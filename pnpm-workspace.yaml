@@ -1,0 +1,10 @@
+packages:
+  - packages/*
+  - gateways/shared/*
+  - gateways/services/*
+
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+
+savePrefix: ""

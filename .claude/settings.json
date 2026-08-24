@@ -1,0 +1,8 @@
+{
+  "deny": [
+    "Bash(npm *)",
+    "Bash(npx *)",
+    "Bash(yarn *)",
+    "Bash(pnpx *)"
+  ]
+}

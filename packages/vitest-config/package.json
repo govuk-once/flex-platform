@@ -1,0 +1,20 @@
+{
+  "name": "@repo/vitest-config",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "eslint": "10.8.1"
+  },
+  "peerDependencies": {
+    "vitest": "^4.0.0"
+  }
+}
