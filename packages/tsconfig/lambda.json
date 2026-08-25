@@ -3,6 +3,6 @@
   "extends": "./base.json",
   "compilerOptions": {
     "noEmit": false,
-    "allowImportingTsExtensions": false
+    "rewriteRelativeImportExtensions": true
   }
 }

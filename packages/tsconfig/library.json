@@ -3,8 +3,8 @@
   "extends": "./base.json",
   "compilerOptions": {
     "noEmit": false,
-    "allowImportingTsExtensions": false,
     "declaration": true,
-    "declarationMap": true
+    "declarationMap": true,
+    "rewriteRelativeImportExtensions": true
   }
 }

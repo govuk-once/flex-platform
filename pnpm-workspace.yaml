@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - gateways/shared/*
+  - gateways/drivers/*
   - gateways/services/*
 
 allowBuilds:

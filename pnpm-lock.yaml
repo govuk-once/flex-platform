@@ -25,6 +25,10 @@ importers:
         version: 6.0.3
 
   gateways/services/udp:
+    dependencies:
+      '@repo/gateway-config':
+        specifier: workspace:*
+        version: link:../../shared/config
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
