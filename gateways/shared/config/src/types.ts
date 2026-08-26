@@ -1,0 +1,40 @@
+import type { DriverDefinition, OperationFields } from "./driver.ts";
+
+export type FieldPath = string;
+
+export interface LogConfig {
+  readonly input?: readonly FieldPath[];
+  readonly output?: readonly FieldPath[];
+}
+
+export interface PolicyConfig {
+  readonly upstreamTimeout?: string;
+  readonly attempts?: number;
+  readonly circuitBreaker?: {
+    readonly threshold?: number;
+    readonly duration?: string;
+  };
+  readonly rateLimit?: {
+    readonly rps?: number;
+  };
+}
+
+export interface BaseOperationConfig {
+  readonly log?: LogConfig;
+  readonly handler?: string;
+  readonly description?: string;
+}
+
+export type OperationConfig<D extends DriverDefinition = DriverDefinition> =
+  BaseOperationConfig & OperationFields<D>;
+
+export interface GatewayConfig<
+  TDriver extends DriverDefinition,
+  TOps extends Readonly<Record<string, OperationConfig<TDriver>>>,
+> {
+  readonly id: string;
+  readonly description?: string;
+  readonly driver: TDriver;
+  readonly policy?: PolicyConfig;
+  readonly operations: TOps;
+}

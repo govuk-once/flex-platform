@@ -41,9 +41,9 @@ The repo is early. Most packages named in this file do not exist yet.
 What exists today:
 
 - `packages/tsconfig`, `packages/eslint-config`, `packages/vitest-config`: shared tooling.
-- `gateways/shared/config` (`@repo/gateway-config`): stub (`export {}`).
-- `gateways/services/udp` (`@govuk-once/flex-gateway-udp`): stub service. `udp` is the first real
-  gateway.
+- `gateways/shared/config` (`@repo/gateway-config`): `defineGateway`, types, presets.
+- `gateways/services/udp` (`@govuk-once/flex-gateway-udp`): the first real gateway, with a
+  `gateway.config.ts` pointing at the User Data Platform upstream.
 
 ## Future work
 
@@ -52,11 +52,11 @@ for.
 
 Needed for a gateway to run end to end:
 
-- `flex-gateway-runtime`
-- `flex-gateway-driver-openapi-rest`
-- `flex-gateway-codegen`
-- `flex-gateway-client`
-- the `udp` gateway's config and an end-to-end test
+- `gateways/shared/runtime` — `flex-gateway-runtime`
+- `gateways/drivers/openapi-rest` — `flex-gateway-driver-openapi-rest`
+- `gateways/shared/codegen` — `flex-gateway-codegen`
+- `gateways/shared/client` — `flex-gateway-client`
+- the `udp` gateway's end-to-end test
 
 Further out:
 
@@ -108,9 +108,9 @@ Do not guess dependency versions or APIs. Check what is installed, or ask. Versi
   tsconfig, eslint or vitest config. Add a root-level tool config only if a tool genuinely cannot
   function otherwise, with a comment saying why.
 - Where code lives: anything gateway-specific goes under `gateways/`, with services in
-  `gateways/services/` and their libraries in `gateways/shared/`. Root `packages/` is reserved for
-  tooling shared across the whole repo (tsconfig, eslint, vitest). A library used only by gateways
-  does not belong in `packages/`, even when it looks generic.
+  `gateways/services/`, drivers in `gateways/drivers/`, and core libraries in `gateways/shared/`.
+  Root `packages/` is reserved for tooling shared across the whole repo (tsconfig, eslint, vitest).
+  A library used only by gateways does not belong in `packages/`, even when it looks generic.
 - tsconfig bases: `base.json` (noEmit, strict), `library.json` (emits `.d.ts` plus maps, for
   shared packages), `lambda.json` (emits JS, no declarations, for services).
 - ESLint presets (`@repo/eslint-config`): `base`, `driver`, `service`. `driver` and `service` add
@@ -181,6 +181,19 @@ behaviour of code that does not exist yet, so read them as constraints on how it
     gateway id at module load. A deployed name containing `dev` is a fact about the deployment
     rather than the code.
 
+## Environment variables
+
+All gateway runtime env vars use the prefix `FLEX_GATEWAY_`. Each gateway is its own Lambda, so
+the same var name resolves to different values per deployment.
+
+| Variable | Purpose |
+|---|---|
+| `FLEX_GATEWAY_BASE_URL` | Upstream base URL. Set per environment by infra. Never in code or config. |
+
+The gateway config (`gateway.config.ts`) is environment-free. It declares the upstream spec
+(pinned to a known commit/ref) and operations, but never URLs, credentials or anything that
+varies between environments. Those come from env vars resolved at cold start.
+
 ## Suggested build order
 
 If and when the walking skeleton gets picked up, this is the order that keeps something runnable
@@ -199,7 +212,8 @@ between packages rather than building packages to completion in isolation.
 5. Driver seam and `ctx.call`: `DriverContext`, wrapped client, in-memory `PolicyStore`, pipeline
    with pass-through stages. Only the timeout needs to be real at first, but composition and
    ordering have to be correct from the start. The stage bodies can land later.
-6. `openapi-rest`: build-time schema emission first, then the runtime path.
+6. `openapi-rest` (`gateways/drivers/openapi-rest`): build-time schema emission first, then the
+   runtime path.
 7. `codegen` (complete): `emitEntry`. Wire validation into dispatcher steps 4 and 8.
 8. `client`: invoke wrapper and error classes.
 9. `udp`: config, local HTTP stub and an end-to-end test through the real dispatcher and driver.
