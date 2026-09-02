@@ -3,8 +3,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc --build tsconfig.build.json",
-    "lint": "eslint src/",
+    "codegen": "gateway-codegen",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -13,9 +12,10 @@
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
+    "@repo/gateway-codegen": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.8.1",
-    "vitest": "4.1.10"
+    "eslint": "10.9.1",
+    "vitest": "4.1.11"
   }
 }

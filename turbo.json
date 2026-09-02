@@ -3,7 +3,7 @@
   "tasks": {
     "codegen": {
       "dependsOn": ["^build"],
-      "inputs": ["gateway.config.ts", "src/**", "../../shared/*/dist/**"],
+      "inputs": ["gateway.config.ts", "schemas.fixture.ts"],
       "outputs": [".gen/**"]
     },
     "build": {

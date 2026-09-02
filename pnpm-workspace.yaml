@@ -9,3 +9,5 @@ allowBuilds:
   unrs-resolver: true
 
 savePrefix: ""
+
+minimumReleaseAge: 10080

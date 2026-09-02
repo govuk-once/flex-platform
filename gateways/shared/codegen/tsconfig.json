@@ -1,4 +1,4 @@
 {
   "extends": "@repo/tsconfig/base.json",
-  "include": ["*.config.ts", "*.fixture.ts"]
+  "include": ["src", "*.config.ts"]
 }
