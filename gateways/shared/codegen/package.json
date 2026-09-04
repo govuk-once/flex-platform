@@ -9,7 +9,7 @@
     }
   },
   "bin": {
-    "gateway-codegen": "./dist/cli.js"
+    "gateway-codegen": "./bin/gateway-codegen.js"
   },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",

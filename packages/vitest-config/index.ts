@@ -10,6 +10,7 @@ export function createVitestConfig(overrides: TestUserConfig = {}) {
       passWithNoTests: true,
       coverage: {
         provider: "v8",
+        reporter: ["text", "lcov"],
       },
       ...overrides,
     },
