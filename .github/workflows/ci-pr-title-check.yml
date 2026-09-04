@@ -1,0 +1,98 @@
+name: Validate PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+
+jobs:
+  validate-pr-title:
+    name: Validate PR Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip Dependabot PRs
+        if: github.actor == 'dependabot[bot]'
+        run: echo "Skipping Jira title check for Dependabot"
+
+      - name: Validate PR title format
+        id: validate
+        if: github.actor != 'dependabot[bot]'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Checking PR title: $TITLE"
+          if echo "$TITLE" | grep -Eq '^(FLEX-[0-9]+ )(feat|fix|chore|docs|style|refactor|test|perf|ci|build|revert)(\([^)]+\))?!?: .+'; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment with PR title guidance
+        if: github.actor != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          VALID: ${{ steps.validate.outputs.valid }}
+        run: |
+          MARKER="<!-- pr-title-check -->"
+          if [ "$VALID" = "true" ]; then
+            cat > comment.md <<'MD'
+          <!-- pr-title-check -->
+          ### ✅ Valid PR title
+
+          Thanks, this PR title follows the required format.
+          MD
+          else
+            cat > comment.md <<'MD'
+          <!-- pr-title-check -->
+          ### ❌ Invalid PR title
+
+          This PR title is squash merged onto `main`, so it must follow the Conventional Commits format:
+
+          ```txt
+          FLEX-<number> <type>(<scope>)?: <description>
+          ```
+
+          **Examples**
+
+          ```txt
+          FLEX-123 feat: add udp gateway
+          FLEX-456 fix(gateways): handle empty payload
+          FLEX-789 feat!: drop legacy client
+          ```
+
+          **Rules**
+
+          - The Jira reference (e.g. `FLEX-123`) comes first, then the type.
+          - `<type>` must be one of: `feat`, `fix`, `chore`, `docs`, `style`, `refactor`, `test`, `perf`, `ci`, `build`, `revert`.
+          - `<scope>` is optional, in parentheses, e.g. `fix(gateways):`.
+          - Append `!` after the type or scope for a breaking change, e.g. `feat!:`.
+          - A `<description>` is required after the colon and space.
+          MD
+          fi
+
+          # Find an existing bot comment carrying our marker so we only ever keep one.
+          COMMENT_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -n1)
+
+          if [ -n "$COMMENT_ID" ]; then
+            echo "Updating existing comment $COMMENT_ID"
+            gh api -X PATCH "repos/$REPO/issues/comments/$COMMENT_ID" -F body=@comment.md >/dev/null
+          elif [ "$VALID" != "true" ]; then
+            echo "Creating new guidance comment"
+            gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@comment.md >/dev/null
+          fi
+
+      - name: Fail if PR title is invalid
+        if: github.actor != 'dependabot[bot]' && steps.validate.outputs.valid != 'true'
+        run: |
+          echo "::error ::PR title must be 'FLEX-<number> <type>(<scope>)?: <description>', e.g 'FLEX-123 feat: add udp gateway'. Types: feat|fix|chore|docs|style|refactor|test|perf|ci|build|revert. Append ! to the type for breaking changes."
+          exit 1

@@ -11,3 +11,4 @@ allowBuilds:
 savePrefix: ""
 
 minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true

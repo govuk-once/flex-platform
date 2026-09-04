@@ -1,0 +1,20 @@
+name: Continuous Deployment
+
+# Currently a replica of the PR checks. Release and deployment stages from
+# govuk-once/flex will be added here once infrastructure exists.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualityChecks:
+    name: Quality Checks
+    uses: ./.github/workflows/_quality-checks.yml
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_URL: ${{ secrets.SONAR_URL }}
