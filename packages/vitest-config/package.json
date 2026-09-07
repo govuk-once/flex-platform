@@ -16,5 +16,8 @@
   },
   "peerDependencies": {
     "vitest": "^4.0.0"
+  },
+  "dependencies": {
+    "@vitest/coverage-v8": "4.1.11"
   }
 }
