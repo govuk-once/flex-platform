@@ -13,7 +13,9 @@
     "typecheck": {
       "dependsOn": ["^build", "codegen"]
     },
-    "lint": {},
+    "lint": {
+      "dependsOn": ["^build"]
+    },
     "test": {
       "dependsOn": ["build"]
     }

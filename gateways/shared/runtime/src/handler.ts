@@ -1,0 +1,222 @@
+import type {
+  DriverDefinition,
+  GatewayConfig,
+  OperationConfig,
+} from "@repo/gateway-config";
+
+import { createDriverContext, type DriverContext } from "./context.ts";
+import type { EnvelopeResponse } from "./envelope.ts";
+import { parseRequest } from "./envelope.ts";
+import { GatewayError } from "./errors.ts";
+import {
+  type CompiledPath,
+  compilePaths,
+  createLogger,
+  pickFields,
+} from "./logging.ts";
+import { checkSecureBindings } from "./secure.ts";
+
+export interface Validator<T = unknown> {
+  (data: unknown): data is T;
+  errors?:
+    | Array<{ instancePath: string; schemaPath: string; message?: string }>
+    | null
+    | undefined;
+}
+
+export interface HandlerDeps {
+  readonly validators: Readonly<
+    Record<
+      string,
+      {
+        readonly input: Validator;
+        readonly outcomes: Readonly<Record<string, Validator>>;
+      }
+    >
+  >;
+  readonly execute: (
+    ctx: DriverContext,
+    operation: string,
+    input: unknown,
+  ) => Promise<{ outcome: string; data: unknown }>;
+}
+
+export type AnyGatewayConfig = GatewayConfig<
+  DriverDefinition,
+  Readonly<Record<string, OperationConfig>>
+>;
+
+interface CompiledOperation {
+  readonly config: OperationConfig;
+  readonly validators: {
+    readonly input: Validator;
+    readonly outcomes: Readonly<Record<string, Validator>>;
+  };
+  readonly logInput: readonly CompiledPath[];
+  readonly logOutput: readonly CompiledPath[];
+}
+
+function compileOperations(
+  config: AnyGatewayConfig,
+  deps: HandlerDeps,
+): ReadonlyMap<string, CompiledOperation> {
+  const opNames = Object.keys(config.operations);
+  if (opNames.length === 0) {
+    throw new Error("Gateway config must define at least one operation");
+  }
+
+  const ops = new Map<string, CompiledOperation>();
+
+  for (const opName of opNames) {
+    const opConfig = config.operations[opName];
+    if (!opConfig) {
+      throw new Error(`Operation "${opName}" missing from config`);
+    }
+    const opValidators = deps.validators[opName];
+    if (!opValidators) {
+      throw new Error(`Missing validators for operation "${opName}"`);
+    }
+    if (typeof opValidators.input !== "function") {
+      throw new Error(`Missing input validator for operation "${opName}"`);
+    }
+    if (Object.keys(opValidators.outcomes).length === 0) {
+      throw new Error(
+        `Operation "${opName}" must have at least one outcome validator`,
+      );
+    }
+
+    ops.set(opName, {
+      config: opConfig,
+      validators: opValidators,
+      logInput: compilePaths(opConfig.log?.input ?? []),
+      logOutput: compilePaths(opConfig.log?.output ?? []),
+    });
+  }
+
+  return ops;
+}
+
+function verifyToken(): void {
+  // STUB: JWT verification will land here.
+}
+
+function formatValidationErrors(
+  errors:
+    | Array<{ instancePath: string; schemaPath: string; message?: string }>
+    | null
+    | undefined,
+): string {
+  if (!errors || errors.length === 0) return "Input validation failed";
+  return errors
+    .map((e) => `${e.instancePath || "/"}: ${e.message ?? "invalid"}`)
+    .join("; ");
+}
+
+function extractOperation(event: unknown): string | undefined {
+  if (event != null && typeof event === "object" && "operation" in event) {
+    const operation = (event as Record<string, unknown>).operation;
+    return typeof operation === "string" ? operation : undefined;
+  }
+  return undefined;
+}
+
+export function createHandler(
+  config: AnyGatewayConfig,
+  deps: HandlerDeps,
+): (event: unknown) => Promise<EnvelopeResponse> {
+  if (!config.id || typeof config.id !== "string") {
+    throw new Error("Gateway config must have a non-empty string id");
+  }
+
+  const operations = compileOperations(config, deps);
+  const logger = createLogger(config.id);
+
+  return async (event: unknown): Promise<EnvelopeResponse> => {
+    try {
+      // Step 1: Parse envelope
+      const request = parseRequest(event);
+
+      // Step 2: Verify token (STUB)
+      verifyToken();
+
+      // Step 3: Route on operation
+      const op = operations.get(request.operation);
+      if (!op) {
+        throw new GatewayError(
+          "OPERATION_NOT_FOUND",
+          `Unknown operation: ${request.operation}`,
+        );
+      }
+
+      // Step 4: Validate input
+      if (!op.validators.input(request.input)) {
+        throw new GatewayError(
+          "INVALID_INPUT",
+          formatValidationErrors(op.validators.input.errors),
+        );
+      }
+
+      // Step 5: Check secure bindings
+      checkSecureBindings(request.secure.values, request.secure.signature);
+
+      // Step 6: Derive deadline (STUB)
+
+      // Step 7: Run pipeline
+      const ctx = createDriverContext();
+      const result = await deps.execute(ctx, request.operation, request.input);
+
+      // Step 8: Validate outcome
+      const outcomeValidator = op.validators.outcomes[result.outcome];
+      if (!outcomeValidator) {
+        throw new GatewayError(
+          "UPSTREAM_CONTRACT_VIOLATION",
+          `Unknown outcome "${result.outcome}" for operation "${request.operation}"`,
+        );
+      }
+      if (!outcomeValidator(result.data)) {
+        throw new GatewayError(
+          "UPSTREAM_CONTRACT_VIOLATION",
+          `Outcome "${result.outcome}" data failed validation for operation "${request.operation}"`,
+        );
+      }
+
+      // Step 9: Record health (STUB)
+
+      // Step 10: Wrap envelope
+      const inputFields = pickFields(request.input, op.logInput);
+      const outputFields = pickFields(result.data, op.logOutput);
+      logger.info(
+        {
+          operation: request.operation,
+          outcome: result.outcome,
+          ...(inputFields ? { input: inputFields } : {}),
+          ...(outputFields ? { output: outputFields } : {}),
+        },
+        "response",
+      );
+
+      return {
+        ok: true as const,
+        outcome: result.outcome,
+        data: result.data,
+      };
+    } catch (err: unknown) {
+      if (err instanceof GatewayError) {
+        logger.warn(
+          { operation: extractOperation(event), code: err.code },
+          err.message,
+        );
+        return {
+          ok: false as const,
+          error: { code: err.code, message: err.message },
+        };
+      }
+
+      logger.error({ err }, "Unhandled error in dispatcher");
+      return {
+        ok: false as const,
+        error: { code: "INTERNAL" as const, message: "Internal error" },
+      };
+    }
+  };
+}
