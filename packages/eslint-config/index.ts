@@ -39,19 +39,20 @@ export const base = tseslint.config(
   },
 );
 
-// `driver` and `service` extend `base` with a hard ban on reaching the network directly.
-// Every legitimate upstream call goes through the wrapped GatewayClient (via ctx.call), which
-// is where timeouts, retries, breaker/budget accounting, auth and redaction live. A raw
-// fetch/node:http/undici call bypasses all of that and still appears to work, so it is blocked
-// here as a second line of defence alongside the structural seam.
-export const driver = tseslint.config(...base, {
+// Drivers own their transport (fetch for REST, AWS SDK for DynamoDB, etc.) so the `driver`
+// preset has no network restrictions. The structural enforcement is that drivers receive a
+// `DriverContext` and must wrap upstream calls in `ctx.attempt`.
+export const driver = tseslint.config(...base);
+
+// Services must not make network calls directly — all upstream access goes through a gateway.
+export const service = tseslint.config(...base, {
   rules: {
     "no-restricted-globals": [
       "error",
       {
         name: "fetch",
         message:
-          "Use ctx.call(client => client.request(...)) instead of raw fetch.",
+          "Services must not make network calls directly. Use a gateway.",
       },
     ],
     "no-restricted-imports": [
@@ -60,19 +61,21 @@ export const driver = tseslint.config(...base, {
         paths: [
           {
             name: "node:http",
-            message: "Use the wrapped GatewayClient instead.",
+            message:
+              "Services must not make network calls directly. Use a gateway.",
           },
           {
             name: "node:https",
-            message: "Use the wrapped GatewayClient instead.",
+            message:
+              "Services must not make network calls directly. Use a gateway.",
           },
-          { name: "undici", message: "Use the wrapped GatewayClient instead." },
+          {
+            name: "undici",
+            message:
+              "Services must not make network calls directly. Use a gateway.",
+          },
         ],
       },
     ],
   },
 });
-
-// `service` currently mirrors `driver` (gateway services carry the same no-raw-network rule).
-// Kept as its own export so the two can diverge later without changing what packages import.
-export const service = driver;

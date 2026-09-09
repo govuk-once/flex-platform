@@ -6,7 +6,7 @@ import type {
 
 import { createDriverContext, type DriverContext } from "./context.ts";
 import type { EnvelopeResponse } from "./envelope.ts";
-import { parseRequest } from "./envelope.ts";
+import { parseEnvelope } from "./envelope.ts";
 import { GatewayError } from "./errors.ts";
 import {
   type CompiledPath,
@@ -134,22 +134,22 @@ export function createHandler(
   return async (event: unknown): Promise<EnvelopeResponse> => {
     try {
       // Step 1: Parse envelope
-      const request = parseRequest(event);
+      const envelope = parseEnvelope(event);
 
       // Step 2: Verify token (STUB)
       verifyToken();
 
       // Step 3: Route on operation
-      const op = operations.get(request.operation);
+      const op = operations.get(envelope.operation);
       if (!op) {
         throw new GatewayError(
           "OPERATION_NOT_FOUND",
-          `Unknown operation: ${request.operation}`,
+          `Unknown operation: ${envelope.operation}`,
         );
       }
 
       // Step 4: Validate input
-      if (!op.validators.input(request.input)) {
+      if (!op.validators.input(envelope.input)) {
         throw new GatewayError(
           "INVALID_INPUT",
           formatValidationErrors(op.validators.input.errors),
@@ -157,37 +157,41 @@ export function createHandler(
       }
 
       // Step 5: Check secure bindings
-      checkSecureBindings(request.secure.values, request.secure.signature);
+      checkSecureBindings(envelope.secure.values, envelope.secure.signature);
 
       // Step 6: Derive deadline (STUB)
 
       // Step 7: Run pipeline
       const ctx = createDriverContext();
-      const result = await deps.execute(ctx, request.operation, request.input);
+      const result = await deps.execute(
+        ctx,
+        envelope.operation,
+        envelope.input,
+      );
 
       // Step 8: Validate outcome
       const outcomeValidator = op.validators.outcomes[result.outcome];
       if (!outcomeValidator) {
         throw new GatewayError(
           "UPSTREAM_CONTRACT_VIOLATION",
-          `Unknown outcome "${result.outcome}" for operation "${request.operation}"`,
+          `Unknown outcome "${result.outcome}" for operation "${envelope.operation}"`,
         );
       }
       if (!outcomeValidator(result.data)) {
         throw new GatewayError(
           "UPSTREAM_CONTRACT_VIOLATION",
-          `Outcome "${result.outcome}" data failed validation for operation "${request.operation}"`,
+          `Outcome "${result.outcome}" data failed validation for operation "${envelope.operation}"`,
         );
       }
 
       // Step 9: Record health (STUB)
 
       // Step 10: Wrap envelope
-      const inputFields = pickFields(request.input, op.logInput);
+      const inputFields = pickFields(envelope.input, op.logInput);
       const outputFields = pickFields(result.data, op.logOutput);
       logger.info(
         {
-          operation: request.operation,
+          operation: envelope.operation,
           outcome: result.outcome,
           ...(inputFields ? { input: inputFields } : {}),
           ...(outputFields ? { output: outputFields } : {}),

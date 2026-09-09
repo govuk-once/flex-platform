@@ -136,6 +136,6 @@ gateways/
 ## Key constraints
 
 - No HTTP anywhere in the design. Consumers invoke via `lambda:InvokeFunction`.
-- Drivers reach the network only through `ctx.call`. Raw `fetch`/`node:http`/`undici` is banned.
+- Drivers own their transport and wrap upstream calls in `ctx.attempt` for policy enforcement.
 - Nothing in code names an environment.
 - Contracts are additive-only. Breaking changes mean a new gateway (`udp-v2`), not a version bump.

@@ -2,7 +2,11 @@ import { defineGateway } from "@repo/gateway-config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DriverContext } from "./context.ts";
-import type { EnvelopeError, EnvelopeSuccess } from "./envelope.ts";
+import type {
+  EnvelopeError,
+  EnvelopeInbound,
+  EnvelopeSuccess,
+} from "./envelope.ts";
 import { GatewayError } from "./errors.ts";
 import type { AnyGatewayConfig, HandlerDeps, Validator } from "./handler.ts";
 import { createHandler } from "./handler.ts";
@@ -59,12 +63,10 @@ function testDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   };
 }
 
-function request(
-  overrides: Partial<{
-    operation: string;
-    input: unknown;
-    secure: { values: Record<string, unknown>; signature: string };
-  }> = {},
+function envelope(
+  overrides: Partial<
+    Pick<EnvelopeInbound, "operation" | "input" | "secure">
+  > = {},
 ) {
   return {
     operation: "ping",
@@ -102,7 +104,7 @@ describe("createHandler", () => {
   describe("happy path", () => {
     it("returns success envelope for valid input", async () => {
       const handler = createHandler(testConfig(), testDeps());
-      const resp = await handler(request({ input: { msg: "hello" } }));
+      const resp = await handler(envelope({ input: { msg: "hello" } }));
 
       expect(resp.ok).toBe(true);
       const success = resp as EnvelopeSuccess;
@@ -114,7 +116,7 @@ describe("createHandler", () => {
   describe("step 3: route on operation", () => {
     it("returns OPERATION_NOT_FOUND for unknown operation", async () => {
       const handler = createHandler(testConfig(), testDeps());
-      const resp = await handler(request({ operation: "unknown" }));
+      const resp = await handler(envelope({ operation: "unknown" }));
 
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
@@ -136,7 +138,7 @@ describe("createHandler", () => {
           },
         }),
       );
-      const resp = await handler(request({ input: { bad: true } }));
+      const resp = await handler(envelope({ input: { bad: true } }));
 
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
@@ -159,16 +161,16 @@ describe("createHandler", () => {
         }),
       );
 
-      await handler(request());
+      await handler(envelope());
       expect(execute).not.toHaveBeenCalled();
     });
   });
 
   describe("step 5: secure bindings", () => {
-    it("accepts requests with populated secure block", async () => {
+    it("accepts envelopes with populated secure block", async () => {
       const handler = createHandler(testConfig(), testDeps());
       const resp = await handler(
-        request({
+        envelope({
           secure: { values: { userId: "abc" }, signature: "sig" },
         }),
       );
@@ -181,7 +183,7 @@ describe("createHandler", () => {
     it("passes a working DriverContext to execute", async () => {
       const execute: HandlerDeps["execute"] = vi.fn(
         async (ctx: DriverContext) => {
-          const result = await ctx.call(() =>
+          const result = await ctx.attempt(() =>
             Promise.resolve({
               outcome: "created" as const,
               data: { id: "456" },
@@ -203,12 +205,12 @@ describe("createHandler", () => {
         }),
       );
 
-      const resp = await handler(request());
+      const resp = await handler(envelope());
       expect(resp.ok).toBe(true);
       expect((resp as EnvelopeSuccess).data).toEqual({ id: "456" });
       expect(execute).toHaveBeenCalledOnce();
       const [ctx, operation, input] = vi.mocked(execute).mock.calls[0]!;
-      expect(ctx).toHaveProperty("call");
+      expect(ctx).toHaveProperty("attempt");
       expect(operation).toBe("ping");
       expect(input).toEqual({});
     });
@@ -217,7 +219,7 @@ describe("createHandler", () => {
       const execute = vi.fn(stubExecute);
       const handler = createHandler(testConfig(), testDeps({ execute }));
 
-      await handler(request({ input: { key: "value" } }));
+      await handler(envelope({ input: { key: "value" } }));
       expect(execute).toHaveBeenCalledOnce();
       const [, operation, input] = vi.mocked(execute).mock.calls[0]!;
       expect(operation).toBe("ping");
@@ -233,7 +235,7 @@ describe("createHandler", () => {
           execute: () => Promise.resolve({ outcome: "nonexistent", data: {} }),
         }),
       );
-      const resp = await handler(request());
+      const resp = await handler(envelope());
 
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
@@ -253,7 +255,7 @@ describe("createHandler", () => {
           },
         }),
       );
-      const resp = await handler(request());
+      const resp = await handler(envelope());
 
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
@@ -269,7 +271,7 @@ describe("createHandler", () => {
           execute: () => Promise.reject(new Error("something broke")),
         }),
       );
-      const resp = await handler(request());
+      const resp = await handler(envelope());
 
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
@@ -285,7 +287,7 @@ describe("createHandler", () => {
             Promise.reject(new Error("secret database connection string")),
         }),
       );
-      const resp = await handler(request());
+      const resp = await handler(envelope());
 
       const err = resp as EnvelopeError;
       expect(err.error.message).not.toContain("secret database");
@@ -299,7 +301,7 @@ describe("createHandler", () => {
             Promise.reject(new GatewayError("UPSTREAM_TIMEOUT", "timed out")),
         }),
       );
-      const resp = await handler(request());
+      const resp = await handler(envelope());
 
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
@@ -352,7 +354,7 @@ describe("createHandler", () => {
       const handler = createHandler(config, testDeps());
 
       await handler(
-        request({
+        envelope({
           input: { email: "visible@test.com", secret: "SUPER_SECRET" },
         }),
       );
@@ -379,7 +381,7 @@ describe("createHandler", () => {
         }),
       );
 
-      await handler(request());
+      await handler(envelope());
 
       const output = capturedOutput();
       expect(output).toContain("pub-id");
@@ -389,7 +391,7 @@ describe("createHandler", () => {
     it("logs no payload fields when log config is absent", async () => {
       const handler = createHandler(testConfig(), testDeps());
 
-      await handler(request({ input: { secret: "INPUT_SECRET" } }));
+      await handler(envelope({ input: { secret: "INPUT_SECRET" } }));
 
       expect(capturedOutput()).not.toContain("INPUT_SECRET");
     });

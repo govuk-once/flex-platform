@@ -1,7 +1,7 @@
-export type { DriverContext, GatewayClient } from "./context.ts";
+export type { DriverContext } from "./context.ts";
 export type {
   EnvelopeError,
-  EnvelopeRequest,
+  EnvelopeInbound,
   EnvelopeResponse,
   EnvelopeSuccess,
 } from "./envelope.ts";
