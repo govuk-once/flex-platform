@@ -53,12 +53,15 @@ function testConfig(
   });
 }
 
+const NO_DEADLINE = { remainingMs: () => Infinity };
+
 function testDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     validators: {
       ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
     },
     execute: stubExecute,
+    deadline: NO_DEADLINE,
     ...overrides,
   };
 }
@@ -179,11 +182,39 @@ describe("createHandler", () => {
     });
   });
 
+  describe("step 6: derive deadline", () => {
+    it("applies safety margin to Lambda remaining time", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          deadline: { remainingMs: () => 600 },
+          execute: async (ctx) => {
+            await ctx.attempt(
+              () => new Promise((resolve) => setTimeout(resolve, 5_000)),
+            );
+            return { outcome: "success", data: {} };
+          },
+        }),
+      );
+      const resp = await handler(envelope());
+
+      expect(resp.ok).toBe(false);
+      expect((resp as EnvelopeError).error.code).toBe("UPSTREAM_TIMEOUT");
+    });
+
+    it("uses policy timeout when deadline has no constraint", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+      const resp = await handler(envelope());
+
+      expect(resp.ok).toBe(true);
+    });
+  });
+
   describe("step 7: run pipeline", () => {
     it("passes a working DriverContext to execute", async () => {
       const execute: HandlerDeps["execute"] = vi.fn(
         async (ctx: DriverContext) => {
-          const result = await ctx.attempt(() =>
+          const result = await ctx.attempt((_signal) =>
             Promise.resolve({
               outcome: "created" as const,
               data: { id: "456" },
@@ -260,6 +291,65 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("UPSTREAM_CONTRACT_VIOLATION");
+    });
+  });
+
+  describe("step 9: record health", () => {
+    it("records upstream_success signal on success", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+      await handler(envelope());
+
+      const output = capturedOutput();
+      expect(output).toContain('"signal":"upstream_success"');
+    });
+
+    it("records upstream_failure signal on UPSTREAM_TIMEOUT", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: () =>
+            Promise.reject(new GatewayError("UPSTREAM_TIMEOUT", "timed out")),
+        }),
+      );
+      await handler(envelope());
+
+      const output = capturedOutput();
+      expect(output).toContain('"signal":"upstream_failure"');
+    });
+
+    it("records upstream_success signal for NOT_FOUND", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: () =>
+            Promise.reject(new GatewayError("NOT_FOUND", "not found")),
+        }),
+      );
+      await handler(envelope());
+
+      const output = capturedOutput();
+      expect(output).toContain('"signal":"upstream_success"');
+    });
+
+    it("records none signal for OPERATION_NOT_FOUND", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+      await handler(envelope({ operation: "nonexistent" }));
+
+      const output = capturedOutput();
+      expect(output).toContain('"signal":"none"');
+    });
+
+    it("records unhandled signal for unknown errors", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: () => Promise.reject(new Error("boom")),
+        }),
+      );
+      await handler(envelope());
+
+      const output = capturedOutput();
+      expect(output).toContain('"signal":"unhandled"');
     });
   });
 
@@ -394,6 +484,40 @@ describe("createHandler", () => {
       await handler(envelope({ input: { secret: "INPUT_SECRET" } }));
 
       expect(capturedOutput()).not.toContain("INPUT_SECRET");
+    });
+  });
+
+  describe("full dispatcher path", () => {
+    it("envelope in → driver called via ctx.attempt with signal → validated outcome out", async () => {
+      let receivedSignal: AbortSignal | undefined;
+      let receivedOperation: string | undefined;
+      let receivedInput: unknown;
+
+      const execute: HandlerDeps["execute"] = async (ctx, operation, input) => {
+        receivedOperation = operation;
+        receivedInput = input;
+        return ctx.attempt((signal) => {
+          receivedSignal = signal;
+          expect(signal).toBeInstanceOf(AbortSignal);
+          expect(signal.aborted).toBe(false);
+          return Promise.resolve({
+            outcome: "success",
+            data: { id: "full-path" },
+          });
+        });
+      };
+
+      const handler = createHandler(testConfig(), testDeps({ execute }));
+      const resp = await handler(envelope({ input: { key: "value" } }));
+
+      expect(resp.ok).toBe(true);
+      const success = resp as EnvelopeSuccess;
+      expect(success.outcome).toBe("success");
+      expect(success.data).toEqual({ id: "full-path" });
+
+      expect(receivedSignal).toBeInstanceOf(AbortSignal);
+      expect(receivedOperation).toBe("ping");
+      expect(receivedInput).toEqual({ key: "value" });
     });
   });
 });

@@ -4,16 +4,21 @@ import type {
   OperationConfig,
 } from "@repo/gateway-config";
 
-import { createDriverContext, type DriverContext } from "./context.ts";
+import {
+  createDriverContext,
+  type DeadlineProvider,
+  type DriverContext,
+} from "./context.ts";
 import type { EnvelopeResponse } from "./envelope.ts";
 import { parseEnvelope } from "./envelope.ts";
-import { GatewayError } from "./errors.ts";
+import { ERROR_CODES, GatewayError, type SignalRuling } from "./errors.ts";
 import {
   type CompiledPath,
   compilePaths,
   createLogger,
   pickFields,
 } from "./logging.ts";
+import { resolvePolicy } from "./policy.ts";
 import { checkSecureBindings } from "./secure.ts";
 
 export interface Validator<T = unknown> {
@@ -39,6 +44,7 @@ export interface HandlerDeps {
     operation: string,
     input: unknown,
   ) => Promise<{ outcome: string; data: unknown }>;
+  readonly deadline: DeadlineProvider;
 }
 
 export type AnyGatewayConfig = GatewayConfig<
@@ -120,6 +126,16 @@ function extractOperation(event: unknown): string | undefined {
   return undefined;
 }
 
+const DEADLINE_SAFETY_MARGIN_MS = 500;
+
+function recordHealthSignal(
+  _operation: string | undefined,
+  signal: SignalRuling,
+): { signal: SignalRuling } {
+  // STUB: breaker/health recording will land here.
+  return { signal };
+}
+
 export function createHandler(
   config: AnyGatewayConfig,
   deps: HandlerDeps,
@@ -130,6 +146,9 @@ export function createHandler(
 
   const operations = compileOperations(config, deps);
   const logger = createLogger(config.id);
+
+  const policy = resolvePolicy(config.policy);
+  const { deadline } = deps;
 
   return async (event: unknown): Promise<EnvelopeResponse> => {
     try {
@@ -159,10 +178,18 @@ export function createHandler(
       // Step 5: Check secure bindings
       checkSecureBindings(envelope.secure.values, envelope.secure.signature);
 
-      // Step 6: Derive deadline (STUB)
+      // Step 6: Derive deadline
+      const requestDeadline: DeadlineProvider = {
+        remainingMs(): number {
+          return Math.max(
+            0,
+            deadline.remainingMs() - DEADLINE_SAFETY_MARGIN_MS,
+          );
+        },
+      };
 
       // Step 7: Run pipeline
-      const ctx = createDriverContext();
+      const ctx = createDriverContext(policy, requestDeadline);
       const result = await deps.execute(
         ctx,
         envelope.operation,
@@ -184,7 +211,8 @@ export function createHandler(
         );
       }
 
-      // Step 9: Record health (STUB)
+      // Step 9: Record health (success path)
+      const health = recordHealthSignal(envelope.operation, "upstream_success");
 
       // Step 10: Wrap envelope
       const inputFields = pickFields(envelope.input, op.logInput);
@@ -193,6 +221,7 @@ export function createHandler(
         {
           operation: envelope.operation,
           outcome: result.outcome,
+          ...health,
           ...(inputFields ? { input: inputFields } : {}),
           ...(outputFields ? { output: outputFields } : {}),
         },
@@ -206,8 +235,14 @@ export function createHandler(
       };
     } catch (err: unknown) {
       if (err instanceof GatewayError) {
+        // Step 9: Record health (error path)
+        const health = recordHealthSignal(
+          extractOperation(event),
+          ERROR_CODES[err.code].signal,
+        );
+
         logger.warn(
-          { operation: extractOperation(event), code: err.code },
+          { operation: extractOperation(event), code: err.code, ...health },
           err.message,
         );
         return {
@@ -216,7 +251,13 @@ export function createHandler(
         };
       }
 
-      logger.error({ err }, "Unhandled error in dispatcher");
+      // Step 9: Record health (unhandled)
+      const health = recordHealthSignal(
+        extractOperation(event),
+        ERROR_CODES.INTERNAL.signal,
+      );
+
+      logger.error({ err, ...health }, "Unhandled error in dispatcher");
       return {
         ok: false as const,
         error: { code: "INTERNAL" as const, message: "Internal error" },
