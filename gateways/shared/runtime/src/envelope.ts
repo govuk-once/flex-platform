@@ -1,7 +1,7 @@
 import type { ErrorCode } from "./errors.ts";
 import { GatewayError } from "./errors.ts";
 
-export interface EnvelopeRequest {
+export interface EnvelopeInbound {
   readonly operation: string;
   readonly input: unknown;
   readonly secure: {
@@ -30,45 +30,45 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function parseRequest(event: unknown): EnvelopeRequest {
+export function parseEnvelope(event: unknown): EnvelopeInbound {
   if (!isObject(event)) {
-    throw new GatewayError("INVALID_INPUT", "Request must be a JSON object");
+    throw new GatewayError("INVALID_INPUT", "Envelope must be a JSON object");
   }
 
   if (typeof event.operation !== "string" || event.operation.length === 0) {
     throw new GatewayError(
       "INVALID_INPUT",
-      "Request must have a non-empty string 'operation'",
+      "Envelope must have a non-empty string 'operation'",
     );
   }
 
   if (!isObject(event.input)) {
     throw new GatewayError(
       "INVALID_INPUT",
-      "Request 'input' must be an object",
+      "Envelope 'input' must be an object",
     );
   }
 
   if (!isObject(event.secure)) {
     throw new GatewayError(
       "INVALID_INPUT",
-      "Request must have a 'secure' object",
+      "Envelope must have a 'secure' object",
     );
   }
 
   if (!isObject(event.secure.values)) {
     throw new GatewayError(
       "INVALID_INPUT",
-      "Request 'secure.values' must be an object",
+      "Envelope 'secure.values' must be an object",
     );
   }
 
   if (typeof event.secure.signature !== "string") {
     throw new GatewayError(
       "INVALID_INPUT",
-      "Request 'secure.signature' must be a string",
+      "Envelope 'secure.signature' must be a string",
     );
   }
 
-  return event as unknown as EnvelopeRequest;
+  return event as unknown as EnvelopeInbound;
 }

@@ -113,9 +113,10 @@ Do not guess dependency versions or APIs. Check what is installed, or ask. Versi
   A library used only by gateways does not belong in `packages/`, even when it looks generic.
 - tsconfig bases: `base.json` (noEmit, strict), `library.json` (emits `.d.ts` plus maps, for
   shared packages), `lambda.json` (emits JS, no declarations, for services).
-- ESLint presets (`@repo/eslint-config`): `base`, `driver`, `service`. `driver` and `service` add
-  `no-restricted-globals` on `fetch` plus restricted imports of `node:http`, `node:https` and
-  `undici`. Driver and service packages must use the `driver` or `service` preset.
+- ESLint presets (`@repo/eslint-config`): `base`, `driver`, `service`. `driver` extends `base`
+  with no network restrictions (drivers own their transport). `service` extends `base` and bans
+  raw `fetch`, `node:http`, `node:https` and `undici` (services must go through a gateway).
+  Driver and service packages must use the `driver` or `service` preset.
 - Generated and build artifacts are gitignored: `.gen/`, `dist/`, `*.tsbuildinfo`, `.turbo/`,
   `cdk.out/`, `coverage/`. Do not commit them. The only committed generated artifact will be
   `published/`, once contract publishing exists.
@@ -132,12 +133,12 @@ behaviour of code that does not exist yet, so read them as constraints on how it
    codegen starts needing HTTP vocabulary, the seam has broken. Stop and fix it rather than routing
    around it. Grep both once the driver work is done.
 
-2. Drivers reach the network only through `ctx.call`. The runtime yields a policy-wrapped
-   `GatewayClient` inside `ctx.call(fn)`, and one `ctx.call` is one metered upstream unit. Raw
-   `fetch`, `node:http`, `node:https` or `undici` in a driver or service is banned. ESLint enforces
-   it and the seam makes it structural. Do not replace the global `fetch` with the wrapped client.
-   The AWS SDK shares that global, and its Secrets Manager and SSM calls would wrongly flow through
-   the upstream's breaker and budget.
+2. Drivers own their transport. The runtime has no knowledge of HTTP, fetch, or any specific
+   network library. A driver chooses its own mechanism (fetch for REST, the AWS SDK for DynamoDB,
+   etc.) and wraps each upstream call in `ctx.attempt(fn)`. One `ctx.attempt` is one metered upstream
+   unit — the runtime applies timeout, retry and breaker around whatever `fn` does. Raw network
+   access in a service is still banned (ESLint enforces it via the `service` preset); in a driver
+   it is expected, but must go through `ctx.attempt` so that policies apply.
 
 3. The dispatcher order is fixed. Parse envelope, verify token (stubbed for now, but keep the call
    site wired), route on `op`, validate input (`INVALID_INPUT`, no upstream call), check `secure`
@@ -209,9 +210,9 @@ between packages rather than building packages to completion in isolation.
    lands later once runtime types are available.
 4. Runtime skeleton: envelope, error taxonomy with health metadata, dispatcher steps 1 to 6 plus
    10, stub driver.
-5. Driver seam and `ctx.call`: `DriverContext`, wrapped client, in-memory `PolicyStore`, pipeline
-   with pass-through stages. Only the timeout needs to be real at first, but composition and
-   ordering have to be correct from the start. The stage bodies can land later.
+5. Driver seam and `ctx.attempt`: `DriverContext`, policy-wrapped `ctx.attempt`, in-memory
+   `PolicyStore`, pipeline with pass-through stages. Only the timeout needs to be real at first,
+   but composition and ordering have to be correct from the start. The stage bodies can land later.
 6. `openapi-rest` (`gateways/drivers/openapi-rest`): build-time schema emission first, then the
    runtime path.
 7. `codegen` (complete): `emitEntry`. Wire validation into dispatcher steps 4 and 8.
@@ -223,7 +224,7 @@ exercised by tests, with no AWS, no network and no infrastructure. That is reach
 `pnpm test` passes from a clean clone with no AWS credentials and no network; a test drives the
 real dispatcher through the real `openapi-rest` driver against a local HTTP stub and gets
 `{ outcome, data }`; input, outcome, secure and error-taxonomy behaviour all match the invariants
-above; a driver provably cannot reach the network outside `ctx.call`; no secret appears in logs;
+above; a driver provably cannot reach the network outside `ctx.attempt`; no secret appears in logs;
 esbuild bundles the generated entry point; and every package has its own tsconfig, eslint and
 vitest config.
 

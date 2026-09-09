@@ -5,7 +5,7 @@ import type {
   EnvelopeResponse,
   EnvelopeSuccess,
 } from "./envelope.ts";
-import { parseRequest } from "./envelope.ts";
+import { parseEnvelope } from "./envelope.ts";
 import { GatewayError } from "./errors.ts";
 
 const VALID_SECURE = { values: {}, signature: "" };
@@ -21,9 +21,9 @@ function expectInvalidInput(fn: () => unknown, messagePart: string): void {
   }
 }
 
-describe("parseRequest", () => {
+describe("parseEnvelope", () => {
   it("parses a minimal valid envelope", () => {
-    const req = parseRequest({
+    const req = parseEnvelope({
       operation: "ping",
       input: {},
       secure: VALID_SECURE,
@@ -34,7 +34,7 @@ describe("parseRequest", () => {
   });
 
   it("parses an envelope with populated secure block", () => {
-    const req = parseRequest({
+    const req = parseEnvelope({
       operation: "transfer",
       input: { amount: 100 },
       secure: { values: { userId: "abc" }, signature: "sig123" },
@@ -47,65 +47,65 @@ describe("parseRequest", () => {
   it("rejects input: null", () => {
     expectInvalidInput(
       () =>
-        parseRequest({ operation: "ping", input: null, secure: VALID_SECURE }),
+        parseEnvelope({ operation: "ping", input: null, secure: VALID_SECURE }),
       "input",
     );
   });
 
   it("rejects null event", () => {
-    expectInvalidInput(() => parseRequest(null), "JSON object");
+    expectInvalidInput(() => parseEnvelope(null), "JSON object");
   });
 
   it("rejects string event", () => {
-    expectInvalidInput(() => parseRequest("hello"), "JSON object");
+    expectInvalidInput(() => parseEnvelope("hello"), "JSON object");
   });
 
   it("rejects number event", () => {
-    expectInvalidInput(() => parseRequest(42), "JSON object");
+    expectInvalidInput(() => parseEnvelope(42), "JSON object");
   });
 
   it("rejects array event", () => {
-    expectInvalidInput(() => parseRequest([1, 2]), "JSON object");
+    expectInvalidInput(() => parseEnvelope([1, 2]), "JSON object");
   });
 
   it("rejects missing operation", () => {
     expectInvalidInput(
-      () => parseRequest({ input: {}, secure: VALID_SECURE }),
+      () => parseEnvelope({ input: {}, secure: VALID_SECURE }),
       "operation",
     );
   });
 
   it("rejects non-string operation", () => {
     expectInvalidInput(
-      () => parseRequest({ operation: 123, input: {}, secure: VALID_SECURE }),
+      () => parseEnvelope({ operation: 123, input: {}, secure: VALID_SECURE }),
       "operation",
     );
   });
 
   it("rejects empty string operation", () => {
     expectInvalidInput(
-      () => parseRequest({ operation: "", input: {}, secure: VALID_SECURE }),
+      () => parseEnvelope({ operation: "", input: {}, secure: VALID_SECURE }),
       "operation",
     );
   });
 
   it("rejects missing input key", () => {
     expectInvalidInput(
-      () => parseRequest({ operation: "ping", secure: VALID_SECURE }),
+      () => parseEnvelope({ operation: "ping", secure: VALID_SECURE }),
       "input",
     );
   });
 
   it("rejects missing secure block", () => {
     expectInvalidInput(
-      () => parseRequest({ operation: "ping", input: {} }),
+      () => parseEnvelope({ operation: "ping", input: {} }),
       "secure",
     );
   });
 
   it("rejects non-object secure block", () => {
     expectInvalidInput(
-      () => parseRequest({ operation: "ping", input: {}, secure: "bad" }),
+      () => parseEnvelope({ operation: "ping", input: {}, secure: "bad" }),
       "secure",
     );
   });
@@ -113,7 +113,7 @@ describe("parseRequest", () => {
   it("rejects secure with missing values", () => {
     expectInvalidInput(
       () =>
-        parseRequest({
+        parseEnvelope({
           operation: "ping",
           input: {},
           secure: { signature: "sig" },
@@ -125,7 +125,7 @@ describe("parseRequest", () => {
   it("rejects secure with missing signature", () => {
     expectInvalidInput(
       () =>
-        parseRequest({
+        parseEnvelope({
           operation: "ping",
           input: {},
           secure: { values: { a: 1 } },
@@ -137,7 +137,7 @@ describe("parseRequest", () => {
   it("rejects secure with non-string signature", () => {
     expectInvalidInput(
       () =>
-        parseRequest({
+        parseEnvelope({
           operation: "ping",
           input: {},
           secure: { values: { a: 1 }, signature: 123 },
