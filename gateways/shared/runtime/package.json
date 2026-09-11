@@ -23,6 +23,6 @@
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "eslint": "10.9.1",
-    "vitest": "4.1.11"
+    "vitest": "5.0.0"
   }
 }
