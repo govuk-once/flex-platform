@@ -29,6 +29,6 @@
     "@repo/vitest-config": "workspace:*",
     "esbuild": "0.28.2",
     "eslint": "10.9.1",
-    "vitest": "4.1.11"
+    "vitest": "5.0.0"
   }
 }
