@@ -17,14 +17,11 @@ import {
 } from "./context.ts";
 import { parseEnvelope } from "./envelope.ts";
 import { GatewayError } from "./errors.ts";
-import {
-  type CompiledPath,
-  compilePaths,
-  createLogger,
-  pickFields,
-} from "./logging.ts";
+import { type CompiledPath, compilePaths } from "./field-path.ts";
+import { createLogger, pickFields } from "./logging.ts";
 import { resolvePolicy } from "./policy.ts";
-import { checkSecureBindings } from "./secure.ts";
+import type { CompiledBinding } from "./secure.ts";
+import { checkSecureBindings, compileBindings } from "./secure.ts";
 
 export interface HandlerDeps {
   readonly validators: Readonly<
@@ -57,6 +54,7 @@ interface CompiledOperation {
   };
   readonly logInput: readonly CompiledPath[];
   readonly logOutput: readonly CompiledPath[];
+  readonly secureBindings: readonly CompiledBinding[];
 }
 
 function compileOperations(
@@ -93,6 +91,7 @@ function compileOperations(
       validators: opValidators,
       logInput: compilePaths(opConfig.log?.input ?? []),
       logOutput: compilePaths(opConfig.log?.output ?? []),
+      secureBindings: compileBindings(opConfig.secure),
     });
   }
 
@@ -173,7 +172,12 @@ export function createHandler(
       }
 
       // Step 5: Check secure bindings
-      checkSecureBindings(envelope.secure.values, envelope.secure.signature);
+      checkSecureBindings(
+        op.secureBindings,
+        envelope.input,
+        envelope.secure.values,
+        envelope.secure.signature,
+      );
 
       // Step 6: Derive deadline
       const requestDeadline: DeadlineProvider = {

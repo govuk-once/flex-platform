@@ -1,35 +1,9 @@
-import { assert, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { compilePaths, pickFields } from "./logging.ts";
+import { compilePaths } from "./field-path.ts";
+import { pickFields } from "./logging.ts";
 
 const compile = (paths: string[]) => compilePaths(paths);
-
-describe("compilePaths", () => {
-  it("splits dot-separated segments", () => {
-    const [path] = compile(["a.b.c"]);
-    assert(path);
-
-    expect(path.segments).toEqual(["a", "b", "c"]);
-    expect(path.raw).toBe("a.b.c");
-  });
-
-  it("marks wildcard paths", () => {
-    const [plain, wild] = compile(["a.b", "a.*.b"]);
-    assert(plain);
-    assert(wild);
-
-    expect(plain.wildcard).toBe(false);
-    expect(wild.wildcard).toBe(true);
-  });
-
-  it("rejects empty path", () => {
-    expect(() => compile([""])).toThrow("Invalid field path");
-  });
-
-  it("rejects path with empty segment", () => {
-    expect(() => compile(["a..b"])).toThrow("Invalid field path");
-  });
-});
 
 describe("pickFields", () => {
   it("returns undefined for empty paths", () => {
