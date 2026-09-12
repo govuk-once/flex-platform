@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "codegen": "gateway-codegen",
+    "lint": "eslint gateway.config.ts schemas.fixture.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

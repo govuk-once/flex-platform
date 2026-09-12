@@ -1,7 +1,6 @@
 name: Continuous Deployment
 
-# Currently a replica of the PR checks. Release and deployment stages from
-# govuk-once/flex will be added here once infrastructure exists.
+# Runs the shared quality checks on the main branch.
 
 on:
   push:
