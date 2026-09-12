@@ -2,7 +2,7 @@ import { GatewayError } from "./errors.ts";
 import type { ResolvedPolicy } from "./policy.ts";
 
 export interface DriverContext {
-  attempt<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T>;
+  upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T>;
 }
 
 export interface DeadlineProvider {
@@ -22,7 +22,7 @@ export function createDriverContext(
   deadline: DeadlineProvider,
 ): DriverContext {
   return {
-    async attempt<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    async upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
       if (deadline.remainingMs() < policy.timeoutMs) {
         throw new GatewayError(
           "UPSTREAM_TIMEOUT",

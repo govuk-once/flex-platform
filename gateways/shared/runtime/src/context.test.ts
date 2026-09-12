@@ -23,9 +23,9 @@ describe("createDriverContext", () => {
     vi.useRealTimers();
   });
 
-  it("attempt invokes the callback with an AbortSignal and returns its result", async () => {
+  it("upstream invokes the callback with an AbortSignal and returns its result", async () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
-    const result = await ctx.attempt((signal) => {
+    const result = await ctx.upstream((signal) => {
       expect(signal).toBeInstanceOf(AbortSignal);
       expect(signal.aborted).toBe(false);
       return Promise.resolve({ id: "123" });
@@ -33,17 +33,17 @@ describe("createDriverContext", () => {
     expect(result).toEqual({ id: "123" });
   });
 
-  it("attempt propagates errors thrown by the callback", async () => {
+  it("upstream propagates errors thrown by the callback", async () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
     await expect(
-      ctx.attempt(() => Promise.reject(new Error("upstream down"))),
+      ctx.upstream(() => Promise.reject(new Error("upstream down"))),
     ).rejects.toThrow("upstream down");
   });
 
   it("supports multiple sequential attempts", async () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
-    const a = await ctx.attempt(() => Promise.resolve(1));
-    const b = await ctx.attempt(() => Promise.resolve(2));
+    const a = await ctx.upstream(() => Promise.resolve(1));
+    const b = await ctx.upstream(() => Promise.resolve(2));
     expect(a).toBe(1);
     expect(b).toBe(2);
   });
@@ -52,7 +52,7 @@ describe("createDriverContext", () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
 
     const result = ctx
-      .attempt(() => new Promise(() => {}))
+      .upstream(() => new Promise(() => {}))
       .catch((err: unknown) => err);
 
     await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
@@ -67,7 +67,7 @@ describe("createDriverContext", () => {
     let capturedSignal: AbortSignal | undefined;
 
     const result = ctx
-      .attempt((signal) => {
+      .upstream((signal) => {
         capturedSignal = signal;
         return new Promise(() => {});
       })
@@ -86,7 +86,7 @@ describe("createDriverContext", () => {
 
     const fn = vi.fn(() => Promise.resolve("should not run"));
     try {
-      await ctx.attempt(fn);
+      await ctx.upstream(fn);
       expect.fail("should have thrown");
     } catch (err) {
       expect(err).toBeInstanceOf(GatewayError);
@@ -102,7 +102,7 @@ describe("createDriverContext", () => {
 
     const fn = vi.fn(() => Promise.resolve("should not run"));
     try {
-      await ctx.attempt(fn);
+      await ctx.upstream(fn);
       expect.fail("should have thrown");
     } catch (err) {
       expect(err).toBeInstanceOf(GatewayError);
@@ -116,7 +116,7 @@ describe("createDriverContext", () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
 
     const result = ctx
-      .attempt(() => new Promise(() => {}))
+      .upstream(() => new Promise(() => {}))
       .catch((err: unknown) => err);
 
     await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
@@ -134,7 +134,7 @@ describe("createDriverContext", () => {
     );
 
     try {
-      await ctx.attempt(() => Promise.reject(original));
+      await ctx.upstream(() => Promise.reject(original));
       expect.fail("should have thrown");
     } catch (err) {
       expect(err).toBe(original);
