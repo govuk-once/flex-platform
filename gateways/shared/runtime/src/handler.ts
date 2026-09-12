@@ -99,7 +99,7 @@ function compileOperations(
 }
 
 function verifyToken(): void {
-  // STUB: JWT verification will land here.
+  // No token verification is performed. This hook does not authenticate the caller.
 }
 
 function formatValidationErrors(
@@ -122,13 +122,14 @@ function extractOperation(event: unknown): string | undefined {
   return undefined;
 }
 
+// Reserve time after the upstream call for outcome validation, logging and the response envelope.
 const DEADLINE_SAFETY_MARGIN_MS = 500;
 
 function recordHealthSignal(
   _operation: string | undefined,
   signal: SignalRuling,
 ): { signal: SignalRuling } {
-  // STUB: breaker/health recording will land here.
+  // Returns a classification for logging; no health state is updated.
   return { signal };
 }
 
