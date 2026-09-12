@@ -39,7 +39,7 @@ export const base = tseslint.config(
   },
 );
 
-// Drivers own transport access. Wrapping upstream calls in ctx.attempt is a contributor
+// Drivers own transport access. Wrapping upstream calls in ctx.upstream is a contributor
 // requirement; this preset does not enforce that wrapping.
 export const driver = tseslint.config(...base);
 

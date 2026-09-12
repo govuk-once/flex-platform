@@ -193,7 +193,7 @@ describe("createHandler", () => {
         testDeps({
           deadline: { remainingMs: () => 600 },
           execute: async (ctx) => {
-            await ctx.attempt(
+            await ctx.upstream(
               () => new Promise((resolve) => setTimeout(resolve, 5_000)),
             );
             return { outcome: "success", data: {} };
@@ -218,7 +218,7 @@ describe("createHandler", () => {
     it("passes a working DriverContext to execute", async () => {
       const execute: HandlerDeps["execute"] = vi.fn(
         async (ctx: DriverContext) => {
-          const result = await ctx.attempt((_signal) =>
+          const result = await ctx.upstream((_signal) =>
             Promise.resolve({
               outcome: "created" as const,
               data: { id: "456" },
@@ -245,7 +245,7 @@ describe("createHandler", () => {
       expect((resp as EnvelopeSuccess).data).toEqual({ id: "456" });
       expect(execute).toHaveBeenCalledOnce();
       const [ctx, operation, input] = vi.mocked(execute).mock.calls[0]!;
-      expect(ctx).toHaveProperty("attempt");
+      expect(ctx).toHaveProperty("upstream");
       expect(operation).toBe("ping");
       expect(input).toEqual({});
     });
@@ -532,7 +532,7 @@ describe("createHandler", () => {
   });
 
   describe("full dispatcher path", () => {
-    it("envelope in → driver called via ctx.attempt with signal → validated outcome out", async () => {
+    it("envelope in → driver called via ctx.upstream with signal → validated outcome out", async () => {
       let receivedSignal: AbortSignal | undefined;
       let receivedOperation: string | undefined;
       let receivedInput: unknown;
@@ -540,7 +540,7 @@ describe("createHandler", () => {
       const execute: HandlerDeps["execute"] = async (ctx, operation, input) => {
         receivedOperation = operation;
         receivedInput = input;
-        return ctx.attempt((signal) => {
+        return ctx.upstream((signal) => {
           receivedSignal = signal;
           expect(signal).toBeInstanceOf(AbortSignal);
           expect(signal.aborted).toBe(false);
