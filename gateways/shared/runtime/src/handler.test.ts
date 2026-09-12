@@ -44,6 +44,7 @@ function testConfig(
       {
         description?: string;
         log?: { input?: string[]; output?: string[] };
+        secure?: Record<string, string>;
       }
     >;
   }> = {},
@@ -174,6 +175,9 @@ describe("createHandler", () => {
   });
 
   describe("step 5: secure bindings", () => {
+    const bound = () =>
+      testConfig({ operations: { ping: { secure: { userId: "sub" } } } });
+
     it("accepts envelopes with populated secure block", async () => {
       const handler = createHandler(testConfig(), testDeps());
       const resp = await handler(
@@ -183,6 +187,67 @@ describe("createHandler", () => {
       );
 
       expect(resp.ok).toBe(true);
+    });
+
+    it("accepts a bound input matching the secure value", async () => {
+      const handler = createHandler(bound(), testDeps());
+      const resp = await handler(
+        envelope({
+          input: { userId: "user-me" },
+          secure: { values: { sub: "user-me" }, signature: "sig" },
+        }),
+      );
+
+      expect(resp.ok).toBe(true);
+    });
+
+    it("returns SECURE_VALUE_MISMATCH when input contradicts the envelope", async () => {
+      const handler = createHandler(bound(), testDeps());
+      const resp = await handler(
+        envelope({
+          input: { userId: "user-someone-else" },
+          secure: { values: { sub: "user-me" }, signature: "sig" },
+        }),
+      );
+
+      expect(resp.ok).toBe(false);
+      expect((resp as EnvelopeError).error.code).toBe("SECURE_VALUE_MISMATCH");
+    });
+
+    it("does not call execute on a mismatch", async () => {
+      const execute = vi.fn(stubExecute);
+      const handler = createHandler(bound(), testDeps({ execute }));
+
+      await handler(
+        envelope({
+          input: { userId: "user-someone-else" },
+          secure: { values: { sub: "user-me" }, signature: "sig" },
+        }),
+      );
+
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it("records a trust signal, never an upstream one", async () => {
+      // A consumer lying about its identity says nothing about upstream health.
+      const handler = createHandler(bound(), testDeps());
+      await handler(
+        envelope({
+          input: { userId: "user-someone-else" },
+          secure: { values: { sub: "user-me" }, signature: "sig" },
+        }),
+      );
+
+      expect(capturedOutput()).toContain('"signal":"trust"');
+    });
+
+    it("fails cold start on a malformed binding path", () => {
+      expect(() =>
+        createHandler(
+          testConfig({ operations: { ping: { secure: { "a..b": "sub" } } } }),
+          testDeps(),
+        ),
+      ).toThrow(/Invalid field path/);
     });
   });
 

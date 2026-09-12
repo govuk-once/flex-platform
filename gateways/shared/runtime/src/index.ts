@@ -4,13 +4,20 @@ export type { DeadlineProvider, DriverContext } from "./context.ts";
 export { parseDuration } from "./duration.ts";
 export { parseEnvelope } from "./envelope.ts";
 export { GatewayError } from "./errors.ts";
+export type { CompiledPath } from "./field-path.ts";
+export { compilePaths } from "./field-path.ts";
 export type { AnyGatewayConfig, HandlerDeps } from "./handler.ts";
 export { createHandler } from "./handler.ts";
-export type { CompiledPath, Logger } from "./logging.ts";
-export { compilePaths, pickFields } from "./logging.ts";
+export type { Logger } from "./logging.ts";
+export { pickFields } from "./logging.ts";
 export type { ResolvedPolicy } from "./policy.ts";
 export { resolvePolicy } from "./policy.ts";
-export { checkSecureBindings, prepareSecurePayload } from "./secure.ts";
+export type { CompiledBinding } from "./secure.ts";
+export {
+  checkSecureBindings,
+  compileBindings,
+  prepareSecurePayload,
+} from "./secure.ts";
 export type {
   EnvelopeError,
   EnvelopeInbound,

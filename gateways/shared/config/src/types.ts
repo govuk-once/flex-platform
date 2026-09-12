@@ -21,6 +21,8 @@ export interface PolicyConfig {
 
 export interface BaseOperationConfig {
   readonly log?: LogConfig;
+  // Input path -> secure value key. Requires equal values; does not authenticate their origin.
+  readonly secure?: Readonly<Record<FieldPath, string>>;
   readonly handler?: string;
   readonly description?: string;
 }
