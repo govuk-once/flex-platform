@@ -1,19 +1,21 @@
 {
-  "name": "@govuk-once/flex-gateway-udp",
+  "name": "@repo/gateway-types",
   "version": "0.0.0",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "codegen": "gateway-codegen",
-    "lint": "eslint gateway.config.ts schemas.fixture.ts",
+    "build": "tsc --build tsconfig.build.json",
+    "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@repo/gateway-config": "workspace:*"
-  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
-    "@repo/gateway-codegen": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "eslint": "10.9.1",

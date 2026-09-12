@@ -40,7 +40,6 @@ describe("defineGateway", () => {
 
     expect(config.description).toBe("A test gateway");
     expect(config.policy?.upstreamTimeout).toBe("3s");
-    expect(config.policy?.attempts).toBe(1);
     expect(config.operations.op.log?.input).toEqual(["field.path"]);
     expect(config.operations.op.log?.output).toEqual(["result.*.id"]);
   });

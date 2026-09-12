@@ -3,31 +3,25 @@ import type {
   GatewayConfig,
   OperationConfig,
 } from "@repo/gateway-config";
+import type {
+  EnvelopeResponse,
+  SignalRuling,
+  Validator,
+} from "@repo/gateway-types";
+import { ERROR_CODES } from "@repo/gateway-types";
 
 import {
   createDriverContext,
   type DeadlineProvider,
   type DriverContext,
 } from "./context.ts";
-import type { EnvelopeResponse } from "./envelope.ts";
 import { parseEnvelope } from "./envelope.ts";
-import { ERROR_CODES, GatewayError, type SignalRuling } from "./errors.ts";
-import {
-  type CompiledPath,
-  compilePaths,
-  createLogger,
-  pickFields,
-} from "./logging.ts";
+import { GatewayError } from "./errors.ts";
+import { type CompiledPath, compilePaths } from "./field-path.ts";
+import { createLogger, pickFields } from "./logging.ts";
 import { resolvePolicy } from "./policy.ts";
-import { checkSecureBindings } from "./secure.ts";
-
-export interface Validator<T = unknown> {
-  (data: unknown): data is T;
-  errors?:
-    | Array<{ instancePath: string; schemaPath: string; message?: string }>
-    | null
-    | undefined;
-}
+import type { CompiledBinding } from "./secure.ts";
+import { checkSecureBindings, compileBindings } from "./secure.ts";
 
 export interface HandlerDeps {
   readonly validators: Readonly<
@@ -60,6 +54,7 @@ interface CompiledOperation {
   };
   readonly logInput: readonly CompiledPath[];
   readonly logOutput: readonly CompiledPath[];
+  readonly secureBindings: readonly CompiledBinding[];
 }
 
 function compileOperations(
@@ -96,6 +91,7 @@ function compileOperations(
       validators: opValidators,
       logInput: compilePaths(opConfig.log?.input ?? []),
       logOutput: compilePaths(opConfig.log?.output ?? []),
+      secureBindings: compileBindings(opConfig.secure),
     });
   }
 
@@ -103,7 +99,7 @@ function compileOperations(
 }
 
 function verifyToken(): void {
-  // STUB: JWT verification will land here.
+  // No token verification is performed. This hook does not authenticate the caller.
 }
 
 function formatValidationErrors(
@@ -126,13 +122,14 @@ function extractOperation(event: unknown): string | undefined {
   return undefined;
 }
 
+// Reserve time after the upstream call for outcome validation, logging and the response envelope.
 const DEADLINE_SAFETY_MARGIN_MS = 500;
 
 function recordHealthSignal(
   _operation: string | undefined,
   signal: SignalRuling,
 ): { signal: SignalRuling } {
-  // STUB: breaker/health recording will land here.
+  // Returns a classification for logging; no health state is updated.
   return { signal };
 }
 
@@ -176,7 +173,12 @@ export function createHandler(
       }
 
       // Step 5: Check secure bindings
-      checkSecureBindings(envelope.secure.values, envelope.secure.signature);
+      checkSecureBindings(
+        op.secureBindings,
+        envelope.input,
+        envelope.secure.values,
+        envelope.secure.signature,
+      );
 
       // Step 6: Derive deadline
       const requestDeadline: DeadlineProvider = {
@@ -215,15 +217,13 @@ export function createHandler(
       const health = recordHealthSignal(envelope.operation, "upstream_success");
 
       // Step 10: Wrap envelope
-      const inputFields = pickFields(envelope.input, op.logInput);
-      const outputFields = pickFields(result.data, op.logOutput);
       logger.info(
         {
           operation: envelope.operation,
           outcome: result.outcome,
           ...health,
-          ...(inputFields ? { input: inputFields } : {}),
-          ...(outputFields ? { output: outputFields } : {}),
+          input: pickFields(envelope.input, op.logInput),
+          output: pickFields(result.data, op.logOutput),
         },
         "response",
       );
@@ -245,10 +245,8 @@ export function createHandler(
           { operation: extractOperation(event), code: err.code, ...health },
           err.message,
         );
-        return {
-          ok: false as const,
-          error: { code: err.code, message: err.message },
-        };
+        // Detail is logged above, never returned.
+        return { ok: false as const, error: { code: err.code } };
       }
 
       // Step 9: Record health (unhandled)
@@ -258,10 +256,7 @@ export function createHandler(
       );
 
       logger.error({ err, ...health }, "Unhandled error in dispatcher");
-      return {
-        ok: false as const,
-        error: { code: "INTERNAL" as const, message: "Internal error" },
-      };
+      return { ok: false as const, error: { code: "INTERNAL" as const } };
     }
   };
 }

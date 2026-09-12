@@ -7,9 +7,9 @@ export interface LogConfig {
   readonly output?: readonly FieldPath[];
 }
 
+// Only upstreamTimeout is enforced. Other fields are accepted but have no enforcement effect.
 export interface PolicyConfig {
   readonly upstreamTimeout?: string;
-  readonly attempts?: number;
   readonly circuitBreaker?: {
     readonly threshold?: number;
     readonly duration?: string;
@@ -21,6 +21,8 @@ export interface PolicyConfig {
 
 export interface BaseOperationConfig {
   readonly log?: LogConfig;
+  // Input path -> secure value key. Requires equal values; does not authenticate their origin.
+  readonly secure?: Readonly<Record<FieldPath, string>>;
   readonly handler?: string;
   readonly description?: string;
 }

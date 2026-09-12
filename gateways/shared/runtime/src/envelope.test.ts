@@ -1,10 +1,5 @@
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import type {
-  EnvelopeError,
-  EnvelopeResponse,
-  EnvelopeSuccess,
-} from "./envelope.ts";
 import { parseEnvelope } from "./envelope.ts";
 import { GatewayError } from "./errors.ts";
 
@@ -147,27 +142,49 @@ describe("parseEnvelope", () => {
   });
 });
 
-describe("EnvelopeResponse type narrowing", () => {
-  it("narrows success envelope on ok: true", () => {
-    const resp: EnvelopeResponse = {
-      ok: true,
-      outcome: "created",
-      data: { id: "1" },
-    };
-    if (resp.ok) {
-      expectTypeOf(resp).toExtend<EnvelopeSuccess>();
-      expect(resp.outcome).toBe("created");
+describe("parseEnvelope: secure.values must be scalars", () => {
+  const withValues = (values: unknown) => ({
+    operation: "op",
+    input: {},
+    secure: { values, signature: "sig" },
+  });
+
+  it.each([
+    ["string", "abc"],
+    ["number", 42],
+    ["zero", 0],
+    ["boolean", true],
+    ["null", null],
+  ])("accepts a %s value", (_label, value) => {
+    expect(() => parseEnvelope(withValues({ k: value }))).not.toThrow();
+  });
+
+  it.each([
+    ["nested object", { nested: { a: 1 } }],
+    ["array", { list: [1, 2] }],
+    ["undefined", { k: undefined }],
+  ])("rejects a %s value as INVALID_INPUT", (_label, values) => {
+    try {
+      parseEnvelope(withValues(values));
+      throw new Error("expected INVALID_INPUT");
+    } catch (err) {
+      expect(err).toBeInstanceOf(GatewayError);
+      expect((err as GatewayError).code).toBe("INVALID_INPUT");
     }
   });
 
-  it("narrows error envelope on ok: false", () => {
-    const resp: EnvelopeResponse = {
-      ok: false,
-      error: { code: "INTERNAL", message: "boom" },
-    };
-    if (!resp.ok) {
-      expectTypeOf(resp).toExtend<EnvelopeError>();
-      expect(resp.error.code).toBe("INTERNAL");
-    }
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+  ])("rejects %s, which would stringify to null when signed", (_l, value) => {
+    expect(() => parseEnvelope(withValues({ k: value }))).toThrow(
+      /secure.values.k/,
+    );
+  });
+
+  it("names the offending key in the message", () => {
+    expect(() => parseEnvelope(withValues({ ok: 1, bad: {} }))).toThrow(
+      /secure\.values\.bad/,
+    );
   });
 });

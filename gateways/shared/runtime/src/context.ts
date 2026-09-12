@@ -2,7 +2,7 @@ import { GatewayError } from "./errors.ts";
 import type { ResolvedPolicy } from "./policy.ts";
 
 export interface DriverContext {
-  attempt<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T>;
+  upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T>;
 }
 
 export interface DeadlineProvider {
@@ -22,19 +22,18 @@ export function createDriverContext(
   deadline: DeadlineProvider,
 ): DriverContext {
   return {
-    async attempt<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
-      if (deadline.remainingMs() < policy.timeoutMs) {
+    async upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+      const remaining = deadline.remainingMs();
+      if (remaining <= 0) {
         throw new GatewayError(
           "UPSTREAM_TIMEOUT",
-          "Insufficient time remaining for upstream call",
+          "Deadline exhausted before the upstream call",
         );
       }
 
-      // STUB: Circuit breaker gate (fast-fail while open)
-      // STUB: Rate limit gate
-
+      const budget = Math.min(policy.timeoutMs, remaining);
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), policy.timeoutMs);
+      const timer = setTimeout(() => controller.abort(), budget);
       const { signal } = controller;
 
       try {

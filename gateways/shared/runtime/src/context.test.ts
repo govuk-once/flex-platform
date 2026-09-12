@@ -7,7 +7,6 @@ import type { ResolvedPolicy } from "./policy.ts";
 
 const testPolicy: ResolvedPolicy = {
   timeoutMs: 5_000,
-  attempts: 1,
   circuitBreaker: { threshold: 5, durationMs: 120_000 },
   rateLimit: { rps: Infinity },
 };
@@ -23,9 +22,9 @@ describe("createDriverContext", () => {
     vi.useRealTimers();
   });
 
-  it("attempt invokes the callback with an AbortSignal and returns its result", async () => {
+  it("upstream invokes the callback with an AbortSignal and returns its result", async () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
-    const result = await ctx.attempt((signal) => {
+    const result = await ctx.upstream((signal) => {
       expect(signal).toBeInstanceOf(AbortSignal);
       expect(signal.aborted).toBe(false);
       return Promise.resolve({ id: "123" });
@@ -33,17 +32,17 @@ describe("createDriverContext", () => {
     expect(result).toEqual({ id: "123" });
   });
 
-  it("attempt propagates errors thrown by the callback", async () => {
+  it("upstream propagates errors thrown by the callback", async () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
     await expect(
-      ctx.attempt(() => Promise.reject(new Error("upstream down"))),
+      ctx.upstream(() => Promise.reject(new Error("upstream down"))),
     ).rejects.toThrow("upstream down");
   });
 
   it("supports multiple sequential attempts", async () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
-    const a = await ctx.attempt(() => Promise.resolve(1));
-    const b = await ctx.attempt(() => Promise.resolve(2));
+    const a = await ctx.upstream(() => Promise.resolve(1));
+    const b = await ctx.upstream(() => Promise.resolve(2));
     expect(a).toBe(1);
     expect(b).toBe(2);
   });
@@ -52,7 +51,7 @@ describe("createDriverContext", () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
 
     const result = ctx
-      .attempt(() => new Promise(() => {}))
+      .upstream(() => new Promise(() => {}))
       .catch((err: unknown) => err);
 
     await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
@@ -67,7 +66,7 @@ describe("createDriverContext", () => {
     let capturedSignal: AbortSignal | undefined;
 
     const result = ctx
-      .attempt((signal) => {
+      .upstream((signal) => {
         capturedSignal = signal;
         return new Promise(() => {});
       })
@@ -79,44 +78,72 @@ describe("createDriverContext", () => {
     expect(capturedSignal?.aborted).toBe(true);
   });
 
-  it("throws immediately when deadline is less than policy timeout", async () => {
+  it("attempts the call even when the deadline is shorter than the policy", async () => {
+    // Refusing here would mean the default 10s policy fails every call on any Lambda
+    // configured below ~10.5s, without ever contacting the upstream.
     const longPolicy = { ...testPolicy, timeoutMs: 60_000 };
     const shortDeadline: DeadlineProvider = { remainingMs: () => 50 };
     const ctx = createDriverContext(longPolicy, shortDeadline);
 
-    const fn = vi.fn(() => Promise.resolve("should not run"));
-    try {
-      await ctx.attempt(fn);
-      expect.fail("should have thrown");
-    } catch (err) {
-      expect(err).toBeInstanceOf(GatewayError);
-      expect((err as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
-      expect((err as GatewayError).message).toContain("Insufficient time");
-    }
-    expect(fn).not.toHaveBeenCalled();
+    const fn = vi.fn(() => Promise.resolve("ran"));
+    await expect(ctx.upstream(fn)).resolves.toBe("ran");
+    expect(fn).toHaveBeenCalledOnce();
   });
 
-  it("throws immediately when no time remaining", async () => {
-    const deadline: DeadlineProvider = { remainingMs: () => 0 };
-    const ctx = createDriverContext(testPolicy, deadline);
+  it("shortens the budget to the remaining deadline", async () => {
+    const longPolicy = { ...testPolicy, timeoutMs: 60_000 };
+    const ctx = createDriverContext(longPolicy, { remainingMs: () => 50 });
+
+    const result = ctx
+      .upstream(() => new Promise(() => {}))
+      .catch((e: unknown) => e);
+
+    // Well inside the 60s policy timeout, so only the deadline can have aborted this.
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(((await result) as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
+  });
+
+  it("refuses to dispatch when the deadline is exhausted", async () => {
+    // The abort is a macrotask, so without this guard `fn` is entered unaborted: a fast call
+    // succeeds on zero budget, and a real one may dispatch a write before the abort lands.
+    const ctx = createDriverContext(testPolicy, { remainingMs: () => 0 });
 
     const fn = vi.fn(() => Promise.resolve("should not run"));
-    try {
-      await ctx.attempt(fn);
-      expect.fail("should have thrown");
-    } catch (err) {
-      expect(err).toBeInstanceOf(GatewayError);
-      expect((err as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
-      expect((err as GatewayError).message).toContain("Insufficient time");
-    }
+    const err = (await ctx
+      .upstream(fn)
+      .catch((e: unknown) => e)) as GatewayError;
+
     expect(fn).not.toHaveBeenCalled();
+    expect(err.code).toBe("UPSTREAM_TIMEOUT");
+    expect(err.message).toContain("exhausted");
+  });
+
+  it("does not resolve a fast call on an exhausted budget", async () => {
+    // The regression: a callback settling in a microtask beat the abort timer and succeeded.
+    const ctx = createDriverContext(testPolicy, { remainingMs: () => 0 });
+
+    await expect(
+      ctx.upstream(() => Promise.resolve("upstream work completed")),
+    ).rejects.toMatchObject({ code: "UPSTREAM_TIMEOUT" });
+  });
+
+  it("uses the policy timeout when it is the tighter of the two", async () => {
+    const ctx = createDriverContext(testPolicy, { remainingMs: () => 60_000 });
+
+    const result = ctx
+      .upstream(() => new Promise(() => {}))
+      .catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
+
+    expect(((await result) as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
   });
 
   it("uses policy timeout when deadline has no constraint", async () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
 
     const result = ctx
-      .attempt(() => new Promise(() => {}))
+      .upstream(() => new Promise(() => {}))
       .catch((err: unknown) => err);
 
     await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
@@ -134,7 +161,7 @@ describe("createDriverContext", () => {
     );
 
     try {
-      await ctx.attempt(() => Promise.reject(original));
+      await ctx.upstream(() => Promise.reject(original));
       expect.fail("should have thrown");
     } catch (err) {
       expect(err).toBe(original);
