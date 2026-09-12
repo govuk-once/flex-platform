@@ -51,6 +51,9 @@ importers:
       '@repo/gateway-config':
         specifier: workspace:*
         version: link:../config
+      '@repo/gateway-types':
+        specifier: workspace:*
+        version: link:../types
       ajv:
         specifier: 8.20.0
         version: 8.20.0
@@ -103,6 +106,9 @@ importers:
       '@repo/gateway-config':
         specifier: workspace:*
         version: link:../config
+      '@repo/gateway-types':
+        specifier: workspace:*
+        version: link:../types
       pino:
         specifier: 10.3.1
         version: 10.3.1
