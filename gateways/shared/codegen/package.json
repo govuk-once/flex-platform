@@ -22,13 +22,13 @@
     "@repo/gateway-types": "workspace:*",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
+    "esbuild": "0.28.2",
     "prettier": "3.9.6"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "esbuild": "0.28.2",
     "eslint": "10.9.1",
     "vitest": "4.1.11"
   }

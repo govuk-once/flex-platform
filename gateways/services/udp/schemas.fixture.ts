@@ -1,6 +1,5 @@
-// TEMPORARY. Delete this file when the openapi-rest driver lands and describe()
-// produces these schemas from the UDP OpenAPI spec. Nothing should grow to
-// depend on it.
+// Example schemas consumed by the codegen CLI. These are fixtures, not an upstream contract.
+// Keep application code independent of this fixture module.
 
 import type { GatewaySchemas } from "@repo/gateway-codegen";
 

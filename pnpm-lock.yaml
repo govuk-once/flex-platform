@@ -60,6 +60,9 @@ importers:
       ajv-formats:
         specifier: 3.0.1
         version: 3.0.1(ajv@8.20.0)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       prettier:
         specifier: 3.9.6
         version: 3.9.6
@@ -73,9 +76,6 @@ importers:
       '@repo/vitest-config':
         specifier: workspace:*
         version: link:../../../packages/vitest-config
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
       eslint:
         specifier: 10.9.1
         version: 10.9.1(jiti@2.7.0)(supports-color@7.2.0)

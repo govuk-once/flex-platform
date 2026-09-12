@@ -51,7 +51,8 @@ async function buildBundle() {
 
   return esbuild.build({
     entryPoints: [path.join(validatorsDir, "index.js")],
-    nodePaths: [path.resolve(import.meta.dirname, "../node_modules")],
+    // No nodePaths. The emitted directory resolves entirely on its own; pointing esbuild at
+    // codegen's node_modules would hide a package import that breaks in a real service.
     bundle: true,
     format: "esm",
     platform: "node",
@@ -61,17 +62,21 @@ async function buildBundle() {
 }
 
 describe("bundle verification", () => {
-  it("excludes the ajv compiler and inlines ajv-formats", async () => {
+  it("bundles emitted modules without additional package dependencies", async () => {
     const result = await buildBundle();
     const inputs = Object.keys(result.metafile.inputs);
 
     const compilerInputs = inputs.filter((p) => p.includes("ajv/dist/compile"));
     expect(compilerInputs).toEqual([]);
 
-    const formatInputs = inputs.filter((p) =>
-      p.includes("ajv-formats/dist/formats"),
+    // This second bundle checks for additional dependencies. Its input list cannot inspect
+    // dependencies already embedded in schemas.js during emission.
+    expect(inputs.filter((p) => p.includes("node_modules"))).toEqual([]);
+    expect(inputs.toSorted()).toEqual(
+      inputs
+        .filter((p) => p.endsWith("index.js") || p.endsWith("schemas.js"))
+        .toSorted(),
     );
-    expect(formatInputs.length).toBeGreaterThan(0);
   });
 
   it("validators work from the bundle", async () => {

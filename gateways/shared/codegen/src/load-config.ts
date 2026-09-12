@@ -19,6 +19,8 @@ async function loadModule<T>(absPath: string): Promise<T> {
   return mod.default;
 }
 
+// Loads TypeScript via Node's type stripping without a config compilation step.
+// The CLI currently uses loadSchemas rather than this loader.
 export async function loadConfig(
   gatewayDir: string,
 ): Promise<AnyGatewayConfig> {
