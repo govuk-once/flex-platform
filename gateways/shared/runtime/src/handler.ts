@@ -216,15 +216,13 @@ export function createHandler(
       const health = recordHealthSignal(envelope.operation, "upstream_success");
 
       // Step 10: Wrap envelope
-      const inputFields = pickFields(envelope.input, op.logInput);
-      const outputFields = pickFields(result.data, op.logOutput);
       logger.info(
         {
           operation: envelope.operation,
           outcome: result.outcome,
           ...health,
-          ...(inputFields ? { input: inputFields } : {}),
-          ...(outputFields ? { output: outputFields } : {}),
+          input: pickFields(envelope.input, op.logInput),
+          output: pickFields(result.data, op.logOutput),
         },
         "response",
       );
