@@ -39,42 +39,36 @@ export const base = tseslint.config(
   },
 );
 
-// Drivers own their transport (fetch for REST, AWS SDK for DynamoDB, etc.) so the `driver`
-// preset has no network restrictions. The structural enforcement is that drivers receive a
-// `DriverContext` and must wrap upstream calls in `ctx.attempt`.
+// Drivers own transport access. Wrapping upstream calls in ctx.attempt is a contributor
+// requirement; this preset does not enforce that wrapping.
 export const driver = tseslint.config(...base);
 
 // Services must not make network calls directly — all upstream access goes through a gateway.
+const NETWORK_MESSAGE =
+  "Services must not make network calls directly. Use a gateway.";
+
+// Bare and node:-prefixed specifiers resolve to the same builtin, so ban both spellings.
+const NETWORK_BUILTINS = ["http", "https", "http2", "net", "dgram", "tls"];
+
+// Third-party clients a service might reach for instead. Not exhaustive; review transport
+// dependencies separately.
+const NETWORK_PACKAGES = ["undici"];
+
+const NETWORK_GLOBALS = ["fetch", "WebSocket", "EventSource", "XMLHttpRequest"];
+
 export const service = tseslint.config(...base, {
   rules: {
     "no-restricted-globals": [
       "error",
-      {
-        name: "fetch",
-        message:
-          "Services must not make network calls directly. Use a gateway.",
-      },
+      ...NETWORK_GLOBALS.map((name) => ({ name, message: NETWORK_MESSAGE })),
     ],
     "no-restricted-imports": [
       "error",
       {
         paths: [
-          {
-            name: "node:http",
-            message:
-              "Services must not make network calls directly. Use a gateway.",
-          },
-          {
-            name: "node:https",
-            message:
-              "Services must not make network calls directly. Use a gateway.",
-          },
-          {
-            name: "undici",
-            message:
-              "Services must not make network calls directly. Use a gateway.",
-          },
-        ],
+          ...NETWORK_BUILTINS.flatMap((name) => [name, `node:${name}`]),
+          ...NETWORK_PACKAGES,
+        ].map((name) => ({ name, message: NETWORK_MESSAGE })),
       },
     ],
   },
