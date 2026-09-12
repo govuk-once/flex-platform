@@ -1,76 +1,49 @@
 # Flex Platform
 
-The monorepo for the Flex Platform.
-
-> **Status:** early. The structure is in place, but most of the tooling described below has not
-> been built yet.
+Gateway libraries and shared development tooling for the Flex Platform.
 
 ## Layout
 
-```
-gateways/     The service gateways
-packages/     Shared toolchain
+```txt
+gateways/shared/     Configuration, shared types, runtime and validator generation
+gateways/services/   Gateway configurations and schema fixtures
+packages/           Shared TypeScript, ESLint and Vitest tooling
 ```
 
-More top-level directories will be added alongside `gateways/`. Each one shares the toolchain in
-`packages/` but owns its own code, contracts and release cycle. If something is used across the
-whole repo it belongs in `packages/`, otherwise it stays where it is used. For example `gateways/`
-has its own `shared/` directory for things common to gateways and nothing else.
+Gateway-specific libraries live under `gateways/shared/`. The `packages/` directory contains
+tooling shared across the repository.
 
 ## Gateways
 
-A gateway is an internal service that owns exactly one upstream. A Flex service calls the
-gateway instead of the upstream, and gets a stable typed interface, consistent errors, and
-resilience built in: timeouts, retries, circuit breaking and rate limiting. Upstream credentials
-never leave the gateway.
+A gateway groups operations for one upstream. Configuration describes those operations; shared
+libraries handle schema validation, dispatch, upstream timeouts and payload logging. This keeps
+transport-specific details separate from common runtime behaviour.
 
-Upstreams include third party APIs and other services within the Once programme. From a consuming
-service there is no difference between the two.
-
-```
-gateways/shared/     Libraries that make gateways work
-gateways/services/   The gateways themselves, one per upstream
-```
-
-### Authoring a gateway
-
-A gateway is written as a single `gateway.config.ts` describing the upstream and its operations.
-Codegen produces everything else: the contract, validators, the deployable handler and a typed
-client. In cases where codegen would not be sufficient we'll provide fallback to a handler
-that can be written manually under that gateway.
-
-Codegen is not implemented yet. When it is, the generated output will be produced on each build
-rather than committed.
-
-### Consuming a gateway
-
-Install the generated client and call a method:
-
-```ts
-import { udp } from "@govuk-once/flex-gateway-udp";
-
-const result = await udp.getNotifications({ id: "123" });
-return result.data;
-```
+The repository includes `defineGateway`, a dispatcher and a generator that emits standalone
+JavaScript validators from schema fixtures. It does not yet provide a complete deployable gateway
+or generated client. Authentication is not implemented, and only the upstream-timeout policy is
+enforced. See [the gateway guide](gateways/README.md) for supported behaviour and limitations.
 
 ## Working in this repo
+
+Use Node 24 and the pnpm version pinned in `package.json`.
 
 ```bash
 pnpm install
 pnpm build
 pnpm test
 pnpm lint
+pnpm typecheck
 ```
 
-Node 24, pnpm and Turborepo. Add `--filter <package>` to scope a command to a single package.
+Turborepo coordinates package tasks. Use `pnpm --filter <package> <script>` to run a package's
+script directly. Generated files and build output are ignored by Git.
 
-Some dependencies are published to GitHub Packages under the `@govuk-once` scope. The repo ships
-an `.npmrc` that expects a token in your environment. You need read access to that scope for
-`pnpm install` to work.
+The `.npmrc` maps the `@govuk-once` scope to GitHub Packages. Authentication is needed when
+accessing packages that require it; do not commit registry credentials.
 
-Conventions and invariants for this repo live in [`CLAUDE.md`](./CLAUDE.md). It is written for AI
-agents, but it is worth reading if you are working here too.
+Contributor conventions and design constraints are in [CLAUDE.md](CLAUDE.md).
 
 ## Licence
 
-MIT. See [`LICENSE`](./LICENSE).
+MIT. See [LICENCE](LICENCE).
