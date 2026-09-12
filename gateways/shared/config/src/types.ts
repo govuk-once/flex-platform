@@ -7,9 +7,9 @@ export interface LogConfig {
   readonly output?: readonly FieldPath[];
 }
 
+// Only upstreamTimeout is enforced. Other fields are accepted but have no enforcement effect.
 export interface PolicyConfig {
   readonly upstreamTimeout?: string;
-  readonly attempts?: number;
   readonly circuitBreaker?: {
     readonly threshold?: number;
     readonly duration?: string;

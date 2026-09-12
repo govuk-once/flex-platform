@@ -6,12 +6,10 @@ describe("resolvePolicy", () => {
   it("resolves standard policy defaults", () => {
     const resolved = resolvePolicy({
       upstreamTimeout: "10s",
-      attempts: 1,
       circuitBreaker: { threshold: 5, duration: "120s" },
     });
 
     expect(resolved.timeoutMs).toBe(10_000);
-    expect(resolved.attempts).toBe(1);
     expect(resolved.circuitBreaker.threshold).toBe(5);
     expect(resolved.circuitBreaker.durationMs).toBe(120_000);
     expect(resolved.rateLimit.rps).toBe(Infinity);
@@ -21,7 +19,6 @@ describe("resolvePolicy", () => {
     const resolved = resolvePolicy(undefined);
 
     expect(resolved.timeoutMs).toBe(10_000);
-    expect(resolved.attempts).toBe(1);
     expect(resolved.circuitBreaker.threshold).toBe(5);
     expect(resolved.circuitBreaker.durationMs).toBe(120_000);
     expect(resolved.rateLimit.rps).toBe(Infinity);
@@ -31,7 +28,6 @@ describe("resolvePolicy", () => {
     const resolved = resolvePolicy({});
 
     expect(resolved.timeoutMs).toBe(10_000);
-    expect(resolved.attempts).toBe(1);
   });
 
   it("parses custom timeout", () => {
@@ -41,9 +37,10 @@ describe("resolvePolicy", () => {
   });
 
   it("overrides individual fields while keeping other defaults", () => {
-    const resolved = resolvePolicy({ attempts: 3 });
+    const resolved = resolvePolicy({ circuitBreaker: { threshold: 9 } });
 
-    expect(resolved.attempts).toBe(3);
+    expect(resolved.circuitBreaker.threshold).toBe(9);
+    expect(resolved.circuitBreaker.durationMs).toBe(120_000);
     expect(resolved.timeoutMs).toBe(10_000);
   });
 
@@ -72,5 +69,18 @@ describe("resolvePolicy", () => {
     expect(() =>
       resolvePolicy({ circuitBreaker: { duration: "nope" } }),
     ).toThrow("Invalid duration");
+  });
+});
+
+describe("resolvePolicy rejects a timeout that disables the gateway", () => {
+  it.each(["0s", "0ms", "0m"])("rejects %s", (value) => {
+    // Zero budget refuses every call before the upstream, which looks like an outage.
+    expect(() => resolvePolicy({ upstreamTimeout: value })).toThrow(
+      /must be greater than zero/,
+    );
+  });
+
+  it("still accepts a small positive timeout", () => {
+    expect(resolvePolicy({ upstreamTimeout: "1ms" }).timeoutMs).toBe(1);
   });
 });
