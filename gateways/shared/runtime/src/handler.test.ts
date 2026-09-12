@@ -1,14 +1,15 @@
 import { defineGateway } from "@repo/gateway-config";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { DriverContext } from "./context.ts";
 import type {
   EnvelopeError,
   EnvelopeInbound,
   EnvelopeSuccess,
-} from "./envelope.ts";
+  Validator,
+} from "@repo/gateway-types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { DriverContext } from "./context.ts";
 import { GatewayError } from "./errors.ts";
-import type { AnyGatewayConfig, HandlerDeps, Validator } from "./handler.ts";
+import type { AnyGatewayConfig, HandlerDeps } from "./handler.ts";
 import { createHandler } from "./handler.ts";
 
 // -- Helpers ------------------------------------------------------------------
@@ -40,7 +41,10 @@ function testConfig(
   overrides: Partial<{
     operations: Record<
       string,
-      { description?: string; log?: { input?: string[]; output?: string[] } }
+      {
+        description?: string;
+        log?: { input?: string[]; output?: string[] };
+      }
     >;
   }> = {},
 ): AnyGatewayConfig {
@@ -124,7 +128,7 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("OPERATION_NOT_FOUND");
-      expect(err.error.message).toContain("unknown");
+      expect(capturedOutput()).toContain("unknown");
     });
   });
 
@@ -146,7 +150,7 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("INVALID_INPUT");
-      expect(err.error.message).toContain("always fails");
+      expect(capturedOutput()).toContain("always fails");
     });
 
     it("does not call execute when input is invalid", async () => {
@@ -271,7 +275,7 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("UPSTREAM_CONTRACT_VIOLATION");
-      expect(err.error.message).toContain("nonexistent");
+      expect(capturedOutput()).toContain("nonexistent");
     });
 
     it("returns UPSTREAM_CONTRACT_VIOLATION when outcome data fails validation", async () => {
@@ -366,7 +370,7 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("INTERNAL");
-      expect(err.error.message).toBe("Internal error");
+      expect(err.error).toEqual({ code: "INTERNAL" });
     });
 
     it("does not leak internal error messages to the response", async () => {
@@ -380,7 +384,7 @@ describe("createHandler", () => {
       const resp = await handler(envelope());
 
       const err = resp as EnvelopeError;
-      expect(err.error.message).not.toContain("secret database");
+      expect(JSON.stringify(err)).not.toContain("secret database");
     });
 
     it("wraps GatewayError thrown by execute", async () => {
@@ -396,7 +400,47 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("UPSTREAM_TIMEOUT");
-      expect(err.error.message).toBe("timed out");
+      expect(err.error).toEqual({ code: "UPSTREAM_TIMEOUT" });
+      expect(capturedOutput()).toContain("timed out");
+    });
+  });
+
+  describe("error envelopes carry the code only", () => {
+    // A message on the wire would be an unbounded free-text channel out of the trust boundary.
+    it.each([
+      [
+        "a GatewayError from execute",
+        () =>
+          Promise.reject(
+            new GatewayError("UPSTREAM_REJECTED", "nino QQ123456C rejected"),
+          ),
+      ],
+      [
+        "an unhandled error",
+        () => Promise.reject(new Error("nino QQ123456C blew up")),
+      ],
+    ])("returns only { code } for %s", async (_label, execute) => {
+      const handler = createHandler(testConfig(), testDeps({ execute }));
+      const resp = await handler(envelope());
+
+      expect(resp.ok).toBe(false);
+      expect(Object.keys((resp as EnvelopeError).error)).toEqual(["code"]);
+      expect(JSON.stringify(resp)).not.toContain("QQ123456C");
+    });
+
+    it("keeps the detail in the log", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: () =>
+            Promise.reject(
+              new GatewayError("UPSTREAM_REJECTED", "detail here"),
+            ),
+        }),
+      );
+      await handler(envelope());
+
+      expect(capturedOutput()).toContain("detail here");
     });
   });
 

@@ -3,15 +3,20 @@ import type {
   GatewayConfig,
   OperationConfig,
 } from "@repo/gateway-config";
+import type {
+  EnvelopeResponse,
+  SignalRuling,
+  Validator,
+} from "@repo/gateway-types";
+import { ERROR_CODES } from "@repo/gateway-types";
 
 import {
   createDriverContext,
   type DeadlineProvider,
   type DriverContext,
 } from "./context.ts";
-import type { EnvelopeResponse } from "./envelope.ts";
 import { parseEnvelope } from "./envelope.ts";
-import { ERROR_CODES, GatewayError, type SignalRuling } from "./errors.ts";
+import { GatewayError } from "./errors.ts";
 import {
   type CompiledPath,
   compilePaths,
@@ -20,14 +25,6 @@ import {
 } from "./logging.ts";
 import { resolvePolicy } from "./policy.ts";
 import { checkSecureBindings } from "./secure.ts";
-
-export interface Validator<T = unknown> {
-  (data: unknown): data is T;
-  errors?:
-    | Array<{ instancePath: string; schemaPath: string; message?: string }>
-    | null
-    | undefined;
-}
 
 export interface HandlerDeps {
   readonly validators: Readonly<
@@ -245,10 +242,8 @@ export function createHandler(
           { operation: extractOperation(event), code: err.code, ...health },
           err.message,
         );
-        return {
-          ok: false as const,
-          error: { code: err.code, message: err.message },
-        };
+        // Detail is logged above, never returned.
+        return { ok: false as const, error: { code: err.code } };
       }
 
       // Step 9: Record health (unhandled)
@@ -258,10 +253,7 @@ export function createHandler(
       );
 
       logger.error({ err, ...health }, "Unhandled error in dispatcher");
-      return {
-        ok: false as const,
-        error: { code: "INTERNAL" as const, message: "Internal error" },
-      };
+      return { ok: false as const, error: { code: "INTERNAL" as const } };
     }
   };
 }
