@@ -1,14 +1,15 @@
 import { defineGateway } from "@repo/gateway-config";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { DriverContext } from "./context.ts";
 import type {
   EnvelopeError,
   EnvelopeInbound,
   EnvelopeSuccess,
-} from "./envelope.ts";
+  Validator,
+} from "@repo/gateway-types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { DriverContext } from "./context.ts";
 import { GatewayError } from "./errors.ts";
-import type { AnyGatewayConfig, HandlerDeps, Validator } from "./handler.ts";
+import type { AnyGatewayConfig, HandlerDeps } from "./handler.ts";
 import { createHandler } from "./handler.ts";
 
 // -- Helpers ------------------------------------------------------------------
@@ -40,7 +41,11 @@ function testConfig(
   overrides: Partial<{
     operations: Record<
       string,
-      { description?: string; log?: { input?: string[]; output?: string[] } }
+      {
+        description?: string;
+        log?: { input?: string[]; output?: string[] };
+        secure?: Record<string, string>;
+      }
     >;
   }> = {},
 ): AnyGatewayConfig {
@@ -124,7 +129,7 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("OPERATION_NOT_FOUND");
-      expect(err.error.message).toContain("unknown");
+      expect(capturedOutput()).toContain("unknown");
     });
   });
 
@@ -146,7 +151,7 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("INVALID_INPUT");
-      expect(err.error.message).toContain("always fails");
+      expect(capturedOutput()).toContain("always fails");
     });
 
     it("does not call execute when input is invalid", async () => {
@@ -170,6 +175,9 @@ describe("createHandler", () => {
   });
 
   describe("step 5: secure bindings", () => {
+    const bound = () =>
+      testConfig({ operations: { ping: { secure: { userId: "sub" } } } });
+
     it("accepts envelopes with populated secure block", async () => {
       const handler = createHandler(testConfig(), testDeps());
       const resp = await handler(
@@ -180,6 +188,67 @@ describe("createHandler", () => {
 
       expect(resp.ok).toBe(true);
     });
+
+    it("accepts a bound input matching the secure value", async () => {
+      const handler = createHandler(bound(), testDeps());
+      const resp = await handler(
+        envelope({
+          input: { userId: "user-me" },
+          secure: { values: { sub: "user-me" }, signature: "sig" },
+        }),
+      );
+
+      expect(resp.ok).toBe(true);
+    });
+
+    it("returns SECURE_VALUE_MISMATCH when input contradicts the envelope", async () => {
+      const handler = createHandler(bound(), testDeps());
+      const resp = await handler(
+        envelope({
+          input: { userId: "user-someone-else" },
+          secure: { values: { sub: "user-me" }, signature: "sig" },
+        }),
+      );
+
+      expect(resp.ok).toBe(false);
+      expect((resp as EnvelopeError).error.code).toBe("SECURE_VALUE_MISMATCH");
+    });
+
+    it("does not call execute on a mismatch", async () => {
+      const execute = vi.fn(stubExecute);
+      const handler = createHandler(bound(), testDeps({ execute }));
+
+      await handler(
+        envelope({
+          input: { userId: "user-someone-else" },
+          secure: { values: { sub: "user-me" }, signature: "sig" },
+        }),
+      );
+
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it("records a trust signal, never an upstream one", async () => {
+      // A consumer lying about its identity says nothing about upstream health.
+      const handler = createHandler(bound(), testDeps());
+      await handler(
+        envelope({
+          input: { userId: "user-someone-else" },
+          secure: { values: { sub: "user-me" }, signature: "sig" },
+        }),
+      );
+
+      expect(capturedOutput()).toContain('"signal":"trust"');
+    });
+
+    it("fails cold start on a malformed binding path", () => {
+      expect(() =>
+        createHandler(
+          testConfig({ operations: { ping: { secure: { "a..b": "sub" } } } }),
+          testDeps(),
+        ),
+      ).toThrow(/Invalid field path/);
+    });
   });
 
   describe("step 6: derive deadline", () => {
@@ -189,7 +258,7 @@ describe("createHandler", () => {
         testDeps({
           deadline: { remainingMs: () => 600 },
           execute: async (ctx) => {
-            await ctx.attempt(
+            await ctx.upstream(
               () => new Promise((resolve) => setTimeout(resolve, 5_000)),
             );
             return { outcome: "success", data: {} };
@@ -214,7 +283,7 @@ describe("createHandler", () => {
     it("passes a working DriverContext to execute", async () => {
       const execute: HandlerDeps["execute"] = vi.fn(
         async (ctx: DriverContext) => {
-          const result = await ctx.attempt((_signal) =>
+          const result = await ctx.upstream((_signal) =>
             Promise.resolve({
               outcome: "created" as const,
               data: { id: "456" },
@@ -241,7 +310,7 @@ describe("createHandler", () => {
       expect((resp as EnvelopeSuccess).data).toEqual({ id: "456" });
       expect(execute).toHaveBeenCalledOnce();
       const [ctx, operation, input] = vi.mocked(execute).mock.calls[0]!;
-      expect(ctx).toHaveProperty("attempt");
+      expect(ctx).toHaveProperty("upstream");
       expect(operation).toBe("ping");
       expect(input).toEqual({});
     });
@@ -271,7 +340,7 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("UPSTREAM_CONTRACT_VIOLATION");
-      expect(err.error.message).toContain("nonexistent");
+      expect(capturedOutput()).toContain("nonexistent");
     });
 
     it("returns UPSTREAM_CONTRACT_VIOLATION when outcome data fails validation", async () => {
@@ -366,7 +435,7 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("INTERNAL");
-      expect(err.error.message).toBe("Internal error");
+      expect(err.error).toEqual({ code: "INTERNAL" });
     });
 
     it("does not leak internal error messages to the response", async () => {
@@ -380,7 +449,7 @@ describe("createHandler", () => {
       const resp = await handler(envelope());
 
       const err = resp as EnvelopeError;
-      expect(err.error.message).not.toContain("secret database");
+      expect(JSON.stringify(err)).not.toContain("secret database");
     });
 
     it("wraps GatewayError thrown by execute", async () => {
@@ -396,7 +465,47 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("UPSTREAM_TIMEOUT");
-      expect(err.error.message).toBe("timed out");
+      expect(err.error).toEqual({ code: "UPSTREAM_TIMEOUT" });
+      expect(capturedOutput()).toContain("timed out");
+    });
+  });
+
+  describe("error envelopes carry the code only", () => {
+    // A message on the wire would be an unbounded free-text channel out of the trust boundary.
+    it.each([
+      [
+        "a GatewayError from execute",
+        () =>
+          Promise.reject(
+            new GatewayError("UPSTREAM_REJECTED", "nino QQ123456C rejected"),
+          ),
+      ],
+      [
+        "an unhandled error",
+        () => Promise.reject(new Error("nino QQ123456C blew up")),
+      ],
+    ])("returns only { code } for %s", async (_label, execute) => {
+      const handler = createHandler(testConfig(), testDeps({ execute }));
+      const resp = await handler(envelope());
+
+      expect(resp.ok).toBe(false);
+      expect(Object.keys((resp as EnvelopeError).error)).toEqual(["code"]);
+      expect(JSON.stringify(resp)).not.toContain("QQ123456C");
+    });
+
+    it("keeps the detail in the log", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: () =>
+            Promise.reject(
+              new GatewayError("UPSTREAM_REJECTED", "detail here"),
+            ),
+        }),
+      );
+      await handler(envelope());
+
+      expect(capturedOutput()).toContain("detail here");
     });
   });
 
@@ -488,7 +597,7 @@ describe("createHandler", () => {
   });
 
   describe("full dispatcher path", () => {
-    it("envelope in → driver called via ctx.attempt with signal → validated outcome out", async () => {
+    it("envelope in → driver called via ctx.upstream with signal → validated outcome out", async () => {
       let receivedSignal: AbortSignal | undefined;
       let receivedOperation: string | undefined;
       let receivedInput: unknown;
@@ -496,7 +605,7 @@ describe("createHandler", () => {
       const execute: HandlerDeps["execute"] = async (ctx, operation, input) => {
         receivedOperation = operation;
         receivedInput = input;
-        return ctx.attempt((signal) => {
+        return ctx.upstream((signal) => {
           receivedSignal = signal;
           expect(signal).toBeInstanceOf(AbortSignal);
           expect(signal.aborted).toBe(false);

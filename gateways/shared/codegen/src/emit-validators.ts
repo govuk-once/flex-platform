@@ -4,6 +4,7 @@ import path from "node:path";
 import ajvModule from "ajv/dist/2020.js";
 import standaloneModule from "ajv/dist/standalone/index.js";
 import addFormatsModule from "ajv-formats";
+import esbuild from "esbuild";
 import { format } from "prettier";
 
 import type { GatewaySchemas, JSONSchema } from "./types.ts";
@@ -15,11 +16,9 @@ const standaloneCode = standaloneModule.default;
 const HEADER =
   "// GENERATED FILE. Do not edit. Produced by @repo/gateway-codegen.\n";
 
+// Resolved during bundling, never left in the emitted output.
 const FORMATS_IMPORT =
   'import { fullFormats as formats } from "ajv-formats/dist/formats.js";\n';
-
-const VALIDATOR_IMPORT =
-  'import type { Validator } from "@repo/gateway-codegen";\n';
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
@@ -38,14 +37,30 @@ function assertIdentifier(name: string, what: string): void {
   }
 }
 
-async function formatSource(
-  source: string,
-  parser: "babel" | "typescript",
-): Promise<string> {
+// Bundle Ajv's formats and keyword helpers so emitted validators have no package imports or
+// unresolved CommonJS requires. Resolve from codegen's dependencies, independent of the caller.
+async function bundleModule(source: string): Promise<string> {
+  const built = await esbuild.build({
+    stdin: { contents: source, resolveDir: import.meta.dirname, loader: "js" },
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node24",
+    write: false,
+  });
+
+  const output = built.outputFiles[0];
+  if (!output) {
+    throw new Error("esbuild produced no output when bundling validators");
+  }
+  return output.text;
+}
+
+async function formatSource(source: string): Promise<string> {
   try {
-    return await format(source, { parser, printWidth: 100 });
+    return await format(source, { parser: "babel", printWidth: 100 });
   } catch (cause) {
-    throw new Error(`Generated ${parser} output is not parseable`, { cause });
+    throw new Error("Generated output is not parseable", { cause });
   }
 }
 
@@ -130,19 +145,8 @@ export async function emitValidators(
     throw new Error("Failed to generate standalone validator code", { cause });
   }
 
-  const schemasJs =
-    HEADER + (await formatSource(FORMATS_IMPORT + "\n" + code, "babel"));
-
-  const schemasDts =
-    HEADER +
-    (await formatSource(
-      VALIDATOR_IMPORT +
-        "\n" +
-        exportNames
-          .map((id) => `export declare const ${id}: Validator;\n`)
-          .join(""),
-      "typescript",
-    ));
+  // Not prettier-formatted: bundled output, and esbuild rejecting bad input is the same check.
+  const schemasJs = HEADER + (await bundleModule(FORMATS_IMPORT + "\n" + code));
 
   const operationEntries = sortedEntries(schemas.operations)
     .map(([opName, opSchemas]) => {
@@ -162,34 +166,11 @@ export async function emitValidators(
         "",
         `export const validators = { ${operationEntries} };`,
       ].join("\n"),
-      "babel",
-    ));
-
-  const indexTypes = sortedEntries(schemas.operations)
-    .map(([opName, opSchemas]) => {
-      const outcomes = sortedEntries(opSchemas.outcomes)
-        .map(([name]) => `${name}: Validator;`)
-        .join(" ");
-
-      return `${opName}: { input: Validator; outcomes: { ${outcomes} } };`;
-    })
-    .join("");
-
-  const indexDts =
-    HEADER +
-    (await formatSource(
-      [
-        VALIDATOR_IMPORT,
-        `export declare const validators: { ${indexTypes} };`,
-      ].join("\n"),
-      "typescript",
     ));
 
   await mkdir(outDir, { recursive: true });
   await Promise.all([
     writeFile(path.join(outDir, "schemas.js"), schemasJs),
-    writeFile(path.join(outDir, "schemas.d.ts"), schemasDts),
     writeFile(path.join(outDir, "index.js"), indexJs),
-    writeFile(path.join(outDir, "index.d.ts"), indexDts),
   ]);
 }

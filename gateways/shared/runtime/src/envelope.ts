@@ -1,33 +1,16 @@
-import type { ErrorCode } from "./errors.ts";
+import type { EnvelopeInbound, SecureValue } from "@repo/gateway-types";
+
 import { GatewayError } from "./errors.ts";
-
-export interface EnvelopeInbound {
-  readonly operation: string;
-  readonly input: unknown;
-  readonly secure: {
-    readonly values: Record<string, unknown>;
-    readonly signature: string;
-  };
-}
-
-export interface EnvelopeSuccess {
-  readonly ok: true;
-  readonly outcome: string;
-  readonly data: unknown;
-}
-
-export interface EnvelopeError {
-  readonly ok: false;
-  readonly error: {
-    readonly code: ErrorCode;
-    readonly message: string;
-  };
-}
-
-export type EnvelopeResponse = EnvelopeSuccess | EnvelopeError;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isSecureValue(value: unknown): value is SecureValue {
+  if (value === null) return true;
+  if (typeof value === "string" || typeof value === "boolean") return true;
+  // Non-finite numbers stringify to null, which would sign differently than intended.
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 export function parseEnvelope(event: unknown): EnvelopeInbound {
@@ -61,6 +44,15 @@ export function parseEnvelope(event: unknown): EnvelopeInbound {
       "INVALID_INPUT",
       "Envelope 'secure.values' must be an object",
     );
+  }
+
+  for (const [key, value] of Object.entries(event.secure.values)) {
+    if (!isSecureValue(value)) {
+      throw new GatewayError(
+        "INVALID_INPUT",
+        `Envelope 'secure.values.${key}' must be a string, finite number, boolean or null`,
+      );
+    }
   }
 
   if (typeof event.secure.signature !== "string") {

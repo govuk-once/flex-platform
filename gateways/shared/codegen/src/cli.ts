@@ -8,7 +8,6 @@ import { loadSchemas } from "./load-config.ts";
 async function main(): Promise<void> {
   const gatewayDir = process.cwd();
 
-  // const config = await loadConfig(gatewayDir);
   const schemas = await loadSchemas(gatewayDir);
   const outDir = path.join(gatewayDir, ".gen", "validators");
   await emitValidators(schemas, outDir);

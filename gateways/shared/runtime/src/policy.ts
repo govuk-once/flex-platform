@@ -4,7 +4,6 @@ import { parseDuration } from "./duration.ts";
 
 export interface ResolvedPolicy {
   readonly timeoutMs: number;
-  readonly attempts: number;
   readonly circuitBreaker: {
     readonly threshold: number;
     readonly durationMs: number;
@@ -16,18 +15,25 @@ export interface ResolvedPolicy {
 
 const DEFAULTS: ResolvedPolicy = {
   timeoutMs: 10_000,
-  attempts: 1,
   circuitBreaker: { threshold: 5, durationMs: 120_000 },
   rateLimit: { rps: Infinity },
 };
 
 export function resolvePolicy(raw: PolicyConfig | undefined): ResolvedPolicy {
+  const timeoutMs =
+    raw?.upstreamTimeout !== undefined
+      ? parseDuration(raw.upstreamTimeout)
+      : DEFAULTS.timeoutMs;
+
+  // Reject a non-positive timeout during handler creation; it would prevent every upstream call.
+  if (timeoutMs <= 0) {
+    throw new TypeError(
+      `Policy upstreamTimeout must be greater than zero, got ${JSON.stringify(raw?.upstreamTimeout)}`,
+    );
+  }
+
   return {
-    timeoutMs:
-      raw?.upstreamTimeout !== undefined
-        ? parseDuration(raw.upstreamTimeout)
-        : DEFAULTS.timeoutMs,
-    attempts: raw?.attempts ?? DEFAULTS.attempts,
+    timeoutMs,
     circuitBreaker: {
       threshold:
         raw?.circuitBreaker?.threshold ?? DEFAULTS.circuitBreaker.threshold,

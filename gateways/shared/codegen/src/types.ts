@@ -10,11 +10,6 @@ export interface GatewaySchemas {
   operations: Record<string, OperationSchemas>;
 }
 
-export interface Validator<T = unknown> {
-  (data: unknown): data is T;
-  errors?: Array<{
-    instancePath: string;
-    schemaPath: string;
-    message?: string;
-  }> | null;
-}
+// The wire contract owns this type. Re-exported here only so codegen's own callers need not
+// reach past it.
+export type { Validator } from "@repo/gateway-types";

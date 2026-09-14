@@ -1,39 +1,13 @@
-import { assert, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { compilePaths, pickFields } from "./logging.ts";
+import { compilePaths } from "./field-path.ts";
+import { pickFields } from "./logging.ts";
 
 const compile = (paths: string[]) => compilePaths(paths);
 
-describe("compilePaths", () => {
-  it("splits dot-separated segments", () => {
-    const [path] = compile(["a.b.c"]);
-    assert(path);
-
-    expect(path.segments).toEqual(["a", "b", "c"]);
-    expect(path.raw).toBe("a.b.c");
-  });
-
-  it("marks wildcard paths", () => {
-    const [plain, wild] = compile(["a.b", "a.*.b"]);
-    assert(plain);
-    assert(wild);
-
-    expect(plain.wildcard).toBe(false);
-    expect(wild.wildcard).toBe(true);
-  });
-
-  it("rejects empty path", () => {
-    expect(() => compile([""])).toThrow("Invalid field path");
-  });
-
-  it("rejects path with empty segment", () => {
-    expect(() => compile(["a..b"])).toThrow("Invalid field path");
-  });
-});
-
 describe("pickFields", () => {
-  it("returns undefined for empty paths", () => {
-    expect(pickFields({ a: 1 }, [])).toBeUndefined();
+  it("returns an empty object for empty paths", () => {
+    expect(pickFields({ a: 1 }, [])).toEqual({});
   });
 
   it("picks only named fields", () => {
@@ -82,14 +56,43 @@ describe("pickFields", () => {
   });
 
   it("returns single value for non-wildcard path", () => {
+    const data = { count: 1 };
+    expect(pickFields(data, compile(["count"]))).toEqual({ count: 1 });
+  });
+
+  it("drops a path that resolves to an object", () => {
+    // Logging the subtree would mean any field the upstream later adds under `address`
+    // becomes a new log leak without the allowlist changing.
+    const data = { address: { city: "London", nino: "QQ123456C" } };
+    expect(pickFields(data, compile(["address"]))).toEqual({});
+  });
+
+  it("drops a path that resolves to an array", () => {
     const data = { items: [{ id: 1 }] };
-    expect(pickFields(data, compile(["items"]))).toEqual({
-      items: [{ id: 1 }],
+    expect(pickFields(data, compile(["items"]))).toEqual({});
+  });
+
+  it("keeps the scalar leaves under a dropped parent", () => {
+    const data = { address: { city: "London", nino: "QQ123456C" } };
+    expect(pickFields(data, compile(["address", "address.city"]))).toEqual({
+      "address.city": "London",
     });
   });
 
-  it("returns undefined when no paths match", () => {
-    expect(pickFields({ x: 1 }, compile(["missing"]))).toBeUndefined();
+  it("filters non-scalars out of a wildcard match", () => {
+    const data = { mixed: [1, { nested: "SECRET" }, 3] };
+    expect(pickFields(data, compile(["mixed.*"]))).toEqual({
+      "mixed.*": [1, 3],
+    });
+  });
+
+  it("drops a wildcard match that is entirely non-scalar", () => {
+    const data = { rows: [{ a: 1 }, { b: 2 }] };
+    expect(pickFields(data, compile(["rows.*"]))).toEqual({});
+  });
+
+  it("returns an empty object when no paths match", () => {
+    expect(pickFields({ x: 1 }, compile(["missing"]))).toEqual({});
   });
 
   it("omits unmatched paths but includes matched ones", () => {
@@ -98,9 +101,9 @@ describe("pickFields", () => {
   });
 
   it("handles non-object data gracefully", () => {
-    expect(pickFields("string", compile(["field"]))).toBeUndefined();
-    expect(pickFields(null, compile(["field"]))).toBeUndefined();
-    expect(pickFields(42, compile(["field"]))).toBeUndefined();
+    expect(pickFields("string", compile(["field"]))).toEqual({});
+    expect(pickFields(null, compile(["field"]))).toEqual({});
+    expect(pickFields(42, compile(["field"]))).toEqual({});
   });
 
   it("skips undefined values in wildcard expansion", () => {

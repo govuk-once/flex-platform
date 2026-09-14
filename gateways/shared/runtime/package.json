@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@repo/gateway-config": "workspace:*",
+    "@repo/gateway-types": "workspace:*",
     "pino": "10.3.1"
   },
   "devDependencies": {
