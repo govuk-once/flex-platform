@@ -30,14 +30,14 @@ Use Node 24 and the pnpm version pinned in `package.json`.
 
 ```bash
 pnpm install
-pnpm build
-pnpm test
 pnpm lint
 pnpm typecheck
+pnpm test
 ```
 
 Turborepo coordinates package tasks. Use `pnpm --filter <package> <script>` to run a package's
-script directly. Generated files and build output are ignored by Git.
+script directly. Packages export TypeScript source, so there is no build step. Generated files
+are ignored by Git.
 
 The `.npmrc` maps the `@govuk-once` scope to GitHub Packages. Authentication is needed when
 accessing packages that require it; do not commit registry credentials.

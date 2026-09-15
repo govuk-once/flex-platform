@@ -3,16 +3,12 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
   "bin": {
     "gateway-codegen": "./bin/gateway-codegen.js"
   },
   "scripts": {
-    "build": "tsc --build tsconfig.build.json",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -23,7 +19,8 @@
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "esbuild": "0.28.2",
-    "prettier": "3.9.6"
+    "prettier": "3.9.6",
+    "tsx": "4.23.13"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

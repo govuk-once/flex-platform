@@ -2,22 +2,10 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "codegen": {
-      "dependsOn": ["^build"],
-      "inputs": ["gateway.config.ts", "schemas.fixture.ts"],
-      "outputs": [".gen/**"]
+      "cache": false
     },
-    "build": {
-      "dependsOn": ["^build", "codegen"],
-      "outputs": ["dist/**"]
-    },
-    "typecheck": {
-      "dependsOn": ["^build", "codegen"]
-    },
-    "lint": {
-      "dependsOn": ["^build"]
-    },
-    "test": {
-      "dependsOn": ["build"]
-    }
+    "typecheck": {},
+    "lint": {},
+    "test": {}
   }
 }

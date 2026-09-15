@@ -34,8 +34,8 @@ Run from the repository root. Turborepo orchestrates per-package tasks.
 pnpm install          # link the workspace and install dependencies
 pnpm lint             # eslint, all packages
 pnpm typecheck        # tsc --noEmit, all packages with a typecheck script
-pnpm build            # build packages and run codegen where configured
-pnpm test             # vitest run, with build dependencies
+pnpm codegen          # generate validators for gateways that configure it
+pnpm test             # vitest run, all packages
 ```
 
 Per package: `pnpm --filter <name> <script>`.
@@ -48,6 +48,7 @@ when a tool has no package script.
 | Tool | Convention |
 |---|---|
 | Runtime | Node 24 (`.nvmrc`), ESM, async handlers |
+| Packages | Export TypeScript source from `package.json`; nothing compiles or emits `dist/` |
 | Language | TypeScript strict mode, including `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` and `verbatimModuleSyntax` |
 | Package manager | pnpm workspaces; version pinned in the root `packageManager` field |
 | Task runner | Turborepo |
@@ -65,13 +66,13 @@ Check installed dependencies and APIs before using them. Dependency version pins
   the repository. Shared gateway libraries belong in `gateways/shared/`.
 - Each package owns its configuration and extends the shared tooling. Add a root-level tool
   configuration only when the tool requires it, with a comment explaining why.
-- TypeScript bases are `base.json` (strict, no emit), `library.json` (JavaScript and declarations)
-  and `lambda.json` (JavaScript without declarations). Use the base appropriate to the build.
+- Every package extends the one TypeScript base, `base.json`: strict, no emit. Packages export
+  their `.ts` sources directly; Vitest, esbuild and tsx consume them as they are.
 - ESLint provides `base`, `driver` and `service` presets. Drivers own transport access; services
   must use gateways. The service preset restricts common network globals and builtin imports;
   it is not a complete enforcement mechanism for network isolation. Review transport access.
-- Build and generated artifacts are ignored, including `.gen/`, `dist/`, `*.tsbuildinfo`,
-  `.turbo/`, `cdk.out/` and `coverage/`. Do not commit them.
+- Generated artifacts are ignored, including `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and
+  `coverage/`. Do not commit them.
 - Publishable packages use the `@govuk-once/` scope. Registry configuration lives in `.npmrc`.
 
 ## Design constraints
@@ -200,9 +201,10 @@ non-obvious decision over a roadmap, a deployment narrative or a repeat of this 
 
 ## Build and test notes
 
-- `pnpm test` depends on `build`. Build and typecheck tasks also depend on dependency builds and
-  codegen. A stale dependency `dist/` can mask changes; rebuild if results look inconsistent.
-- Codegen has its own `^build` dependency because it reads dependencies' `dist/` exports.
-  Listing both `^build` and codegen as dependencies of another task does not order them.
+- Nothing is compiled. Workspace packages resolve to each other's sources, so typecheck and
+  tests see a dependency change immediately and no task waits on another package.
+- The codegen CLI is `src/cli.ts`, started by `bin/gateway-codegen.js`, which registers tsx
+  and imports it. The CLI and the gateway configurations it loads therefore have the whole
+  language available, not the subset Node strips on its own.
 - Test literal operation-key inference at the type level; widening it to `string` loses useful
   information for codegen and handler authors.
