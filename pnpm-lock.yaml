@@ -57,6 +57,9 @@ importers:
       '@repo/gateway-config':
         specifier: workspace:*
         version: link:../../shared/config
+      '@repo/gateway-driver-openapi-rest':
+        specifier: workspace:*
+        version: link:../../drivers/openapi-rest
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
