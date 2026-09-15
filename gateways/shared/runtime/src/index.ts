@@ -25,3 +25,11 @@ export {
   compileBindings,
   prepareSecurePayload,
 } from "./secure.ts";
+export type { UpstreamOptions } from "./upstream-target.ts";
+export {
+  readUpstreamOptions,
+  readUpstreamSecretArn,
+  readUpstreamTarget,
+  UPSTREAM_SECRET_ARN_ENV,
+  UPSTREAM_TARGET_ENV,
+} from "./upstream-target.ts";

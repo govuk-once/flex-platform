@@ -162,7 +162,15 @@ integrations are implemented.
 
 11. **Keep configuration environment-independent.** Do not hard-code deployed addresses,
     credentials or environment names in gateway code. Deployment-specific configuration belongs
-    at the integration boundary.
+    at the integration boundary. Every driver takes its upstream location from
+    `UPSTREAM_TARGET` and its secret from the AWS Secrets Manager secret whose ARN is in
+    `UPSTREAM_SECRET_ARN`, both named in the runtime and both required, a gateway that sends no
+    credential included. What the target means, and what the secret must contain, are the
+    driver's decisions, declared on its definition; the runtime only retrieves the secret as a
+    JSON object and caches it for a bounded age. Read the variables at the entrypoint through
+    `readUpstreamOptions`, which builds the secret provider, and pass the result in, never
+    inside a request. A gateway configuration never names an ARN or a secret value, and
+    importing one never reaches the environment or AWS.
 
 ## Public documentation and comments
 
