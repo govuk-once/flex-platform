@@ -13,7 +13,7 @@ import { ERROR_CODES } from "@repo/gateway-types";
 
 import { createDriverContext, type DeadlineProvider } from "./context.ts";
 import { parseEnvelope } from "./envelope.ts";
-import { GatewayError } from "./errors.ts";
+import { describeUnexpectedError, GatewayError } from "./errors.ts";
 import { type CompiledPath, compilePaths } from "./field-path.ts";
 import { createLogger, pickFields } from "./logging.ts";
 import { resolvePolicy } from "./policy.ts";
@@ -42,6 +42,17 @@ export type GatewayHandler = (
   event: unknown,
   invocation: Invocation,
 ) => Promise<EnvelopeResponse>;
+
+export type DispatchStep =
+  | "envelope"
+  | "token"
+  | "routing"
+  | "input"
+  | "bindings"
+  | "deadline"
+  | "execute"
+  | "outcome"
+  | "response";
 
 export type AnyGatewayConfig = GatewayConfig<DriverDefinition, AnyOperations>;
 
@@ -159,14 +170,19 @@ export function createHandler<const TOps extends AnyOperations>(
   const policy = resolvePolicy(config.policy);
 
   return async (event, invocation): Promise<EnvelopeResponse> => {
+    // The runtime's own record of how far a request got, logged beside the source locations
+    // of an undeclared error so the step and the site locate it together.
+    let step: DispatchStep = "envelope";
     try {
       // Step 1: Parse envelope
       const envelope = parseEnvelope(event);
 
       // Step 2: Verify token (STUB)
+      step = "token";
       verifyToken();
 
       // Step 3: Route on operation
+      step = "routing";
       const op = operations.get(envelope.operation);
       if (!op) {
         throw new GatewayError(
@@ -176,6 +192,7 @@ export function createHandler<const TOps extends AnyOperations>(
       }
 
       // Step 4: Validate input
+      step = "input";
       if (!op.input(envelope.input)) {
         throw new GatewayError(
           "INVALID_INPUT",
@@ -184,6 +201,7 @@ export function createHandler<const TOps extends AnyOperations>(
       }
 
       // Step 5: Check secure bindings
+      step = "bindings";
       checkSecureBindings(
         op.secureBindings,
         envelope.input,
@@ -192,6 +210,7 @@ export function createHandler<const TOps extends AnyOperations>(
       );
 
       // Step 6: Derive deadline
+      step = "deadline";
       const { deadline } = invocation;
       const requestDeadline: DeadlineProvider = {
         remainingMs(): number {
@@ -203,6 +222,7 @@ export function createHandler<const TOps extends AnyOperations>(
       };
 
       // Step 7: Run pipeline
+      step = "execute";
       const ctx = createDriverContext(policy, requestDeadline);
       const result = await deps.execute(
         ctx,
@@ -211,6 +231,7 @@ export function createHandler<const TOps extends AnyOperations>(
       );
 
       // Step 8: Validate outcome
+      step = "outcome";
       const outcomeValidator = op.outcomes.get(result.outcome);
       if (outcomeValidator === undefined) {
         throw new GatewayError(
@@ -226,6 +247,7 @@ export function createHandler<const TOps extends AnyOperations>(
       }
 
       // Step 9: Record health (success path)
+      step = "response";
       const health = recordHealthSignal(envelope.operation, "upstream_success");
 
       // Step 10: Wrap envelope
@@ -267,7 +289,16 @@ export function createHandler<const TOps extends AnyOperations>(
         ERROR_CODES.INTERNAL.signal,
       );
 
-      logger.error({ err, ...health }, "Unhandled error in dispatcher");
+      // Nothing declared this error, so nothing about it is known to be safe to log. The
+      // envelope is returned whatever happens here; logging must not become a second failure.
+      try {
+        logger.error(
+          { err: describeUnexpectedError(err), step, ...health },
+          "Unhandled error in dispatcher",
+        );
+      } catch {
+        // The response still carries the code.
+      }
       return { ok: false as const, error: { code: "INTERNAL" as const } };
     }
   };

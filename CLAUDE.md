@@ -111,8 +111,20 @@ integrations are implemented.
    as an envelope.
 
 4. **Errors carry codes.** Failure responses are `{ ok: false, error: { code } }`. Diagnostic
-   messages stay in logs and must be safe to log. Success responses use
-   `{ ok: true, outcome, data }`, keeping the outcome separate from upstream fields.
+   messages stay in logs and must be safe to log. A `GatewayError` is the declaration that a
+   message is safe: the runtime records it as written. Any other error is logged as its source
+   locations and the dispatcher step only, because a library or a custom handler can put a
+   payload in the message, the name, the properties, the cause or the stack text, which is
+   writable. The locations are read from V8's structured frames through a temporary
+   `Error.prepareStackTrace` hook, as file, line and column only, never from the stack string;
+   a stack already formatted or replaced yields none, and summarising an error must never
+   throw. Source filenames are trusted deployment metadata: eval frames are skipped, but that
+   does not cover every way a script can be created under a payload-derived name, so the
+   protection covers what an error says, not where code chose to load itself from. Drivers
+   therefore raise their own request-time failures as `GatewayError`, `INTERNAL` for
+   configuration bugs, so the diagnosis survives.
+   Success responses use `{ ok: true, outcome, data }`, keeping the outcome separate from
+   upstream fields.
 
 5. **Error codes declare health semantics.** Every code in `ERROR_CODES` has a signal ruling.
    `NOT_FOUND` and `UPSTREAM_REJECTED` represent an upstream response; contract violations and

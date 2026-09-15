@@ -732,3 +732,113 @@ describe("outcome lookup hardening", () => {
     });
   });
 });
+
+describe("unexpected error logging", () => {
+  it("logs the source locations and the dispatcher step, never the message, name, properties or cause", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: () => {
+          throw Object.assign(
+            new Error(
+              "token=SYNTHETIC_MESSAGE\n    at SYNTHETIC_FRAME (/x.ts:1:1)",
+            ),
+            {
+              name: "SYNTHETIC_NAME",
+              request: { headers: { authorization: "SYNTHETIC_PROPERTY" } },
+              cause: new Error("SYNTHETIC_CAUSE"),
+            },
+          );
+        },
+      }),
+    );
+    const resp = await handler(envelope());
+    expect(resp).toEqual({ ok: false, error: { code: "INTERNAL" } });
+
+    const logged = capturedOutput();
+    expect(logged).toContain("Unhandled error in dispatcher");
+    expect(logged).toContain('"err":{"frames":["at ');
+    expect(logged).toContain("handler.test.ts");
+    expect(logged).toContain('"step":"execute"');
+    expect(logged).not.toMatch(/SYNTHETIC_/);
+  });
+
+  it("names the step that was running when validation code itself fails", async () => {
+    const throwing: Validator = Object.assign(
+      (_data: unknown): _data is never => {
+        throw new RangeError("SYNTHETIC");
+      },
+      { errors: null },
+    );
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        validators: {
+          ping: { input: alwaysValid, outcomes: { success: throwing } },
+        },
+      }),
+    );
+    await handler(envelope());
+    const logged = capturedOutput();
+    expect(logged).toContain('"err":{"frames":["at ');
+    expect(logged).toContain('"step":"outcome"');
+    expect(logged).not.toContain("SYNTHETIC");
+  });
+
+  it("returns the INTERNAL envelope even when the error's own properties throw", async () => {
+    const hostile = new Error("x");
+    Object.defineProperty(hostile, "name", {
+      get() {
+        throw new Error("SYNTHETIC_GETTER");
+      },
+    });
+    Object.defineProperty(hostile, "stack", { value: 42 });
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: () => {
+          throw hostile;
+        },
+      }),
+    );
+    await expect(handler(envelope())).resolves.toEqual({
+      ok: false,
+      error: { code: "INTERNAL" },
+    });
+    expect(capturedOutput()).not.toContain("SYNTHETIC");
+  });
+
+  it("still logs the step and returns INTERNAL when no location is available", async () => {
+    const formatted = new Error("SYNTHETIC_MESSAGE");
+    void formatted.stack;
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: () => {
+          throw formatted;
+        },
+      }),
+    );
+    await expect(handler(envelope())).resolves.toEqual({
+      ok: false,
+      error: { code: "INTERNAL" },
+    });
+    const logged = capturedOutput();
+    expect(logged).toContain('"err":{"frames":[]}');
+    expect(logged).toContain('"step":"execute"');
+    expect(logged).not.toContain("SYNTHETIC");
+  });
+
+  it("keeps a GatewayError's message, which is written to be logged", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: () => {
+          throw new GatewayError("INTERNAL", "mapping bug: field x unmapped");
+        },
+      }),
+    );
+    await handler(envelope());
+    expect(capturedOutput()).toContain("mapping bug: field x unmapped");
+  });
+});
