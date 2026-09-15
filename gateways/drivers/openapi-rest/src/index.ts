@@ -1,3 +1,6 @@
+// Registers the path-parameter refinement with defineGateway for every consumer of this package.
+import "./config/refine.ts";
+
 export type {
   ApiKeySecret,
   BearerTokenSecret,
