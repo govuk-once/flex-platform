@@ -6,7 +6,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "eslint src/",
+    "lint": "eslint src/ test/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -16,6 +16,7 @@
     "@repo/gateway-types": "workspace:*"
   },
   "devDependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1128.0",
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",

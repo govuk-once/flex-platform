@@ -1,4 +1,9 @@
-import type { DriverDefinition } from "@repo/gateway-config";
+import type {
+  AnyOperations,
+  DriverDefinition,
+  ExecutorOptions,
+  GatewayConfig,
+} from "@repo/gateway-config";
 
 import {
   type HttpMethod,
@@ -48,16 +53,24 @@ export interface OpenApiRestDriver
   readonly type: typeof OPENAPI_REST_DRIVER_TYPE;
 }
 
-// Constructs driver metadata for defineGateway. Transport lives in the executor, not here,
-// so a gateway configuration can be loaded by codegen without touching the network.
+export type OpenApiRestGatewayConfig = GatewayConfig<
+  OpenApiRestDriver,
+  AnyOperations<OpenApiRestDriver>
+>;
+
 export function openapiRest(
   config: OpenApiRestDriverConfig,
 ): OpenApiRestDriver {
   return {
     type: OPENAPI_REST_DRIVER_TYPE,
-    // A placeholder until this package supplies its executor; nothing here creates one.
-    createExecutor: () =>
-      Promise.reject(new Error("The openapi-rest executor is not implemented")),
+    // Loaded on first call, not at import, so codegen never evaluates the runtime.
+    createExecutor: (
+      config: OpenApiRestGatewayConfig,
+      options: ExecutorOptions,
+    ) =>
+      import("../runtime/executor.ts").then((m) =>
+        m.createExecutor(config, options),
+      ),
     spec: config.spec,
     auth: config.auth,
     ...(config.headers !== undefined ? { headers: config.headers } : {}),
