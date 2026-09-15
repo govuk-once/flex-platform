@@ -1,0 +1,25 @@
+{
+  "name": "@repo/gateway-driver-openapi-rest",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/gateway-config": "workspace:*",
+    "@repo/gateway-runtime": "workspace:*",
+    "@repo/gateway-types": "workspace:*"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "eslint": "10.9.1",
+    "vitest": "4.1.11"
+  }
+}
