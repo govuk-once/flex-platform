@@ -630,3 +630,40 @@ describe("createHandler", () => {
     });
   });
 });
+
+describe("outcome lookup hardening", () => {
+  it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
+    "rejects the undeclared outcome %j even though objects inherit it",
+    async (outcome) => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: () => Promise.resolve({ outcome, data: "unvalidated" }),
+        }),
+      );
+      const resp = await handler(envelope());
+      expect(resp).toEqual({
+        ok: false,
+        error: { code: "UPSTREAM_CONTRACT_VIOLATION" },
+      });
+    },
+  );
+
+  it("rejects an outcome validator that is not a function at creation", () => {
+    expect(() =>
+      createHandler(
+        testConfig(),
+        testDeps({
+          validators: {
+            ping: {
+              input: alwaysValid,
+              outcomes: { success: "nope" as unknown as Validator },
+            },
+          },
+        }),
+      ),
+    ).toThrowError(
+      'Outcome "success" of operation "ping" has no validator function',
+    );
+  });
+});

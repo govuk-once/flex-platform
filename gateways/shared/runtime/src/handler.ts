@@ -41,10 +41,11 @@ export type AnyGatewayConfig = GatewayConfig<
 
 interface CompiledOperation {
   readonly config: OperationConfig;
-  readonly validators: {
-    readonly input: Validator;
-    readonly outcomes: Readonly<Record<string, Validator>>;
-  };
+  readonly input: Validator;
+  // A Map, not an object: the outcome name comes from the driver at request time, and an
+  // object lookup would find inherited members such as "constructor" and treat them as a
+  // validator.
+  readonly outcomes: ReadonlyMap<string, Validator>;
   readonly logInput: readonly CompiledPath[];
   readonly logOutput: readonly CompiledPath[];
   readonly secureBindings: readonly CompiledBinding[];
@@ -73,7 +74,17 @@ function compileOperations(
     if (typeof opValidators.input !== "function") {
       throw new Error(`Missing input validator for operation "${opName}"`);
     }
-    if (Object.keys(opValidators.outcomes).length === 0) {
+
+    const outcomes = new Map<string, Validator>();
+    for (const [outcome, validator] of Object.entries(opValidators.outcomes)) {
+      if (typeof validator !== "function") {
+        throw new Error(
+          `Outcome "${outcome}" of operation "${opName}" has no validator function`,
+        );
+      }
+      outcomes.set(outcome, validator);
+    }
+    if (outcomes.size === 0) {
       throw new Error(
         `Operation "${opName}" must have at least one outcome validator`,
       );
@@ -81,7 +92,8 @@ function compileOperations(
 
     ops.set(opName, {
       config: opConfig,
-      validators: opValidators,
+      input: opValidators.input,
+      outcomes,
       logInput: compilePaths(opConfig.log?.input ?? []),
       logOutput: compilePaths(opConfig.log?.output ?? []),
       secureBindings: compileBindings(opConfig.secure),
@@ -158,10 +170,10 @@ export function createHandler(
       }
 
       // Step 4: Validate input
-      if (!op.validators.input(envelope.input)) {
+      if (!op.input(envelope.input)) {
         throw new GatewayError(
           "INVALID_INPUT",
-          formatValidationErrors(op.validators.input.errors),
+          formatValidationErrors(op.input.errors),
         );
       }
 
@@ -192,8 +204,8 @@ export function createHandler(
       );
 
       // Step 8: Validate outcome
-      const outcomeValidator = op.validators.outcomes[result.outcome];
-      if (!outcomeValidator) {
+      const outcomeValidator = op.outcomes.get(result.outcome);
+      if (outcomeValidator === undefined) {
         throw new GatewayError(
           "UPSTREAM_CONTRACT_VIOLATION",
           `Unknown outcome "${result.outcome}" for operation "${envelope.operation}"`,

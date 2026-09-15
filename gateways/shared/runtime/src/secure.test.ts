@@ -234,3 +234,12 @@ describe("checkSecureBindings", () => {
     expect(err.message).toContain("nino");
   });
 });
+
+describe("checkSecureBindings with inherited member names", () => {
+  it("treats a secure key naming an inherited member as absent", () => {
+    const bindings = compileBindings({ actor: "constructor" });
+    expect(() =>
+      checkSecureBindings(bindings, { actor: "x" }, {}, ""),
+    ).toThrowError(expect.objectContaining({ code: "SECURE_VALUE_MISMATCH" }));
+  });
+});

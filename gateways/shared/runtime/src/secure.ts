@@ -76,6 +76,7 @@ export function checkSecureBindings(
       );
     }
 
+    // Own properties only, so a key naming an inherited member reads as absent.
     const expected: SecureValue | undefined = values[binding.secureKey];
     if (actual !== expected) {
       throw new GatewayError(
