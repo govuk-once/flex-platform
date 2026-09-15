@@ -1,24 +1,16 @@
-import type { DriverDefinition } from "@repo/gateway-config";
 import { defineGateway } from "@repo/gateway-config";
+import { noAuth, openapiRest } from "@repo/gateway-driver-openapi-rest";
 
-function openapiRest(config: {
-  spec: string;
-}): DriverDefinition<{ upstream: string }> {
-  return {
-    type: "openapi-rest",
-    // A placeholder until the openapi-rest driver package supplies the definition. Codegen
-    // loads this configuration; nothing here creates an executor.
-    createExecutor: () =>
-      Promise.reject(new Error("The openapi-rest driver is not implemented")),
-    ...config,
-  };
-}
+import getIdentityExchange from "./handlers/get-identity-exchange.ts";
 
 export default defineGateway({
   id: "udp",
   description: "User Data Platform gateway",
   driver: openapiRest({
     spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/refs/heads/main/docs/openapi.yml",
+    // The upstream takes no credential yet. The deployment still names a secret, which must
+    // be the empty object; a login flow, when the upstream gets one, replaces this definition.
+    auth: noAuth(),
   }),
   operations: {
     createUser: {
@@ -28,6 +20,8 @@ export default defineGateway({
     getIdentityExchange: {
       description: "Look up a linked identity record for a different service",
       upstream: "GET /v1/identity/exchange",
+      parameters: { subjectId: { in: "query" } },
+      handler: getIdentityExchange,
     },
   },
 });
