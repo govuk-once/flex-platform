@@ -110,6 +110,35 @@ describe("defineGateway type inference", () => {
     expectTypeOf(gw.operations.full.handler).toBeFunction();
   });
 
+  it("rejects a misspelled operation field", () => {
+    defineGateway({
+      id: "test",
+      driver: stubDriver(),
+      operations: {
+        op: {
+          upstream: "GET /op",
+          // @ts-expect-error `hanlder` is not an operation field
+          hanlder: () => Promise.resolve({ outcome: "ok", data: null }),
+        },
+        other: {
+          upstream: "GET /other",
+          // @ts-expect-error `descripton` is not an operation field
+          descripton: "typo",
+        },
+      },
+    });
+  });
+
+  it("rejects a misspelled gateway field", () => {
+    defineGateway({
+      id: "test",
+      // @ts-expect-error `descripton` is not a gateway field
+      descripton: "typo",
+      driver: stubDriver(),
+      operations: { op: { upstream: "GET /op" } },
+    });
+  });
+
   it("works with a driver that requires no extra fields", () => {
     function minimalDriver(): DriverDefinition<Record<string, unknown>> {
       return { type: "minimal", createExecutor: neverExecutes };

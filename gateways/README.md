@@ -29,6 +29,10 @@ keyed by the configuration's operations and an execution function, compiles once
 handler that takes each invocation's deadline. Outcome validators are held in a `Map`, so an
 outcome name matching an inherited object member such as `constructor` cannot pass validation.
 
+Configuration is checked for shape as well as content: a misspelled operation, gateway or
+driver field is a type error at `defineGateway` or the driver helper, not a silently ignored
+key.
+
 Token and signature verification are not implemented. Secure bindings check consistency of
 values only. Of the configured policy settings, only `upstreamTimeout` is enforced.
 
