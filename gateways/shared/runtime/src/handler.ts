@@ -20,24 +20,30 @@ import { resolvePolicy } from "./policy.ts";
 import type { CompiledBinding } from "./secure.ts";
 import { checkSecureBindings, compileBindings } from "./secure.ts";
 
-export interface HandlerDeps {
-  readonly validators: Readonly<
-    Record<
-      string,
-      {
-        readonly input: Validator;
-        readonly outcomes: Readonly<Record<string, Validator>>;
-      }
-    >
-  >;
+export interface OperationValidators {
+  readonly input: Validator;
+  readonly outcomes: Readonly<Record<string, Validator>>;
+}
+
+export type AnyOperations = Readonly<Record<string, OperationConfig>>;
+
+// Keyed by the configuration's operations, so a missing or misnamed validator set fails to
+// typecheck. What varies per invocation, the deadline, is passed to the handler instead.
+export interface HandlerDeps<TOps extends AnyOperations = AnyOperations> {
+  readonly validators: { readonly [K in keyof TOps]: OperationValidators };
   readonly execute: ExecuteFn;
+}
+
+export interface Invocation {
   readonly deadline: DeadlineProvider;
 }
 
-export type AnyGatewayConfig = GatewayConfig<
-  DriverDefinition,
-  Readonly<Record<string, OperationConfig>>
->;
+export type GatewayHandler = (
+  event: unknown,
+  invocation: Invocation,
+) => Promise<EnvelopeResponse>;
+
+export type AnyGatewayConfig = GatewayConfig<DriverDefinition, AnyOperations>;
 
 interface CompiledOperation {
   readonly config: OperationConfig;
@@ -53,7 +59,7 @@ interface CompiledOperation {
 
 function compileOperations(
   config: AnyGatewayConfig,
-  deps: HandlerDeps,
+  validators: Readonly<Record<string, OperationValidators | undefined>>,
 ): ReadonlyMap<string, CompiledOperation> {
   const opNames = Object.keys(config.operations);
   if (opNames.length === 0) {
@@ -67,7 +73,7 @@ function compileOperations(
     if (!opConfig) {
       throw new Error(`Operation "${opName}" missing from config`);
     }
-    const opValidators = deps.validators[opName];
+    const opValidators = validators[opName];
     if (!opValidators) {
       throw new Error(`Missing validators for operation "${opName}"`);
     }
@@ -138,21 +144,21 @@ function recordHealthSignal(
   return { signal };
 }
 
-export function createHandler(
-  config: AnyGatewayConfig,
-  deps: HandlerDeps,
-): (event: unknown) => Promise<EnvelopeResponse> {
+// Compiles once; the returned handler serves every invocation, each with its own deadline.
+export function createHandler<const TOps extends AnyOperations>(
+  config: GatewayConfig<DriverDefinition, TOps>,
+  deps: HandlerDeps<TOps>,
+): GatewayHandler {
   if (!config.id || typeof config.id !== "string") {
     throw new Error("Gateway config must have a non-empty string id");
   }
 
-  const operations = compileOperations(config, deps);
+  const operations = compileOperations(config, deps.validators);
   const logger = createLogger(config.id);
 
   const policy = resolvePolicy(config.policy);
-  const { deadline } = deps;
 
-  return async (event: unknown): Promise<EnvelopeResponse> => {
+  return async (event, invocation): Promise<EnvelopeResponse> => {
     try {
       // Step 1: Parse envelope
       const envelope = parseEnvelope(event);
@@ -186,6 +192,7 @@ export function createHandler(
       );
 
       // Step 6: Derive deadline
+      const { deadline } = invocation;
       const requestDeadline: DeadlineProvider = {
         remainingMs(): number {
           return Math.max(

@@ -97,9 +97,10 @@ integrations are implemented.
    envelope parsing, token-verification hook, routing, input validation, secure bindings,
    deadline derivation, execution, outcome validation, health classification and response.
    The token hook currently performs no verification. Invalid configuration should fail when
-   creating the handler, not per request. Look up outcome validators through a `Map`, never a
-   plain object: the outcome name arrives from the driver at request time, and an object lookup
-   finds inherited members.
+   creating the handler, not per request. The handler compiles once and takes each
+   invocation's deadline as an argument; nothing per invocation is captured at creation. Look
+   up outcome validators through a `Map`, never a plain object: the outcome name arrives from
+   the driver at request time, and an object lookup finds inherited members.
 
    Each step owns a code: `INVALID_INPUT` for envelope parsing and input validation,
    `OPERATION_NOT_FOUND` for an unknown operation, `SECURE_VALUE_MISMATCH` for bindings,

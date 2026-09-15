@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GatewayError } from "./errors.ts";
 import type { AnyGatewayConfig, HandlerDeps } from "./handler.ts";
-import { createHandler } from "./handler.ts";
+import { createHandler as createGatewayHandler } from "./handler.ts";
 
 // -- Helpers ------------------------------------------------------------------
 
@@ -60,13 +60,22 @@ function testConfig(
 
 const NO_DEADLINE = { remainingMs: () => Infinity };
 
+// Binds one invocation's deadline so the tests below call handlers with the event alone.
+function createHandler(
+  config: AnyGatewayConfig,
+  deps: HandlerDeps,
+  deadline = NO_DEADLINE,
+) {
+  const handle = createGatewayHandler(config, deps);
+  return (event: unknown) => handle(event, { deadline });
+}
+
 function testDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     validators: {
       ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
     },
     execute: stubExecute,
-    deadline: NO_DEADLINE,
     ...overrides,
   };
 }
@@ -256,7 +265,6 @@ describe("createHandler", () => {
       const handler = createHandler(
         testConfig(),
         testDeps({
-          deadline: { remainingMs: () => 600 },
           execute: async (ctx) => {
             await ctx.upstream(
               () => new Promise((resolve) => setTimeout(resolve, 5_000)),
@@ -264,11 +272,35 @@ describe("createHandler", () => {
             return { outcome: "success", data: {} };
           },
         }),
+        { remainingMs: () => 600 },
       );
       const resp = await handler(envelope());
 
       expect(resp.ok).toBe(false);
       expect((resp as EnvelopeError).error.code).toBe("UPSTREAM_TIMEOUT");
+    });
+
+    it("takes the deadline from each invocation, not from construction", async () => {
+      const slow: HandlerDeps["execute"] = async (ctx) => {
+        await ctx.upstream(
+          () => new Promise((resolve) => setTimeout(resolve, 200)),
+        );
+        return { outcome: "success", data: {} };
+      };
+      const handle = createGatewayHandler(
+        testConfig(),
+        testDeps({ execute: slow }),
+      );
+
+      const exhausted = await handle(envelope(), {
+        deadline: { remainingMs: () => 100 },
+      });
+      const roomy = await handle(envelope(), {
+        deadline: { remainingMs: () => 10_000 },
+      });
+
+      expect((exhausted as EnvelopeError).error.code).toBe("UPSTREAM_TIMEOUT");
+      expect(roomy.ok).toBe(true);
     });
 
     it("uses policy timeout when deadline has no constraint", async () => {
@@ -665,5 +697,38 @@ describe("outcome lookup hardening", () => {
     ).toThrowError(
       'Outcome "success" of operation "ping" has no validator function',
     );
+  });
+
+  it("types validators by the configuration's operations", () => {
+    const config = defineGateway({
+      id: "typed",
+      driver: { type: "stub" },
+      operations: { ping: {}, pong: {} },
+    });
+    createGatewayHandler(config, {
+      validators: {
+        ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
+        pong: { input: alwaysValid, outcomes: { success: alwaysValid } },
+      },
+      execute: stubExecute,
+    });
+    expect(() =>
+      createGatewayHandler(config, {
+        // @ts-expect-error pong has no validators
+        validators: {
+          ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
+        },
+        execute: stubExecute,
+      }),
+    ).toThrowError(/Missing validators for operation "pong"/);
+    createGatewayHandler(config, {
+      validators: {
+        ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
+        pong: { input: alwaysValid, outcomes: { success: alwaysValid } },
+        // @ts-expect-error pang is not an operation
+        pang: { input: alwaysValid, outcomes: { success: alwaysValid } },
+      },
+      execute: stubExecute,
+    });
   });
 });

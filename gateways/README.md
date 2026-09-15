@@ -24,8 +24,9 @@ pnpm --filter @govuk-once/flex-gateway-udp codegen
 ```
 
 Run `pnpm build` from the repository root first to build workspace dependencies. The CLI does
-not generate a deployable handler or client. The runtime's `createHandler` accepts validators,
-an execution function and a deadline provider. Outcome validators are held in a `Map`, so an
+not generate a deployable handler or client. The runtime's `createHandler` accepts validators
+keyed by the configuration's operations and an execution function, compiles once, and returns a
+handler that takes each invocation's deadline. Outcome validators are held in a `Map`, so an
 outcome name matching an inherited object member such as `constructor` cannot pass validation.
 
 Token and signature verification are not implemented. Secure bindings check consistency of
