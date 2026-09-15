@@ -3,12 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { Validator } from "@repo/gateway-types";
+import type { GatewaySchemas, Validator } from "@repo/gateway-types";
 import esbuild from "esbuild";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { emitValidators } from "./emit-validators.ts";
-import type { GatewaySchemas } from "./types.ts";
 
 let tmp: string;
 

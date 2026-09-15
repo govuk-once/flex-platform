@@ -9,7 +9,7 @@ and logging. Each gateway configuration describes one upstream.
 gateways/
   shared/
     config/        defineGateway, driver and operation types, policy presets
-    types/         Envelope shapes, error codes and Validator
+    types/         Envelope shapes, error codes, Validator, driver contract and schema shapes
     runtime/       Envelope parsing, dispatch, timeouts, bindings and logging
     codegen/       Schema loading and standalone validator generation
   services/

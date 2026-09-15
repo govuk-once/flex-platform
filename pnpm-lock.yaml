@@ -33,6 +33,9 @@ importers:
       '@repo/gateway-codegen':
         specifier: workspace:*
         version: link:../../shared/codegen
+      '@repo/gateway-types':
+        specifier: workspace:*
+        version: link:../../shared/types
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../../../packages/tsconfig

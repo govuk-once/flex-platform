@@ -1,4 +1,4 @@
-export type { DeadlineProvider, DriverContext } from "./context.ts";
+export type { DeadlineProvider } from "./context.ts";
 export { parseDuration } from "./duration.ts";
 export { parseEnvelope } from "./envelope.ts";
 export { GatewayError } from "./errors.ts";

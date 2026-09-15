@@ -10,7 +10,8 @@ operations for one upstream, keeping transport details separate from validation 
 
 - `packages/`: TypeScript, ESLint and Vitest configuration shared across the repository.
 - `gateways/shared/config`: `defineGateway`, driver and operation types, and policy presets.
-- `gateways/shared/types`: envelope shapes, error codes and the shared `Validator` interface.
+- `gateways/shared/types`: envelope shapes, error codes, the shared `Validator` interface, the
+  driver context and execute types, and the operation schema shapes.
 - `gateways/shared/runtime`: envelope parsing, dispatch, input and outcome validation, secure
   value comparisons, upstream timeouts and payload field selection for logs.
 - `gateways/shared/codegen`: schema loading and standalone JavaScript validator generation.

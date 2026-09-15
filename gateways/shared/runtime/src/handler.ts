@@ -5,16 +5,13 @@ import type {
 } from "@repo/gateway-config";
 import type {
   EnvelopeResponse,
+  ExecuteFn,
   SignalRuling,
   Validator,
 } from "@repo/gateway-types";
 import { ERROR_CODES } from "@repo/gateway-types";
 
-import {
-  createDriverContext,
-  type DeadlineProvider,
-  type DriverContext,
-} from "./context.ts";
+import { createDriverContext, type DeadlineProvider } from "./context.ts";
 import { parseEnvelope } from "./envelope.ts";
 import { GatewayError } from "./errors.ts";
 import { type CompiledPath, compilePaths } from "./field-path.ts";
@@ -33,11 +30,7 @@ export interface HandlerDeps {
       }
     >
   >;
-  readonly execute: (
-    ctx: DriverContext,
-    operation: string,
-    input: unknown,
-  ) => Promise<{ outcome: string; data: unknown }>;
+  readonly execute: ExecuteFn;
   readonly deadline: DeadlineProvider;
 }
 

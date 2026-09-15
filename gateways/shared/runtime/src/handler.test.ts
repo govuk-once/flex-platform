@@ -1,5 +1,6 @@
 import { defineGateway } from "@repo/gateway-config";
 import type {
+  DriverContext,
   EnvelopeError,
   EnvelopeInbound,
   EnvelopeSuccess,
@@ -7,7 +8,6 @@ import type {
 } from "@repo/gateway-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DriverContext } from "./context.ts";
 import { GatewayError } from "./errors.ts";
 import type { AnyGatewayConfig, HandlerDeps } from "./handler.ts";
 import { createHandler } from "./handler.ts";

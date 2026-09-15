@@ -1,9 +1,7 @@
+import type { DriverContext } from "@repo/gateway-types";
+
 import { GatewayError } from "./errors.ts";
 import type { ResolvedPolicy } from "./policy.ts";
-
-export interface DriverContext {
-  upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T>;
-}
 
 export interface DeadlineProvider {
   remainingMs(): number;
