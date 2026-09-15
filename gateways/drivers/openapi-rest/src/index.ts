@@ -17,6 +17,7 @@ export type {
   ParameterMapping,
   UpstreamTemplate,
 } from "./config/definition.ts";
+export type { OpenApiRestGatewayConfig } from "./config/definition.ts";
 export { openapiRest } from "./config/definition.ts";
 export { defineHandler } from "./config/handler.ts";
 export { encodePathParam } from "./path.ts";

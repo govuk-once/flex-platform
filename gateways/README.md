@@ -12,6 +12,8 @@ gateways/
     types/         Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
     runtime/       Envelope parsing, dispatch, timeouts, bindings, logging and secret retrieval
     codegen/       Schema loading and standalone validator generation
+  drivers/
+    openapi-rest/  HTTP request construction, status mapping, authentication and custom handlers
   services/
     udp/           Example gateway configuration and schema fixtures
 ```
@@ -26,43 +28,43 @@ pnpm --filter @govuk-once/flex-gateway-udp codegen
 There is no build step: the CLI runs from source. The CLI does not generate a deployable
 handler or client. The runtime's `createHandler` accepts validators
 keyed by the configuration's operations and an execution function, compiles once, and returns a
-handler that takes each invocation's deadline. Outcome validators are held in a `Map`, so an
-outcome name matching an inherited object member such as `constructor` cannot pass validation.
+handler that takes each invocation's deadline; the openapi-rest driver's `createExecutor`
+supplies the execution function once it has retrieved and validated the gateway's secret.
+Outcome validators are held in a `Map`, so an outcome name matching an inherited object
+member such as `constructor` cannot pass validation.
 
 Configuration is checked for shape as well as content: a misspelled operation, gateway or
 driver field is a type error at `defineGateway` or the driver helper, not a silently ignored
 key.
 
-Token and signature verification are not implemented. Secure bindings check consistency of
-values only. Of the configured policy settings, only `upstreamTimeout` is enforced.
+The upstream must be reached over https. An http target is accepted only for a loopback host,
+so a local stub or a sidecar that terminates TLS still works while a remote address cannot be
+configured in cleartext.
+
+Token and signature verification of the caller are not implemented. Secure bindings check
+consistency of values only. Of the configured policy settings, only `upstreamTimeout` is
+enforced. Authentication towards the upstream is configured per gateway on its driver
+definition; see [Authentication](#authentication).
 
 ## Gateway configuration
 
 `defineGateway` preserves operation names in the inferred type and supplies policy defaults.
-The [UDP gateway](services/udp/gateway.config.ts) describes the User Data Platform API.
-Its local `openapiRest` helper stands in for the driver package: it constructs the definition
-and implements no transport.
+The [UDP gateway](services/udp/gateway.config.ts) describes the User Data Platform API using
+the [openapi-rest driver](#the-openapi-rest-driver). Its upstream takes no credential, so it
+declares `noAuth()`; its deployment still names a secret, which must be the empty object.
 
 ```ts
-import type { DriverDefinition } from "@repo/gateway-config";
 import { defineGateway } from "@repo/gateway-config";
+import { noAuth, openapiRest } from "@repo/gateway-driver-openapi-rest";
 
-function openapiRest(config: {
-  spec: string;
-}): DriverDefinition<{ upstream: string }> {
-  return {
-    type: "openapi-rest",
-    createExecutor: () =>
-      Promise.reject(new Error("The openapi-rest driver is not implemented")),
-    ...config,
-  };
-}
+import getIdentityExchange from "./handlers/get-identity-exchange.ts";
 
 export default defineGateway({
   id: "udp",
   description: "User Data Platform gateway",
   driver: openapiRest({
     spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/refs/heads/main/docs/openapi.yml",
+    auth: noAuth(),
   }),
   operations: {
     createUser: {
@@ -72,6 +74,8 @@ export default defineGateway({
     getIdentityExchange: {
       description: "Look up a linked identity record for a different service",
       upstream: "GET /v1/identity/exchange",
+      parameters: { subjectId: { in: "query" } },
+      handler: getIdentityExchange,
     },
   },
 });
@@ -86,7 +90,7 @@ export default defineGateway({
 
 | Operation field | Purpose |
 |---|---|
-| Driver-specific fields | Defined by the driver type, such as `upstream` in the example. |
+| Driver-specific fields | Defined by the driver type, such as `upstream` and `parameters` above. |
 | `description` | Optional description. |
 | `log` | Optional input and output field allowlists. |
 | `secure` | Optional mappings from input paths to envelope secure-value keys. |
@@ -138,6 +142,304 @@ Secure values must be strings, finite numbers, booleans or null. Other values pr
 `INVALID_INPUT`. The scalar restriction keeps payload preparation simple and deterministic.
 The envelope requires a string `secure.signature`, but the runtime does not verify it.
 
+## The openapi-rest driver
+
+`@repo/gateway-driver-openapi-rest` is the only package that knows HTTP: methods, paths, status
+codes and headers live here. The runtime and codegen see opaque driver metadata and an execution
+function.
+
+The package is split by when its code runs. `src/config/` holds what a gateway configuration
+imports: the driver and authentication definitions and `defineHandler`. Codegen evaluates these
+when it loads a configuration, and nothing in them reaches the network or a secret.
+`src/runtime/` holds the executor and everything under it, reached only through the
+definition's `createExecutor`, which imports it on first call; a lint rule stops `config/` and
+the shared modules from importing it statically. The shared modules at the top of `src/` are
+the vocabulary both sides use: the client and handler types, header rules and path parameter
+encoding.
+
+### Input convention
+
+A caller sends one flat `input` object and does not know which fields become path parameters,
+query parameters or headers. The operation declares that per input field, in the OpenAPI
+document's own vocabulary. The request body, when there is one, travels under the top-level
+`payload` field.
+
+| Operation field | Purpose |
+|---|---|
+| `upstream` | `"<METHOD> /path/{param}"`. Methods: GET, POST, PUT, PATCH, DELETE. |
+| `parameters` | Input field to `{ in, name? }`. `in` is `path`, `query` or `header`; `name` is the upstream parameter or header when it differs from the field. Every `{param}` in the template needs an entry with `in: "path"`. |
+
+```ts
+updateUser: {
+  upstream: "PATCH /v1/orgs/{orgId}/users/{id}",
+  parameters: {
+    orgId: { in: "path" },
+    userId: { in: "path", name: "id" },
+    dryRun: { in: "query" },
+    etag: { in: "header", name: "if-match" },
+  },
+}
+// input { orgId: "acme", userId: "u1", dryRun: true, etag: "abc", payload: { name: "Ann" } }
+// sends PATCH /v1/orgs/acme/users/u1?dryRun=true with If-Match: abc and body {"name":"Ann"}
+```
+
+Read `parameters` against the operation's input schema: every schema field appears there or is
+`payload`, and every template parameter appears there with `in: "path"`. A template parameter
+without an entry that names it, or a path entry naming a parameter the template lacks, is a type
+error at `defineGateway` as well as a failure at executor creation. The type error reports the
+corrected `parameters` shape: a missing entry keyed by the parameter, or an entry whose `name`
+must be one of the template's.
+
+Every input field must be mapped or be `payload`; an unmapped field is a configuration error
+and fails the request as `INTERNAL`. That diagnostic counts the unmapped fields and never names
+them: a schema that allows additional properties lets the caller choose the names. Path values
+must be scalars and are percent-encoded as one segment. Values that are only dots, or that
+contain `/`, `\`, `?`, `#`, `%` or a control character, are rejected: this gateway's URL parser would collapse `..`, and an upstream that
+decodes before it routes would reinterpret the rest, sending `../../admin` to `/admin` with the
+gateway's credentials. Constrain path parameter formats in the input schema so callers receive
+`INVALID_INPUT` rather than relying on this check. Query values may be scalars or arrays of
+scalars, arrays repeating the key. Null and undefined query and header values are omitted.
+A `payload` on GET is an error. Bodies are JSON with `Content-Type: application/json`, and every
+request sends `Accept: application/json`.
+
+Configuration problems such as an unsupported method, a template parameter without an entry, an
+entry naming a path parameter the template does not declare, two fields feeding one upstream
+name, a reserved header (`content-type`, `content-length`, `host`, `transfer-encoding`,
+`connection`), a mapping onto a header the authentication owns, or a handler that is not a
+function fail when the executor is created. A misspelled key inside a parameter mapping is a
+type error at `defineGateway`.
+
+### Outcomes and errors
+
+Status codes never reach the caller. Success statuses map to fixed outcome names, which are the
+keys the schema's `outcomes` must use.
+
+| Status | Outcome |
+|---|---|
+| 200 | `ok` |
+| 201 | `created` |
+| 202 | `accepted` |
+| 204 | `no_content`, with `data: null` |
+
+Any other status becomes an error code.
+
+| Status | Code |
+|---|---|
+| 404 | `NOT_FOUND` |
+| 401, 403 | `UPSTREAM_REJECTED`: the gateway's own credentials were refused |
+| 429 | `RATE_LIMITED`, the same code as a gateway-side limit |
+| other 4xx | `UPSTREAM_REJECTED` |
+| 5xx | `UPSTREAM_ERROR` |
+| 1xx, 3xx, other 2xx | `UPSTREAM_CONTRACT_VIOLATION` |
+| transport failure | `UPSTREAM_ERROR` |
+| 2xx body that is not JSON | `UPSTREAM_CONTRACT_VIOLATION` |
+
+Redirects are not followed. Every request is one `ctx.upstream` attempt that includes
+authentication, the request and reading the body, so the policy timeout bounds the whole
+exchange; an aborted attempt is reported by the runtime as `UPSTREAM_TIMEOUT`. Nothing retries.
+Bodies are buffered up to the driver's `maxResponseBytes` (1 MiB by default); a larger declared
+or streamed body is cancelled and reported as `UPSTREAM_CONTRACT_VIOLATION`.
+
+Diagnostic messages name the operation, its template, the status and header or field names,
+never a resolved path, a header value or a body. The driver raises every request-time failure
+of its own as a `GatewayError`, whose message is written to be logged and which the runtime
+records as is. Anything else that escapes, a library exception or a custom handler's own error,
+is logged by the runtime as its source locations and the dispatcher step that was running,
+never its message, name, properties, cause or stack text, since a handler or library can put a
+payload in any of them; the locations come from V8's structured frames, and only while the
+stack has not yet been formatted. Within the attempt, library exceptions are still replaced
+with controlled ones. `Headers` quoting an invalid value is one case; an authentication flow
+failing with the request it was making, or the secret it read, is another, and nothing of that
+error is kept. A failing flow is reported as `INTERNAL` unless it raised a `GatewayError` of
+its own. A transport failure's name and system code appear in the `UPSTREAM_ERROR` diagnostic
+only when they match a fixed set such as `TypeError` and `ECONNREFUSED`.
+
+### Running the executor
+
+Nothing here is called by hand, and nothing an entrypoint calls is specific to this driver.
+A driver definition carries its own `createExecutor`, so a generated entrypoint reaches it as
+`config.driver` and awaits it with the neutral `ExecutorOptions` from `@repo/gateway-config`.
+Those options are the target the runtime reads from the environment and a provider for the
+secret it names, so the entrypoint is the same for every driver and every gateway, and
+nothing outside the configuration names a driver package.
+
+```ts
+import { createHandler, readUpstreamOptions } from "@repo/gateway-runtime";
+
+import config from "./gateway.config.ts";
+import { validators } from "./.gen/validators/index.js";
+
+// Retrieves and validates the secret, so a misconfigured deployment fails here.
+const execute = await config.driver.createExecutor(config, readUpstreamOptions());
+const gateway = createHandler(config, { validators, execute });
+
+// One invocation: the deadline comes from the platform, not from construction.
+export const handler = (event: unknown, context: { getRemainingTimeInMillis(): number }) =>
+  gateway(event, { deadline: { remainingMs: () => context.getRemainingTimeInMillis() } });
+```
+
+| Executor option | Purpose |
+|---|---|
+| `target` | `UPSTREAM_TARGET`. For this driver an absolute https base URL with no query, fragment or credentials; http is accepted only for a loopback host. A path prefix is kept. |
+| `secret` | A provider for the secret `UPSTREAM_SECRET_ARN` names, built by `readUpstreamOptions`. The driver's `auth` says what it must hold. |
+
+Behaviour is configured on the driver definition, where it is reviewed with the gateway.
+
+| Driver field | Purpose |
+|---|---|
+| `spec` | Location of the OpenAPI document. Recorded for review; never fetched. |
+| `auth` | Required. How requests are authenticated and what the secret must contain; see [Authentication](#authentication). |
+| `headers` | Static headers on every request, such as an API version. |
+| `maxResponseBytes` | Largest response body to buffer. Defaults to 1 MiB. |
+
+Creation is asynchronous. Configuration is checked first: a reserved or invalid name in the
+auth definition's header list, a static header the authentication owns, a non-positive
+`maxResponseBytes` or a `handler` that is not a function fails before anything is retrieved.
+The secret is then retrieved through the provider and validated, and the authentication state
+is built on it; a missing, unreadable or invalid secret rejects creation, so the deployment
+fails at startup rather than on its first request. A diagnostic about the secret names the
+schema locations that rejected it, never what it held or a path into it, whose segments a
+dictionary schema takes from the secret's own keys; a read that fails is reported as a fixed
+message with nothing of the library's error.
+
+Headers layer in this order, later overriding earlier: driver defaults, the driver's static
+headers, the operation's input-mapped or call headers, then the authentication's. The headers
+an auth definition declares are reserved before operations compile: a static header, a
+parameter mapping or a handler's call that names one fails, at creation for the first two and
+as `INTERNAL` for the third, so mapped input cannot replace what the gateway authenticates
+with. The authentication may set no header it did not declare.
+
+The contract also reserves `deriveSchemas`, through which a driver will produce operation
+schemas from its own description of the upstream. This driver does not implement it yet;
+codegen reads `schemas.fixture.ts` until it does.
+
+### Authentication
+
+The `auth` field of `openapiRest` takes an authentication definition. Three come with the
+driver:
+
+| Definition | Secret | Sends |
+|---|---|---|
+| `noAuth()` | `{}` | Nothing. For an upstream that needs no credential; the deployment still names a secret. |
+| `bearerToken()` | `{ "token": "..." }` | `Authorization: Bearer <token>` |
+| `apiKey({ header })` | `{ "apiKey": "..." }` | The key in the named header. |
+
+Each validates its secret strictly: the field must be a non-empty string that the transport
+sends exactly as stored, so it may contain no control character other than tab and no leading
+or trailing space or tab, which the `Headers` class would strip; and no other field may be
+present, so a token placed in the wrong secret, or under a misspelled field, fails at startup.
+
+A definition is data. It declares the validator for its secret, the header names it owns and a
+`create` function that builds its per-executor state, and nothing in it reads a secret or
+exchanges a token when the configuration is imported, so codegen loads a configuration without
+an environment or AWS access. A custom flow is one more definition, written with `defineAuth`,
+which types `create` from the validator. The validator follows the shared `Validator`
+convention, so a generated standalone validator fits as well as a hand-written predicate:
+
+```ts
+import { defineAuth } from "@repo/gateway-driver-openapi-rest";
+import { GatewayError } from "@repo/gateway-runtime";
+
+// A Validator<{ clientId: string; clientSecret: string; tokenUrl: string }>.
+import { isClientSecret } from "./client-secret.ts";
+
+export const clientCredentials = defineAuth({
+  validateSecret: isClientSecret,
+  headers: ["authorization"],
+  create: ({ secret, transport }) => {
+    let token: { value: string; expiresAt: number } | undefined;
+    return {
+      async headers({ signal }) {
+        if (token === undefined || token.expiresAt <= Date.now()) {
+          const { clientId, clientSecret, tokenUrl } = await secret.get();
+          const response = await transport.request(
+            {
+              method: "POST",
+              url: tokenUrl,
+              form: {
+                grant_type: "client_credentials",
+                client_id: clientId,
+                client_secret: clientSecret,
+              },
+            },
+            signal,
+          );
+          if (response.status !== 200) {
+            throw new GatewayError("UPSTREAM_REJECTED", `Token endpoint returned ${response.status}`);
+          }
+          const body = response.json() as { access_token: string; expires_in: number };
+          token = { value: body.access_token, expiresAt: Date.now() + body.expires_in * 1000 };
+        }
+        return { authorization: `Bearer ${token.value}` };
+      },
+    };
+  },
+});
+```
+
+Concurrent requests on an expired token each exchange in this example; keep one pending
+promise for the exchange when the token endpoint should see it once.
+
+`headers` runs inside every request's attempt, so a secret read or an exchange counts against
+the operation's timeout, and a request that runs out of budget stops waiting; a read the
+runtime has already started completes on its own and fills the cache. `secret.get` returns the
+current secret: the runtime reads it through Powertools Parameters, which serves a retrieved
+copy for five minutes and reads again on the first call after that. Concurrent calls on a cold
+or expired cache may each read; nothing coordinates them. Every value passes the definition's
+validator before it is returned, on every read; one that fails is never returned, and the
+operation fails instead, as `INTERNAL`, as it does when a read fails. Rotating the secret
+therefore needs no restart: a built-in definition sends the new value on the first read after
+the cache age. Token and session expiry are the flow's own concern.
+
+`transport.request` is the only way a flow reaches the network. It sends one request with the
+signal the flow was given, to an absolute URL or to a path on the target, with a JSON or a form
+body, applies the response limit and returns the raw status, headers and body. It takes the same
+transport rule as the target: https, or http only for a loopback host, since a token exchange
+carries the credentials that obtain the credential.
+Statuses are not mapped, since what a token endpoint's answer means is the flow's decision. A
+flow's own `GatewayError` is reported as it is; any other error it raises is replaced with an
+`INTERNAL` diagnostic that names the operation only. Nothing replays an upstream operation
+after an authentication failure.
+
+### Custom handlers
+
+An operation with a `handler` bypasses the automatic mapping. A handler is a value produced by
+the driver's `defineHandler`, set on the operation in the configuration; where it is written
+is up to the author, with a module next to the configuration being the usual choice. The
+compiler checks it against the driver's handler type, which the definition exposes through
+`HandlerOf`. That type is branded with the driver's `type`, and only `defineHandler` produces
+it, so a plain function or a handler written for another driver is a type error on that line.
+`defineHandler` also lets the author name the input type. Both paths use the same client, so every upstream call still goes
+through `ctx.upstream` once and maps transport errors the same way.
+
+The UDP gateway's [identity exchange handler](services/udp/handlers/get-identity-exchange.ts)
+turns the upstream's 404 into an `unlinked` outcome, which its schema declares alongside `ok`:
+
+```ts
+import { defineHandler } from "@repo/gateway-driver-openapi-rest";
+
+export default defineHandler(async (input: { subjectId: string }, client) => {
+  const response = await client.request(client.prepare(input));
+  if (response.status === 404) {
+    return { outcome: "unlinked", data: null };
+  }
+  return client.mapResponse(response);
+});
+```
+
+The input annotation states what the operation's input schema describes, and the outcomes the
+handler returns are inferred. Both stay on the handler's type, so calling it with the wrong
+input is a type error and a generated contract can check them against the schemas. The schema
+fixture is likewise keyed by the gateway's operations through `GatewaySchemas<Operation>`, so a
+missing or misnamed operation fails to typecheck.
+
+`prepare` builds the operation's automatic request, `request` sends it once and returns the raw
+status, headers and body without treating 4xx or 5xx as errors, `mapResponse` applies the status
+mapping above to a response already received, and `invoke` is `request` followed by
+`mapResponse`. Map the response you have rather than calling `invoke` after `request`: that
+would send the request again, duplicating any write. Build paths for hand-written calls with
+`encodePathParam`, which applies the single-segment rule.
+
 ## Responses and errors
 
 Success responses have the shape `{ ok: true, outcome, data }`. Failures are
@@ -145,8 +447,9 @@ Success responses have the shape `{ ok: true, outcome, data }`. Failures are
 detail out of the response contract.
 
 `ERROR_CODES` defines the following meanings. A defined code does not imply the corresponding
-control is implemented: authentication, signature verification, circuit breaking and rate
-limiting do not currently emit their reserved errors automatically.
+control is implemented: authentication, signature verification, circuit breaking and gateway-side
+rate limiting do not currently emit their reserved errors automatically. Which upstream responses
+produce which codes is a driver decision; see the openapi-rest driver above.
 
 | Code | Meaning |
 |---|---|
@@ -161,7 +464,7 @@ limiting do not currently emit their reserved errors automatically.
 | `UPSTREAM_TIMEOUT` | The attempt timed out or had no remaining budget. |
 | `UPSTREAM_CONTRACT_VIOLATION` | The result failed outcome validation. |
 | `UPSTREAM_UNAVAILABLE` | An upstream call was prevented by a gateway availability control. |
-| `RATE_LIMITED` | A gateway rate limit rejected the call. |
+| `RATE_LIMITED` | A rate limit rejected the call, whether the gateway's own or the upstream's. |
 | `INTERNAL` | An unexpected gateway error. |
 
 The runtime classifies errors for health reporting. Gateway-side rejections are neutral to
@@ -172,6 +475,8 @@ upstream health; upstream responses and failures have separate classifications.
 - Keep transport details in adapters. Make each upstream call with `ctx.upstream(fn)`; the
   runtime applies the timeout and passes an abort signal to `fn`.
 - Keep deployment-specific addresses, credentials and environment names out of gateway code.
+  A gateway names no secret ARN and no secret value; the runtime reads the secret and the
+  driver validates it on every read before authentication code sees a field.
 - Emitted validators have no package imports or type declarations. Their helpers are bundled
   during generation so they can run independently of codegen's installed dependencies.
 - Preserve compatibility of established contracts. Incompatible changes require a distinct
