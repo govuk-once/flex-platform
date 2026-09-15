@@ -21,8 +21,9 @@ transport-specific details separate from common runtime behaviour.
 
 The repository includes `defineGateway`, a dispatcher and a generator that emits standalone
 JavaScript validators from schema fixtures. It does not yet provide a complete deployable gateway
-or generated client. Authentication is not implemented, and only the upstream-timeout policy is
-enforced. See [the gateway guide](gateways/README.md) for supported behaviour and limitations.
+or generated client. Caller authentication is not implemented, and only the upstream-timeout
+policy is enforced. Authentication towards an upstream is configured per gateway on its driver
+definition, with the secret read from AWS Secrets Manager when the gateway starts. See [the gateway guide](gateways/README.md) for supported behaviour and limitations.
 
 ## Working in this repo
 
