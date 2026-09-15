@@ -9,7 +9,8 @@ Flex Platform contains gateway libraries and shared development tooling. A gatew
 operations for one upstream, keeping transport details separate from validation and dispatch.
 
 - `packages/`: TypeScript, ESLint and Vitest configuration shared across the repository.
-- `gateways/shared/config`: `defineGateway`, driver and operation types, and policy presets.
+- `gateways/shared/config`: `defineGateway`, the driver definition with its `createExecutor`
+  contract and neutral `ExecutorOptions`, operation types and policy presets.
 - `gateways/shared/types`: envelope shapes, error codes, the shared `Validator` interface, the
   driver context and execute types, the operation schema shapes and the secret provider shape.
 - `gateways/shared/runtime`: envelope parsing, dispatch, input and outcome validation, secure
@@ -83,6 +84,13 @@ integrations are implemented.
 1. **Transport-neutral contracts.** Runtime and codegen share JSON Schema and opaque driver
    definitions. Upstream methods, paths, status codes and headers belong in transport adapters.
    Adding a transport should not require transport-specific logic in the dispatcher or generator.
+   A driver definition carries its own `createExecutor`, so codegen and a generated entrypoint
+   reach any driver the same way, as `config.driver`, and pass it the neutral `ExecutorOptions`;
+   nothing outside a configuration names a driver package. A driver's handler type is a
+   `BrandedHandler` carrying its `type`, produced only by that driver's `defineHandler`; a
+   configuration imports its handlers statically and sets them on operations, so a handler
+   cannot be wired to the wrong driver. Anything an entrypoint would need to know about a
+   specific driver or gateway is a design error.
 
 2. **Upstream calls use the driver context.** Make each upstream call with `ctx.upstream(fn)`,
    invoked once per call. The runtime invokes `fn` once per attempt, so `fn` must build its
@@ -99,7 +107,11 @@ integrations are implemented.
    deadline derivation, execution, outcome validation, health classification and response.
    The token hook currently performs no verification. Invalid configuration should fail when
    creating the handler, not per request. The handler compiles once and takes each
-   invocation's deadline as an argument; nothing per invocation is captured at creation. Look
+   invocation's deadline as an argument; nothing per invocation is captured at creation. A
+   driver's `createExecutor` is asynchronous for the same reason: it retrieves the gateway
+   secret through the provider in its options, validates it and instantiates its
+   authentication state before it resolves, so a missing or invalid secret fails at startup and
+   never on the first request. Look
    up outcome validators through a `Map`, never a plain object: the outcome name arrives from
    the driver at request time, and an object lookup finds inherited members.
 

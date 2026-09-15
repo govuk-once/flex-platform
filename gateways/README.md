@@ -8,7 +8,7 @@ and logging. Each gateway configuration describes one upstream.
 ```txt
 gateways/
   shared/
-    config/        defineGateway, driver and operation types, policy presets
+    config/        defineGateway, driver definition and executor contract, policy presets
     types/         Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
     runtime/       Envelope parsing, dispatch, timeouts, bindings, logging and secret retrieval
     codegen/       Schema loading and standalone validator generation
@@ -36,7 +36,8 @@ values only. Of the configured policy settings, only `upstreamTimeout` is enforc
 
 `defineGateway` preserves operation names in the inferred type and supplies policy defaults.
 The [UDP gateway](services/udp/gateway.config.ts) describes the User Data Platform API.
-Its local `openapiRest` helper constructs driver metadata; it does not implement transport.
+Its local `openapiRest` helper stands in for the driver package: it constructs the definition
+and implements no transport.
 
 ```ts
 import type { DriverDefinition } from "@repo/gateway-config";
@@ -45,7 +46,12 @@ import { defineGateway } from "@repo/gateway-config";
 function openapiRest(config: {
   spec: string;
 }): DriverDefinition<{ upstream: string }> {
-  return { type: "openapi-rest", ...config };
+  return {
+    type: "openapi-rest",
+    createExecutor: () =>
+      Promise.reject(new Error("The openapi-rest driver is not implemented")),
+    ...config,
+  };
 }
 
 export default defineGateway({
@@ -80,7 +86,7 @@ export default defineGateway({
 | `description` | Optional description. |
 | `log` | Optional input and output field allowlists. |
 | `secure` | Optional mappings from input paths to envelope secure-value keys. |
-| `handler` | Optional module path in the configuration type; not loaded by the current runtime or CLI. |
+| `handler` | Optional custom handler, a value from the driver's `defineHandler`, typed against the driver. The runtime and CLI ignore it; the driver's executor dispatches to it. |
 
 ### Policy
 

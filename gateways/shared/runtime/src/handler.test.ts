@@ -1,3 +1,4 @@
+import type { DriverDefinition } from "@repo/gateway-config";
 import { defineGateway } from "@repo/gateway-config";
 import type {
   DriverContext,
@@ -37,6 +38,13 @@ const alwaysInvalid: Validator = Object.assign(
 const stubExecute: HandlerDeps["execute"] = () =>
   Promise.resolve({ outcome: "success", data: { id: "123" } });
 
+// Tests supply execute through the handler's deps; the driver's own factory is never called.
+const stubDriver: DriverDefinition = {
+  type: "stub",
+  createExecutor: () =>
+    Promise.reject(new Error("stub driver has no executor")),
+};
+
 function testConfig(
   overrides: Partial<{
     operations: Record<
@@ -51,7 +59,7 @@ function testConfig(
 ): AnyGatewayConfig {
   return defineGateway({
     id: "test-gw",
-    driver: { type: "stub" },
+    driver: stubDriver,
     operations: overrides.operations ?? {
       ping: { description: "Test operation" },
     },
@@ -547,7 +555,7 @@ describe("createHandler", () => {
         createHandler(
           defineGateway({
             id: "empty",
-            driver: { type: "stub" },
+            driver: stubDriver,
             operations: {},
           }),
           testDeps(),
@@ -702,7 +710,7 @@ describe("outcome lookup hardening", () => {
   it("types validators by the configuration's operations", () => {
     const config = defineGateway({
       id: "typed",
-      driver: { type: "stub" },
+      driver: stubDriver,
       operations: { ping: {}, pong: {} },
     });
     createGatewayHandler(config, {

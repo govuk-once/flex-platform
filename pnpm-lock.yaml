@@ -87,6 +87,10 @@ importers:
         version: 4.1.11(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0))
 
   gateways/shared/config:
+    dependencies:
+      '@repo/gateway-types':
+        specifier: workspace:*
+        version: link:../types
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*

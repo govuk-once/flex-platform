@@ -4,7 +4,14 @@ import { defineGateway } from "@repo/gateway-config";
 function openapiRest(config: {
   spec: string;
 }): DriverDefinition<{ upstream: string }> {
-  return { type: "openapi-rest", ...config };
+  return {
+    type: "openapi-rest",
+    // A placeholder until the openapi-rest driver package supplies the definition. Codegen
+    // loads this configuration; nothing here creates an executor.
+    createExecutor: () =>
+      Promise.reject(new Error("The openapi-rest driver is not implemented")),
+    ...config,
+  };
 }
 
 export default defineGateway({
