@@ -73,3 +73,21 @@ export type BrandedHandler<
   TType extends string,
   THandler extends OperationHandler,
 > = THandler & { readonly [HANDLER_DRIVER]: TType };
+
+declare const NO_REFINEMENT: unique symbol;
+
+// A driver can refine the type each of its operations must satisfy, for checks that relate one
+// field to another, such as a path template to the parameters that fill it. The driver augments
+// this interface with a member keyed by its literal `type`; the member receives the operation as
+// written and returns the type it must be assignable to. This package holds only the slot.
+export interface OperationRefinements<TOp> {
+  // Never a driver type. Keeps TOp in the base declaration, which every augmentation must match.
+  readonly [NO_REFINEMENT]?: TOp;
+}
+
+export type RefineOperation<
+  TDriver extends DriverDefinition,
+  TOp,
+> = TDriver["type"] extends keyof OperationRefinements<TOp>
+  ? OperationRefinements<TOp>[TDriver["type"]]
+  : TOp;

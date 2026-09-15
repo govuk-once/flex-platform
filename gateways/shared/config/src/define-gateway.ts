@@ -1,4 +1,4 @@
-import type { DriverDefinition } from "./driver.ts";
+import type { DriverDefinition, RefineOperation } from "./driver.ts";
 import { standardPolicy } from "./presets.ts";
 import type { GatewayConfig, OperationConfig } from "./types.ts";
 
@@ -10,14 +10,14 @@ type ExactKeys<TExpected, TActual> = {
 };
 
 // Operation keys and literals are inferred from the plain GatewayConfig side; NoInfer keeps the
-// checks out of inference.
+// checks out of inference. A driver with no refinement gets identity from RefineOperation.
 export function defineGateway<
   const TDriver extends DriverDefinition,
   const TOps extends Readonly<Record<string, OperationConfig<TDriver>>>,
 >(
   config: GatewayConfig<TDriver, TOps> & {
     readonly operations: NoInfer<{
-      readonly [K in keyof TOps]: TOps[K] &
+      readonly [K in keyof TOps]: RefineOperation<TDriver, TOps[K]> &
         ExactKeys<OperationConfig<TDriver>, TOps[K]>;
     }>;
   },

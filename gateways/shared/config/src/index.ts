@@ -6,6 +6,8 @@ export type {
   ExecutorOptions,
   HandlerOf,
   OperationFields,
+  OperationRefinements,
+  RefineOperation,
 } from "./driver.ts";
 export { standardPolicy } from "./presets.ts";
 export type {

@@ -171,6 +171,9 @@ integrations are implemented.
     the package that declares it: no package re-exports another's types, and every package that
     uses one declares the dependency itself. Preserve literal operation names in `defineGateway`
     types.
+    A driver that needs a check relating one operation field to another registers it by
+    augmenting `OperationRefinements`, keyed by its literal `type`; the config package holds
+    only that slot and no driver vocabulary.
 
 11. **Keep configuration environment-independent.** Do not hard-code deployed addresses,
     credentials or environment names in gateway code. Deployment-specific configuration belongs

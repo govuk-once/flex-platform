@@ -24,6 +24,29 @@ function stubDriver(): DriverDefinition<{ upstream: string }> {
   return { type: "stub", createExecutor: neverExecutes };
 }
 
+// A test-only refinement: an upstream with a "{param}" must declare `parameters`. It shows the
+// slot working without this package knowing what a path parameter is.
+interface RefinedDriver extends DriverDefinition<{
+  upstream: string;
+  parameters?: object;
+}> {
+  readonly type: "refined-stub";
+}
+
+declare module "./driver.ts" {
+  interface OperationRefinements<TOp> {
+    readonly "refined-stub": TOp extends {
+      readonly upstream: `${string}{${string}}${string}`;
+    }
+      ? TOp & { readonly parameters: object }
+      : TOp;
+  }
+}
+
+function refinedDriver(): RefinedDriver {
+  return { type: "refined-stub", createExecutor: neverExecutes };
+}
+
 describe("defineGateway", () => {
   it("applies standardPolicy as default when no policy provided", () => {
     const config = defineGateway({
@@ -108,6 +131,32 @@ describe("defineGateway type inference", () => {
 
     expectTypeOf(gw.operations.full.upstream).toBeString();
     expectTypeOf(gw.operations.full.handler).toBeFunction();
+  });
+
+  it("passes operations through for a driver with no refinement", () => {
+    const gw = defineGateway({
+      id: "test",
+      driver: stubDriver(),
+      operations: { op: { upstream: "GET /x/{id}" } },
+    });
+    expectTypeOf(gw.operations.op.upstream).toEqualTypeOf<"GET /x/{id}">();
+  });
+
+  it("applies a driver's refinement to each operation", () => {
+    const gw = defineGateway({
+      id: "test",
+      driver: refinedDriver(),
+      operations: {
+        plain: { upstream: "GET /x" },
+        declared: { upstream: "GET /x/{id}", parameters: { id: true } },
+        // @ts-expect-error the refinement requires parameters when the template has one
+        missing: { upstream: "GET /x/{id}" },
+      },
+    });
+    expect(gw.operations.declared.parameters).toEqual({ id: true });
+    expectTypeOf<keyof typeof gw.operations>().toEqualTypeOf<
+      "plain" | "declared" | "missing"
+    >();
   });
 
   it("rejects a misspelled operation field", () => {
