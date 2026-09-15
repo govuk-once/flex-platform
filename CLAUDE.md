@@ -138,8 +138,10 @@ integrations are implemented.
 
 10. **Keep shared types independent of execution.** `@repo/gateway-types` has no package
     dependencies. Consumers can name envelopes and error codes without installing the runtime
-    or generator. Parsing and `GatewayError` belong in the runtime, which re-exports shared
-    types for handler authors. Preserve literal operation names in `defineGateway` types.
+    or generator. Parsing and `GatewayError` belong in the runtime. Import a shared type from
+    the package that declares it: no package re-exports another's types, and every package that
+    uses one declares the dependency itself. Preserve literal operation names in `defineGateway`
+    types.
 
 11. **Keep configuration environment-independent.** Do not hard-code deployed addresses,
     credentials or environment names in gateway code. Deployment-specific configuration belongs

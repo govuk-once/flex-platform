@@ -12,10 +12,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
+import type { Validator } from "@repo/gateway-types";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { emitValidators } from "./emit-validators.ts";
-import type { GatewaySchemas, Validator } from "./types.ts";
+import type { GatewaySchemas } from "./types.ts";
 
 const schemas: GatewaySchemas = {
   defs: {

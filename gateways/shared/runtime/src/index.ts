@@ -1,5 +1,3 @@
-// Re-export the wire contract so handler authors can use a single runtime import.
-// Consumers needing only shared types can import @repo/gateway-types directly.
 export type { DeadlineProvider, DriverContext } from "./context.ts";
 export { parseDuration } from "./duration.ts";
 export { parseEnvelope } from "./envelope.ts";
@@ -18,15 +16,3 @@ export {
   compileBindings,
   prepareSecurePayload,
 } from "./secure.ts";
-export type {
-  EnvelopeError,
-  EnvelopeInbound,
-  EnvelopeResponse,
-  EnvelopeSuccess,
-  ErrorCode,
-  ErrorRuling,
-  SecureValue,
-  SignalRuling,
-  Validator,
-} from "@repo/gateway-types";
-export { ERROR_CODES } from "@repo/gateway-types";
