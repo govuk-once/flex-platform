@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+# Tests use SYNTHETIC-prefixed stand-in secrets to prove that payload logs omit them
+[allowlist]
+regexTarget = "secret"
+regexes = ['''^SYNTHETIC(?:_[A-Z0-9]+)*$''']
