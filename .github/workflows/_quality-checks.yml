@@ -63,8 +63,8 @@ jobs:
       - name: Type check
         run: pnpm run typecheck
 
-      - name: Build
-        run: pnpm run build
+      - name: Generate validators
+        run: pnpm run codegen
 
       - name: Test
         run: pnpm run test

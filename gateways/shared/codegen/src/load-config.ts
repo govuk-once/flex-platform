@@ -6,8 +6,7 @@ import type {
   GatewayConfig,
   OperationConfig,
 } from "@repo/gateway-config";
-
-import type { GatewaySchemas } from "./types.ts";
+import type { GatewaySchemas } from "@repo/gateway-types";
 
 type AnyGatewayConfig = GatewayConfig<
   DriverDefinition,

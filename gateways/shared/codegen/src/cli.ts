@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import path from "node:path";
 
 import { emitValidators } from "./emit-validators.ts";

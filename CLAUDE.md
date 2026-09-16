@@ -9,10 +9,13 @@ Flex Platform contains gateway libraries and shared development tooling. A gatew
 operations for one upstream, keeping transport details separate from validation and dispatch.
 
 - `packages/`: TypeScript, ESLint and Vitest configuration shared across the repository.
-- `gateways/shared/config`: `defineGateway`, driver and operation types, and policy presets.
-- `gateways/shared/types`: envelope shapes, error codes and the shared `Validator` interface.
+- `gateways/shared/config`: `defineGateway`, the driver definition with its `createExecutor`
+  contract and neutral `ExecutorOptions`, operation types and policy presets.
+- `gateways/shared/types`: envelope shapes, error codes, the shared `Validator` interface, the
+  driver context and execute types, the operation schema shapes and the secret provider shape.
 - `gateways/shared/runtime`: envelope parsing, dispatch, input and outcome validation, secure
-  value comparisons, upstream timeouts and payload field selection for logs.
+  value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
+  gateway secret from AWS Secrets Manager through Powertools Parameters.
 - `gateways/shared/codegen`: schema loading and standalone JavaScript validator generation.
 - `gateways/services/udp`: an example gateway configuration and schema fixtures.
 
@@ -31,8 +34,8 @@ Run from the repository root. Turborepo orchestrates per-package tasks.
 pnpm install          # link the workspace and install dependencies
 pnpm lint             # eslint, all packages
 pnpm typecheck        # tsc --noEmit, all packages with a typecheck script
-pnpm build            # build packages and run codegen where configured
-pnpm test             # vitest run, with build dependencies
+pnpm codegen          # generate validators for gateways that configure it
+pnpm test             # vitest run, all packages
 ```
 
 Per package: `pnpm --filter <name> <script>`.
@@ -45,6 +48,7 @@ when a tool has no package script.
 | Tool | Convention |
 |---|---|
 | Runtime | Node 24 (`.nvmrc`), ESM, async handlers |
+| Packages | Export TypeScript source from `package.json`; nothing compiles or emits `dist/` |
 | Language | TypeScript strict mode, including `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` and `verbatimModuleSyntax` |
 | Package manager | pnpm workspaces; version pinned in the root `packageManager` field |
 | Task runner | Turborepo |
@@ -62,13 +66,13 @@ Check installed dependencies and APIs before using them. Dependency version pins
   the repository. Shared gateway libraries belong in `gateways/shared/`.
 - Each package owns its configuration and extends the shared tooling. Add a root-level tool
   configuration only when the tool requires it, with a comment explaining why.
-- TypeScript bases are `base.json` (strict, no emit), `library.json` (JavaScript and declarations)
-  and `lambda.json` (JavaScript without declarations). Use the base appropriate to the build.
+- Every package extends the one TypeScript base, `base.json`: strict, no emit. Packages export
+  their `.ts` sources directly; Vitest, esbuild and tsx consume them as they are.
 - ESLint provides `base`, `driver` and `service` presets. Drivers own transport access; services
   must use gateways. The service preset restricts common network globals and builtin imports;
   it is not a complete enforcement mechanism for network isolation. Review transport access.
-- Build and generated artifacts are ignored, including `.gen/`, `dist/`, `*.tsbuildinfo`,
-  `.turbo/`, `cdk.out/` and `coverage/`. Do not commit them.
+- Generated artifacts are ignored, including `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and
+  `coverage/`. Do not commit them.
 - Publishable packages use the `@govuk-once/` scope. Registry configuration lives in `.npmrc`.
 
 ## Design constraints
@@ -81,6 +85,13 @@ integrations are implemented.
 1. **Transport-neutral contracts.** Runtime and codegen share JSON Schema and opaque driver
    definitions. Upstream methods, paths, status codes and headers belong in transport adapters.
    Adding a transport should not require transport-specific logic in the dispatcher or generator.
+   A driver definition carries its own `createExecutor`, so codegen and a generated entrypoint
+   reach any driver the same way, as `config.driver`, and pass it the neutral `ExecutorOptions`;
+   nothing outside a configuration names a driver package. A driver's handler type is a
+   `BrandedHandler` carrying its `type`, produced only by that driver's `defineHandler`; a
+   configuration imports its handlers statically and sets them on operations, so a handler
+   cannot be wired to the wrong driver. Anything an entrypoint would need to know about a
+   specific driver or gateway is a design error.
 
 2. **Upstream calls use the driver context.** Make each upstream call with `ctx.upstream(fn)`,
    invoked once per call. The runtime invokes `fn` once per attempt, so `fn` must build its
@@ -96,7 +107,14 @@ integrations are implemented.
    envelope parsing, token-verification hook, routing, input validation, secure bindings,
    deadline derivation, execution, outcome validation, health classification and response.
    The token hook currently performs no verification. Invalid configuration should fail when
-   creating the handler, not per request.
+   creating the handler, not per request. The handler compiles once and takes each
+   invocation's deadline as an argument; nothing per invocation is captured at creation. A
+   driver's `createExecutor` is asynchronous for the same reason: it retrieves the gateway
+   secret through the provider in its options, validates it and instantiates its
+   authentication state before it resolves, so a missing or invalid secret fails at startup and
+   never on the first request. Look
+   up outcome validators through a `Map`, never a plain object: the outcome name arrives from
+   the driver at request time, and an object lookup finds inherited members.
 
    Each step owns a code: `INVALID_INPUT` for envelope parsing and input validation,
    `OPERATION_NOT_FOUND` for an unknown operation, `SECURE_VALUE_MISMATCH` for bindings,
@@ -107,8 +125,20 @@ integrations are implemented.
    as an envelope.
 
 4. **Errors carry codes.** Failure responses are `{ ok: false, error: { code } }`. Diagnostic
-   messages stay in logs and must be safe to log. Success responses use
-   `{ ok: true, outcome, data }`, keeping the outcome separate from upstream fields.
+   messages stay in logs and must be safe to log. A `GatewayError` is the declaration that a
+   message is safe: the runtime records it as written. Any other error is logged as its source
+   locations and the dispatcher step only, because a library or a custom handler can put a
+   payload in the message, the name, the properties, the cause or the stack text, which is
+   writable. The locations are read from V8's structured frames through a temporary
+   `Error.prepareStackTrace` hook, as file, line and column only, never from the stack string;
+   a stack already formatted or replaced yields none, and summarising an error must never
+   throw. Source filenames are trusted deployment metadata: eval frames are skipped, but that
+   does not cover every way a script can be created under a payload-derived name, so the
+   protection covers what an error says, not where code chose to load itself from. Drivers
+   therefore raise their own request-time failures as `GatewayError`, `INTERNAL` for
+   configuration bugs, so the diagnosis survives.
+   Success responses use `{ ok: true, outcome, data }`, keeping the outcome separate from
+   upstream fields.
 
 5. **Error codes declare health semantics.** Every code in `ERROR_CODES` has a signal ruling.
    `NOT_FOUND` and `UPSTREAM_REJECTED` represent an upstream response; contract violations and
@@ -138,12 +168,25 @@ integrations are implemented.
 
 10. **Keep shared types independent of execution.** `@repo/gateway-types` has no package
     dependencies. Consumers can name envelopes and error codes without installing the runtime
-    or generator. Parsing and `GatewayError` belong in the runtime, which re-exports shared
-    types for handler authors. Preserve literal operation names in `defineGateway` types.
+    or generator. Parsing and `GatewayError` belong in the runtime. Import a shared type from
+    the package that declares it: no package re-exports another's types, and every package that
+    uses one declares the dependency itself. Preserve literal operation names in `defineGateway`
+    types.
+    A driver that needs a check relating one operation field to another registers it by
+    augmenting `OperationRefinements`, keyed by its literal `type`; the config package holds
+    only that slot and no driver vocabulary.
 
 11. **Keep configuration environment-independent.** Do not hard-code deployed addresses,
     credentials or environment names in gateway code. Deployment-specific configuration belongs
-    at the integration boundary.
+    at the integration boundary. Every driver takes its upstream location from
+    `UPSTREAM_TARGET` and its secret from the AWS Secrets Manager secret whose ARN is in
+    `UPSTREAM_SECRET_ARN`, both named in the runtime and both required, a gateway that sends no
+    credential included. What the target means, and what the secret must contain, are the
+    driver's decisions, declared on its definition; the runtime only retrieves the secret as a
+    JSON object and caches it for a bounded age. Read the variables at the entrypoint through
+    `readUpstreamOptions`, which builds the secret provider, and pass the result in, never
+    inside a request. A gateway configuration never names an ARN or a secret value, and
+    importing one never reaches the environment or AWS.
 
 ## Public documentation and comments
 
@@ -158,9 +201,10 @@ non-obvious decision over a roadmap, a deployment narrative or a repeat of this 
 
 ## Build and test notes
 
-- `pnpm test` depends on `build`. Build and typecheck tasks also depend on dependency builds and
-  codegen. A stale dependency `dist/` can mask changes; rebuild if results look inconsistent.
-- Codegen has its own `^build` dependency because it reads dependencies' `dist/` exports.
-  Listing both `^build` and codegen as dependencies of another task does not order them.
+- Nothing is compiled. Workspace packages resolve to each other's sources, so typecheck and
+  tests see a dependency change immediately and no task waits on another package.
+- The codegen CLI is `src/cli.ts`, started by `bin/gateway-codegen.js`, which registers tsx
+  and imports it. The CLI and the gateway configurations it loads therefore have the whole
+  language available, not the subset Node strips on its own.
 - Test literal operation-key inference at the type level; widening it to `string` loses useful
   information for codegen and handler authors.

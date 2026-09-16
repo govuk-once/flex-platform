@@ -5,53 +5,64 @@ import type {
 } from "@repo/gateway-config";
 import type {
   EnvelopeResponse,
+  ExecuteFn,
   SignalRuling,
   Validator,
 } from "@repo/gateway-types";
 import { ERROR_CODES } from "@repo/gateway-types";
 
-import {
-  createDriverContext,
-  type DeadlineProvider,
-  type DriverContext,
-} from "./context.ts";
+import { createDriverContext, type DeadlineProvider } from "./context.ts";
 import { parseEnvelope } from "./envelope.ts";
-import { GatewayError } from "./errors.ts";
+import { describeUnexpectedError, GatewayError } from "./errors.ts";
 import { type CompiledPath, compilePaths } from "./field-path.ts";
 import { createLogger, pickFields } from "./logging.ts";
 import { resolvePolicy } from "./policy.ts";
 import type { CompiledBinding } from "./secure.ts";
 import { checkSecureBindings, compileBindings } from "./secure.ts";
 
-export interface HandlerDeps {
-  readonly validators: Readonly<
-    Record<
-      string,
-      {
-        readonly input: Validator;
-        readonly outcomes: Readonly<Record<string, Validator>>;
-      }
-    >
-  >;
-  readonly execute: (
-    ctx: DriverContext,
-    operation: string,
-    input: unknown,
-  ) => Promise<{ outcome: string; data: unknown }>;
+export interface OperationValidators {
+  readonly input: Validator;
+  readonly outcomes: Readonly<Record<string, Validator>>;
+}
+
+export type AnyOperations = Readonly<Record<string, OperationConfig>>;
+
+// Keyed by the configuration's operations, so a missing or misnamed validator set fails to
+// typecheck. What varies per invocation, the deadline, is passed to the handler instead.
+export interface HandlerDeps<TOps extends AnyOperations = AnyOperations> {
+  readonly validators: { readonly [K in keyof TOps]: OperationValidators };
+  readonly execute: ExecuteFn;
+}
+
+export interface Invocation {
   readonly deadline: DeadlineProvider;
 }
 
-export type AnyGatewayConfig = GatewayConfig<
-  DriverDefinition,
-  Readonly<Record<string, OperationConfig>>
->;
+export type GatewayHandler = (
+  event: unknown,
+  invocation: Invocation,
+) => Promise<EnvelopeResponse>;
+
+export type DispatchStep =
+  | "envelope"
+  | "token"
+  | "routing"
+  | "input"
+  | "bindings"
+  | "deadline"
+  | "execute"
+  | "outcome"
+  | "response";
+
+export type AnyGatewayConfig = GatewayConfig<DriverDefinition, AnyOperations>;
 
 interface CompiledOperation {
   readonly config: OperationConfig;
-  readonly validators: {
-    readonly input: Validator;
-    readonly outcomes: Readonly<Record<string, Validator>>;
-  };
+  readonly input: Validator;
+  // A Map, not an object: the outcome name comes from the driver at request time, and an
+  // object lookup would find inherited members such as "constructor" and treat them as a
+  // validator.
+  readonly outcomes: ReadonlyMap<string, Validator>;
   readonly logInput: readonly CompiledPath[];
   readonly logOutput: readonly CompiledPath[];
   readonly secureBindings: readonly CompiledBinding[];
@@ -59,7 +70,7 @@ interface CompiledOperation {
 
 function compileOperations(
   config: AnyGatewayConfig,
-  deps: HandlerDeps,
+  validators: Readonly<Record<string, OperationValidators | undefined>>,
 ): ReadonlyMap<string, CompiledOperation> {
   const opNames = Object.keys(config.operations);
   if (opNames.length === 0) {
@@ -73,14 +84,24 @@ function compileOperations(
     if (!opConfig) {
       throw new Error(`Operation "${opName}" missing from config`);
     }
-    const opValidators = deps.validators[opName];
+    const opValidators = validators[opName];
     if (!opValidators) {
       throw new Error(`Missing validators for operation "${opName}"`);
     }
     if (typeof opValidators.input !== "function") {
       throw new Error(`Missing input validator for operation "${opName}"`);
     }
-    if (Object.keys(opValidators.outcomes).length === 0) {
+
+    const outcomes = new Map<string, Validator>();
+    for (const [outcome, validator] of Object.entries(opValidators.outcomes)) {
+      if (typeof validator !== "function") {
+        throw new Error(
+          `Outcome "${outcome}" of operation "${opName}" has no validator function`,
+        );
+      }
+      outcomes.set(outcome, validator);
+    }
+    if (outcomes.size === 0) {
       throw new Error(
         `Operation "${opName}" must have at least one outcome validator`,
       );
@@ -88,7 +109,8 @@ function compileOperations(
 
     ops.set(opName, {
       config: opConfig,
-      validators: opValidators,
+      input: opValidators.input,
+      outcomes,
       logInput: compilePaths(opConfig.log?.input ?? []),
       logOutput: compilePaths(opConfig.log?.output ?? []),
       secureBindings: compileBindings(opConfig.secure),
@@ -133,29 +155,34 @@ function recordHealthSignal(
   return { signal };
 }
 
-export function createHandler(
-  config: AnyGatewayConfig,
-  deps: HandlerDeps,
-): (event: unknown) => Promise<EnvelopeResponse> {
+// Compiles once; the returned handler serves every invocation, each with its own deadline.
+export function createHandler<const TOps extends AnyOperations>(
+  config: GatewayConfig<DriverDefinition, TOps>,
+  deps: HandlerDeps<TOps>,
+): GatewayHandler {
   if (!config.id || typeof config.id !== "string") {
     throw new Error("Gateway config must have a non-empty string id");
   }
 
-  const operations = compileOperations(config, deps);
+  const operations = compileOperations(config, deps.validators);
   const logger = createLogger(config.id);
 
   const policy = resolvePolicy(config.policy);
-  const { deadline } = deps;
 
-  return async (event: unknown): Promise<EnvelopeResponse> => {
+  return async (event, invocation): Promise<EnvelopeResponse> => {
+    // The runtime's own record of how far a request got, logged beside the source locations
+    // of an undeclared error so the step and the site locate it together.
+    let step: DispatchStep = "envelope";
     try {
       // Step 1: Parse envelope
       const envelope = parseEnvelope(event);
 
       // Step 2: Verify token (STUB)
+      step = "token";
       verifyToken();
 
       // Step 3: Route on operation
+      step = "routing";
       const op = operations.get(envelope.operation);
       if (!op) {
         throw new GatewayError(
@@ -165,14 +192,16 @@ export function createHandler(
       }
 
       // Step 4: Validate input
-      if (!op.validators.input(envelope.input)) {
+      step = "input";
+      if (!op.input(envelope.input)) {
         throw new GatewayError(
           "INVALID_INPUT",
-          formatValidationErrors(op.validators.input.errors),
+          formatValidationErrors(op.input.errors),
         );
       }
 
       // Step 5: Check secure bindings
+      step = "bindings";
       checkSecureBindings(
         op.secureBindings,
         envelope.input,
@@ -181,6 +210,8 @@ export function createHandler(
       );
 
       // Step 6: Derive deadline
+      step = "deadline";
+      const { deadline } = invocation;
       const requestDeadline: DeadlineProvider = {
         remainingMs(): number {
           return Math.max(
@@ -191,6 +222,7 @@ export function createHandler(
       };
 
       // Step 7: Run pipeline
+      step = "execute";
       const ctx = createDriverContext(policy, requestDeadline);
       const result = await deps.execute(
         ctx,
@@ -199,8 +231,9 @@ export function createHandler(
       );
 
       // Step 8: Validate outcome
-      const outcomeValidator = op.validators.outcomes[result.outcome];
-      if (!outcomeValidator) {
+      step = "outcome";
+      const outcomeValidator = op.outcomes.get(result.outcome);
+      if (outcomeValidator === undefined) {
         throw new GatewayError(
           "UPSTREAM_CONTRACT_VIOLATION",
           `Unknown outcome "${result.outcome}" for operation "${envelope.operation}"`,
@@ -214,6 +247,7 @@ export function createHandler(
       }
 
       // Step 9: Record health (success path)
+      step = "response";
       const health = recordHealthSignal(envelope.operation, "upstream_success");
 
       // Step 10: Wrap envelope
@@ -255,7 +289,16 @@ export function createHandler(
         ERROR_CODES.INTERNAL.signal,
       );
 
-      logger.error({ err, ...health }, "Unhandled error in dispatcher");
+      // Nothing declared this error, so nothing about it is known to be safe to log. The
+      // envelope is returned whatever happens here; logging must not become a second failure.
+      try {
+        logger.error(
+          { err: describeUnexpectedError(err), step, ...health },
+          "Unhandled error in dispatcher",
+        );
+      } catch {
+        // The response still carries the code.
+      }
       return { ok: false as const, error: { code: "INTERNAL" as const } };
     }
   };

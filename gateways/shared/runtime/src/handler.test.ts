@@ -1,5 +1,7 @@
+import type { DriverDefinition } from "@repo/gateway-config";
 import { defineGateway } from "@repo/gateway-config";
 import type {
+  DriverContext,
   EnvelopeError,
   EnvelopeInbound,
   EnvelopeSuccess,
@@ -7,10 +9,9 @@ import type {
 } from "@repo/gateway-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DriverContext } from "./context.ts";
 import { GatewayError } from "./errors.ts";
 import type { AnyGatewayConfig, HandlerDeps } from "./handler.ts";
-import { createHandler } from "./handler.ts";
+import { createHandler as createGatewayHandler } from "./handler.ts";
 
 // -- Helpers ------------------------------------------------------------------
 
@@ -37,6 +38,13 @@ const alwaysInvalid: Validator = Object.assign(
 const stubExecute: HandlerDeps["execute"] = () =>
   Promise.resolve({ outcome: "success", data: { id: "123" } });
 
+// Tests supply execute through the handler's deps; the driver's own factory is never called.
+const stubDriver: DriverDefinition = {
+  type: "stub",
+  createExecutor: () =>
+    Promise.reject(new Error("stub driver has no executor")),
+};
+
 function testConfig(
   overrides: Partial<{
     operations: Record<
@@ -51,7 +59,7 @@ function testConfig(
 ): AnyGatewayConfig {
   return defineGateway({
     id: "test-gw",
-    driver: { type: "stub" },
+    driver: stubDriver,
     operations: overrides.operations ?? {
       ping: { description: "Test operation" },
     },
@@ -60,13 +68,22 @@ function testConfig(
 
 const NO_DEADLINE = { remainingMs: () => Infinity };
 
+// Binds one invocation's deadline so the tests below call handlers with the event alone.
+function createHandler(
+  config: AnyGatewayConfig,
+  deps: HandlerDeps,
+  deadline = NO_DEADLINE,
+) {
+  const handle = createGatewayHandler(config, deps);
+  return (event: unknown) => handle(event, { deadline });
+}
+
 function testDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     validators: {
       ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
     },
     execute: stubExecute,
-    deadline: NO_DEADLINE,
     ...overrides,
   };
 }
@@ -256,7 +273,6 @@ describe("createHandler", () => {
       const handler = createHandler(
         testConfig(),
         testDeps({
-          deadline: { remainingMs: () => 600 },
           execute: async (ctx) => {
             await ctx.upstream(
               () => new Promise((resolve) => setTimeout(resolve, 5_000)),
@@ -264,11 +280,35 @@ describe("createHandler", () => {
             return { outcome: "success", data: {} };
           },
         }),
+        { remainingMs: () => 600 },
       );
       const resp = await handler(envelope());
 
       expect(resp.ok).toBe(false);
       expect((resp as EnvelopeError).error.code).toBe("UPSTREAM_TIMEOUT");
+    });
+
+    it("takes the deadline from each invocation, not from construction", async () => {
+      const slow: HandlerDeps["execute"] = async (ctx) => {
+        await ctx.upstream(
+          () => new Promise((resolve) => setTimeout(resolve, 200)),
+        );
+        return { outcome: "success", data: {} };
+      };
+      const handle = createGatewayHandler(
+        testConfig(),
+        testDeps({ execute: slow }),
+      );
+
+      const exhausted = await handle(envelope(), {
+        deadline: { remainingMs: () => 100 },
+      });
+      const roomy = await handle(envelope(), {
+        deadline: { remainingMs: () => 10_000 },
+      });
+
+      expect((exhausted as EnvelopeError).error.code).toBe("UPSTREAM_TIMEOUT");
+      expect(roomy.ok).toBe(true);
     });
 
     it("uses policy timeout when deadline has no constraint", async () => {
@@ -515,7 +555,7 @@ describe("createHandler", () => {
         createHandler(
           defineGateway({
             id: "empty",
-            driver: { type: "stub" },
+            driver: stubDriver,
             operations: {},
           }),
           testDeps(),
@@ -628,5 +668,185 @@ describe("createHandler", () => {
       expect(receivedOperation).toBe("ping");
       expect(receivedInput).toEqual({ key: "value" });
     });
+  });
+});
+
+describe("outcome lookup hardening", () => {
+  it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
+    "rejects the undeclared outcome %j even though objects inherit it",
+    async (outcome) => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: () => Promise.resolve({ outcome, data: "unvalidated" }),
+        }),
+      );
+      const resp = await handler(envelope());
+      expect(resp).toEqual({
+        ok: false,
+        error: { code: "UPSTREAM_CONTRACT_VIOLATION" },
+      });
+    },
+  );
+
+  it("rejects an outcome validator that is not a function at creation", () => {
+    expect(() =>
+      createHandler(
+        testConfig(),
+        testDeps({
+          validators: {
+            ping: {
+              input: alwaysValid,
+              outcomes: { success: "nope" as unknown as Validator },
+            },
+          },
+        }),
+      ),
+    ).toThrowError(
+      'Outcome "success" of operation "ping" has no validator function',
+    );
+  });
+
+  it("types validators by the configuration's operations", () => {
+    const config = defineGateway({
+      id: "typed",
+      driver: stubDriver,
+      operations: { ping: {}, pong: {} },
+    });
+    createGatewayHandler(config, {
+      validators: {
+        ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
+        pong: { input: alwaysValid, outcomes: { success: alwaysValid } },
+      },
+      execute: stubExecute,
+    });
+    expect(() =>
+      createGatewayHandler(config, {
+        // @ts-expect-error pong has no validators
+        validators: {
+          ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
+        },
+        execute: stubExecute,
+      }),
+    ).toThrowError(/Missing validators for operation "pong"/);
+    createGatewayHandler(config, {
+      validators: {
+        ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
+        pong: { input: alwaysValid, outcomes: { success: alwaysValid } },
+        // @ts-expect-error pang is not an operation
+        pang: { input: alwaysValid, outcomes: { success: alwaysValid } },
+      },
+      execute: stubExecute,
+    });
+  });
+});
+
+describe("unexpected error logging", () => {
+  it("logs the source locations and the dispatcher step, never the message, name, properties or cause", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: () => {
+          throw Object.assign(
+            new Error(
+              "token=SYNTHETIC_MESSAGE\n    at SYNTHETIC_FRAME (/x.ts:1:1)",
+            ),
+            {
+              name: "SYNTHETIC_NAME",
+              request: { headers: { authorization: "SYNTHETIC_PROPERTY" } },
+              cause: new Error("SYNTHETIC_CAUSE"),
+            },
+          );
+        },
+      }),
+    );
+    const resp = await handler(envelope());
+    expect(resp).toEqual({ ok: false, error: { code: "INTERNAL" } });
+
+    const logged = capturedOutput();
+    expect(logged).toContain("Unhandled error in dispatcher");
+    expect(logged).toContain('"err":{"frames":["at ');
+    expect(logged).toContain("handler.test.ts");
+    expect(logged).toContain('"step":"execute"');
+    expect(logged).not.toMatch(/SYNTHETIC_/);
+  });
+
+  it("names the step that was running when validation code itself fails", async () => {
+    const throwing: Validator = Object.assign(
+      (_data: unknown): _data is never => {
+        throw new RangeError("SYNTHETIC");
+      },
+      { errors: null },
+    );
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        validators: {
+          ping: { input: alwaysValid, outcomes: { success: throwing } },
+        },
+      }),
+    );
+    await handler(envelope());
+    const logged = capturedOutput();
+    expect(logged).toContain('"err":{"frames":["at ');
+    expect(logged).toContain('"step":"outcome"');
+    expect(logged).not.toContain("SYNTHETIC");
+  });
+
+  it("returns the INTERNAL envelope even when the error's own properties throw", async () => {
+    const hostile = new Error("x");
+    Object.defineProperty(hostile, "name", {
+      get() {
+        throw new Error("SYNTHETIC_GETTER");
+      },
+    });
+    Object.defineProperty(hostile, "stack", { value: 42 });
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: () => {
+          throw hostile;
+        },
+      }),
+    );
+    await expect(handler(envelope())).resolves.toEqual({
+      ok: false,
+      error: { code: "INTERNAL" },
+    });
+    expect(capturedOutput()).not.toContain("SYNTHETIC");
+  });
+
+  it("still logs the step and returns INTERNAL when no location is available", async () => {
+    const formatted = new Error("SYNTHETIC_MESSAGE");
+    void formatted.stack;
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: () => {
+          throw formatted;
+        },
+      }),
+    );
+    await expect(handler(envelope())).resolves.toEqual({
+      ok: false,
+      error: { code: "INTERNAL" },
+    });
+    const logged = capturedOutput();
+    expect(logged).toContain('"err":{"frames":[]}');
+    expect(logged).toContain('"step":"execute"');
+    expect(logged).not.toContain("SYNTHETIC");
+  });
+
+  it("keeps a GatewayError's message, which is written to be logged", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: () => {
+          throw new GatewayError("INTERNAL", "mapping bug: field x unmapped");
+        },
+      }),
+    );
+    await handler(envelope());
+    expect(capturedOutput()).toContain("mapping bug: field x unmapped");
   });
 });

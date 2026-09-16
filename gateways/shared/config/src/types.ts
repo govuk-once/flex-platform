@@ -1,4 +1,4 @@
-import type { DriverDefinition, OperationFields } from "./driver.ts";
+import type { DriverDefinition, HandlerOf, OperationFields } from "./driver.ts";
 
 export type FieldPath = string;
 
@@ -19,16 +19,24 @@ export interface PolicyConfig {
   };
 }
 
-export interface BaseOperationConfig {
+// A type alias, not an interface: an operation's type intersects this with the driver's fields,
+// and only an intersection of type literals is assignable to the `Record<string, unknown>` that
+// stands for those fields in a driver-agnostic configuration. A driver's createExecutor relies
+// on that to take its own configuration type.
+export type BaseOperationConfig = {
   readonly log?: LogConfig;
   // Input path -> secure value key. Requires equal values; does not authenticate their origin.
   readonly secure?: Readonly<Record<FieldPath, string>>;
-  readonly handler?: string;
   readonly description?: string;
-}
+};
 
 export type OperationConfig<D extends DriverDefinition = DriverDefinition> =
-  BaseOperationConfig & OperationFields<D>;
+  BaseOperationConfig &
+    OperationFields<D> & {
+      // A custom handler for this operation, imported statically into the configuration and
+      // typed against the driver, so the wrong driver's handler fails here.
+      readonly handler?: HandlerOf<D>;
+    };
 
 export interface GatewayConfig<
   TDriver extends DriverDefinition,

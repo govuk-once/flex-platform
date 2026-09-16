@@ -4,6 +4,8 @@
     "strict": true,
     "module": "nodenext",
     "target": "es2025",
+    // The target's default libs, plus esnext.error for Error.isError, which Node 24 ships.
+    "lib": ["es2025", "dom", "dom.iterable", "dom.asynciterable", "esnext.error"],
     "types": ["node"],
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,

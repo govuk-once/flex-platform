@@ -4,8 +4,6 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    "./base.json": "./base.json",
-    "./library.json": "./library.json",
-    "./lambda.json": "./lambda.json"
+    "./base.json": "./base.json"
   }
 }

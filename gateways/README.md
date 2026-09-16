@@ -8,9 +8,9 @@ and logging. Each gateway configuration describes one upstream.
 ```txt
 gateways/
   shared/
-    config/        defineGateway, driver and operation types, policy presets
-    types/         Envelope shapes, error codes and Validator
-    runtime/       Envelope parsing, dispatch, timeouts, bindings and logging
+    config/        defineGateway, driver definition and executor contract, policy presets
+    types/         Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
+    runtime/       Envelope parsing, dispatch, timeouts, bindings, logging and secret retrieval
     codegen/       Schema loading and standalone validator generation
   services/
     udp/           Example gateway configuration and schema fixtures
@@ -23,9 +23,15 @@ For the included example, run:
 pnpm --filter @govuk-once/flex-gateway-udp codegen
 ```
 
-Run `pnpm build` from the repository root first to build workspace dependencies. The CLI does
-not generate a deployable handler or client. The runtime's `createHandler` accepts validators,
-an execution function and a deadline provider.
+There is no build step: the CLI runs from source. The CLI does not generate a deployable
+handler or client. The runtime's `createHandler` accepts validators
+keyed by the configuration's operations and an execution function, compiles once, and returns a
+handler that takes each invocation's deadline. Outcome validators are held in a `Map`, so an
+outcome name matching an inherited object member such as `constructor` cannot pass validation.
+
+Configuration is checked for shape as well as content: a misspelled operation, gateway or
+driver field is a type error at `defineGateway` or the driver helper, not a silently ignored
+key.
 
 Token and signature verification are not implemented. Secure bindings check consistency of
 values only. Of the configured policy settings, only `upstreamTimeout` is enforced.
@@ -34,7 +40,8 @@ values only. Of the configured policy settings, only `upstreamTimeout` is enforc
 
 `defineGateway` preserves operation names in the inferred type and supplies policy defaults.
 The [UDP gateway](services/udp/gateway.config.ts) describes the User Data Platform API.
-Its local `openapiRest` helper constructs driver metadata; it does not implement transport.
+Its local `openapiRest` helper stands in for the driver package: it constructs the definition
+and implements no transport.
 
 ```ts
 import type { DriverDefinition } from "@repo/gateway-config";
@@ -43,7 +50,12 @@ import { defineGateway } from "@repo/gateway-config";
 function openapiRest(config: {
   spec: string;
 }): DriverDefinition<{ upstream: string }> {
-  return { type: "openapi-rest", ...config };
+  return {
+    type: "openapi-rest",
+    createExecutor: () =>
+      Promise.reject(new Error("The openapi-rest driver is not implemented")),
+    ...config,
+  };
 }
 
 export default defineGateway({
@@ -78,7 +90,7 @@ export default defineGateway({
 | `description` | Optional description. |
 | `log` | Optional input and output field allowlists. |
 | `secure` | Optional mappings from input paths to envelope secure-value keys. |
-| `handler` | Optional module path in the configuration type; not loaded by the current runtime or CLI. |
+| `handler` | Optional custom handler, a value from the driver's `defineHandler`, typed against the driver. The runtime and CLI ignore it; the driver's executor dispatches to it. |
 
 ### Policy
 

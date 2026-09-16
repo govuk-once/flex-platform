@@ -1,13 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
 import ajvModule from "ajv/dist/2020.js";
 import standaloneModule from "ajv/dist/standalone/index.js";
 import addFormatsModule from "ajv-formats";
 import esbuild from "esbuild";
 import { format } from "prettier";
-
-import type { GatewaySchemas, JSONSchema } from "./types.ts";
 
 const Ajv2020 = ajvModule.default;
 const addFormats = addFormatsModule.default;

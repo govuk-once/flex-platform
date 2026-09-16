@@ -8,7 +8,7 @@
     "url": "https://github.com/govuk-once/flex-platform.git"
   },
   "scripts": {
-    "build": "turbo run build",
+    "codegen": "turbo run codegen",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck"

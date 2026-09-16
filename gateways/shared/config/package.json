@@ -3,16 +3,15 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc --build tsconfig.build.json",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/gateway-types": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

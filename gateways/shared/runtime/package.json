@@ -3,18 +3,16 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc --build tsconfig.build.json",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-lambda-powertools/parameters": "2.35.0",
+    "@aws-sdk/client-secrets-manager": "3.1128.0",
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-types": "workspace:*",
     "pino": "10.3.1"

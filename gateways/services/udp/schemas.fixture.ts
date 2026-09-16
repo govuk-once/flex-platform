@@ -1,7 +1,7 @@
 // Example schemas consumed by the codegen CLI. These are fixtures, not an upstream contract.
 // Keep application code independent of this fixture module.
 
-import type { GatewaySchemas } from "@repo/gateway-codegen";
+import type { GatewaySchemas } from "@repo/gateway-types";
 
 export default {
   defs: {
