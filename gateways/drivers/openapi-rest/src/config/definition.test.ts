@@ -4,30 +4,40 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { OpenApiRestHandler } from "../types.ts";
 import { OPENAPI_REST_DRIVER_TYPE } from "../types.ts";
+import { noAuth } from "./auth.ts";
 import type { OpenApiRestOperationFields } from "./definition.ts";
 import { openapiRest } from "./definition.ts";
 
 const SPEC = "https://example.test/openapi.yml";
+const AUTH = noAuth();
 
 describe("openapiRest", () => {
-  it("builds a driver definition naming its type and spec", () => {
-    const definition = openapiRest({ spec: SPEC });
+  it("builds a driver definition naming its type, spec and auth", () => {
+    const definition = openapiRest({ spec: SPEC, auth: AUTH });
     expect(definition).toMatchObject({
       type: OPENAPI_REST_DRIVER_TYPE,
       spec: SPEC,
+      auth: AUTH,
     });
-    expect(Object.keys(definition)).toEqual(["type", "createExecutor", "spec"]);
+    expect(Object.keys(definition)).toEqual([
+      "type",
+      "createExecutor",
+      "spec",
+      "auth",
+    ]);
   });
 
   it("carries headers and the response limit when given", () => {
     const definition = openapiRest({
       spec: SPEC,
+      auth: AUTH,
       headers: { "x-api-version": "2" },
       maxResponseBytes: 4096,
     });
     expect(definition).toMatchObject({
       type: OPENAPI_REST_DRIVER_TYPE,
       spec: SPEC,
+      auth: AUTH,
       headers: { "x-api-version": "2" },
       maxResponseBytes: 4096,
     });
@@ -35,13 +45,19 @@ describe("openapiRest", () => {
       "type",
       "createExecutor",
       "spec",
+      "auth",
       "headers",
       "maxResponseBytes",
     ]);
   });
 
+  it("requires an auth definition", () => {
+    // @ts-expect-error every gateway states how its requests are authenticated
+    openapiRest({ spec: SPEC });
+  });
+
   it("types the driver with a literal type discriminator", () => {
-    const driver = openapiRest({ spec: SPEC });
+    const driver = openapiRest({ spec: SPEC, auth: AUTH });
     expectTypeOf(driver.type).toEqualTypeOf<"openapi-rest">();
   });
 
@@ -52,7 +68,7 @@ describe("openapiRest", () => {
 
   it("rejects a misspelled driver field", () => {
     // @ts-expect-error `spce` is not a driver field
-    openapiRest({ spce: SPEC });
+    openapiRest({ spec: SPEC, auth: AUTH, spce: SPEC });
   });
 
   it("declares the HTTP operation fields", () => {
@@ -67,7 +83,7 @@ describe("openapiRest with defineGateway", () => {
   it("preserves literal operation keys and the upstream field", () => {
     const gw = defineGateway({
       id: "test",
-      driver: openapiRest({ spec: SPEC }),
+      driver: openapiRest({ spec: SPEC, auth: AUTH }),
       operations: {
         createUser: { upstream: "POST /v1/user" },
         getAddress: {
@@ -94,7 +110,7 @@ describe("openapiRest with defineGateway", () => {
   it("rejects operations without an upstream", () => {
     defineGateway({
       id: "test",
-      driver: openapiRest({ spec: SPEC }),
+      driver: openapiRest({ spec: SPEC, auth: AUTH }),
       operations: {
         // @ts-expect-error upstream is required by the openapi-rest driver
         missing: { description: "No upstream" },
@@ -105,7 +121,7 @@ describe("openapiRest with defineGateway", () => {
   it("rejects an unknown parameter location", () => {
     defineGateway({
       id: "test",
-      driver: openapiRest({ spec: SPEC }),
+      driver: openapiRest({ spec: SPEC, auth: AUTH }),
       operations: {
         op: {
           upstream: "GET /x",
@@ -119,7 +135,7 @@ describe("openapiRest with defineGateway", () => {
   it("rejects an upstream with an unknown method or no leading slash", () => {
     defineGateway({
       id: "test",
-      driver: openapiRest({ spec: SPEC }),
+      driver: openapiRest({ spec: SPEC, auth: AUTH }),
       operations: {
         // @ts-expect-error FETCH is not an HTTP method the driver supports
         badMethod: { upstream: "FETCH /x" },

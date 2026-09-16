@@ -5,6 +5,7 @@ import {
   OPENAPI_REST_DRIVER_TYPE,
   type OpenApiRestHandler,
 } from "../types.ts";
+import type { OpenApiRestAuth } from "./auth.ts";
 
 // Behaviour lives here, reviewed with the gateway. Deployment values such as the target and
 // the secret arrive as executor options instead.
@@ -16,6 +17,10 @@ export interface OpenApiRestDriverConfig {
   readonly headers?: Readonly<Record<string, string>>;
   // Largest response body the driver buffers, in bytes. Defaults to 1 MiB.
   readonly maxResponseBytes?: number;
+  // How requests are authenticated: bearerToken(), apiKey() or noAuth() from this package, or
+  // a definition written with defineAuth. It says what the secret must hold and which headers
+  // it owns. Required, so a gateway that sends no credential says so.
+  readonly auth: OpenApiRestAuth;
 }
 
 export type UpstreamTemplate = `${HttpMethod} /${string}`;
@@ -54,6 +59,7 @@ export function openapiRest(
     createExecutor: () =>
       Promise.reject(new Error("The openapi-rest executor is not implemented")),
     spec: config.spec,
+    auth: config.auth,
     ...(config.headers !== undefined ? { headers: config.headers } : {}),
     ...(config.maxResponseBytes !== undefined
       ? { maxResponseBytes: config.maxResponseBytes }

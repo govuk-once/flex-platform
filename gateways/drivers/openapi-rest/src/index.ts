@@ -1,4 +1,16 @@
 export type {
+  ApiKeySecret,
+  BearerTokenSecret,
+  EmptySecret,
+  OpenApiRestAuth,
+  OpenApiRestAuthCall,
+  OpenApiRestAuthDeps,
+  OpenApiRestAuthInstance,
+  OpenApiRestAuthRequest,
+  OpenApiRestAuthTransport,
+} from "./config/auth.ts";
+export { apiKey, bearerToken, defineAuth, noAuth } from "./config/auth.ts";
+export type {
   OpenApiRestDriver,
   OpenApiRestDriverConfig,
   OpenApiRestOperationFields,
