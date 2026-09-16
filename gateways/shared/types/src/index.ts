@@ -20,4 +20,5 @@ export type {
   JSONSchema,
   OperationSchemas,
 } from "./schemas.ts";
+export type { SecretObject, SecretProvider } from "./secret.ts";
 export type { Validator } from "./validator.ts";

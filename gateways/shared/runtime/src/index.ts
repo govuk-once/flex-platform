@@ -18,6 +18,7 @@ export type { Logger } from "./logging.ts";
 export { pickFields } from "./logging.ts";
 export type { ResolvedPolicy } from "./policy.ts";
 export { resolvePolicy } from "./policy.ts";
+export { asSecretObject, createSecretProvider } from "./secret-provider.ts";
 export type { CompiledBinding } from "./secure.ts";
 export {
   checkSecureBindings,
