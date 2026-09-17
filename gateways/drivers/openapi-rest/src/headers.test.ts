@@ -23,13 +23,11 @@ describe("normaliseHeaderName", () => {
     "transfer-encoding",
     "connection",
   ])("rejects reserved header %s", (name) => {
-    expect(() => normaliseHeaderName(name, "ctx")).toThrowError(
-      /set by the driver/,
-    );
+    expect(() => normaliseHeaderName(name, "ctx")).toThrow(/set by the driver/);
   });
 
   it.each(["", "x y", "x:y", "x\ny"])("rejects invalid name %j", (name) => {
-    expect(() => normaliseHeaderName(name, "ctx")).toThrowError(
+    expect(() => normaliseHeaderName(name, "ctx")).toThrow(
       /not a valid header name/,
     );
   });
@@ -65,7 +63,7 @@ describe("validateHeaders", () => {
   it("rejects a non-string value", () => {
     expect(() =>
       validateHeaders({ "x-n": 1 as unknown as string }, "ctx"),
-    ).toThrowError('ctx: header "x-n" has an invalid value');
+    ).toThrow('ctx: header "x-n" has an invalid value');
   });
 
   // The Headers class strips surrounding spaces and tabs, which is why a credential goes
@@ -87,9 +85,9 @@ describe("validateHeaders", () => {
   });
 
   it("includes the context in errors", () => {
-    expect(() =>
-      validateHeaders({ host: "x" }, "Executor headers"),
-    ).toThrowError(/^Executor headers: /);
+    expect(() => validateHeaders({ host: "x" }, "Executor headers")).toThrow(
+      /^Executor headers: /,
+    );
   });
 });
 

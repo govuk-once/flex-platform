@@ -180,7 +180,7 @@ describe("createAuthTransport", () => {
       () => new Response("<html>", { status: 200 }),
     );
     const response = await html.request({ method: "GET", url: "/t" }, s2);
-    expect(() => response.json()).toThrowError(
+    expect(() => response.json()).toThrow(
       "Upstream response body is not JSON for an authentication request",
     );
   });
