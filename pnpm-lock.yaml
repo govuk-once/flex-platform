@@ -33,6 +33,9 @@ importers:
         specifier: workspace:*
         version: link:../../shared/types
     devDependencies:
+      '@aws-sdk/client-secrets-manager':
+        specifier: 3.1128.0
+        version: 3.1128.0
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../../packages/eslint-config
