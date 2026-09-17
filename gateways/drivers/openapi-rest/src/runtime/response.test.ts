@@ -60,7 +60,7 @@ describe("parseJsonBody", () => {
   });
 
   it("throws a contract violation for non-JSON, naming the request only", () => {
-    expect(() => parseJsonBody("<html>", where)).toThrowError(
+    expect(() => parseJsonBody("<html>", where)).toThrow(
       expect.objectContaining({
         code: "UPSTREAM_CONTRACT_VIOLATION",
         message:

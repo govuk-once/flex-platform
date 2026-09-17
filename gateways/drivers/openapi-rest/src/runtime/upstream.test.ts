@@ -68,7 +68,7 @@ describe("parseUpstream", () => {
     ["GET /users\\{id}", /backslash/],
     ["GET /users/a\\b", /backslash/],
   ])("rejects %j", (upstream, message) => {
-    expect(() => parseUpstream(upstream)).toThrowError(message);
+    expect(() => parseUpstream(upstream)).toThrow(message);
   });
 
   // Neither check may catch a template that is merely dot-shaped or escape-shaped: only a whole
@@ -82,6 +82,6 @@ describe("parseUpstream", () => {
     "GET /users/..hidden",
     "GET /users/{id}..",
   ])("accepts %j", (upstream) => {
-    expect(() => parseUpstream(upstream)).not.toThrowError();
+    expect(() => parseUpstream(upstream)).not.toThrow();
   });
 });

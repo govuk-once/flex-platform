@@ -40,6 +40,6 @@ describe("parseUpstreamTarget", () => {
     ["http://localhost.evil.test", /http is accepted only for a loopback host/],
     ["http://127.0.0.1.evil.test", /http is accepted only for a loopback host/],
   ])("rejects %j", (value, message) => {
-    expect(() => parseUpstreamTarget(value)).toThrowError(message);
+    expect(() => parseUpstreamTarget(value)).toThrow(message);
   });
 });

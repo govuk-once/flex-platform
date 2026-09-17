@@ -46,7 +46,7 @@ describe("findUpSync", () => {
   });
 
   it("throws when the file is not found up to the filesystem root", () => {
-    expect(() => findUpSync("does-not-exist.marker", start)).toThrowError(
+    expect(() => findUpSync("does-not-exist.marker", start)).toThrow(
       /Could not find does-not-exist\.marker/,
     );
   });
