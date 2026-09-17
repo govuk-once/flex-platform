@@ -121,12 +121,10 @@ describe("apiKey", () => {
   });
 
   it("rejects a reserved or invalid header name when defined", () => {
-    expect(() => apiKey({ header: "host" })).toThrowError(
+    expect(() => apiKey({ header: "host" })).toThrow(
       'apiKey auth: header "host" is set by the driver',
     );
-    expect(() => apiKey({ header: "x y" })).toThrowError(
-      /not a valid header name/,
-    );
+    expect(() => apiKey({ header: "x y" })).toThrow(/not a valid header name/);
   });
 });
 

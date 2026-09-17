@@ -28,15 +28,13 @@ describe("readUpstreamTarget", () => {
   });
 
   it("throws when unset", () => {
-    expect(() => readUpstreamTarget({})).toThrowError(
-      /UPSTREAM_TARGET must be set/,
-    );
+    expect(() => readUpstreamTarget({})).toThrow(/UPSTREAM_TARGET must be set/);
   });
 
   it("throws when blank", () => {
-    expect(() =>
-      readUpstreamTarget({ [UPSTREAM_TARGET_ENV]: "   " }),
-    ).toThrowError(/UPSTREAM_TARGET must be set/);
+    expect(() => readUpstreamTarget({ [UPSTREAM_TARGET_ENV]: "   " })).toThrow(
+      /UPSTREAM_TARGET must be set/,
+    );
   });
 });
 
@@ -48,12 +46,12 @@ describe("readUpstreamSecretArn", () => {
   });
 
   it("throws when unset or blank", () => {
-    expect(() => readUpstreamSecretArn({})).toThrowError(
+    expect(() => readUpstreamSecretArn({})).toThrow(
       /UPSTREAM_SECRET_ARN must be set/,
     );
     expect(() =>
       readUpstreamSecretArn({ [UPSTREAM_SECRET_ARN_ENV]: " " }),
-    ).toThrowError(/UPSTREAM_SECRET_ARN must be set/);
+    ).toThrow(/UPSTREAM_SECRET_ARN must be set/);
   });
 
   it("does not judge the value's shape; the provider does", () => {
@@ -91,15 +89,15 @@ describe("readUpstreamOptions", () => {
   it("rejects a value that is not a Secrets Manager ARN", () => {
     expect(() =>
       readUpstreamOptions({ ...env, [UPSTREAM_SECRET_ARN_ENV]: "udp-secret" }),
-    ).toThrowError(/needs a Secrets Manager secret ARN/);
+    ).toThrow(/needs a Secrets Manager secret ARN/);
   });
 
   it("requires both variables", () => {
     expect(() =>
       readUpstreamOptions({ [UPSTREAM_SECRET_ARN_ENV]: ARN }),
-    ).toThrowError(/UPSTREAM_TARGET must be set/);
+    ).toThrow(/UPSTREAM_TARGET must be set/);
     expect(() =>
       readUpstreamOptions({ [UPSTREAM_TARGET_ENV]: "https://x.test" }),
-    ).toThrowError(/UPSTREAM_SECRET_ARN must be set/);
+    ).toThrow(/UPSTREAM_SECRET_ARN must be set/);
   });
 });
