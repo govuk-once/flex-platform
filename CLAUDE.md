@@ -17,7 +17,7 @@ operations for one upstream, keeping transport details separate from validation 
   value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
   gateway secret from AWS Secrets Manager through Powertools Parameters.
 - `gateways/shared/codegen`: schema loading, the build-time check of a configuration against
-  its schemas, and standalone JavaScript validator generation.
+  its schemas, standalone JavaScript validator generation and the call contract.
 - `gateways/drivers/openapi-rest`: the HTTP driver. Builds `fetch` requests from operation
   mappings, maps statuses to outcomes and error codes, and dispatches to custom handlers the
   entrypoint supplies. Nothing in it is called by hand; a generated entrypoint wires it.
@@ -26,8 +26,9 @@ operations for one upstream, keeping transport details separate from validation 
   keeps the two apart.
 - `gateways/services/udp`: an example gateway configuration and schema fixtures.
 
-The CLI reads `schemas.fixture.ts`, checks the configuration against it and writes validators.
-It does not produce a complete deployable gateway or client. Token and signature verification are not implemented;
+The CLI reads `schemas.fixture.ts`, checks the configuration against it, and writes the
+validators to `.gen/runtime/` and the call contract to `.gen/client/`. It does not produce a
+client: a consumer takes the generated types and invokes the deployed gateway itself. Token and signature verification are not implemented;
 secure bindings check value consistency only. Of the policy settings, only `upstreamTimeout`
 is enforced.
 
@@ -176,8 +177,11 @@ integrations are implemented.
 9. **Emitted validators are self-contained JavaScript.** Bundle Ajv runtime helpers and formats
    at generation time, resolving them from codegen's dependencies. Do not maintain a manual
    list of helpers. Validator output has no package imports or declaration files; this rule
-   applies to validators, not every possible generated artifact. Preserve subprocess tests
-   outside workspace dependency resolution and fixtures that exercise runtime helpers.
+   applies to validators, not every possible generated artifact; the call contract imports the
+   package that declares the envelope types. Preserve subprocess tests outside workspace
+   dependency resolution and fixtures that exercise runtime helpers. Generated code is not
+   typechecked and nothing outside `.gen/` imports it, so the generated contract is checked by
+   compiling it in a codegen test.
 
 10. **Keep shared types independent of execution.** `@repo/gateway-types` has no package
     dependencies. Consumers can name envelopes and error codes without installing the runtime

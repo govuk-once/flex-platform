@@ -11,25 +11,25 @@ gateways/
     config/        defineGateway, driver definition and executor contract, policy presets
     types/         Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
     runtime/       Envelope parsing, dispatch, timeouts, bindings, logging and secret retrieval
-    codegen/       Schema loading, configuration checks and standalone validator generation
+    codegen/       Schema loading, configuration checks, validators and the call contract
   drivers/
     openapi-rest/  HTTP request construction, status mapping, authentication and custom handlers
   services/
     udp/           Example gateway configuration and schema fixtures
 ```
 
-The codegen CLI checks a gateway configuration against its schemas and writes JavaScript
-validators to `.gen/validators/`; see [Code generation](#code-generation). For the included
+The codegen CLI checks a gateway configuration against its schemas and writes the validators
+and the call contract to `.gen/`; see [Code generation](#code-generation). For the included
 example, run:
 
 ```bash
 pnpm --filter @govuk-once/flex-gateway-udp codegen
 ```
 
-There is no build step: the CLI runs from source. The CLI does not generate a deployable
-handler or client. The runtime's `createHandler` accepts validators
-keyed by the configuration's operations and an execution function, compiles once, and returns a
-handler that takes each invocation's deadline; the openapi-rest driver's `createExecutor`
+There is no build step: the CLI runs from source. It does not generate a client; a consumer
+takes the generated contract and invokes the deployed gateway itself. The runtime's
+`createHandler` accepts validators keyed by the configuration's operations and an execution
+function, compiles once, and returns a handler that takes each invocation's deadline; the openapi-rest driver's `createExecutor`
 supplies the execution function once it has retrieved and validated the gateway's secret.
 Outcome validators are held in a `Map`, so an outcome name matching an inherited object
 member such as `constructor` cannot pass validation.
@@ -148,9 +148,18 @@ The envelope requires a string `secure.signature`, but the runtime does not veri
 
 ## Code generation
 
-`gateway-codegen` runs in a gateway package, loads `gateway.config.ts` and writes the compiled
-validators to `.gen/validators/`. Schemas come from the driver's `deriveSchemas` when it has one
-and from the gateway's `schemas.fixture.ts` otherwise; no driver implements `deriveSchemas` yet.
+`gateway-codegen` runs in a gateway package, loads `gateway.config.ts` and writes everything
+generated to `.gen/`, in two directories because the two are deployed separately: `runtime/` is
+what the gateway itself runs and `client/` is what a service calling it imports. Schemas come
+from the driver's `deriveSchemas` when it has one and from the gateway's `schemas.fixture.ts`
+otherwise; no driver implements `deriveSchemas` yet.
+
+| Path | Contents |
+|---|---|
+| `.gen/runtime/validators/` | Standalone Ajv validators, one for each operation's input and one for each declared outcome. Self-contained JavaScript with no package imports. |
+| `.gen/client/rpc.ts` | The call contract as types: each operation's input and the union of its outcomes. Types only, so a consumer takes it without the gateway's dependencies. |
+
+Generated code is not typechecked, and nothing outside `.gen/` imports it.
 
 Nothing is written unless the configuration and the schemas agree, so a failed run never leaves
 output that builds but dispatches to validators that do not match it.
@@ -192,6 +201,58 @@ constraint that applies to nothing fails generation rather than passing silently
 off: strict mode wants a tuple's length pinned, which would refuse an array that types its first
 elements by position and the rest with `items`. A schema whose validation is asynchronous is
 refused outright, since the dispatcher validates synchronously.
+
+### The call contract
+
+`.gen/client/rpc.ts` describes what a caller sends and receives. Each operation's input is one
+flat object: the fields the operation maps to the upstream request at the top level, and the
+request body, when there is one, under `payload`. Each response is an error envelope or a success
+carrying one of the declared outcomes, so a switch over `outcome` is checked for exhaustiveness
+and an outcome the gateway does not declare is a type error.
+
+```ts
+import type { GetIdentityExchangeResponse } from "./.gen/client/rpc.ts";
+
+export function linkedId(response: GetIdentityExchangeResponse): string | null {
+  if (!response.ok) throw new Error(response.error.code);
+  switch (response.outcome) {
+    case "ok":
+      return response.data.linkedId;
+    case "unlinked":
+      return null;
+  }
+}
+```
+
+`Operations` maps each operation name to its input and result, and `OperationName`,
+`OperationInput`, `OperationResult` and `OperationResponse` name them generically.
+`GatewayRequest` is one call as the handler receives it: the operation, its input and the
+envelope's `secure` values.
+
+A schema often states one shape in several places: `properties` here, `required` there, more of
+both inside `allOf`, and the rest behind a `$ref`. TypeScript has no equivalent of "this keyword
+applies only when the value is an object", so the object keywords a composition contributes
+become one declaration and everything else is intersected around it; a reference keeps its name.
+`anyOf` and `oneOf` become unions, each branch read against what encloses it, so a field the
+schema requires stays required inside every branch and a schema that also admits null keeps
+admitting it. An array whose front `prefixItems` types becomes a tuple, with the elements a length
+does not require left optional. Where a composition has more ways through than are worth writing
+out, the generated type is the wider one: it never rejects a request the gateway accepts, and the
+validators remain what enforces the schema.
+
+A `$ref` names a key of the gateway's shared `defs`, which the contract declares as a type of that
+name. A pointer into the schema itself, such as `#/$defs/Body`, compiles to a validator but has no
+name to emit here, so generation fails rather than describing it as `unknown`: declare the
+subschema in `defs` and reference it by that key, and both readers take it from one declaration.
+
+An object the schema does not close carries an index signature. Leaving `additionalProperties` out
+admits every other name, exactly as writing `true` does, so the type has to admit them too;
+`additionalProperties: false` is what narrows it to the fields it names, which is worth setting on
+an input, since a field no `parameters` entry maps fails the request as `INTERNAL`. A field the
+schema requires but describes nowhere is named as `unknown`, so a request the validators would
+reject does not typecheck. A schema nested more than 100 levels deep fails generation rather than
+emitting what it can: nothing written by hand nests that far, and a reference costs no depth at
+all.
 
 ## The openapi-rest driver
 
