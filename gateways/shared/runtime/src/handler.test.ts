@@ -123,6 +123,13 @@ function capturedOutput(): string {
   return stdoutChunks.join("");
 }
 
+function capturedRecords(): Record<string, unknown>[] {
+  return capturedOutput()
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
 // -- Tests --------------------------------------------------------------------
 
 describe("createHandler", () => {
@@ -668,6 +675,46 @@ describe("createHandler", () => {
       ).toThrow('Missing validators for operation "ping"');
     });
 
+    it("throws on an empty gateway id", () => {
+      expect(() =>
+        createHandler({ ...testConfig(), id: "" }, testDeps()),
+      ).toThrow("non-empty string id");
+    });
+
+    it("throws on an operation the configuration names but does not define", () => {
+      // Not reachable from a typed configuration; the guard is for a JavaScript caller.
+      const config = testConfig();
+      const operations = { ...config.operations, pong: undefined };
+
+      expect(() =>
+        createHandler(
+          { ...config, operations } as unknown as AnyGatewayConfig,
+          testDeps({
+            validators: {
+              ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
+              pong: { input: alwaysValid, outcomes: { success: alwaysValid } },
+            },
+          }),
+        ),
+      ).toThrow('Operation "pong" missing from config');
+    });
+
+    it("throws when an operation's input validator is not a function", () => {
+      expect(() =>
+        createHandler(
+          testConfig(),
+          testDeps({
+            validators: {
+              ping: {
+                input: undefined as unknown as Validator,
+                outcomes: { success: alwaysValid },
+              },
+            },
+          }),
+        ),
+      ).toThrow('Missing input validator for operation "ping"');
+    });
+
     it("throws on missing outcome validators", () => {
       expect(() =>
         createHandler(
@@ -679,6 +726,45 @@ describe("createHandler", () => {
           }),
         ),
       ).toThrow("at least one outcome validator");
+    });
+  });
+
+  describe("logging the operation a failed envelope carried", () => {
+    it("names it when the envelope carried a string", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+
+      await handler(envelope({ operation: "absent" }));
+
+      expect(capturedOutput()).toContain('"operation":"absent"');
+    });
+
+    it("leaves it out when the envelope carried no operation at all", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+
+      const resp = await handler("not an envelope");
+
+      expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+      for (const record of capturedRecords()) {
+        expect(record).not.toHaveProperty("operation");
+      }
+    });
+
+    it("leaves it out when the envelope carried something else", async () => {
+      // Envelope parsing rejects it, and the error path reads the same field to log it.
+      const handler = createHandler(testConfig(), testDeps());
+
+      const resp = await handler({
+        operation: 42,
+        input: {},
+        secure: VALID_SECURE,
+      });
+
+      expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+      // The field is left out, rather than logged as something else: a substring check would
+      // pass on "operation":"42" too.
+      for (const record of capturedRecords()) {
+        expect(record).not.toHaveProperty("operation");
+      }
     });
   });
 
