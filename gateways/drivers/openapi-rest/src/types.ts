@@ -11,6 +11,18 @@ export function isHttpMethod(value: string): value is HttpMethod {
   return (HTTP_METHODS as readonly string[]).includes(value);
 }
 
+export const METHODS_WITH_BODY: ReadonlySet<HttpMethod> = new Set([
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+]);
+
+// The input field carrying the request body. Never a mapping target, so it cannot double as a
+// path or query parameter. Named here rather than in the executor because the build-time check
+// reads it as well.
+export const PAYLOAD_FIELD = "payload";
+
 // Outcome names are fixed by the driver so callers discriminate on a stable string and never
 // see a status code.
 export type OpenApiRestOutcome = "ok" | "created" | "accepted" | "no_content";
