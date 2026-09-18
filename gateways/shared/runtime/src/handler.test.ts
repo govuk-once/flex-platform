@@ -123,6 +123,13 @@ function capturedOutput(): string {
   return stdoutChunks.join("");
 }
 
+function capturedRecords(): Record<string, unknown>[] {
+  return capturedOutput()
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
 // -- Tests --------------------------------------------------------------------
 
 describe("createHandler", () => {
@@ -169,6 +176,105 @@ describe("createHandler", () => {
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("INVALID_INPUT");
       expect(capturedOutput()).toContain("always fails");
+      expect(capturedOutput()).toContain("#/bad");
+    });
+
+    it("logs where the schema rejected the input, never a path into it", async () => {
+      // A dictionary schema takes an instance path's segments from the caller's own keys, and
+      // this message is logged whatever `log.input` selects.
+      const dictionaryFailure: Validator = Object.assign(
+        (_data: unknown): _data is never => false,
+        {
+          errors: [
+            {
+              instancePath: "/national-insurance-number",
+              schemaPath: "#/additionalProperties/type",
+              message: "must be string",
+            },
+          ],
+        },
+      );
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          validators: {
+            ping: {
+              input: dictionaryFailure,
+              outcomes: { success: alwaysValid },
+            },
+          },
+        }),
+      );
+
+      const resp = await handler(
+        envelope({ input: { "national-insurance-number": 1 } }),
+      );
+
+      expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+      expect(capturedOutput()).toContain("#/additionalProperties/type");
+      expect(capturedOutput()).toContain("must be string");
+      expect(capturedOutput()).not.toContain("national-insurance-number");
+    });
+
+    // A validator that rejects with the given findings, as a generated one leaves on `errors`.
+    const rejectingWith = (errors: Validator["errors"]): Validator =>
+      Object.assign((_data: unknown): _data is never => false, { errors });
+
+    const reject = async (input: Validator) => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          validators: { ping: { input, outcomes: { success: alwaysValid } } },
+        }),
+      );
+      return handler(envelope({ input: { bad: true } }));
+    };
+
+    it("falls back to the schema root and the keyword when a finding gives neither", async () => {
+      // A hand-written validator in the shared convention need not fill either field.
+      // No schema path and no message: the keyword said nothing either.
+      const resp = await reject(
+        rejectingWith([{ instancePath: "/bad", schemaPath: "" }]),
+      );
+
+      expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+      expect(capturedOutput()).toContain("#: invalid");
+      expect(capturedOutput()).not.toContain("/bad");
+    });
+
+    it.each([
+      ["null findings", null],
+      ["no findings at all", undefined],
+      ["an empty list of findings", []],
+    ])(
+      "reports a validator that rejects with %s",
+      async (_case, errors: Validator["errors"]) => {
+        const resp = await reject(rejectingWith(errors));
+
+        expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+        expect(capturedOutput()).toContain("Input validation failed");
+      },
+    );
+
+    it("joins every finding a validator reports", async () => {
+      await reject(
+        rejectingWith([
+          {
+            instancePath: "/a",
+            schemaPath: "#/properties/a/type",
+            message: "must be string",
+          },
+          {
+            instancePath: "/b",
+            schemaPath: "#/required",
+            message: "must have required property 'b'",
+          },
+        ]),
+      );
+
+      expect(capturedOutput()).toContain(
+        "#/properties/a/type: must be string; #/required: must have required property 'b'",
+      );
     });
 
     it("does not call execute when input is invalid", async () => {
@@ -569,6 +675,46 @@ describe("createHandler", () => {
       ).toThrow('Missing validators for operation "ping"');
     });
 
+    it("throws on an empty gateway id", () => {
+      expect(() =>
+        createHandler({ ...testConfig(), id: "" }, testDeps()),
+      ).toThrow("non-empty string id");
+    });
+
+    it("throws on an operation the configuration names but does not define", () => {
+      // Not reachable from a typed configuration; the guard is for a JavaScript caller.
+      const config = testConfig();
+      const operations = { ...config.operations, pong: undefined };
+
+      expect(() =>
+        createHandler(
+          { ...config, operations } as unknown as AnyGatewayConfig,
+          testDeps({
+            validators: {
+              ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
+              pong: { input: alwaysValid, outcomes: { success: alwaysValid } },
+            },
+          }),
+        ),
+      ).toThrow('Operation "pong" missing from config');
+    });
+
+    it("throws when an operation's input validator is not a function", () => {
+      expect(() =>
+        createHandler(
+          testConfig(),
+          testDeps({
+            validators: {
+              ping: {
+                input: undefined as unknown as Validator,
+                outcomes: { success: alwaysValid },
+              },
+            },
+          }),
+        ),
+      ).toThrow('Missing input validator for operation "ping"');
+    });
+
     it("throws on missing outcome validators", () => {
       expect(() =>
         createHandler(
@@ -580,6 +726,45 @@ describe("createHandler", () => {
           }),
         ),
       ).toThrow("at least one outcome validator");
+    });
+  });
+
+  describe("logging the operation a failed envelope carried", () => {
+    it("names it when the envelope carried a string", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+
+      await handler(envelope({ operation: "absent" }));
+
+      expect(capturedOutput()).toContain('"operation":"absent"');
+    });
+
+    it("leaves it out when the envelope carried no operation at all", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+
+      const resp = await handler("not an envelope");
+
+      expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+      for (const record of capturedRecords()) {
+        expect(record).not.toHaveProperty("operation");
+      }
+    });
+
+    it("leaves it out when the envelope carried something else", async () => {
+      // Envelope parsing rejects it, and the error path reads the same field to log it.
+      const handler = createHandler(testConfig(), testDeps());
+
+      const resp = await handler({
+        operation: 42,
+        input: {},
+        secure: VALID_SECURE,
+      });
+
+      expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+      // The field is left out, rather than logged as something else: a substring check would
+      // pass on "operation":"42" too.
+      for (const record of capturedRecords()) {
+        expect(record).not.toHaveProperty("operation");
+      }
     });
   });
 
