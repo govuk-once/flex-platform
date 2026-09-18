@@ -131,12 +131,24 @@ export function compileValidators(schemas: GatewaySchemas): CompiledValidators {
   }
 
   for (const { $id, context } of registered) {
+    let validate;
     try {
-      ajv.getSchema($id);
+      validate = ajv.getSchema($id);
     } catch (cause) {
       throw new Error(
         `Invalid schema for ${context}: ${(cause as Error).message}`,
         { cause },
+      );
+    }
+    // An "$async" schema compiles to a validator that returns a promise. The dispatcher calls
+    // validators synchronously and would read that promise as a value that passed, letting an
+    // invalid request reach the upstream and an invalid response reach the caller, with the
+    // rejection surfacing as an unhandled one. Nothing here can await it, so it is refused.
+    // Ajv marks an asynchronous validator on the function; only that overload declares the
+    // property, so its presence is what identifies one.
+    if (validate !== undefined && "$async" in validate) {
+      throw new Error(
+        `Invalid schema for ${context}: "$async" is not supported, because validation is synchronous`,
       );
     }
   }

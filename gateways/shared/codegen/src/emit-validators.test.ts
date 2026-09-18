@@ -373,6 +373,45 @@ describe("generation errors", () => {
     ).rejects.toThrow(/get-user/);
   });
 
+  it("refuses a schema that validates asynchronously", async () => {
+    // An "$async" validator returns a promise, which the dispatcher would read as a pass: the
+    // request would reach the upstream and the rejection would surface as an unhandled one.
+    const bad: GatewaySchemas = {
+      operations: {
+        broken: {
+          input: {
+            $async: true,
+            type: "object",
+            properties: { id: { type: "string" } },
+            required: ["id"],
+          },
+          outcomes: { ok: { type: "object" } },
+        },
+      },
+    };
+
+    await expect(
+      emitValidators(bad, path.join(tmp, "async-input")),
+    ).rejects.toThrow(
+      /input of operation "broken": "\$async" is not supported/,
+    );
+  });
+
+  it("refuses an asynchronous outcome schema", async () => {
+    const bad: GatewaySchemas = {
+      operations: {
+        broken: {
+          input: { type: "object" },
+          outcomes: { ok: { $async: true, type: "object" } },
+        },
+      },
+    };
+
+    await expect(
+      emitValidators(bad, path.join(tmp, "async-outcome")),
+    ).rejects.toThrow(/outcome "ok" of operation "broken"/);
+  });
+
   it("rejects an unresolvable $ref", async () => {
     const bad: GatewaySchemas = {
       operations: {
