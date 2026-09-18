@@ -49,6 +49,16 @@ export interface DriverDefinition<
   deriveSchemas?(
     config: GatewayConfig<DriverDefinition, AnyOperations<DriverDefinition>>,
   ): Promise<GatewaySchemas>;
+  // Whether the configuration and the schemas describe the same requests, in the relations only
+  // the driver can read: a path template against the input fields that fill it, say. Codegen
+  // calls it before it emits anything and fails the run with every message returned, so a
+  // mismatch is a generation error rather than a request that fails in production. Returning
+  // the findings rather than throwing lets one run report all of them. Optional: a driver with
+  // nothing to relate omits it.
+  checkSchemas?(
+    config: GatewayConfig<DriverDefinition, AnyOperations<DriverDefinition>>,
+    schemas: GatewaySchemas,
+  ): readonly string[];
   // Phantom properties - give TypeScript structural anchors to infer TOpFields and THandler
   // from a driver instance via OperationFields<D> and HandlerOf<D>. Never set at runtime.
   readonly __opFields?: TOpFields;
