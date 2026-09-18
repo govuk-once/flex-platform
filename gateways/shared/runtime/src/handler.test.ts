@@ -169,6 +169,44 @@ describe("createHandler", () => {
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("INVALID_INPUT");
       expect(capturedOutput()).toContain("always fails");
+      expect(capturedOutput()).toContain("#/bad");
+    });
+
+    it("logs where the schema rejected the input, never a path into it", async () => {
+      // A dictionary schema takes an instance path's segments from the caller's own keys, and
+      // this message is logged whatever `log.input` selects.
+      const dictionaryFailure: Validator = Object.assign(
+        (_data: unknown): _data is never => false,
+        {
+          errors: [
+            {
+              instancePath: "/national-insurance-number",
+              schemaPath: "#/additionalProperties/type",
+              message: "must be string",
+            },
+          ],
+        },
+      );
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          validators: {
+            ping: {
+              input: dictionaryFailure,
+              outcomes: { success: alwaysValid },
+            },
+          },
+        }),
+      );
+
+      const resp = await handler(
+        envelope({ input: { "national-insurance-number": 1 } }),
+      );
+
+      expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+      expect(capturedOutput()).toContain("#/additionalProperties/type");
+      expect(capturedOutput()).toContain("must be string");
+      expect(capturedOutput()).not.toContain("national-insurance-number");
     });
 
     it("does not call execute when input is invalid", async () => {
