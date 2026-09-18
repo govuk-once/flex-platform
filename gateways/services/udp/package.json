@@ -17,7 +17,7 @@
     "@repo/gateway-types": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.9.1",
+    "eslint": "10.10.0",
     "vitest": "4.1.11"
   }
 }
