@@ -160,7 +160,7 @@ describe("defineGateway type inference", () => {
   });
 
   it("rejects a misspelled operation field", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       driver: stubDriver(),
       operations: {
@@ -176,16 +176,23 @@ describe("defineGateway type inference", () => {
         },
       },
     });
+    expectTypeOf<keyof typeof gw.operations>().toEqualTypeOf<"op" | "other">();
+    // Nothing strips the misspelled field; the type error is the only protection.
+    expect(gw.operations.other).toEqual({
+      upstream: "GET /other",
+      descripton: "typo",
+    });
   });
 
   it("rejects a misspelled gateway field", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       // @ts-expect-error `descripton` is not a gateway field
       descripton: "typo",
       driver: stubDriver(),
       operations: { op: { upstream: "GET /op" } },
     });
+    expect(gw).toMatchObject({ id: "test", descripton: "typo" });
   });
 
   it("works with a driver that requires no extra fields", () => {
