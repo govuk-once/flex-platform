@@ -1,5 +1,5 @@
-import { hasDotSegment } from "../path.ts";
-import { HTTP_METHODS, type HttpMethod, isHttpMethod } from "../types.ts";
+import { hasDotSegment } from "./path.ts";
+import { HTTP_METHODS, type HttpMethod, isHttpMethod } from "./types.ts";
 
 export type PathPart =
   | { readonly kind: "literal"; readonly value: string }
