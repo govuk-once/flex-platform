@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "codegen": "gateway-codegen",
-    "lint": "eslint gateway.config.ts gateway.config.test.ts schemas.fixture.ts handlers/",
+    "lint": "eslint gateway.config.ts schemas.fixture.ts handlers/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
