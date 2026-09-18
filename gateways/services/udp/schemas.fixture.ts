@@ -3,6 +3,11 @@
 
 import type { GatewaySchemas } from "@repo/gateway-types";
 
+import type gateway from "./gateway.config.ts";
+
+// Keyed by the gateway's operations, so a missing or misnamed operation fails to typecheck.
+type Operation = keyof (typeof gateway)["operations"];
+
 export default {
   defs: {
     UserRecord: {
@@ -17,10 +22,18 @@ export default {
 
   operations: {
     createUser: {
+      // The request body travels under `payload`; see the openapi-rest driver.
       input: {
         type: "object",
-        properties: { email: { type: "string" } },
-        required: ["email"],
+        properties: {
+          payload: {
+            type: "object",
+            properties: { email: { type: "string" } },
+            required: ["email"],
+            additionalProperties: false,
+          },
+        },
+        required: ["payload"],
         additionalProperties: false,
       },
       outcomes: {
@@ -36,12 +49,14 @@ export default {
         additionalProperties: false,
       },
       outcomes: {
-        record: {
+        ok: {
           type: "object",
           properties: { linkedId: { type: "string" } },
           required: ["linkedId"],
         },
+        // Returned by the custom handler when the upstream answers 404.
+        unlinked: { type: "null" },
       },
     },
   },
-} satisfies GatewaySchemas;
+} satisfies GatewaySchemas<Operation>;

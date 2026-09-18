@@ -702,7 +702,7 @@ describe("outcome lookup hardening", () => {
           },
         }),
       ),
-    ).toThrowError(
+    ).toThrow(
       'Outcome "success" of operation "ping" has no validator function',
     );
   });
@@ -728,7 +728,7 @@ describe("outcome lookup hardening", () => {
         },
         execute: stubExecute,
       }),
-    ).toThrowError(/Missing validators for operation "pong"/);
+    ).toThrow(/Missing validators for operation "pong"/);
     createGatewayHandler(config, {
       validators: {
         ping: { input: alwaysValid, outcomes: { success: alwaysValid } },

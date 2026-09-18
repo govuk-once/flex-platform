@@ -113,7 +113,7 @@ describe("compileOperation", () => {
       /unknown location "cookie"/,
     ],
   ] as const)("rejects %j at compile time", (config, message) => {
-    expect(() => compileOperation("op", config)).toThrowError(message);
+    expect(() => compileOperation("op", config)).toThrow(message);
   });
 
   it("lets a same-named field feed the path when another field is renamed onto it", () => {
@@ -134,7 +134,7 @@ describe("compileOperation upstream parsing", () => {
   it("propagates upstream parse errors", () => {
     expect(() =>
       compileOperation("op", { upstream: "FETCH /users" as "GET /users" }),
-    ).toThrowError(/unsupported method/);
+    ).toThrow(/unsupported method/);
   });
 });
 
@@ -183,7 +183,7 @@ describe("prepare", () => {
         upstream: "GET /x/{v}/y",
         parameters: { v: { in: "path" } },
       });
-      expect(() => op.prepare({ v: value })).toThrowError(/dot segment/);
+      expect(() => op.prepare({ v: value })).toThrow(/dot segment/);
     },
   );
 
@@ -192,7 +192,7 @@ describe("prepare", () => {
       upstream: "GET /x/{v}",
       parameters: { v: { in: "path" } },
     });
-    expect(() => op.prepare({ v: "" })).toThrowError(/must not be empty/);
+    expect(() => op.prepare({ v: "" })).toThrow(/must not be empty/);
   });
 
   it.each([
@@ -213,7 +213,7 @@ describe("prepare", () => {
       upstream: "GET /users/{id}",
       parameters: { id: { in: "path" } },
     });
-    expect(() => op.prepare({ id: value })).toThrowError(
+    expect(() => op.prepare({ id: value })).toThrow(
       /cannot appear in a single path segment/,
     );
   });
@@ -255,9 +255,7 @@ describe("prepare", () => {
       upstream: "GET /users/{id}",
       parameters: { id: { in: "path" } },
     });
-    expect(() => op.prepare({ id: "x\ud800y" })).toThrowError(
-      /well-formed Unicode/,
-    );
+    expect(() => op.prepare({ id: "x\ud800y" })).toThrow(/well-formed Unicode/);
   });
 
   it("rejects a missing path parameter", () => {
@@ -265,7 +263,7 @@ describe("prepare", () => {
       upstream: "GET /x/{v}",
       parameters: { v: { in: "path" } },
     });
-    expect(() => op.prepare({})).toThrowError(
+    expect(() => op.prepare({})).toThrow(
       /path parameter "v" needs a scalar input field "v"/,
     );
   });
@@ -275,9 +273,7 @@ describe("prepare", () => {
       upstream: "GET /x/{v}",
       parameters: { v: { in: "path" } },
     });
-    expect(() => op.prepare({ v: { nested: true } })).toThrowError(
-      /needs a scalar/,
-    );
+    expect(() => op.prepare({ v: { nested: true } })).toThrow(/needs a scalar/);
   });
 
   it("maps query fields with and without a renamed upstream name", () => {
@@ -310,7 +306,7 @@ describe("prepare", () => {
       upstream: "GET /users",
       parameters: { filter: { in: "query" } },
     });
-    expect(() => op.prepare({ filter: { a: 1 } })).toThrowError(
+    expect(() => op.prepare({ filter: { a: 1 } })).toThrow(
       /query parameter "filter" needs a scalar/,
     );
   });
@@ -342,7 +338,7 @@ describe("prepare", () => {
 
   it("rejects a payload on GET", () => {
     const op = compileOperation("get", { upstream: "GET /users" });
-    expect(() => op.prepare({ payload: {} })).toThrowError(
+    expect(() => op.prepare({ payload: {} })).toThrow(
       /GET requests cannot carry a "payload"/,
     );
   });
@@ -394,7 +390,7 @@ describe("prepare", () => {
         },
         new Set(["authorization"]),
       ),
-    ).toThrowError(
+    ).toThrow(
       /maps to header "Authorization", which is reserved by the driver/,
     );
   });
@@ -465,7 +461,7 @@ describe("prepare", () => {
     ["an array", ["a"]],
   ])("rejects %s as input", (_label, input) => {
     const op = compileOperation("get", { upstream: "GET /users" });
-    expect(() => op.prepare(input)).toThrowError(/input must be an object/);
+    expect(() => op.prepare(input)).toThrow(/input must be an object/);
   });
 });
 
@@ -491,7 +487,7 @@ describe("prepare scalar rules", () => {
 
   // String(NaN) and String(Infinity) would reach the upstream as words.
   it.each([NaN, Infinity, -Infinity])("rejects %p in a path value", (value) => {
-    expect(() => paths.prepare({ id: value })).toThrowError(
+    expect(() => paths.prepare({ id: value })).toThrow(
       /path parameter "id" needs a scalar input field "id"/,
     );
   });
@@ -499,7 +495,7 @@ describe("prepare scalar rules", () => {
   it.each([NaN, Infinity, -Infinity])(
     "rejects %p in a query value",
     (value) => {
-      expect(() => others.prepare({ q: value })).toThrowError(
+      expect(() => others.prepare({ q: value })).toThrow(
         /query parameter "q" needs a scalar or array of scalars/,
       );
     },
@@ -508,7 +504,7 @@ describe("prepare scalar rules", () => {
   it.each([NaN, Infinity, -Infinity])(
     "rejects %p in a header value",
     (value) => {
-      expect(() => others.prepare({ h: value })).toThrowError(
+      expect(() => others.prepare({ h: value })).toThrow(
         /header "x-h" needs a scalar input field "h"/,
       );
     },
@@ -570,7 +566,7 @@ describe("prepare query arrays", () => {
     ["an object", [{ a: 1 }]],
     ["NaN", [1, NaN]],
   ])("rejects an array containing %s", (_label, ids) => {
-    expect(() => op.prepare({ ids })).toThrowError(
+    expect(() => op.prepare({ ids })).toThrow(
       /query parameter "ids" needs a scalar or array of scalars in input field "ids"/,
     );
   });
@@ -596,7 +592,7 @@ describe("prepare payload semantics", () => {
     ["zero", 0],
     ["an empty string", ""],
   ])("rejects %s as a body on GET", (_label, payload) => {
-    expect(() => get.prepare({ payload })).toThrowError(
+    expect(() => get.prepare({ payload })).toThrow(
       /GET requests cannot carry a "payload"/,
     );
   });
@@ -615,7 +611,7 @@ describe("prepare input ownership", () => {
       parameters: { id: { in: "path" } },
     });
     const inherited = Object.create({ id: "u1" }) as Record<string, unknown>;
-    expect(() => op.prepare(inherited)).toThrowError(
+    expect(() => op.prepare(inherited)).toThrow(
       /path parameter "id" needs a scalar input field "id"/,
     );
   });

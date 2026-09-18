@@ -65,7 +65,7 @@ describe("buildUrl", () => {
   });
 
   it("rejects a path without a leading slash", () => {
-    expect(() => buildUrl(TARGET, "users", undefined)).toThrowError(
+    expect(() => buildUrl(TARGET, "users", undefined)).toThrow(
       /must start with "\/"/,
     );
   });
@@ -103,13 +103,13 @@ describe("template composition", () => {
         upstream: "GET /users/%2e%{id}/tail",
         parameters: { id: { in: "path" } },
       }),
-    ).toThrowError(/incomplete percent escape/);
+    ).toThrow(/incomplete percent escape/);
   });
 
   it.each(["GET /../admin", "GET /%2e%2e/admin"] as const)(
     "refuses the literal traversal %j",
     (upstream) => {
-      expect(() => compileOperation("get", { upstream })).toThrowError(
+      expect(() => compileOperation("get", { upstream })).toThrow(
         /dot segment/,
       );
     },
@@ -216,7 +216,7 @@ describe("client.request", () => {
     const { c } = client(() => json(200, {}), {}, { upstream: "POST /users" });
     await expect(
       c.request({ method: "POST", path: "/users", body: { n: 10n } }),
-    ).rejects.toThrowError(
+    ).rejects.toThrow(
       'Request body cannot be serialised as JSON for operation "getUser"',
     );
   });
@@ -290,7 +290,7 @@ describe("client.request", () => {
         path: "/users/1",
         headers: { "content-length": "1" },
       }),
-    ).rejects.toThrowError(/call headers: header "content-length"/);
+    ).rejects.toThrow(/call headers: header "content-length"/);
   });
 
   it("rejects a call header the authentication owns", async () => {
@@ -327,7 +327,7 @@ describe("client.request", () => {
     expect(res.status).toBe(418);
     expect(res.headers.get("x-r")).toBe("1");
     expect(res.text).toBe("nope");
-    expect(() => res.json()).toThrowError(
+    expect(() => res.json()).toThrow(
       expect.objectContaining({ code: "UPSTREAM_CONTRACT_VIOLATION" }),
     );
   });
@@ -386,10 +386,10 @@ describe("client.request", () => {
     const { c } = client(() => json(200, {}));
     await expect(
       c.request({ method: "GET", path: "/x", body: {} }),
-    ).rejects.toThrowError(/GET requests cannot carry a body/);
+    ).rejects.toThrow(/GET requests cannot carry a body/);
     await expect(
       c.request({ method: "TRACE" as "GET", path: "/x" }),
-    ).rejects.toThrowError(/unsupported method "TRACE"/);
+    ).rejects.toThrow(/unsupported method "TRACE"/);
   });
 });
 
@@ -399,7 +399,7 @@ describe("the request boundary", () => {
     "makes no request when the path value %j is refused",
     (value) => {
       const { c, ff } = client(() => json(200, {}));
-      expect(() => c.prepare({ id: value })).toThrowError(GatewayError);
+      expect(() => c.prepare({ id: value })).toThrow(GatewayError);
       expect(ff.calls).toHaveLength(0);
     },
   );
@@ -441,7 +441,7 @@ describe("client.invoke", () => {
       outcome: "created",
       data: { id: "n" },
     });
-    expect(() => c.mapResponse({ ...response, status: 503 })).toThrowError(
+    expect(() => c.mapResponse({ ...response, status: 503 })).toThrow(
       expect.objectContaining({ code: "UPSTREAM_ERROR" }),
     );
     expect(ff.calls).toHaveLength(1);

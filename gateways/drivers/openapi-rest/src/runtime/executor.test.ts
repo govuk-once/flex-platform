@@ -112,7 +112,7 @@ describe("createExecutor", () => {
     const plain = (input: unknown) =>
       Promise.resolve({ outcome: "ok", data: input });
     const foreign = plain as unknown as BrandedHandler<"other", typeof plain>;
-    defineGateway({
+    const gw = defineGateway({
       id: "x",
       driver: DRIVER,
       operations: {
@@ -134,6 +134,16 @@ describe("createExecutor", () => {
         },
       },
     });
+    // The branding is a type-level check; each handler is still carried as written.
+    expect(Object.keys(gw.operations)).toEqual([
+      "wrongInput",
+      "unbranded",
+      "foreign",
+    ]);
+    expect(gw.operations).toMatchObject({
+      unbranded: { handler: plain },
+      foreign: { handler: foreign },
+    });
   });
 
   it("rejects a handler that is not a function", async () => {
@@ -149,14 +159,14 @@ describe("createExecutor", () => {
     });
     await expect(
       createExecutor(broken, { target: TARGET, secret: emptySecret() }),
-    ).rejects.toThrowError('Operation "op": handler must be a function');
+    ).rejects.toThrow('Operation "op": handler must be a function');
   });
 
   it("checks configuration before it retrieves the secret", async () => {
     const secret = fakeSecret({});
     await expect(
       createExecutor(gateway, { target: "nope", secret: secret.provider }),
-    ).rejects.toThrowError(/absolute http or https URL/);
+    ).rejects.toThrow(/absolute http or https URL/);
     expect(secret.reads()).toBe(0);
   });
 
@@ -248,7 +258,7 @@ describe("createExecutor", () => {
         target: TARGET,
         secret: emptySecret(),
       }),
-    ).rejects.toThrowError(
+    ).rejects.toThrow(
       /driver auth must be a definition with validateSecret, headers and create/,
     );
 
@@ -262,7 +272,7 @@ describe("createExecutor", () => {
         target: TARGET,
         secret: emptySecret(),
       }),
-    ).rejects.toThrowError(
+    ).rejects.toThrow(
       /auth create\(\) must return an instance with a headers function/,
     );
   });
@@ -278,7 +288,7 @@ describe("createExecutor", () => {
         target: TARGET,
         secret: emptySecret(),
       }),
-    ).rejects.toThrowError(
+    ).rejects.toThrow(
       'Driver auth headers: header "host" is set by the driver',
     );
   });
@@ -292,7 +302,7 @@ describe("createExecutor", () => {
         target: TARGET,
         secret: fakeSecret({ token: "tok" }).provider,
       }),
-    ).rejects.toThrowError(
+    ).rejects.toThrow(
       /header "authorization" is reserved by the driver's authentication/,
     );
 
@@ -314,7 +324,7 @@ describe("createExecutor", () => {
         target: TARGET,
         secret: fakeSecret({ apiKey: "k" }).provider,
       }),
-    ).rejects.toThrowError(
+    ).rejects.toThrow(
       /maps to header "x-api-key", which is reserved by the driver/,
     );
   });
@@ -377,7 +387,7 @@ describe("createExecutor", () => {
     });
     await expect(
       createExecutor(other, { target: TARGET, secret: emptySecret() }),
-    ).rejects.toThrowError(/driver type must be "openapi-rest"/);
+    ).rejects.toThrow(/driver type must be "openapi-rest"/);
   });
 
   it("rejects an operation config at creation", async () => {
@@ -397,7 +407,7 @@ describe("createExecutor", () => {
     });
     await expect(
       createExecutor(broken, { target: TARGET, secret: emptySecret() }),
-    ).rejects.toThrowError(/"\{nope\}", which is not in the template/);
+    ).rejects.toThrow(/"\{nope\}", which is not in the template/);
   });
 
   it("rejects a non-positive maxResponseBytes on the driver", async () => {
@@ -406,9 +416,7 @@ describe("createExecutor", () => {
         target: TARGET,
         secret: emptySecret(),
       }),
-    ).rejects.toThrowError(
-      /Driver maxResponseBytes must be a positive integer/,
-    );
+    ).rejects.toThrow(/Driver maxResponseBytes must be a positive integer/);
   });
 
   it("rejects reserved static headers on the driver", async () => {
@@ -417,7 +425,7 @@ describe("createExecutor", () => {
         target: TARGET,
         secret: emptySecret(),
       }),
-    ).rejects.toThrowError(/Driver headers: header "host"/);
+    ).rejects.toThrow(/Driver headers: header "host"/);
   });
 });
 
@@ -796,9 +804,9 @@ describe("execute", () => {
 
   it("throws for an operation it was not built with", async () => {
     const { execute } = await setup(() => json(200, {}));
-    await expect(
-      execute(passthroughContext(), "unknown", {}),
-    ).rejects.toThrowError(/Unknown operation "unknown"/);
+    await expect(execute(passthroughContext(), "unknown", {})).rejects.toThrow(
+      /Unknown operation "unknown"/,
+    );
   });
 
   it("uses the global fetch by default", async () => {

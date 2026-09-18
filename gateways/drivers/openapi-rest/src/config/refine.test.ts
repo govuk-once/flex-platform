@@ -134,7 +134,7 @@ describe("defineGateway with the openapi-rest refinement", () => {
   });
 
   it("rejects a template parameter without an entry", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       driver: DRIVER,
       operations: {
@@ -154,10 +154,15 @@ describe("defineGateway with the openapi-rest refinement", () => {
         },
       },
     });
+    expectTypeOf<keyof typeof gw.operations>().toEqualTypeOf<
+      "missing" | "partial" | "elsewhere"
+    >();
+    // The refinement is a type-level check; the operations pass through as written.
+    expect(gw.operations.elsewhere.parameters).toEqual({ id: { in: "query" } });
   });
 
   it("rejects misspelled keys in operations and parameter mappings", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       driver: DRIVER,
       operations: {
@@ -178,10 +183,16 @@ describe("defineGateway with the openapi-rest refinement", () => {
         },
       },
     });
+    expectTypeOf<keyof typeof gw.operations>().toEqualTypeOf<
+      "mapping" | "operation" | "handler"
+    >();
+    expect(gw.operations.mapping.parameters).toEqual({
+      id: { in: "path", nmae: "id" },
+    });
   });
 
   it("rejects a path entry that names a parameter the template lacks", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       driver: DRIVER,
       operations: {
@@ -206,6 +217,12 @@ describe("defineGateway with the openapi-rest refinement", () => {
           parameters: { id: { in: "path" } },
         },
       },
+    });
+    expectTypeOf<keyof typeof gw.operations>().toEqualTypeOf<
+      "renamedAway" | "extraEntry" | "extraKey" | "noTemplateParams"
+    >();
+    expect(gw.operations.renamedAway.parameters).toEqual({
+      id: { in: "path", name: "nope" },
     });
   });
 });
