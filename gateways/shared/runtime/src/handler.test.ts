@@ -209,6 +209,67 @@ describe("createHandler", () => {
       expect(capturedOutput()).not.toContain("national-insurance-number");
     });
 
+    // A validator that rejects with the given findings, as a generated one leaves on `errors`.
+    const rejectingWith = (errors: Validator["errors"]): Validator =>
+      Object.assign((_data: unknown): _data is never => false, { errors });
+
+    const reject = async (input: Validator) => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          validators: { ping: { input, outcomes: { success: alwaysValid } } },
+        }),
+      );
+      return handler(envelope({ input: { bad: true } }));
+    };
+
+    it("falls back to the schema root and the keyword when a finding gives neither", async () => {
+      // A hand-written validator in the shared convention need not fill either field.
+      // No schema path and no message: the keyword said nothing either.
+      const resp = await reject(
+        rejectingWith([{ instancePath: "/bad", schemaPath: "" }]),
+      );
+
+      expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+      expect(capturedOutput()).toContain("#: invalid");
+      expect(capturedOutput()).not.toContain("/bad");
+    });
+
+    it.each([
+      ["null findings", null],
+      ["no findings at all", undefined],
+      ["an empty list of findings", []],
+    ])(
+      "reports a validator that rejects with %s",
+      async (_case, errors: Validator["errors"]) => {
+        const resp = await reject(rejectingWith(errors));
+
+        expect(resp).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+        expect(capturedOutput()).toContain("Input validation failed");
+      },
+    );
+
+    it("joins every finding a validator reports", async () => {
+      await reject(
+        rejectingWith([
+          {
+            instancePath: "/a",
+            schemaPath: "#/properties/a/type",
+            message: "must be string",
+          },
+          {
+            instancePath: "/b",
+            schemaPath: "#/required",
+            message: "must have required property 'b'",
+          },
+        ]),
+      );
+
+      expect(capturedOutput()).toContain(
+        "#/properties/a/type: must be string; #/required: must have required property 'b'",
+      );
+    });
+
     it("does not call execute when input is invalid", async () => {
       const execute = vi.fn(stubExecute);
       const handler = createHandler(
