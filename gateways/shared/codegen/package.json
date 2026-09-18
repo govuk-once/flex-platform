@@ -9,7 +9,7 @@
     "gateway-codegen": "./bin/gateway-codegen.js"
   },
   "scripts": {
-    "lint": "eslint src/",
+    "lint": "eslint src/ test/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

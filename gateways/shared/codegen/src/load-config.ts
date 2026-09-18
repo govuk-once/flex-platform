@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -37,6 +37,44 @@ async function loadModule<T>(absPath: string): Promise<T> {
   url.searchParams.set("read", await digestOf(absPath));
   const mod = (await import(url.href)) as { default: T };
   return mod.default;
+}
+
+// What a gateway is generated from: its own modules, not what they resolve to in a package.
+// Generated output and anything installed is left out, and so is every dotted entry, which is
+// where a run stages what it is building.
+const SOURCE_EXTENSIONS = new Set([
+  ".ts",
+  ".tsx",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".json",
+]);
+
+async function sourceFiles(dir: string, prefix = ""): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const found: string[] = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+    const relative = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      found.push(...(await sourceFiles(path.join(dir, entry.name), relative)));
+    } else if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
+      found.push(relative);
+    }
+  }
+  return found;
+}
+
+// Everything the gateway's own modules are made of, as one name, for a caller that needs to know
+// whether any of them changed while it worked.
+export async function sourceDigest(gatewayDir: string): Promise<string> {
+  const hash = createHash("sha256");
+  for (const file of (await sourceFiles(gatewayDir)).toSorted()) {
+    hash.update(file);
+    hash.update(await readFile(path.join(gatewayDir, file)));
+  }
+  return hash.digest("hex").slice(0, 32);
 }
 
 // Loads TypeScript via Node's type stripping without a config compilation step. Importing a

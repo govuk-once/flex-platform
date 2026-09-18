@@ -4,6 +4,7 @@ import standaloneModule from "ajv/dist/standalone/index.js";
 import addFormatsModule from "ajv-formats";
 import esbuild from "esbuild";
 
+import { VALIDATORS_MODULE } from "./layout.ts";
 import {
   assertIdentifier,
   formatSource,
@@ -174,7 +175,7 @@ export async function writeValidators(
   );
 
   await writeGenerated(outDir, "schemas.js", schemasJs);
-  await writeGenerated(outDir, "index.js", indexJs);
+  await writeGenerated(outDir, VALIDATORS_MODULE, indexJs);
 }
 
 // Both steps, for a caller with nothing to do between them.

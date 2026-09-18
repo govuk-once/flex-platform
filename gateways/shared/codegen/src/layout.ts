@@ -8,6 +8,7 @@
 //   runtime/
 //     entry.js          the handler, wiring the configuration, validators and driver
 //     validators/       compiled input and outcome validators
+//       index.js        what the entry point imports them from
 //     bundle.mjs        entry.js and everything it imports, bundled for deployment
 //   client/
 //     rpc.ts            the call contract, as types
@@ -22,6 +23,7 @@ export const RUNTIME_DIR = "runtime";
 export const CLIENT_DIR = "client";
 
 export const VALIDATORS_DIR = "validators";
+export const VALIDATORS_MODULE = "index.js";
 export const ENTRY_MODULE = "entry.js";
 export const BUNDLE_MODULE = "bundle.mjs";
 export const CONTRACT_MODULE = "rpc.ts";
