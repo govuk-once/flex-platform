@@ -122,7 +122,10 @@ matches are logged: a path resolving to an object or array is dropped. Name `add
 instead of `address` so newly added nested fields are not logged automatically.
 
 These allowlists govern selected payload fields. Diagnostic messages require separate care and
-must not include sensitive values.
+must not include sensitive values. An input that fails validation is logged as the schema
+locations that rejected it and the keywords' own messages, never as a path into the input: a
+dictionary schema takes such a path's segments from the caller's keys, which no allowlist
+selected.
 
 ### Secure bindings
 

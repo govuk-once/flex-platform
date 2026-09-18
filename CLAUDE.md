@@ -159,7 +159,9 @@ integrations are implemented.
 6. **Payload logging is explicit and leaf-only.** Select fields with `log.input` and
    `log.output`. Paths resolving to objects or arrays are dropped so newly added nested fields
    are not logged automatically. Keep tests checking that unselected fields and synthetic
-   secrets are absent from captured payload logs. Review diagnostic messages separately.
+   secrets are absent from captured payload logs. Review diagnostic messages separately: a
+   validation failure is logged as the schema locations that rejected it, never as an instance
+   path, whose segments a dictionary schema takes from the caller's own keys.
 
 7. **Preserve contract compatibility.** Changes to an established gateway contract must be
    additive. An incompatible contract requires a distinct gateway identity. This is a design
