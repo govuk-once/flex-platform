@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@repo/gateway-config": "workspace:*",
-    "@repo/gateway-driver-openapi-rest": "workspace:*"
+    "@repo/gateway-driver-openapi-rest": "workspace:*",
+    "@repo/gateway-runtime": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
