@@ -63,10 +63,16 @@ async function formatSource(source: string): Promise<string> {
   }
 }
 
-export async function emitValidators(
-  schemas: GatewaySchemas,
-  outDir: string,
-): Promise<void> {
+// What generation produced, held before anything is written: a caller with a further check to
+// make runs it between the two steps, and a schema that is not a schema is refused by the
+// first, as itself, rather than reported as whatever that check makes of it.
+export interface CompiledValidators {
+  readonly schemas: GatewaySchemas;
+  readonly exportNames: readonly string[];
+  readonly code: string;
+}
+
+export function compileValidators(schemas: GatewaySchemas): CompiledValidators {
   const ajv = new Ajv2020({
     code: {
       source: true,
@@ -144,6 +150,15 @@ export async function emitValidators(
     throw new Error("Failed to generate standalone validator code", { cause });
   }
 
+  return { schemas, exportNames, code };
+}
+
+export async function writeValidators(
+  compiled: CompiledValidators,
+  outDir: string,
+): Promise<void> {
+  const { schemas, exportNames, code } = compiled;
+
   // Not prettier-formatted: bundled output, and esbuild rejecting bad input is the same check.
   const schemasJs = HEADER + (await bundleModule(FORMATS_IMPORT + "\n" + code));
 
@@ -172,4 +187,12 @@ export async function emitValidators(
     writeFile(path.join(outDir, "schemas.js"), schemasJs),
     writeFile(path.join(outDir, "index.js"), indexJs),
   ]);
+}
+
+// Both steps, for a caller with nothing to do between them.
+export async function emitValidators(
+  schemas: GatewaySchemas,
+  outDir: string,
+): Promise<void> {
+  await writeValidators(compileValidators(schemas), outDir);
 }
