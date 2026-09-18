@@ -81,6 +81,11 @@ export function compileValidators(schemas: GatewaySchemas): CompiledValidators {
       formats: ajvModule._`formats`,
     },
     strict: true,
+    // Ajv's one strict-mode check that refuses a valid 2020-12 schema: it wants a tuple's length
+    // pinned, so `prefixItems` beside an `items` that types the rest, or without a `minItems`
+    // requiring the elements it names, would fail generation. Both describe an array the
+    // validators and the call contract handle, so only this check is off.
+    strictTuples: false,
     allErrors: false,
   });
 
