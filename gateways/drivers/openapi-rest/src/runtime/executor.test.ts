@@ -112,7 +112,7 @@ describe("createExecutor", () => {
     const plain = (input: unknown) =>
       Promise.resolve({ outcome: "ok", data: input });
     const foreign = plain as unknown as BrandedHandler<"other", typeof plain>;
-    defineGateway({
+    const gw = defineGateway({
       id: "x",
       driver: DRIVER,
       operations: {
@@ -133,6 +133,16 @@ describe("createExecutor", () => {
           handler: foreign,
         },
       },
+    });
+    // The branding is a type-level check; each handler is still carried as written.
+    expect(Object.keys(gw.operations)).toEqual([
+      "wrongInput",
+      "unbranded",
+      "foreign",
+    ]);
+    expect(gw.operations).toMatchObject({
+      unbranded: { handler: plain },
+      foreign: { handler: foreign },
     });
   });
 
