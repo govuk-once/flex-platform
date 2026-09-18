@@ -8,7 +8,9 @@ import type {
 } from "@repo/gateway-config";
 import type { GatewaySchemas } from "@repo/gateway-types";
 
-type AnyGatewayConfig = GatewayConfig<
+// A configuration as codegen holds it: the driver is opaque, and its operations carry whatever
+// fields that driver defines.
+export type AnyGatewayConfig = GatewayConfig<
   DriverDefinition,
   Readonly<Record<string, OperationConfig>>
 >;
@@ -18,8 +20,8 @@ async function loadModule<T>(absPath: string): Promise<T> {
   return mod.default;
 }
 
-// Loads TypeScript via Node's type stripping without a config compilation step.
-// The CLI currently uses loadSchemas rather than this loader.
+// Loads TypeScript via Node's type stripping without a config compilation step. Importing a
+// configuration reaches no environment, secret or network by design, so this runs anywhere.
 export async function loadConfig(
   gatewayDir: string,
 ): Promise<AnyGatewayConfig> {
@@ -32,4 +34,15 @@ export async function loadSchemas(gatewayDir: string): Promise<GatewaySchemas> {
   return loadModule<GatewaySchemas>(
     path.resolve(gatewayDir, "schemas.fixture.ts"),
   );
+}
+
+// A driver that describes its own upstream produces the schemas; otherwise they come from the
+// gateway's fixture. No driver implements deriveSchemas yet.
+export async function loadGatewaySchemas(
+  config: AnyGatewayConfig,
+  gatewayDir: string,
+): Promise<GatewaySchemas> {
+  return config.driver.deriveSchemas === undefined
+    ? loadSchemas(gatewayDir)
+    : config.driver.deriveSchemas(config);
 }
