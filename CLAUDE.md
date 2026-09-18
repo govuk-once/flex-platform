@@ -17,7 +17,8 @@ operations for one upstream, keeping transport details separate from validation 
   value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
   gateway secret from AWS Secrets Manager through Powertools Parameters.
 - `gateways/shared/codegen`: schema loading, the build-time check of a configuration against
-  its schemas, standalone JavaScript validator generation and the call contract.
+  its schemas, standalone JavaScript validator generation, the call contract and the entry
+  point that wires a gateway to the dispatcher.
 - `gateways/drivers/openapi-rest`: the HTTP driver. Builds `fetch` requests from operation
   mappings, maps statuses to outcomes and error codes, and dispatches to custom handlers the
   entrypoint supplies. Nothing in it is called by hand; a generated entrypoint wires it.
@@ -27,10 +28,11 @@ operations for one upstream, keeping transport details separate from validation 
 - `gateways/services/udp`: an example gateway configuration and schema fixtures.
 
 The CLI reads `schemas.fixture.ts`, checks the configuration against it, and writes the
-validators to `.gen/runtime/` and the call contract to `.gen/client/`. It does not produce a
-client: a consumer takes the generated types and invokes the deployed gateway itself. Token and signature verification are not implemented;
-secure bindings check value consistency only. Of the policy settings, only `upstreamTimeout`
-is enforced.
+validators, the entry point and its esbuild bundle to `.gen/runtime/` and the call contract to
+`.gen/client/`. It does not produce a client:
+a consumer takes the generated types and invokes the deployed gateway itself. Token and
+signature verification are not implemented; secure bindings check value consistency only. Of
+the policy settings, only `upstreamTimeout` is enforced.
 
 See [the gateway guide](gateways/README.md) for configuration and runtime behaviour.
 
@@ -177,11 +179,12 @@ integrations are implemented.
 9. **Emitted validators are self-contained JavaScript.** Bundle Ajv runtime helpers and formats
    at generation time, resolving them from codegen's dependencies. Do not maintain a manual
    list of helpers. Validator output has no package imports or declaration files; this rule
-   applies to validators, not every possible generated artifact; the call contract imports the
-   package that declares the envelope types. Preserve subprocess tests outside workspace
-   dependency resolution and fixtures that exercise runtime helpers. Generated code is not
-   typechecked and nothing outside `.gen/` imports it, so the generated contract is checked by
-   compiling it in a codegen test.
+   applies to validators, not every possible generated artifact. The entry point and the call
+   contract do import packages, and the entry point is JavaScript for the same reason the
+   validators have no declarations: a TypeScript module could not import them. Preserve
+   subprocess tests outside workspace dependency resolution and fixtures that exercise runtime
+   helpers. Generated code is not typechecked and nothing outside `.gen/` imports it, so the
+   generated contract is checked by compiling it in a codegen test.
 
 10. **Keep shared types independent of execution.** `@repo/gateway-types` has no package
     dependencies. Consumers can name envelopes and error codes without installing the runtime
@@ -237,8 +240,13 @@ non-obvious decision over a roadmap, a deployment narrative or a repeat of this 
 
 ## Build and test notes
 
-- Nothing is compiled. Workspace packages resolve to each other's sources, so typecheck and
+- Nothing is compiled, apart from the generated entry point, which codegen bundles with esbuild
+  so a gateway that cannot be bundled fails generation. The AWS SDK stays external: the Lambda
+  runtime provides it. Workspace packages resolve to each other's sources, so typecheck and
   tests see a dependency change immediately and no task waits on another package.
+- Test the libraries, not each gateway. Generation, bundling and dispatch are covered against
+  the fixture gateway in `gateways/shared/codegen/test/`; a gateway package tests only its own
+  custom handlers, since there will be many gateways and a deployment is what exercises one.
 - The codegen CLI is `src/cli.ts`, started by `bin/gateway-codegen.js`, which registers tsx
   and imports it. The CLI and the gateway configurations it loads therefore have the whole
   language available, not the subset Node strips on its own.
