@@ -1,20 +1,17 @@
 import type { EnvelopeInbound, SecureValue } from "@repo/gateway-types";
+import { isRecord } from "@repo/utils/is-record";
+import { isScalar } from "@repo/utils/is-scalar";
 
 import { GatewayError } from "./errors.ts";
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function isSecureValue(value: unknown): value is SecureValue {
-  if (value === null) return true;
-  if (typeof value === "string" || typeof value === "boolean") return true;
-  // Non-finite numbers stringify to null, which would sign differently than intended.
-  return typeof value === "number" && Number.isFinite(value);
+  // Null is a value a caller may assert; a number that JSON cannot write is not, since it would
+  // reach the signature as null and sign differently than intended.
+  return value === null || isScalar(value);
 }
 
 export function parseEnvelope(event: unknown): EnvelopeInbound {
-  if (!isObject(event)) {
+  if (!isRecord(event)) {
     throw new GatewayError("INVALID_INPUT", "Envelope must be a JSON object");
   }
 
@@ -25,21 +22,21 @@ export function parseEnvelope(event: unknown): EnvelopeInbound {
     );
   }
 
-  if (!isObject(event.input)) {
+  if (!isRecord(event.input)) {
     throw new GatewayError(
       "INVALID_INPUT",
       "Envelope 'input' must be an object",
     );
   }
 
-  if (!isObject(event.secure)) {
+  if (!isRecord(event.secure)) {
     throw new GatewayError(
       "INVALID_INPUT",
       "Envelope must have a 'secure' object",
     );
   }
 
-  if (!isObject(event.secure.values)) {
+  if (!isRecord(event.secure.values)) {
     throw new GatewayError(
       "INVALID_INPUT",
       "Envelope 'secure.values' must be an object",

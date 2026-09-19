@@ -1,4 +1,5 @@
 import type { GatewaySchemas } from "@repo/gateway-types";
+import { isRecord } from "@repo/utils/is-record";
 
 import type { AnyGatewayConfig } from "./load-config.ts";
 
@@ -20,10 +21,6 @@ export class GatewayCheckError extends Error {
     this.name = "GatewayCheckError";
     this.problems = problems;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 // What holds whatever the driver is. Relations between an operation's mappings and its schema

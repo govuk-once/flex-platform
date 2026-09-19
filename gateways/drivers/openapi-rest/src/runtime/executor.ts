@@ -1,6 +1,7 @@
 import type { ExecutorOptions } from "@repo/gateway-config";
 import { GatewayError } from "@repo/gateway-runtime";
 import type { ExecuteFn } from "@repo/gateway-types";
+import { isRecord } from "@repo/utils/is-record";
 
 import type {
   OpenApiRestAuth,
@@ -37,10 +38,6 @@ function checkAuthDefinition(
     );
   }
   return candidate as OpenApiRestAuth;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function isAuthInstance(value: unknown): value is OpenApiRestAuthInstance {

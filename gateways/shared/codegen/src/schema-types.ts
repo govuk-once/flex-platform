@@ -1,4 +1,6 @@
 import type { JSONSchema } from "@repo/gateway-types";
+import { isRecord } from "@repo/utils/is-record";
+import { stringsIn } from "@repo/utils/strings-in";
 
 import { isIdentifier } from "./output.ts";
 
@@ -107,16 +109,6 @@ function combine(
 const union = (parts: readonly TypeExpression[]) => combine(parts, " | ");
 const intersection = (parts: readonly TypeExpression[]) =>
   combine(parts, " & ");
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function stringArray(value: unknown): readonly string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
 
 // A scalar JSON value as a literal type. An object or array in an `enum` has no literal type
 // worth writing, so it widens.
@@ -232,7 +224,7 @@ function cloneComposition(composition: Composition): Composition {
 // that left it out would reject a value the gateway takes.
 function declaredTypes(schema: JSONSchema): readonly string[] | undefined {
   const declared = Array.isArray(schema.type)
-    ? stringArray(schema.type)
+    ? stringsIn(schema.type)
     : typeof schema.type === "string"
       ? [schema.type]
       : undefined;
@@ -318,7 +310,7 @@ function absorb(
   }
   if (Object.hasOwn(schema, "required")) {
     shape.present = true;
-    for (const name of stringArray(schema.required)) shape.required.add(name);
+    for (const name of stringsIn(schema.required)) shape.required.add(name);
   }
   if (isRecord(schema.patternProperties)) {
     shape.present = true;
