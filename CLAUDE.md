@@ -8,7 +8,8 @@ before making changes. Work within the requested scope; design constraints are n
 Flex Platform contains gateway libraries and shared development tooling. A gateway groups
 operations for one upstream, keeping transport details separate from validation and dispatch.
 
-- `packages/`: TypeScript, ESLint and Vitest configuration shared across the repository.
+- `packages/`: TypeScript, ESLint and Vitest configuration shared across the repository, and
+  `utils`, generic functions that name nothing of a gateway.
 - `gateways/shared/config`: `defineGateway`, the driver definition with its `createExecutor`
   contract and neutral `ExecutorOptions`, operation types and policy presets.
 - `gateways/shared/types`: envelope shapes, error codes, the shared `Validator` interface, the
@@ -72,8 +73,17 @@ Check installed dependencies and APIs before using them. Dependency version pins
 
 ## Repository conventions
 
-- Keep gateway-specific code under `gateways/`. Use `packages/` only for tooling shared across
-  the repository. Shared gateway libraries belong in `gateways/shared/`.
+- Keep gateway-specific code under `gateways/`. `packages/` holds what the repository shares
+  with no gateway vocabulary in it: its tooling, and `@repo/utils`. Anything that names an
+  envelope, an operation, a driver or a schema belongs in `gateways/shared/`.
+- `@repo/utils` exports one function per module, imported by its own path
+  (`@repo/utils/sorted-entries`), so a consumer takes what it uses and nothing else. A module is
+  exported once something outside the package uses it; what only the package uses lives under
+  `src/internal/`, which its exports refuse. Sort
+  through it: `sortedNames` and `sortedEntries` order by code unit, which is the same on every
+  machine, where `localeCompare` — what a linter suggests for sorting "alphabetically" — depends
+  on the runtime's locale and ICU data. Generated files, the digests taken over them and the
+  canonical payload a secure envelope is built from all have to come out the same twice.
 - Each package owns its configuration and extends the shared tooling. Add a root-level tool
   configuration only when the tool requires it, with a comment explaining why.
 - Every package extends the one TypeScript base, `base.json`: strict, no emit. Packages export

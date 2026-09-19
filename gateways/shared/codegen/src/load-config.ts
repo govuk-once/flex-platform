@@ -9,6 +9,7 @@ import type {
   OperationConfig,
 } from "@repo/gateway-config";
 import type { GatewaySchemas } from "@repo/gateway-types";
+import { sortedNames } from "@repo/utils/sorted-names";
 
 import { CONFIG_FILE, SCHEMAS_FILE } from "./layout.ts";
 
@@ -70,7 +71,7 @@ async function sourceFiles(dir: string, prefix = ""): Promise<string[]> {
 // whether any of them changed while it worked.
 export async function sourceDigest(gatewayDir: string): Promise<string> {
   const hash = createHash("sha256");
-  for (const file of (await sourceFiles(gatewayDir)).toSorted()) {
+  for (const file of sortedNames(await sourceFiles(gatewayDir))) {
     hash.update(file);
     hash.update(await readFile(path.join(gatewayDir, file)));
   }

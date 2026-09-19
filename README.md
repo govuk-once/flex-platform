@@ -7,11 +7,12 @@ Gateway libraries and shared development tooling for the Flex Platform.
 ```txt
 gateways/shared/     Configuration, shared types, runtime and validator generation
 gateways/services/   Gateway configurations and schema fixtures
-packages/           Shared TypeScript, ESLint and Vitest tooling
+packages/           Shared TypeScript, ESLint and Vitest tooling, and generic utilities
 ```
 
 Gateway-specific libraries live under `gateways/shared/`. The `packages/` directory contains
-tooling shared across the repository.
+what the repository shares with no gateway vocabulary in it: its tooling, and `@repo/utils`,
+whose functions are exported one per module and imported by their own paths.
 
 ## Gateways
 

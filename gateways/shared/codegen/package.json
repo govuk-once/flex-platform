@@ -16,6 +16,7 @@
   "dependencies": {
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-types": "workspace:*",
+    "@repo/utils": "workspace:*",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "esbuild": "0.28.2",

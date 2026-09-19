@@ -86,6 +86,25 @@ describe("pickFields", () => {
     });
   });
 
+  it("keeps a null leaf, which is a value a caller can read", () => {
+    expect(pickFields({ a: null }, compile(["a"]))).toEqual({ a: null });
+  });
+
+  it("drops a number JSON cannot write", () => {
+    // These reach a log as null, which reads as a field that was null rather than one that was
+    // not logged at all.
+    const data = {
+      nan: Number.NaN,
+      up: Number.POSITIVE_INFINITY,
+      down: -Infinity,
+    };
+
+    expect(pickFields(data, compile(["nan", "up", "down"]))).toEqual({});
+    expect(
+      pickFields({ mixed: [1, Number.NaN, 3] }, compile(["mixed.*"])),
+    ).toEqual({ "mixed.*": [1, 3] });
+  });
+
   it("drops a wildcard match that is entirely non-scalar", () => {
     const data = { rows: [{ a: 1 }, { b: 2 }] };
     expect(pickFields(data, compile(["rows.*"]))).toEqual({});

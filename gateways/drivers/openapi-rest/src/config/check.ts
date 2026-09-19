@@ -1,4 +1,7 @@
 import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
+import { isRecord } from "@repo/utils/is-record";
+import { ownValue } from "@repo/utils/own-value";
+import { stringsIn } from "@repo/utils/strings-in";
 
 import { normaliseHeaderName } from "../headers.ts";
 import { METHODS_WITH_BODY, PAYLOAD_FIELD } from "../types.ts";
@@ -14,10 +17,6 @@ import type {
 // are configuration errors, and both are visible here, before anything is emitted. Every finding
 // is collected rather than thrown, so one run reports the whole picture.
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 // Follows "$ref": "<def>" through the shared definitions, which codegen registers under their
 // keys, and answers with the schema the chain ends at. Where it ends short, because a
 // definition is missing or because the chain comes back on itself, the last schema read is
@@ -30,27 +29,11 @@ function resolveSchema(
   let current: JSONSchema = schema;
   while (typeof current.$ref === "string" && !following.has(current.$ref)) {
     following.add(current.$ref);
-    const target = Object.hasOwn(defs, current.$ref)
-      ? defs[current.$ref]
-      : undefined;
+    const target = ownValue(defs, current.$ref);
     if (target === undefined) return current;
     current = target;
   }
   return current;
-}
-
-// The names a keyword lists, as JSON Schema states them: an array of strings. A schema is a
-// plain record here, so anything can be written in one, and anything else is read as naming
-// nothing. The direction is deliberate. A name not read leaves a mapping reported, where
-// reading `required: "id"` as the name "id" would accept a path mapping that the generated
-// validator does not enforce, and the request that arrives without it fails as INTERNAL.
-// The schema itself is Ajv's to refuse, against the meta-schema, when the validators are built.
-function stringSet(value: unknown): Set<string> {
-  return new Set(
-    Array.isArray(value)
-      ? value.filter((item) => typeof item === "string")
-      : [],
-  );
 }
 
 function intersect(sets: readonly Set<string>[]): Set<string> {
@@ -107,9 +90,7 @@ function collectFields(
     if (following.has(schema.$ref)) {
       fields.cyclic = true;
     } else {
-      const target = Object.hasOwn(defs, schema.$ref)
-        ? defs[schema.$ref]
-        : undefined;
+      const target = ownValue(defs, schema.$ref);
       absorb(
         collectFields(target, defs, new Set([...following, schema.$ref])),
         true,
@@ -120,7 +101,12 @@ function collectFields(
   if (isRecord(schema.properties)) {
     for (const name of Object.keys(schema.properties)) fields.names.add(name);
   }
-  for (const name of stringSet(schema.required)) fields.required.add(name);
+  // Anything but an array of strings names nothing. The direction is deliberate: a name not
+  // read leaves a mapping reported, where reading `required: "id"` as the name "id" would
+  // accept a path mapping the generated validator does not enforce, and the request that
+  // arrives without it fails as INTERNAL. The schema itself is Ajv's to refuse, against the
+  // meta-schema, when the validators are built.
+  for (const name of stringsIn(schema.required)) fields.required.add(name);
 
   if (Array.isArray(schema.allOf)) {
     for (const branch of schema.allOf) {

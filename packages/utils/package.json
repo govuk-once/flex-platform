@@ -1,22 +1,15 @@
 {
-  "name": "@repo/gateway-runtime",
+  "name": "@repo/utils",
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    "./internal/*": null,
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "@aws-lambda-powertools/parameters": "2.35.0",
-    "@aws-sdk/client-secrets-manager": "3.1128.0",
-    "@repo/gateway-config": "workspace:*",
-    "@repo/gateway-types": "workspace:*",
-    "@repo/utils": "workspace:*",
-    "pino": "10.3.1"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

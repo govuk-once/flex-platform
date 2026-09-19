@@ -1,5 +1,7 @@
 import type { OperationConfig } from "@repo/gateway-config";
 import { GatewayError } from "@repo/gateway-runtime";
+import { isScalar } from "@repo/utils/is-scalar";
+import { ownValue } from "@repo/utils/own-value";
 
 import type {
   OpenApiRestDriver,
@@ -11,7 +13,6 @@ import type {
   OpenApiRestCall,
   OpenApiRestHandler,
   QueryValue,
-  Scalar,
 } from "../types.ts";
 import { METHODS_WITH_BODY, PAYLOAD_FIELD } from "../types.ts";
 import { type ParsedUpstream, parseUpstream } from "../upstream.ts";
@@ -25,14 +26,6 @@ export interface CompiledOperation {
   // Maps the caller's input to a request. Throws on any input the operation does not account
   // for: a field that maps nowhere is a configuration bug, not something to drop silently.
   prepare(input: unknown): OpenApiRestCall;
-}
-
-function isScalar(value: unknown): value is Scalar {
-  return (
-    typeof value === "string" ||
-    typeof value === "boolean" ||
-    (typeof value === "number" && Number.isFinite(value))
-  );
 }
 
 function isQueryValue(value: unknown): value is QueryValue {
@@ -197,8 +190,7 @@ export function compileOperation(
     const fields = input as Record<string, unknown>;
     // Own properties only: an omitted field named like an inherited member, `toString` say,
     // must read as absent rather than as Object.prototype's function.
-    const read = (field: string): unknown =>
-      Object.hasOwn(fields, field) ? fields[field] : undefined;
+    const read = (field: string): unknown => ownValue(fields, field);
 
     let path = "";
     for (const step of steps) {

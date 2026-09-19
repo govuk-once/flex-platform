@@ -119,8 +119,10 @@ log: {
 ```
 
 Paths use dot notation. A wildcard expands across array entries or object values. Only scalar
-matches are logged: a path resolving to an object or array is dropped. Name `address.postcode`
-instead of `address` so newly added nested fields are not logged automatically.
+matches are logged: a path resolving to an object or array is dropped, and so is a number JSON
+cannot write, since `NaN` and the infinities reach a log as null and would read as a field that
+was null rather than one that was not logged. A field that is null is logged as null. Name
+`address.postcode` instead of `address` so newly added nested fields are not logged automatically.
 
 These allowlists govern selected payload fields. Diagnostic messages require separate care and
 must not include sensitive values. An input that fails validation is logged as the schema
