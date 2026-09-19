@@ -22,6 +22,7 @@ describe("openapiRest", () => {
     expect(Object.keys(definition)).toEqual([
       "type",
       "createExecutor",
+      "checkSchemas",
       "spec",
       "auth",
     ]);
@@ -44,6 +45,7 @@ describe("openapiRest", () => {
     expect(Object.keys(definition)).toEqual([
       "type",
       "createExecutor",
+      "checkSchemas",
       "spec",
       "auth",
       "headers",

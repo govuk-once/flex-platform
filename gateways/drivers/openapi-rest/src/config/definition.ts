@@ -11,6 +11,7 @@ import {
   type OpenApiRestHandler,
 } from "../types.ts";
 import type { OpenApiRestAuth } from "./auth.ts";
+import { checkOperationSchemas } from "./check.ts";
 
 // Behaviour lives here, reviewed with the gateway. Deployment values such as the target and
 // the secret arrive as executor options instead.
@@ -71,6 +72,9 @@ export function openapiRest(
       import("../runtime/executor.ts").then((m) =>
         m.createExecutor(config, options),
       ),
+    // Build-time only, so it is imported statically: nothing here reaches the network, a
+    // secret or the environment.
+    checkSchemas: checkOperationSchemas,
     spec: config.spec,
     auth: config.auth,
     ...(config.headers !== undefined ? { headers: config.headers } : {}),

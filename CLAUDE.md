@@ -16,7 +16,8 @@ operations for one upstream, keeping transport details separate from validation 
 - `gateways/shared/runtime`: envelope parsing, dispatch, input and outcome validation, secure
   value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
   gateway secret from AWS Secrets Manager through Powertools Parameters.
-- `gateways/shared/codegen`: schema loading and standalone JavaScript validator generation.
+- `gateways/shared/codegen`: schema loading, the build-time check of a configuration against
+  its schemas, and standalone JavaScript validator generation.
 - `gateways/drivers/openapi-rest`: the HTTP driver. Builds `fetch` requests from operation
   mappings, maps statuses to outcomes and error codes, and dispatches to custom handlers the
   entrypoint supplies. Nothing in it is called by hand; a generated entrypoint wires it.
@@ -25,8 +26,8 @@ operations for one upstream, keeping transport details separate from validation 
   keeps the two apart.
 - `gateways/services/udp`: an example gateway configuration and schema fixtures.
 
-The CLI currently reads `schemas.fixture.ts` and writes validators. It does not produce a
-complete deployable gateway or client. Token and signature verification are not implemented;
+The CLI reads `schemas.fixture.ts`, checks the configuration against it and writes validators.
+It does not produce a complete deployable gateway or client. Token and signature verification are not implemented;
 secure bindings check value consistency only. Of the policy settings, only `upstreamTimeout`
 is enforced.
 

@@ -1,5 +1,6 @@
 import type {
   ExecuteFn,
+  GatewaySchemas,
   OperationHandler,
   SecretProvider,
 } from "@repo/gateway-types";
@@ -269,6 +270,31 @@ describe("driver contract types", () => {
       .toHaveProperty("secret")
       .toEqualTypeOf<SecretProvider>();
     expectTypeOf<keyof ExecutorOptions>().toEqualTypeOf<"target" | "secret">();
+  });
+
+  it("reserves a build-time check of a configuration against its schemas", () => {
+    // Codegen calls it; what the messages mean is the driver's own business, and this package
+    // learns no transport vocabulary from holding the slot.
+    const driver: DriverDefinition = {
+      type: "stub",
+      createExecutor: neverExecutes,
+      checkSchemas: (config, schemas) =>
+        Object.keys(schemas.operations)
+          .filter((name) => !Object.hasOwn(config.operations, name))
+          .map((name) => `no operation "${name}"`),
+    };
+    const gw = defineGateway({
+      id: "test",
+      driver,
+      operations: { op: { upstream: "GET /op" } },
+    });
+    const schemas: GatewaySchemas = {
+      operations: { other: { input: {}, outcomes: {} } },
+    };
+
+    expect(gw.driver.checkSchemas?.(gw, schemas)).toEqual([
+      'no operation "other"',
+    ]);
   });
 
   it("brands a handler with the driver it was written for", () => {

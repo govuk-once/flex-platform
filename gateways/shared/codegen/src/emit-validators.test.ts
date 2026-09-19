@@ -56,6 +56,28 @@ const schemas: GatewaySchemas = {
       },
     },
 
+    // An array typed by position, with the rest typed by `items` and no length closing it.
+    listPage: {
+      input: {
+        type: "object",
+        properties: {
+          page: {
+            type: "array",
+            prefixItems: [{ type: "number" }],
+            items: { type: "string" },
+            minItems: 1,
+          },
+          cursor: {
+            type: "array",
+            prefixItems: [{ type: "number" }, { type: "string" }],
+          },
+        },
+        required: ["page"],
+        additionalProperties: false,
+      },
+      outcomes: { page: { type: "object" } },
+    },
+
     // Covers keyword and format validation, including the ucs2length runtime helper.
     searchRecords: {
       input: {
@@ -89,6 +111,7 @@ const schemas: GatewaySchemas = {
 interface IndexModule {
   validators: {
     createUser: { input: Validator; outcomes: { created: Validator } };
+    listPage: { input: Validator; outcomes: { page: Validator } };
     getIdentityExchange: { input: Validator; outcomes: { record: Validator } };
     searchRecords: { input: Validator; outcomes: { page: Validator } };
   };
@@ -293,11 +316,34 @@ describe("keyword and format validation", () => {
   });
 });
 
+describe("tuple validation", () => {
+  // `prefixItems` types an array by position. Ajv's strict mode would refuse both of these for
+  // leaving the length open, which is what a tuple with a typed tail is for.
+  const input = (over: Record<string, unknown> = {}) =>
+    index.validators.listPage.input({ page: [1], ...over });
+
+  it("checks the element a prefix names", () => {
+    expect(input()).toBe(true);
+    expect(input({ page: [1, "a", "b"] })).toBe(true);
+    expect(input({ page: ["a"] })).toBe(false);
+    expect(input({ page: [1, 2] })).toBe(false);
+    expect(input({ page: [] })).toBe(false);
+  });
+
+  it("leaves a named element the schema does not require", () => {
+    expect(input({ cursor: [] })).toBe(true);
+    expect(input({ cursor: [1] })).toBe(true);
+    expect(input({ cursor: [1, "a"] })).toBe(true);
+    expect(input({ cursor: ["a"] })).toBe(false);
+  });
+});
+
 describe("barrel", () => {
   it("exposes every operation keyed by name", () => {
     expect(Object.keys(index.validators)).toEqual([
       "createUser",
       "getIdentityExchange",
+      "listPage",
       "searchRecords",
     ]);
   });
@@ -371,6 +417,45 @@ describe("generation errors", () => {
     await expect(
       emitValidators(bad, path.join(tmp, "bad-name")),
     ).rejects.toThrow(/get-user/);
+  });
+
+  it("refuses a schema that validates asynchronously", async () => {
+    // An "$async" validator returns a promise, which the dispatcher would read as a pass: the
+    // request would reach the upstream and the rejection would surface as an unhandled one.
+    const bad: GatewaySchemas = {
+      operations: {
+        broken: {
+          input: {
+            $async: true,
+            type: "object",
+            properties: { id: { type: "string" } },
+            required: ["id"],
+          },
+          outcomes: { ok: { type: "object" } },
+        },
+      },
+    };
+
+    await expect(
+      emitValidators(bad, path.join(tmp, "async-input")),
+    ).rejects.toThrow(
+      /input of operation "broken": "\$async" is not supported/,
+    );
+  });
+
+  it("refuses an asynchronous outcome schema", async () => {
+    const bad: GatewaySchemas = {
+      operations: {
+        broken: {
+          input: { type: "object" },
+          outcomes: { ok: { $async: true, type: "object" } },
+        },
+      },
+    };
+
+    await expect(
+      emitValidators(bad, path.join(tmp, "async-outcome")),
+    ).rejects.toThrow(/outcome "ok" of operation "broken"/);
   });
 
   it("rejects an unresolvable $ref", async () => {

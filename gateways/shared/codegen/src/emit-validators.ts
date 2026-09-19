@@ -63,10 +63,16 @@ async function formatSource(source: string): Promise<string> {
   }
 }
 
-export async function emitValidators(
-  schemas: GatewaySchemas,
-  outDir: string,
-): Promise<void> {
+// What generation produced, held before anything is written: a caller with a further check to
+// make runs it between the two steps, and a schema that is not a schema is refused by the
+// first, as itself, rather than reported as whatever that check makes of it.
+export interface CompiledValidators {
+  readonly schemas: GatewaySchemas;
+  readonly exportNames: readonly string[];
+  readonly code: string;
+}
+
+export function compileValidators(schemas: GatewaySchemas): CompiledValidators {
   const ajv = new Ajv2020({
     code: {
       source: true,
@@ -75,6 +81,11 @@ export async function emitValidators(
       formats: ajvModule._`formats`,
     },
     strict: true,
+    // Ajv's one strict-mode check that refuses a valid 2020-12 schema: it wants a tuple's length
+    // pinned, so `prefixItems` beside an `items` that types the rest, or without a `minItems`
+    // requiring the elements it names, would fail generation. Both describe an array the
+    // validators and the call contract handle, so only this check is off.
+    strictTuples: false,
     allErrors: false,
   });
 
@@ -125,12 +136,24 @@ export async function emitValidators(
   }
 
   for (const { $id, context } of registered) {
+    let validate;
     try {
-      ajv.getSchema($id);
+      validate = ajv.getSchema($id);
     } catch (cause) {
       throw new Error(
         `Invalid schema for ${context}: ${(cause as Error).message}`,
         { cause },
+      );
+    }
+    // An "$async" schema compiles to a validator that returns a promise. The dispatcher calls
+    // validators synchronously and would read that promise as a value that passed, letting an
+    // invalid request reach the upstream and an invalid response reach the caller, with the
+    // rejection surfacing as an unhandled one. Nothing here can await it, so it is refused.
+    // Ajv marks an asynchronous validator on the function; only that overload declares the
+    // property, so its presence is what identifies one.
+    if (validate !== undefined && "$async" in validate) {
+      throw new Error(
+        `Invalid schema for ${context}: "$async" is not supported, because validation is synchronous`,
       );
     }
   }
@@ -143,6 +166,15 @@ export async function emitValidators(
   } catch (cause) {
     throw new Error("Failed to generate standalone validator code", { cause });
   }
+
+  return { schemas, exportNames, code };
+}
+
+export async function writeValidators(
+  compiled: CompiledValidators,
+  outDir: string,
+): Promise<void> {
+  const { schemas, exportNames, code } = compiled;
 
   // Not prettier-formatted: bundled output, and esbuild rejecting bad input is the same check.
   const schemasJs = HEADER + (await bundleModule(FORMATS_IMPORT + "\n" + code));
@@ -172,4 +204,12 @@ export async function emitValidators(
     writeFile(path.join(outDir, "schemas.js"), schemasJs),
     writeFile(path.join(outDir, "index.js"), indexJs),
   ]);
+}
+
+// Both steps, for a caller with nothing to do between them.
+export async function emitValidators(
+  schemas: GatewaySchemas,
+  outDir: string,
+): Promise<void> {
+  await writeValidators(compileValidators(schemas), outDir);
 }

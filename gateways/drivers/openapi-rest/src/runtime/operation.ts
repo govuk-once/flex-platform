@@ -8,13 +8,13 @@ import type {
 import { normaliseHeaderName } from "../headers.ts";
 import { encodePathParam } from "../path.ts";
 import type {
-  HttpMethod,
   OpenApiRestCall,
   OpenApiRestHandler,
   QueryValue,
   Scalar,
 } from "../types.ts";
-import { type ParsedUpstream, parseUpstream } from "./upstream.ts";
+import { METHODS_WITH_BODY, PAYLOAD_FIELD } from "../types.ts";
+import { type ParsedUpstream, parseUpstream } from "../upstream.ts";
 
 export type OpenApiRestOperationConfig = OperationConfig<OpenApiRestDriver>;
 
@@ -26,16 +26,6 @@ export interface CompiledOperation {
   // for: a field that maps nowhere is a configuration bug, not something to drop silently.
   prepare(input: unknown): OpenApiRestCall;
 }
-
-// The body field. Never a mapping target, so it cannot double as a path or query parameter.
-export const PAYLOAD_FIELD = "payload";
-
-const METHODS_WITH_BODY: ReadonlySet<HttpMethod> = new Set([
-  "POST",
-  "PUT",
-  "PATCH",
-  "DELETE",
-]);
 
 function isScalar(value: unknown): value is Scalar {
   return (
