@@ -11,16 +11,16 @@ gateways/
     config/        defineGateway, driver definition and executor contract, policy presets
     types/         Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
     runtime/       Envelope parsing, dispatch, timeouts, bindings, logging and secret retrieval
-    codegen/       Schema loading, configuration checks, validators and the call contract
+    codegen/       Schema loading, configuration checks, validators, contract and entry point
   drivers/
     openapi-rest/  HTTP request construction, status mapping, authentication and custom handlers
   services/
     udp/           Example gateway configuration and schema fixtures
 ```
 
-The codegen CLI checks a gateway configuration against its schemas and writes the validators
-and the call contract to `.gen/`; see [Code generation](#code-generation). For the included
-example, run:
+The codegen CLI checks a gateway configuration against its schemas and writes the validators,
+the call contract and the entry point to `.gen/`; see [Code generation](#code-generation). For
+the included example, run:
 
 ```bash
 pnpm --filter @govuk-once/flex-gateway-udp codegen
@@ -29,10 +29,10 @@ pnpm --filter @govuk-once/flex-gateway-udp codegen
 There is no build step: the CLI runs from source. It does not generate a client; a consumer
 takes the generated contract and invokes the deployed gateway itself. The runtime's
 `createHandler` accepts validators keyed by the configuration's operations and an execution
-function, compiles once, and returns a handler that takes each invocation's deadline; the openapi-rest driver's `createExecutor`
-supplies the execution function once it has retrieved and validated the gateway's secret.
-Outcome validators are held in a `Map`, so an outcome name matching an inherited object
-member such as `constructor` cannot pass validation.
+function, compiles once, and returns a handler that takes each invocation's deadline; the
+openapi-rest driver's `createExecutor` supplies the execution function once it has retrieved
+and validated the gateway's secret. Outcome validators are held in a `Map`, so an outcome name
+matching an inherited object member such as `constructor` cannot pass validation.
 
 Configuration is checked for shape as well as content: a misspelled operation, gateway or
 driver field is a type error at `defineGateway` or the driver helper, not a silently ignored
@@ -156,13 +156,34 @@ otherwise; no driver implements `deriveSchemas` yet.
 
 | Path | Contents |
 |---|---|
+| `.gen/runtime/entry.js` | The handler: the configuration, the validators and the executor the driver builds. Reads the environment and exports `handler`. |
 | `.gen/runtime/validators/` | Standalone Ajv validators, one for each operation's input and one for each declared outcome. Self-contained JavaScript with no package imports. |
+| `.gen/runtime/bundle.mjs` | `entry.js` and everything it imports, bundled by esbuild as ESM for Node 24, with the AWS SDK left to the Lambda runtime. The deployed artifact; its handler is `bundle.handler`. |
 | `.gen/client/rpc.ts` | The call contract as types: each operation's input and the union of its outcomes. Types only, so a consumer takes it without the gateway's dependencies. |
 
-Generated code is not typechecked, and nothing outside `.gen/` imports it.
+Generated code is not typechecked, and nothing outside `.gen/` imports it. A gateway package
+holds a configuration, its schemas and any custom handlers; generation and dispatch are covered
+by the libraries' own tests, against a fixture gateway in `gateways/shared/codegen/test/`, so a
+new gateway adds no test of its own beyond its handlers.
 
-Nothing is written unless the configuration and the schemas agree, so a failed run never leaves
-output that builds but dispatches to validators that do not match it.
+Nothing is published unless the whole run succeeds. The configuration is checked against the
+schemas first, and everything is then built in a directory of the run's own beside `.gen/` and
+moved into place only once the last step has finished, so a run that fails leaves what the last
+complete one produced rather than a gateway whose two halves came from different schemas. The
+output being replaced is moved aside rather than deleted, so even a failure to publish leaves the
+last complete run in place; removing it once the new output is in place is tidying, and a
+filesystem that refuses it leaves that directory behind rather than turning a published run into a
+failed one. A run is given a gateway's directory rather than a configuration: it reads
+`gateway.config.ts` and `schemas.fixture.ts` itself, from the bytes on disk rather than from
+whatever a process loaded earlier, because the entry point imports the configuration and esbuild
+reads it again when it bundles. What those two import is another matter: Node serves a module it
+has already evaluated and nothing here can evict one, so a gateway is generated once per process,
+which is what the command does. Every module the gateway is made of is read again once the output
+is built, and a file that changed while the run was in progress fails it before anything is
+published: what was checked would not be what the bundle runs. One run at a time per generated
+directory: nothing coordinates two, and a gateway is generated by one command. The bundle is built
+during generation rather than at deployment, so a gateway that cannot be bundled fails where the
+cause is at hand, and the same gateway bundles to the same bytes.
 
 ### What codegen checks
 
@@ -202,11 +223,45 @@ off: strict mode wants a tuple's length pinned, which would refuse an array that
 elements by position and the rest with `items`. A schema whose validation is asynchronous is
 refused outright, since the dispatcher validates synchronously.
 
+### The generated entry point
+
+```js
+// .gen/runtime/entry.js
+import { createHandler, readUpstreamOptions } from "@repo/gateway-runtime";
+
+import config from "../../gateway.config.ts";
+import { validators } from "./validators/index.js";
+
+const execute = await config.driver.createExecutor(config, readUpstreamOptions());
+const gateway = createHandler(config, { validators, execute });
+
+export const handler = (event, context) =>
+  gateway(event, {
+    deadline: { remainingMs: () => context.getRemainingTimeInMillis() },
+  });
+```
+
+It is the same module for every gateway: the driver arrives as part of the configuration and
+builds its own executor, so nothing here names a driver package or a transport. `UPSTREAM_TARGET`
+and `UPSTREAM_SECRET_ARN` are read here and nowhere else, and the handler is built while the
+module loads, which is the platform's initialisation phase, so the operations compile and the
+secret is retrieved and validated before any request rather than during the first one. The
+handler is the only export: a gateway runs on Lambda and the platform is its only caller.
+
+It is JavaScript, not TypeScript, for the same reason the validators carry no declarations: a
+TypeScript module could not import them.
+
+The bundle carries everything the handler imports except Node's builtins and the AWS SDK, which
+the Lambda runtime provides. Its handler is `bundle.handler`. A bundled CommonJS dependency
+reaches those builtins through `require`, which an ES module does not have, so the bundle opens
+with one of its own from `node:module`; without it the module would throw as it loaded rather
+than fail a request.
+
 ### The call contract
 
-`.gen/client/rpc.ts` describes what a caller sends and receives. Each operation's input is one
-flat object: the fields the operation maps to the upstream request at the top level, and the
-request body, when there is one, under `payload`. Each response is an error envelope or a success
+`.gen/client/rpc.ts` describes what a caller sends and receives. Each operation's input is one flat
+object: the fields the operation maps to the upstream request at the top level, and the request
+body, when there is one, under `payload`. Each response is an error envelope or a success
 carrying one of the declared outcomes, so a switch over `outcome` is checked for exhaustiveness
 and an outcome the gateway does not declare is a type error.
 
@@ -373,27 +428,13 @@ only when they match a fixed set such as `TypeError` and `ECONNREFUSED`.
 
 ### Running the executor
 
-Nothing here is called by hand, and nothing an entrypoint calls is specific to this driver.
-A driver definition carries its own `createExecutor`, so a generated entrypoint reaches it as
-`config.driver` and awaits it with the neutral `ExecutorOptions` from `@repo/gateway-config`.
-Those options are the target the runtime reads from the environment and a provider for the
-secret it names, so the entrypoint is the same for every driver and every gateway, and
-nothing outside the configuration names a driver package.
-
-```ts
-import { createHandler, readUpstreamOptions } from "@repo/gateway-runtime";
-
-import config from "./gateway.config.ts";
-import { validators } from "./.gen/validators/index.js";
-
-// Retrieves and validates the secret, so a misconfigured deployment fails here.
-const execute = await config.driver.createExecutor(config, readUpstreamOptions());
-const gateway = createHandler(config, { validators, execute });
-
-// One invocation: the deadline comes from the platform, not from construction.
-export const handler = (event: unknown, context: { getRemainingTimeInMillis(): number }) =>
-  gateway(event, { deadline: { remainingMs: () => context.getRemainingTimeInMillis() } });
-```
+Nothing here is called by hand, and nothing the entry point calls is specific to this driver.
+A driver definition carries its own `createExecutor`, so the
+[generated entry point](#the-generated-entry-point) reaches it as `config.driver` and awaits it
+with the neutral `ExecutorOptions` from `@repo/gateway-config`. Those options are the target the
+runtime reads from the environment and a provider for the secret it names, so the entry point is
+the same for every driver and every gateway, and nothing outside the configuration names a
+driver package.
 
 | Executor option | Purpose |
 |---|---|

@@ -7,13 +7,17 @@ import * as codegen from "./index.ts";
 describe("@repo/gateway-codegen", () => {
   it("exports what the CLI and its callers use", () => {
     expect(Object.keys(codegen).toSorted()).toEqual([
+      "BUNDLE_MODULE",
       "CLIENT_DIR",
       "CONTRACT_MODULE",
+      "ENTRY_MODULE",
       "GatewayCheckError",
       "RUNTIME_DIR",
       "VALIDATORS_DIR",
+      "bundleEntry",
       "checkGateway",
       "emitContract",
+      "emitEntry",
       "emitValidators",
       "generate",
       "loadConfig",
@@ -27,8 +31,17 @@ describe("@repo/gateway-codegen", () => {
     expect([
       codegen.RUNTIME_DIR,
       codegen.VALIDATORS_DIR,
+      codegen.ENTRY_MODULE,
+      codegen.BUNDLE_MODULE,
       codegen.CLIENT_DIR,
       codegen.CONTRACT_MODULE,
-    ]).toEqual(["runtime", "validators", "client", "rpc.ts"]);
+    ]).toEqual([
+      "runtime",
+      "validators",
+      "entry.js",
+      "bundle.mjs",
+      "client",
+      "rpc.ts",
+    ]);
   });
 });
