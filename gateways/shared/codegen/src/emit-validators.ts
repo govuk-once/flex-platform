@@ -1,16 +1,12 @@
 import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
+import { sortedEntries } from "@repo/utils/sorted-entries";
 import ajvModule from "ajv/dist/2020.js";
 import standaloneModule from "ajv/dist/standalone/index.js";
 import addFormatsModule from "ajv-formats";
 import esbuild from "esbuild";
 
 import { VALIDATORS_MODULE } from "./layout.ts";
-import {
-  assertIdentifier,
-  formatSource,
-  sortedEntries,
-  writeGenerated,
-} from "./output.ts";
+import { assertIdentifier, formatSource, writeGenerated } from "./output.ts";
 
 const Ajv2020 = ajvModule.default;
 const addFormats = addFormatsModule.default;

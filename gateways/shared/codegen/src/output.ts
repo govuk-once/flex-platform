@@ -20,13 +20,6 @@ export function assertIdentifier(name: string, what: string): void {
   }
 }
 
-// Deterministic iteration. Output must not depend on key insertion order.
-export function sortedEntries<T>(record: Record<string, T>): [string, T][] {
-  return Object.keys(record)
-    .sort()
-    .map((key) => [key, record[key]!]);
-}
-
 export async function formatSource(
   source: string,
   parser: "babel" | "typescript",
