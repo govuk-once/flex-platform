@@ -1,4 +1,5 @@
 import type { SecureValue } from "@repo/gateway-types";
+import { sortedEntries } from "@repo/utils/sorted-entries";
 
 import { GatewayError } from "./errors.ts";
 import { compilePaths, valueAt } from "./field-path.ts";
@@ -6,13 +7,7 @@ import { compilePaths, valueAt } from "./field-path.ts";
 export function prepareSecurePayload(
   values: Readonly<Record<string, SecureValue>>,
 ): string {
-  const sorted: Record<string, SecureValue> = {};
-  const keys = Object.keys(values).sort();
-  for (const key of keys) {
-    const value = values[key];
-    if (value !== undefined) sorted[key] = value;
-  }
-  return JSON.stringify(sorted);
+  return JSON.stringify(Object.fromEntries(sortedEntries(values)));
 }
 
 export interface CompiledBinding {

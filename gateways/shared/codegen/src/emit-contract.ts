@@ -1,12 +1,8 @@
 import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
+import { sortedEntries } from "@repo/utils/sorted-entries";
 
 import { CONTRACT_MODULE } from "./layout.ts";
-import {
-  assertIdentifier,
-  formatSource,
-  sortedEntries,
-  writeGenerated,
-} from "./output.ts";
+import { assertIdentifier, formatSource, writeGenerated } from "./output.ts";
 import { type TypeContext, typeExpression } from "./schema-types.ts";
 
 // What a schema was read for, added to whatever reading it threw: the translator is given one
