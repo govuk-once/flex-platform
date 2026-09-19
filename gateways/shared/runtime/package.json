@@ -15,6 +15,7 @@
     "@aws-sdk/client-secrets-manager": "3.1128.0",
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-types": "workspace:*",
+    "@repo/utils": "workspace:*",
     "pino": "10.3.1"
   },
   "devDependencies": {
