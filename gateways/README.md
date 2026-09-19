@@ -193,16 +193,17 @@ error at `defineGateway` as well as a failure at executor creation. The type err
 corrected `parameters` shape: a missing entry keyed by the parameter, or an entry whose `name`
 must be one of the template's.
 
-Every input field must be mapped or be `payload`; an unmapped field is a configuration error
-and fails the request as `INTERNAL`. That diagnostic counts the unmapped fields and never names
-them: a schema that allows additional properties lets the caller choose the names. Path values
-must be scalars and are percent-encoded as one segment. Values that are only dots, or that
-contain `/`, `\`, `?`, `#`, `%` or a control character, are rejected: this gateway's URL parser would collapse `..`, and an upstream that
-decodes before it routes would reinterpret the rest, sending `../../admin` to `/admin` with the
-gateway's credentials. Constrain path parameter formats in the input schema so callers receive
+Every input field must be mapped or be `payload` wherever the request is built from the mapping;
+an unmapped field is a configuration error and fails the request as `INTERNAL`. That diagnostic
+counts the unmapped fields and never names them: a schema that allows additional properties lets
+the caller choose the names. Path values must be scalars and are percent-encoded as one segment.
+Values that are only dots, or that contain `/`, `\`, `?`, `#`, `%` or a control character, are
+rejected: this gateway's URL parser would collapse `..`, and an upstream that decodes before it
+routes would reinterpret the rest, sending `../../admin` to `/admin` with the gateway's
+credentials. Constrain path parameter formats in the input schema so callers receive
 `INVALID_INPUT` rather than relying on this check. Query values may be scalars or arrays of
-scalars, arrays repeating the key. Null and undefined query and header values are omitted.
-A `payload` on GET is an error. Bodies are JSON with `Content-Type: application/json`, and every
+scalars, arrays repeating the key. Null and undefined query and header values are omitted. A
+`payload` on GET is an error. Bodies are JSON with `Content-Type: application/json`, and every
 request sends `Accept: application/json`.
 
 Configuration problems such as an unsupported method, a template parameter without an entry, an
