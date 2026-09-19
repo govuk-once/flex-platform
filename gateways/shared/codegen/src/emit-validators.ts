@@ -1,40 +1,23 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-
 import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
 import ajvModule from "ajv/dist/2020.js";
 import standaloneModule from "ajv/dist/standalone/index.js";
 import addFormatsModule from "ajv-formats";
 import esbuild from "esbuild";
-import { format } from "prettier";
+
+import {
+  assertIdentifier,
+  formatSource,
+  sortedEntries,
+  writeGenerated,
+} from "./output.ts";
 
 const Ajv2020 = ajvModule.default;
 const addFormats = addFormatsModule.default;
 const standaloneCode = standaloneModule.default;
 
-const HEADER =
-  "// GENERATED FILE. Do not edit. Produced by @repo/gateway-codegen.\n";
-
 // Resolved during bundling, never left in the emitted output.
 const FORMATS_IMPORT =
   'import { fullFormats as formats } from "ajv-formats/dist/formats.js";\n';
-
-const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-
-// Deterministic iteration. Output must not depend on key insertion order.
-function sortedEntries<T>(record: Record<string, T>): [string, T][] {
-  return Object.keys(record)
-    .sort()
-    .map((key) => [key, record[key]!]);
-}
-
-function assertIdentifier(name: string, what: string): void {
-  if (!IDENTIFIER.test(name)) {
-    throw new Error(
-      `${what} "${name}" is not a valid JavaScript identifier, so it cannot be used as an export name.`,
-    );
-  }
-}
 
 // Bundle Ajv's formats and keyword helpers so emitted validators have no package imports or
 // unresolved CommonJS requires. Resolve from codegen's dependencies, independent of the caller.
@@ -53,14 +36,6 @@ async function bundleModule(source: string): Promise<string> {
     throw new Error("esbuild produced no output when bundling validators");
   }
   return output.text;
-}
-
-async function formatSource(source: string): Promise<string> {
-  try {
-    return await format(source, { parser: "babel", printWidth: 100 });
-  } catch (cause) {
-    throw new Error("Generated output is not parseable", { cause });
-  }
 }
 
 // What generation produced, held before anything is written: a caller with a further check to
@@ -177,7 +152,7 @@ export async function writeValidators(
   const { schemas, exportNames, code } = compiled;
 
   // Not prettier-formatted: bundled output, and esbuild rejecting bad input is the same check.
-  const schemasJs = HEADER + (await bundleModule(FORMATS_IMPORT + "\n" + code));
+  const schemasJs = await bundleModule(FORMATS_IMPORT + "\n" + code);
 
   const operationEntries = sortedEntries(schemas.operations)
     .map(([opName, opSchemas]) => {
@@ -189,21 +164,17 @@ export async function writeValidators(
     })
     .join("");
 
-  const indexJs =
-    HEADER +
-    (await formatSource(
-      [
-        `import { ${exportNames.join(", ")} } from "./schemas.js";`,
-        "",
-        `export const validators = { ${operationEntries} };`,
-      ].join("\n"),
-    ));
+  const indexJs = await formatSource(
+    [
+      `import { ${exportNames.join(", ")} } from "./schemas.js";`,
+      "",
+      `export const validators = { ${operationEntries} };`,
+    ].join("\n"),
+    "babel",
+  );
 
-  await mkdir(outDir, { recursive: true });
-  await Promise.all([
-    writeFile(path.join(outDir, "schemas.js"), schemasJs),
-    writeFile(path.join(outDir, "index.js"), indexJs),
-  ]);
+  await writeGenerated(outDir, "schemas.js", schemasJs);
+  await writeGenerated(outDir, "index.js", indexJs);
 }
 
 // Both steps, for a caller with nothing to do between them.
