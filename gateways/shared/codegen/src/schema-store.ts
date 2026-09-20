@@ -144,6 +144,46 @@ function checkOnly(
   }
 }
 
+// A character that does not display: a control character, or one of the format characters that
+// reorder or hide the text around them. A version is reviewed by a person and its text is written
+// into generated code, so one of these would let it show a reviewer one thing and hold another.
+// Tab and the line breaks are what a description is laid out with. Read from the parsed value,
+// so one written as an escape is found as surely as one written as itself.
+const HIDDEN = /(?![\t\n\r])[\p{Cc}\p{Cf}\u2028\u2029]/u;
+
+const codePoint = (text: string): string => {
+  const found = HIDDEN.exec(text)?.[0].codePointAt(0) ?? 0;
+  return `U+${found.toString(16).toUpperCase().padStart(4, "0")}`;
+};
+
+function hiddenCharacters(
+  value: unknown,
+  where: string,
+  problems: string[],
+): void {
+  if (typeof value === "string") {
+    if (HIDDEN.test(value)) {
+      problems.push(
+        `${where} holds a character that does not display (${codePoint(value)})`,
+      );
+    }
+  } else if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      hiddenCharacters(item, `${where}.${String(index)}`, problems);
+    });
+  } else if (isRecord(value)) {
+    for (const [key, held] of Object.entries(value)) {
+      if (HIDDEN.test(key)) {
+        problems.push(
+          `${where} has a field whose name holds a character that does not display (${codePoint(key)})`,
+        );
+        continue;
+      }
+      hiddenCharacters(held, where === "" ? key : `${where}.${key}`, problems);
+    }
+  }
+}
+
 // A version is parsed, so nothing has checked it the way a compiler checks a module. What is
 // established here is only that it has the shape the generator reads: whether a schema is a
 // valid schema is Ajv's to say, and whether the operations are the configuration's is the
@@ -225,7 +265,8 @@ export async function readSchemas(
     );
   }
 
-  const problems = shapeProblems(parsed);
+  const problems = [...shapeProblems(parsed)];
+  hiddenCharacters(parsed, "", problems);
   if (problems.length > 0) throw new SchemaStoreError(file, problems);
   return parsed as GatewaySchemas;
 }
