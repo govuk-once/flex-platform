@@ -1,15 +1,6 @@
 import { GatewayError } from "@repo/gateway-runtime";
 import type { ErrorCode } from "@repo/gateway-types";
 
-import type { OpenApiRestOutcome } from "../types.ts";
-
-const OUTCOME_BY_STATUS: Readonly<Record<number, OpenApiRestOutcome>> = {
-  200: "ok",
-  201: "created",
-  202: "accepted",
-  204: "no_content",
-};
-
 // Codes for statuses with a specific meaning. Other 4xx are UPSTREAM_REJECTED and 5xx are
 // UPSTREAM_ERROR. 401 and 403 mean the gateway's own credentials were refused, which the
 // upstream answered normally, so they are rejections rather than failures. 429 is RATE_LIMITED
@@ -20,12 +11,6 @@ const ERROR_BY_STATUS: Readonly<Record<number, ErrorCode>> = {
   404: "NOT_FOUND",
   429: "RATE_LIMITED",
 };
-
-export function outcomeForStatus(
-  status: number,
-): OpenApiRestOutcome | undefined {
-  return OUTCOME_BY_STATUS[status];
-}
 
 // Messages name the operation, its template and the status: enough to diagnose, never the
 // resolved path or body, which can contain input values.

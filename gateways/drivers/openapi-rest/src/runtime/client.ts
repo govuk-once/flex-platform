@@ -2,6 +2,7 @@ import { GatewayError } from "@repo/gateway-runtime";
 import type { DriverContext } from "@repo/gateway-types";
 
 import { validateHeaders } from "../headers.ts";
+import { outcomeForStatus } from "../outcomes.ts";
 import { hasControlCharacter, hasDotSegment } from "../path.ts";
 import type {
   OpenApiRestCall,
@@ -12,7 +13,7 @@ import type {
 import { requestFailure } from "./failure.ts";
 import { checkCall, sendRequest, serialiseJson } from "./http.ts";
 import type { CompiledOperation } from "./operation.ts";
-import { errorForStatus, outcomeForStatus } from "./response.ts";
+import { errorForStatus } from "./response.ts";
 
 // The headers the gateway's authentication adds to one request, already validated and known
 // to be among the names it declared. Called inside the timed attempt, so a secret refresh or a
