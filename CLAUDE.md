@@ -26,11 +26,12 @@ operations for one upstream, keeping transport details separate from validation 
   `src/config/` is what a gateway configuration imports and codegen evaluates; `src/runtime/`
   is reached only through the definition's `createExecutor`, which loads it, and a lint rule
   keeps the two apart.
-- `gateways/services/udp`: an example gateway configuration and schema fixtures.
+- `gateways/services/udp`: an example gateway configuration and its versioned schemas.
 
-The CLI reads `schemas.fixture.ts`, checks the configuration against it, and writes the
-validators, the entry point and its esbuild bundle to `.gen/runtime/` and the call contract to
-`.gen/client/`. It does not produce a client:
+The CLI reads the latest version in a gateway's `schemas/` directory, JSON files numbered from
+`0001.json`, checks the configuration against it, and writes the validators, the entry point and
+its esbuild bundle to `.gen/runtime/` and the call contract to `.gen/client/`. It does not
+produce a client:
 a consumer takes the generated types and invokes the deployed gateway itself. Token and
 signature verification are not implemented; secure bindings check value consistency only. Of
 the policy settings, only `upstreamTimeout` is enforced.
