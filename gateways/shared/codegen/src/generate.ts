@@ -2,6 +2,7 @@ import { mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { checkGateway } from "./check-gateway.ts";
+import { checkVersions } from "./compare-schemas.ts";
 import { emitContract } from "./emit-contract.ts";
 import { bundleEntry, emitEntry } from "./emit-entry.ts";
 import { compileValidators, writeValidators } from "./emit-validators.ts";
@@ -12,7 +13,7 @@ import {
   VALIDATORS_DIR,
 } from "./layout.ts";
 import { loadConfig, sourceDigest } from "./load-config.ts";
-import { loadSchemas } from "./schema-store.ts";
+import { loadVersions } from "./schema-store.ts";
 
 // What every staging directory of a run for `outDir` is named after. Each run gets one of its
 // own beneath this prefix, so a run that fails cleans up only what it built. A sibling of the
@@ -97,11 +98,16 @@ export async function generate(gatewayDir: string): Promise<void> {
   // themselves and find a run to publish, having checked what the files said before.
   const sources = await sourceDigest(dir);
   const config = await loadConfig(dir);
-  const schemas = await loadSchemas(dir);
+  const versions = await loadVersions(dir);
+  // loadVersions refuses a gateway with no versions, so there is a latest.
+  const schemas = versions.at(-1)?.schemas ?? { operations: {} };
 
-  // The schemas are generated from before they are read against the configuration, so a schema
-  // that is not a valid schema is reported as itself rather than as the disagreement it causes.
+  // The schemas are generated from before they are read against anything else, so a schema that
+  // is not a valid schema is reported as itself rather than as the disagreement it causes. Then
+  // against the versions before them, and only then against the configuration: a contract that
+  // breaks its callers is refused whatever the configuration makes of it.
   const compiled = compileValidators(schemas);
+  checkVersions(config.id, versions);
   checkGateway(config, schemas);
 
   const outDir = path.join(dir, GENERATED_DIR);
