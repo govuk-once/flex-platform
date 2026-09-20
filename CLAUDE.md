@@ -20,7 +20,8 @@ operations for one upstream, keeping transport details separate from validation 
 - `gateways/shared/codegen`: schema loading, the comparison of each version of a gateway's
   schemas with the one before it, the build-time check of a configuration against its schemas,
   standalone JavaScript validator generation, the call contract and the entry point that wires
-  a gateway to the dispatcher.
+  a gateway to the dispatcher; and `gateway-schemas`, the command that derives a gateway's
+  schemas through its driver and writes the next version when the shape changed safely.
 - `gateways/drivers/openapi-rest`: the HTTP driver. Builds `fetch` requests from operation
   mappings, maps statuses to outcomes and error codes, and dispatches to custom handlers the
   entrypoint supplies. Nothing in it is called by hand; a generated entrypoint wires it.
@@ -48,6 +49,7 @@ pnpm install          # link the workspace and install dependencies
 pnpm lint             # eslint, all packages
 pnpm typecheck        # tsc --noEmit, all packages with a typecheck script
 pnpm codegen          # generate validators for gateways that configure it
+pnpm schemas          # bring each gateway's schemas up to date with its upstream; by hand, never in CI
 pnpm test             # vitest run, all packages
 ```
 
@@ -109,6 +111,12 @@ integrations are implemented.
    Adding a transport should not require transport-specific logic in the dispatcher or generator.
    `gateways/drivers/openapi-rest` is the only package that names methods, paths, status codes
    or headers; callers see outcome names such as `ok` and `no_content`, never a status.
+   A driver that derives its schemas gives the module that does as a `file:` URL built from its
+   own, `deriveSchemasModule`, and never imports it: the entry point imports the configuration
+   and the bundler follows every import from there, so an import would put whatever parses an
+   upstream's description into the deployed gateway. Only `gateway-schemas` loads it. What
+   either command prints, a report or the error that stopped it, carries upstream text: it goes
+   out through `printable`, which writes what does not display as its code point.
    A driver definition carries its own `createExecutor`, so codegen and a generated entrypoint
    reach any driver the same way, as `config.driver`, and pass it the neutral `ExecutorOptions`;
    nothing outside a configuration names a driver package. A driver's handler type is a
