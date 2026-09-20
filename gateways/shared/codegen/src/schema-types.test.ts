@@ -32,15 +32,13 @@ describe("typeExpression", () => {
         properties: { id: { type: "string" }, note: { type: "string" } },
         required: ["id"],
       }),
-    ).toBe(
-      "{ readonly id: string; readonly note?: string; readonly [key: string]: unknown; }",
-    );
+    ).toBe("{ readonly id: string; readonly note?: string; }");
   });
 
   it("quotes a property name that is not an identifier", () => {
     expect(
       type({ type: "object", properties: { "x-trace": { type: "string" } } }),
-    ).toBe('{ readonly "x-trace"?: string; readonly [key: string]: unknown; }');
+    ).toBe('{ readonly "x-trace"?: string; }');
   });
 
   it("describes an object with no properties by what it admits", () => {
@@ -55,21 +53,21 @@ describe("typeExpression", () => {
     );
   });
 
-  it("admits the names a schema does not close", () => {
-    // A declared field and nothing said about the rest: the caller may send more, so the type
-    // has to take more. Refusing them here would refuse a request the gateway accepts.
-    const open = {
+  it("offers only the fields a schema declares unless it says it holds more", () => {
+    // A declared field and nothing said about the rest. The validator admits more, what an
+    // upstream adds or plain JavaScript sends, and the type does not offer it: a contract never
+    // suggests fields that depend on the version of it a caller has.
+    const silent = {
       type: "object",
       properties: { id: { type: "string" } },
       required: ["id"],
     };
 
-    expect(type(open)).toBe(
+    expect(type(silent)).toBe("{ readonly id: string; }");
+    expect(type({ ...silent, additionalProperties: false })).toBe(type(silent));
+    // A schema that says it holds more is described as holding more.
+    expect(type({ ...silent, additionalProperties: true })).toBe(
       "{ readonly id: string; readonly [key: string]: unknown; }",
-    );
-    expect(type({ ...open, additionalProperties: true })).toBe(type(open));
-    expect(type({ ...open, additionalProperties: false })).toBe(
-      "{ readonly id: string; }",
     );
   });
 
@@ -111,9 +109,7 @@ describe("typeExpression", () => {
           },
         ],
       }),
-    ).toBe(
-      "{ readonly id: string; readonly name: string; readonly [key: string]: unknown; }",
-    );
+    ).toBe("{ readonly id: string; readonly name: string; }");
 
     // The enclosing type narrows each branch: null was never admissible here, so the branch
     // that asks for it admits nothing and leaves the union.
@@ -124,7 +120,7 @@ describe("typeExpression", () => {
         required: ["id"],
         anyOf: [{ type: "object" }, { type: "null" }],
       }),
-    ).toBe("{ readonly id: string; readonly [key: string]: unknown; }");
+    ).toBe("{ readonly id: string; }");
   });
 
   it("reads each union branch against everything enclosing it", () => {
@@ -138,9 +134,7 @@ describe("typeExpression", () => {
           { properties: { id: { type: "number" } } },
         ],
       }),
-    ).toBe(
-      "{ readonly id: string; readonly [key: string]: unknown; } | { readonly id: number; readonly [key: string]: unknown; }",
-    );
+    ).toBe("{ readonly id: string; } | { readonly id: number; }");
 
     // A branch of object keywords says nothing about null, which the schema still admits.
     expect(
@@ -150,9 +144,7 @@ describe("typeExpression", () => {
           { properties: { tenant: { type: "string" } }, required: ["tenant"] },
         ],
       }),
-    ).toBe(
-      "{ readonly tenant: string; readonly [key: string]: unknown; } | null",
-    );
+    ).toBe("{ readonly tenant: string; } | null");
 
     // A branch that names its own type keeps it, and what it declares with it.
     expect(
@@ -166,9 +158,7 @@ describe("typeExpression", () => {
           },
         ],
       }),
-    ).toBe(
-      "string | { readonly id: string; readonly [key: string]: unknown; }",
-    );
+    ).toBe("string | { readonly id: string; }");
 
     expect(
       type({
@@ -198,9 +188,7 @@ describe("typeExpression", () => {
           { properties: { b: { type: "string" } }, required: ["b"] },
         ],
       }),
-    ).toBe(
-      "{ readonly a: string; readonly [key: string]: unknown; } | null | { readonly b: string; readonly [key: string]: unknown; }",
-    );
+    ).toBe("{ readonly a: string; } | null | { readonly b: string; }");
   });
 
   it("refuses a composition with more ways through than it writes out", () => {
@@ -247,7 +235,7 @@ describe("typeExpression", () => {
         ],
       }),
     ).toBe(
-      "(UserRecord & { readonly note: string; readonly [key: string]: unknown; }) | { readonly note: number; readonly [key: string]: unknown; }",
+      "(UserRecord & { readonly note: string; }) | { readonly note: number; }",
     );
   });
 
@@ -260,7 +248,7 @@ describe("typeExpression", () => {
         required: ["id"],
         allOf: [{ type: "object", properties: { id: { type: "string" } } }],
       }),
-    ).toBe("{ readonly id: string; readonly [key: string]: unknown; }");
+    ).toBe("{ readonly id: string; }");
   });
 
   it("requires a field only a shared definition declares", () => {
@@ -272,9 +260,7 @@ describe("typeExpression", () => {
         required: ["note"],
         allOf: [{ $ref: "UserRecord" }],
       }),
-    ).toBe(
-      "UserRecord & { readonly note: string; readonly [key: string]: unknown; }",
-    );
+    ).toBe("UserRecord & { readonly note: string; }");
   });
 
   it("requires a field a chain of definitions declares", () => {
@@ -299,7 +285,7 @@ describe("typeExpression", () => {
         { type: "object", required: ["id"], allOf: [{ $ref: "Link0" }] },
         chained,
       ),
-    ).toBe("Link0 & { readonly id: string; readonly [key: string]: unknown; }");
+    ).toBe("Link0 & { readonly id: string; }");
   });
 
   it("requires a field only a union inside a definition declares", () => {
@@ -327,9 +313,7 @@ describe("typeExpression", () => {
         { type: "object", required: ["id"], allOf: [{ $ref: "Choice" }] },
         choice,
       ),
-    ).toBe(
-      "Choice & { readonly id: unknown; readonly [key: string]: unknown; }",
-    );
+    ).toBe("Choice & { readonly id: unknown; }");
   });
 
   it("requires a field the schema never describes", () => {
@@ -357,7 +341,7 @@ describe("typeExpression", () => {
         { type: "object", required: ["id"], allOf: [{ $ref: "Left" }] },
         mutual,
       ),
-    ).toBe("Left & { readonly id: unknown; readonly [key: string]: unknown; }");
+    ).toBe("Left & { readonly id: unknown; }");
   });
 
   it("keeps the constraints written beside a reference", () => {
@@ -367,9 +351,7 @@ describe("typeExpression", () => {
         properties: { extra: { type: "string" } },
         required: ["extra"],
       }),
-    ).toBe(
-      "UserRecord & { readonly extra: string; readonly [key: string]: unknown; }",
-    );
+    ).toBe("UserRecord & { readonly extra: string; }");
   });
 
   it("keeps a value the object keywords do not exclude", () => {
@@ -380,7 +362,7 @@ describe("typeExpression", () => {
         type: ["object", "null"],
         allOf: [{ properties: { id: { type: "string" } }, required: ["id"] }],
       }),
-    ).toBe("{ readonly id: string; readonly [key: string]: unknown; } | null");
+    ).toBe("{ readonly id: string; } | null");
 
     // A branch that states `type: "object"` does exclude it.
     expect(
@@ -394,13 +376,13 @@ describe("typeExpression", () => {
           },
         ],
       }),
-    ).toBe("{ readonly id: string; readonly [key: string]: unknown; }");
+    ).toBe("{ readonly id: string; }");
   });
 
   it("describes an object from its properties without a type", () => {
     expect(
       type({ properties: { id: { type: "string" } }, required: ["id"] }),
-    ).toBe("{ readonly id: string; readonly [key: string]: unknown; }");
+    ).toBe("{ readonly id: string; }");
   });
 
   it("groups a compound element without reading its literals", () => {
@@ -493,9 +475,10 @@ describe("typeExpression", () => {
     expect(type({ type: "array", items: false })).toBe("readonly []");
   });
 
-  it("admits the fields a pattern names", () => {
+  it("admits the fields a pattern names where the rest is spoken for", () => {
     // TypeScript has no pattern-keyed index signature, so the pattern's values widen the one it
-    // has: a contract that dropped them would refuse an entry the gateway accepts.
+    // has: a contract that dropped them would refuse an entry the gateway accepts. Closed to
+    // everything else, the patterns are all a name can carry, so the signature is the truth.
     expect(
       type({
         type: "object",
@@ -504,18 +487,6 @@ describe("typeExpression", () => {
       }),
     ).toBe("{ readonly [key: string]: string | undefined; }");
 
-    // With nothing said about the fields no pattern matches, the schema admits any value under
-    // any other name, and so must the index signature.
-    expect(
-      type({
-        type: "object",
-        properties: { id: { type: "number" } },
-        required: ["id"],
-        patternProperties: { "^x-": { type: "string" } },
-      }),
-    ).toBe("{ readonly id: number; readonly [key: string]: unknown; }");
-
-    // Closed to everything else, the patterns are all a name can carry.
     expect(
       type({
         type: "object",
@@ -528,10 +499,42 @@ describe("typeExpression", () => {
       "{ readonly id: number; readonly [key: string]: string | number | undefined; }",
     );
 
+    // A schema for the rest covers every other name too, so both types reach the signature.
+    expect(
+      type({
+        type: "object",
+        patternProperties: { "^x-": { type: "string" } },
+        additionalProperties: { type: "number" },
+      }),
+    ).toBe("{ readonly [key: string]: number | string | undefined; }");
+
     // An object that names no field and admits none is still closed.
     expect(type({ type: "object", additionalProperties: false })).toBe(
       "Record<string, never>",
     );
+  });
+
+  it("promises no type for a name a pattern does not match", () => {
+    // An index signature is a promise about every name, and a schema that leaves
+    // `additionalProperties` out says nothing about the names its patterns miss: the validator
+    // takes `{ "unmatched": 123 }`, so a signature typed `string` would let a caller read
+    // `data.unmatched.toUpperCase()`, compile, and fail at the gateway.
+    expect(
+      type({
+        type: "object",
+        patternProperties: { "^x-": { type: "string" } },
+      }),
+    ).toBe("Record<string, unknown>");
+
+    // Beside a declared field the patterns are left out, as every other unlisted name is.
+    expect(
+      type({
+        type: "object",
+        properties: { id: { type: "number" } },
+        required: ["id"],
+        patternProperties: { "^x-": { type: "string" } },
+      }),
+    ).toBe("{ readonly id: number; }");
   });
 
   it("keeps null through a branch that admits it", () => {
@@ -548,7 +551,7 @@ describe("typeExpression", () => {
           },
         ],
       }),
-    ).toBe("{ readonly id: string; readonly [key: string]: unknown; } | null");
+    ).toBe("{ readonly id: string; } | null");
   });
 
   it("admits null where the schema says the value may be null", () => {
@@ -561,7 +564,7 @@ describe("typeExpression", () => {
         properties: { id: { type: "string" } },
         required: ["id"],
       }),
-    ).toBe("{ readonly id: string; readonly [key: string]: unknown; } | null");
+    ).toBe("{ readonly id: string; } | null");
   });
 
   it("turns an enum into a union of literals", () => {
@@ -580,8 +583,20 @@ describe("typeExpression", () => {
       "string | null",
     );
     expect(type({ allOf: [{ $ref: "UserRecord" }, { type: "object" }] })).toBe(
-      "UserRecord & Record<string, unknown>",
+      "UserRecord & object",
     );
+  });
+
+  it("does not reopen a definition an empty object fragment sits beside", () => {
+    // `Record<string, unknown>` intersected with a reference offers every name the definition
+    // does not declare, which is the index signature naming it kept out. What is left to say is
+    // that the value is not a primitive.
+    expect(type({ $ref: "UserRecord", type: "object" })).toBe(
+      "UserRecord & object",
+    );
+    expect(type({ $ref: "UserRecord" })).toBe("UserRecord");
+    // Alone, a fragment that declares nothing is any object, and says so.
+    expect(type({ type: "object" })).toBe("Record<string, unknown>");
   });
 
   it("names a shared definition rather than expanding it", () => {
@@ -691,6 +706,6 @@ describe("typeExpression", () => {
         properties: { id: { type: "string" } },
         required: ["id"],
       }),
-    ).toBe("{ readonly id: string; readonly [key: string]: unknown; } | null");
+    ).toBe("{ readonly id: string; } | null");
   });
 });

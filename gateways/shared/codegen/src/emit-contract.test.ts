@@ -77,6 +77,14 @@ const schemas: GatewaySchemas = {
             type: "object",
             required: ["createdAt"],
           },
+          // A reference beside an object fragment that declares nothing of its own.
+          owner: { $ref: "UserRecord", type: "object" },
+          // Patterns with nothing said about the names they do not match, which the validator
+          // admits: what an arbitrary name carries has to reach the consumer as unknown.
+          tags: {
+            type: "object",
+            patternProperties: { "^x-": { type: "string" } },
+          },
           // Object keywords beside a type that also admits null.
           scope: {
             type: ["object", "null"],
@@ -184,25 +192,14 @@ describe("emitted contract", () => {
 
   it("declares a shared definition once and refers to it by name", () => {
     expect(source).toContain(
-      [
-        "export type UserRecord = {",
-        "  readonly id: string;",
-        "  readonly createdAt?: string;",
-        "  readonly [key: string]: unknown;",
-        "};",
-      ].join("\n"),
+      "export type UserRecord = { readonly id: string; readonly createdAt?: string };",
     );
     expect(source).toContain("readonly data: UserRecord");
   });
 
   it("carries the request body under payload and mapped fields at the top level", () => {
     expect(source).toContain(
-      [
-        "export type CreateUserInput = {",
-        "  readonly payload: { readonly email: string; readonly [key: string]: unknown };",
-        "  readonly [key: string]: unknown;",
-        "};",
-      ].join("\n"),
+      "export type CreateUserInput = { readonly payload: { readonly email: string } };",
     );
     expect(source).toContain("export type GetIdentityExchangeInput = {");
     expect(source).toContain("readonly subjectId: string;");
@@ -213,29 +210,20 @@ describe("emitted contract", () => {
     // A combinator constrains the shape beside it rather than replacing it, and the object
     // keywords of both become one declaration.
     expect(source).toContain(
-      [
-        "readonly filter?: {",
-        "    readonly since: string;",
-        "    readonly until: string;",
-        "    readonly [key: string]: unknown;",
-        "  };",
-      ].join("\n"),
+      "readonly filter?: { readonly since: string; readonly until: string };",
     );
     // A reference keeps its name, with what the composition adds beside it.
     expect(source).toContain(
-      "readonly subject?: UserRecord & { readonly createdAt: string; readonly [key: string]: unknown };",
+      "readonly subject?: UserRecord & { readonly createdAt: string };",
     );
     expect(source).toContain(
-      "readonly scope?: { readonly tenant: string; readonly [key: string]: unknown } | null;",
+      "readonly scope?: { readonly tenant: string } | null;",
     );
   });
 
   it("discriminates the declared outcomes", () => {
     expect(source).toContain(
-      [
-        'readonly outcome: "ok";',
-        "      readonly data: { readonly linkedId: string; readonly [key: string]: unknown };",
-      ].join("\n"),
+      '{ readonly outcome: "ok"; readonly data: { readonly linkedId: string } }',
     );
     expect(source).toContain(
       '{ readonly outcome: "unlinked"; readonly data: null }',
@@ -307,6 +295,18 @@ export const actorWithout: Input["actor"] = {};
 export const subject: Input["subject"] = { id: "u-1", createdAt: "2026-01-01" };
 // @ts-expect-error the composition requires createdAt
 export const subjectWithout: Input["subject"] = { id: "u-1" };
+
+// An object fragment declaring nothing leaves the reference as the whole of the shape.
+export const owner: Input["owner"] = { id: "u-1" };
+export const ownerId: string | undefined = owner?.id;
+// @ts-expect-error the definition declares no field of that name
+export const ownerOther: unknown = owner?.undeclared;
+
+// A pattern types the names it matches and says nothing about the rest, which the gateway still
+// takes: reading one as the pattern's type would compile here and fail there.
+export const tags: Input["tags"] = { "x-team": "core", unmatched: 123 };
+// @ts-expect-error what an arbitrary name carries is unknown, not the pattern's type
+export const tagLength: number = tags?.["x-team"].length;
 
 // The object keywords narrow the object; null is still admitted.
 export const scope: Input["scope"] = null;
