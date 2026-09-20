@@ -14,4 +14,5 @@ export {
   VALIDATORS_DIR,
 } from "./layout.ts";
 export type { AnyGatewayConfig } from "./load-config.ts";
-export { loadConfig, loadGatewaySchemas, loadSchemas } from "./load-config.ts";
+export { loadConfig } from "./load-config.ts";
+export { loadSchemas, SchemaStoreError } from "./schema-store.ts";

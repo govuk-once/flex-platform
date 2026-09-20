@@ -14,6 +14,7 @@ describe("@repo/gateway-codegen", () => {
       "GENERATED_DIR",
       "GatewayCheckError",
       "RUNTIME_DIR",
+      "SchemaStoreError",
       "VALIDATORS_DIR",
       "bundleEntry",
       "checkGateway",
@@ -22,7 +23,6 @@ describe("@repo/gateway-codegen", () => {
       "emitValidators",
       "generate",
       "loadConfig",
-      "loadGatewaySchemas",
       "loadSchemas",
       "main",
     ]);

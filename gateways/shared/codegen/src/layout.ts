@@ -3,7 +3,8 @@
 // `runtime/` is what the gateway itself runs, `client/` is what a service calling it imports.
 //
 // gateway.config.ts       the configuration, named the same way for every gateway
-// schemas.fixture.ts      the schemas it is generated from, where no driver derives them
+// schemas/                the schemas it is generated from, one file for each version
+//   0001.json             the first version; the highest number is the one generated from
 // .gen/
 //   runtime/
 //     entry.js          the handler, wiring the configuration, validators and driver
@@ -14,7 +15,6 @@
 //     rpc.ts            the call contract, as types
 
 export const CONFIG_FILE = "gateway.config.ts";
-export const SCHEMAS_FILE = "schemas.fixture.ts";
 
 // The versions of a gateway's schemas, kept beside its configuration. JSON rather than a module:
 // a version is data to be parsed, never code to be evaluated, and one written once is history,
