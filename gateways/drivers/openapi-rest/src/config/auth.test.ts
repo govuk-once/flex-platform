@@ -1,7 +1,11 @@
 import type { SecretProvider, Validator } from "@repo/gateway-types";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import type { OpenApiRestAuthDeps, OpenApiRestAuthTransport } from "./auth.ts";
+import type {
+  OpenApiRestAuthDeps,
+  OpenApiRestAuthRequest,
+  OpenApiRestAuthTransport,
+} from "./auth.ts";
 import { apiKey, bearerToken, defineAuth, noAuth } from "./auth.ts";
 
 // Serves the given values in turn, then repeats the last, as a provider whose cached secret
@@ -21,8 +25,15 @@ const transport: OpenApiRestAuthTransport = {
   request: () => Promise.reject(new Error("unused")),
 };
 
-function requestFor(operation = "op") {
-  return { operation, signal: new AbortController().signal };
+function requestFor(operation = "op"): OpenApiRestAuthRequest {
+  return {
+    operation,
+    signal: new AbortController().signal,
+    method: "GET",
+    url: new URL("https://api.test/v1/things"),
+    headers: new Headers({ accept: "application/json" }),
+    body: undefined,
+  };
 }
 
 function failures(validator: Validator, data: unknown): string[] {

@@ -1,6 +1,7 @@
 import { GatewayError } from "@repo/gateway-runtime";
 import type { DriverContext } from "@repo/gateway-types";
 
+import type { OpenApiRestAuthRequest } from "../config/auth.ts";
 import { validateHeaders } from "../headers.ts";
 import { type CompiledMetadata, readMetadata } from "../metadata.ts";
 import { outcomeForStatus } from "../outcomes.ts";
@@ -19,10 +20,7 @@ import { errorForStatus } from "./response.ts";
 // The headers the gateway's authentication adds to one request, already validated and known
 // to be among the names it declared. Called inside the timed attempt, so a secret refresh or a
 // token exchange counts against the budget and the signal fires when it runs out.
-export type AuthHeaders = (
-  operation: string,
-  signal: AbortSignal,
-) => Promise<Headers>;
+export type AuthHeaders = (request: OpenApiRestAuthRequest) => Promise<Headers>;
 
 export interface ClientDeps {
   readonly target: URL;
@@ -127,9 +125,18 @@ export function createClient(
       const headers = new Headers({ accept: "application/json" });
       for (const [key, value] of deps.staticHeaders) headers.set(key, value);
       for (const [key, value] of callHeaders) headers.set(key, value);
-      for (const [key, value] of await deps.auth(name, signal)) {
-        headers.set(key, value);
-      }
+      // Before authentication, so a scheme that signs the request signs the content type it is
+      // sent with; and again after it, so nothing authentication returns replaces it.
+      if (body !== undefined) headers.set("content-type", "application/json");
+      const authentication = await deps.auth({
+        operation: name,
+        signal,
+        method: call.method,
+        url: new URL(url.href),
+        headers: new Headers(headers),
+        body,
+      });
+      for (const [key, value] of authentication) headers.set(key, value);
       if (body !== undefined) headers.set("content-type", "application/json");
 
       return sendRequest(
