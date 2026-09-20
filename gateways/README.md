@@ -236,6 +236,60 @@ name rather than compiling it, reads a required one off the prototype, and write
 out as an object literal that the key would reshape. Whether each schema is a valid schema is
 Ajv's to say when the validators are built.
 
+#### Compatibility between versions
+
+A caller written against one version has to survive the next, so codegen compares each version
+with the one before it, all the way back, and fails when any step would break a caller. Reading
+only the last step would let two versions added together hide a break in the first. The two
+sides of a call run in opposite directions:
+
+| | Breaks a caller | Safe |
+|---|---|---|
+| Input | Admitting less: a field that becomes required or is removed, a narrower type, a removed `enum` value, a tighter bound, a new `pattern` or `format`, an object that closes | Admitting more: an optional field on a closed object, a wider type, an added `enum` value, a looser bound |
+| Outcome | Promising less: a field that is removed or stops being required, a wider type, an added `enum` value, a looser bound | Promising more: an added field no dictionary already spoke for, a field that becomes required, a narrower type |
+| Operations | One that is removed | One that is added |
+| Outcomes | One that is removed, and one that is added, since a caller's switch over them was complete | |
+| Shared definitions | One that is removed or replaced by another, since the contract exports each as a named type | One that is added |
+
+Annotations such as `description`, `title`, `deprecated` and `examples` are not differences, and
+neither is the order anything is written in. They are annotations only where a schema goes: a
+property, a pattern, a name a map such as `dependentSchemas` or `$defs` keys its schemas by, and a
+name a keyword such as `dependentRequired` lists are each read as the name they are. A
+bound is read as what it is in effect, so one written at the value its keyword means by saying
+nothing is no difference, and `minContains: 0` removed is a bound arriving rather than one going,
+since an array with a `contains` and no `minContains` has to hold a match. `const` and `enum`
+are read together where both appear, since each restricts what the other admits.
+
+An outcome may list the values it knows of beside a type it admits in full,
+`anyOf: [{ "enum": [...] }, { "type": "string" }]`; those known values can change freely, because
+the outcome admitted any string already. A field declared where a dictionary already governed the
+name — through `additionalProperties` or a `patternProperties` entry — is compared against what
+that dictionary said, so an outcome whose values were strings does not quietly gain a number.
+
+A definition is compared on each side of the call it is used on, read from the schemas rather
+than from what the comparison reached, so a composition that changed too much to place does not
+carry the definitions its branches name past the check, and reading one as an input is never
+reading it as an outcome. A definition reached under a `not`, an `if`, a `contains` with a
+`maxContains`, or a branch of a `oneOf` is compared as neither side: negation turns admitting
+more into admitting less, and nothing here says which way such a change lands, so any difference
+in it is a break.
+
+Subsumption between JSON Schemas is not decidable in general and nothing here attempts it. The
+keywords above are read one by one; `allOf` and `anyOf` are read branch by branch; and a
+difference in any other keyword, or one that does not fit, counts as a break. `oneOf` admits a
+value exactly one branch admits, which is not what the call contract makes of it, and it is not
+read as a union here: a branch that comes to admit more can take a value another already admitted
+and leave two matching, which the whole then refuses, and a branch removed can leave a value that
+matched two matching one, which it then admits. Every change to a `oneOf` runs both ways at once,
+so only one whose branches say what they said, and name what they named, is read as saying the
+same: a definition a branch refers to is frozen with it.
+
+A change refused that was safe costs a look, where one accepted that was not costs every caller.
+The check covers the schemas only:
+nothing compares the generated types across a change to the generator, or the error codes, which
+live in `@repo/gateway-types`. A contract that has to break takes a gateway of its own, under
+another id.
+
 ### What codegen checks
 
 Each operation must have schemas and each set of schemas an operation, and every operation must
