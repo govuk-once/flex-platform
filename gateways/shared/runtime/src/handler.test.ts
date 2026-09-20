@@ -1101,3 +1101,311 @@ describe("unexpected error logging", () => {
     expect(capturedOutput()).toContain("mapping bug: field x unmapped");
   });
 });
+
+describe("createHandler, on what a driver reports beside its result", () => {
+  const isUuid: Validator = Object.assign(
+    (data: unknown): data is string =>
+      typeof data === "string" && /^[0-9a-f-]{36}$/.test(data),
+    {
+      errors: [
+        {
+          instancePath: "",
+          schemaPath: "#/format",
+          message: "must match format",
+        },
+      ],
+    },
+  );
+  const REQUEST_ID = "dbcf549a-43db-4b95-aea8-1e6b792397bb";
+  const meta = { upstreamRequestId: isUuid, remaining: alwaysValid };
+
+  const reporting =
+    (
+      values: Record<string, unknown>,
+      then: HandlerDeps["execute"] = stubExecute,
+    ): HandlerDeps["execute"] =>
+    (ctx, ...rest) => {
+      for (const [name, value] of Object.entries(values)) ctx.meta(name, value);
+      return then(ctx, ...rest);
+    };
+
+  it("returns and logs what the gateway declared, beside a success", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        meta,
+        execute: reporting({ upstreamRequestId: REQUEST_ID, remaining: 41 }),
+      }),
+    );
+
+    await expect(handler(envelope())).resolves.toEqual({
+      ok: true,
+      outcome: "success",
+      data: { id: "123" },
+      meta: { upstreamRequestId: REQUEST_ID, remaining: 41 },
+    });
+    expect(capturedRecords().at(-1)).toMatchObject({
+      msg: "response",
+      meta: { upstreamRequestId: REQUEST_ID, remaining: 41 },
+    });
+  });
+
+  it("returns and logs it beside a failure, which is when a caller most needs it", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        meta,
+        execute: reporting({ upstreamRequestId: REQUEST_ID }, () => {
+          throw new GatewayError("UPSTREAM_ERROR", "Upstream returned 500");
+        }),
+      }),
+    );
+
+    await expect(handler(envelope())).resolves.toEqual({
+      ok: false,
+      error: { code: "UPSTREAM_ERROR" },
+      meta: { upstreamRequestId: REQUEST_ID },
+    });
+    expect(capturedRecords().at(-1)).toMatchObject({
+      code: "UPSTREAM_ERROR",
+      meta: { upstreamRequestId: REQUEST_ID },
+    });
+  });
+
+  it("returns it beside a failure nothing declared, and beside a response its outcome failed", async () => {
+    const unexpected = createHandler(
+      testConfig(),
+      testDeps({
+        meta,
+        execute: reporting({ upstreamRequestId: REQUEST_ID }, () => {
+          throw new TypeError("SYNTHETIC");
+        }),
+      }),
+    );
+    await expect(unexpected(envelope())).resolves.toEqual({
+      ok: false,
+      error: { code: "INTERNAL" },
+      meta: { upstreamRequestId: REQUEST_ID },
+    });
+
+    const violating = createHandler(
+      testConfig(),
+      testDeps({
+        meta,
+        validators: {
+          ping: { input: alwaysValid, outcomes: { success: alwaysInvalid } },
+        },
+        execute: reporting({ upstreamRequestId: REQUEST_ID }),
+      }),
+    );
+    await expect(violating(envelope())).resolves.toEqual({
+      ok: false,
+      error: { code: "UPSTREAM_CONTRACT_VIOLATION" },
+      meta: { upstreamRequestId: REQUEST_ID },
+    });
+  });
+
+  it("has no meta at all when nothing was reported, or the request never reached a driver", async () => {
+    const handler = createHandler(testConfig(), testDeps({ meta }));
+
+    expect(await handler(envelope())).not.toHaveProperty("meta");
+    expect(await handler(envelope({ operation: "unknown" }))).toEqual({
+      ok: false,
+      error: { code: "OPERATION_NOT_FOUND" },
+    });
+  });
+
+  it("carries nothing of one invocation into the next, on the one handler", async () => {
+    let reports: string | undefined = REQUEST_ID;
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        meta,
+        execute: (ctx, ...rest) => {
+          if (reports !== undefined) ctx.meta("upstreamRequestId", reports);
+          return stubExecute(ctx, ...rest);
+        },
+      }),
+    );
+
+    await expect(handler(envelope())).resolves.toMatchObject({
+      meta: { upstreamRequestId: REQUEST_ID },
+    });
+    reports = undefined;
+
+    // The handler is compiled once and serves both, so anything holding what the first reported
+    // would answer the second with it.
+    expect(await handler(envelope())).not.toHaveProperty("meta");
+    expect(capturedRecords().at(-1)).not.toHaveProperty("meta");
+  });
+
+  it("keeps two invocations apart while both are in flight", async () => {
+    const OTHER_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        meta,
+        execute: async (ctx, _operation, input) => {
+          const { requestId } = input as { requestId: string };
+          ctx.meta("upstreamRequestId", requestId);
+          // The first reports and then waits here while the second runs to the end: what either
+          // of them reported into something they share would leave with the other.
+          if (requestId === REQUEST_ID) await held;
+          return { outcome: "success", data: { id: "123" } };
+        },
+      }),
+    );
+
+    const first = handler(envelope({ input: { requestId: REQUEST_ID } }));
+    const second = await handler(envelope({ input: { requestId: OTHER_ID } }));
+    release();
+    const completed = await first;
+
+    const responded = (id: string) => ({
+      ok: true,
+      outcome: "success",
+      data: { id: "123" },
+      meta: { upstreamRequestId: id },
+    });
+    expect(second).toEqual(responded(OTHER_ID));
+    expect(completed).toEqual(responded(REQUEST_ID));
+    expect(
+      capturedRecords().map((record) => (record as { meta?: unknown }).meta),
+    ).toEqual([
+      { upstreamRequestId: OTHER_ID },
+      { upstreamRequestId: REQUEST_ID },
+    ]);
+  });
+
+  it("leaves out what the gateway did not declare, without a word of it", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        meta,
+        execute: reporting({ sessionToken: "SYNTHETIC-SECRET", remaining: 7 }),
+      }),
+    );
+
+    await expect(handler(envelope())).resolves.toMatchObject({
+      meta: { remaining: 7 },
+    });
+    expect(capturedOutput()).not.toContain("SYNTHETIC-SECRET");
+    expect(capturedOutput()).not.toContain("sessionToken");
+  });
+
+  it.each([
+    [
+      "one its schema refuses",
+      "SYNTHETIC-not-a-uuid",
+      "#/format: must match format",
+    ],
+    [
+      "an object",
+      { id: REQUEST_ID },
+      "not a string, a finite number or a boolean",
+    ],
+    [
+      "a number JSON cannot write",
+      Number.NaN,
+      "not a string, a finite number or a boolean",
+    ],
+    ["null", null, "not a string, a finite number or a boolean"],
+  ])(
+    "leaves out %s, says where and never what, and still answers",
+    async (_what, value, where) => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({ meta, execute: reporting({ upstreamRequestId: value }) }),
+      );
+
+      await expect(handler(envelope())).resolves.toEqual({
+        ok: true,
+        outcome: "success",
+        data: { id: "123" },
+      });
+      const warned = capturedRecords().find(
+        (record) => record.metadata === "upstreamRequestId",
+      );
+      expect(warned?.msg).toBe(`Reported metadata left out: ${where}`);
+      expect(capturedOutput()).not.toContain("SYNTHETIC");
+    },
+  );
+
+  it("answers all the same when a validator throws", async () => {
+    const throwing: Validator = Object.assign(
+      (_data: unknown): _data is unknown => {
+        throw new Error("SYNTHETIC validator bug");
+      },
+      { errors: null },
+    );
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        meta: { upstreamRequestId: throwing },
+        execute: reporting({ upstreamRequestId: REQUEST_ID }),
+      }),
+    );
+
+    await expect(handler(envelope())).resolves.toEqual({
+      ok: true,
+      outcome: "success",
+      data: { id: "123" },
+    });
+    expect(capturedOutput()).not.toContain("SYNTHETIC");
+  });
+
+  it("refuses a metadata validator that is not a function when the handler is created", () => {
+    expect(() =>
+      createHandler(
+        testConfig(),
+        testDeps({
+          meta: { upstreamRequestId: undefined as unknown as Validator },
+        }),
+      ),
+    ).toThrow(/Metadata "upstreamRequestId" has no validator function/);
+  });
+
+  it("returns what was reported before the upstream timed out", async () => {
+    // 550ms of the invocation's time less the 500ms margin leaves a 50ms budget, which an
+    // upstream that never answers outlasts.
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        meta,
+        execute: reporting({ upstreamRequestId: REQUEST_ID }, (ctx) =>
+          ctx.upstream(() => new Promise<never>(() => undefined)),
+        ),
+      }),
+      { remainingMs: () => 550 },
+    );
+
+    await expect(handler(envelope())).resolves.toEqual({
+      ok: false,
+      error: { code: "UPSTREAM_TIMEOUT" },
+      meta: { upstreamRequestId: REQUEST_ID },
+    });
+  });
+
+  it("finds a name an object inherits only if the gateway declared it", async () => {
+    const undeclared = createHandler(
+      testConfig(),
+      testDeps({ meta, execute: reporting({ constructor: "SYNTHETIC" }) }),
+    );
+    expect(await undeclared(envelope())).not.toHaveProperty("meta");
+
+    const declared = createHandler(
+      testConfig(),
+      testDeps({
+        meta: { constructor: alwaysValid },
+        execute: reporting({ constructor: "declared" }),
+      }),
+    );
+    expect(await declared(envelope())).toMatchObject({
+      meta: { constructor: "declared" },
+    });
+  });
+});

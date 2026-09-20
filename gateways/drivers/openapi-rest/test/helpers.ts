@@ -40,13 +40,21 @@ export function json(status: number, body: unknown): Response {
   });
 }
 
-// A context that runs the attempt once with a live signal and applies no timeout.
-export function passthroughContext(): DriverContext & { attempts: number } {
+// A context that runs the attempt once with a live signal and applies no timeout, and keeps
+// what the driver reported beside its result for a test to read.
+export function passthroughContext(): DriverContext & {
+  attempts: number;
+  reported: Map<string, unknown>;
+} {
   const ctx = {
     attempts: 0,
+    reported: new Map<string, unknown>(),
     upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
       ctx.attempts += 1;
       return fn(new AbortController().signal);
+    },
+    meta(name: string, value: unknown): void {
+      ctx.reported.set(name, value);
     },
   };
   return ctx;

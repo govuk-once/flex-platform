@@ -9,8 +9,10 @@ export type {
 export type {
   EnvelopeError,
   EnvelopeInbound,
+  EnvelopeMeta,
   EnvelopeResponse,
   EnvelopeSuccess,
+  MetaValue,
   SecureValue,
 } from "./envelope.ts";
 export type { ErrorCode, ErrorRuling, SignalRuling } from "./errors.ts";

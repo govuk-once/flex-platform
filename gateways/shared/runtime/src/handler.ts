@@ -4,14 +4,21 @@ import type {
   OperationConfig,
 } from "@repo/gateway-config";
 import type {
+  EnvelopeMeta,
   EnvelopeResponse,
   ExecuteFn,
+  MetaValue,
   SignalRuling,
   Validator,
 } from "@repo/gateway-types";
 import { ERROR_CODES } from "@repo/gateway-types";
+import { isScalar } from "@repo/utils/is-scalar";
 
-import { createDriverContext, type DeadlineProvider } from "./context.ts";
+import {
+  createDriverContext,
+  type DeadlineProvider,
+  type ReportedMeta,
+} from "./context.ts";
 import { parseEnvelope } from "./envelope.ts";
 import { describeUnexpectedError, GatewayError } from "./errors.ts";
 import { type CompiledPath, compilePaths } from "./field-path.ts";
@@ -31,6 +38,9 @@ export type AnyOperations = Readonly<Record<string, OperationConfig>>;
 // typecheck. What varies per invocation, the deadline, is passed to the handler instead.
 export interface HandlerDeps<TOps extends AnyOperations = AnyOperations> {
   readonly validators: { readonly [K in keyof TOps]: OperationValidators };
+  // A validator for each thing the gateway may report about an exchange beside its result, by
+  // the name it is reported under. Left out by a gateway that reports nothing.
+  readonly meta?: Readonly<Record<string, Validator>>;
   readonly execute: ExecuteFn;
 }
 
@@ -120,6 +130,48 @@ function compileOperations(
   return ops;
 }
 
+// A Map for the reason the outcomes are one: the name comes from a driver at request time.
+function compileMeta(
+  validators: Readonly<Record<string, Validator>> | undefined,
+): ReadonlyMap<string, Validator> {
+  const compiled = new Map<string, Validator>();
+  for (const [name, validator] of Object.entries(validators ?? {})) {
+    if (typeof validator !== "function") {
+      throw new Error(`Metadata "${name}" has no validator function`);
+    }
+    compiled.set(name, validator);
+  }
+  return compiled;
+}
+
+// What of a driver's report a caller and a log may see: what the gateway declared, where it is
+// the scalar its schema says. The rest is left out and nothing is said of its value, only of
+// where its schema refused it. A report is never a reason to fail a call: what it describes has
+// already happened, and one that went wrong is worth less than the answer it rode in with.
+function acceptedMeta(
+  declared: ReadonlyMap<string, Validator>,
+  reported: ReportedMeta,
+  refused: (name: string, where: string) => void,
+): EnvelopeMeta | undefined {
+  const accepted: Record<string, MetaValue> = {};
+  for (const [name, validator] of declared) {
+    if (!reported.has(name)) continue;
+    const value = reported.get(name);
+    try {
+      if (!isScalar(value)) {
+        refused(name, "not a string, a finite number or a boolean");
+      } else if (validator(value)) {
+        accepted[name] = value;
+      } else {
+        refused(name, formatValidationErrors(validator.errors));
+      }
+    } catch {
+      refused(name, "its validator failed");
+    }
+  }
+  return Object.keys(accepted).length > 0 ? accepted : undefined;
+}
+
 function verifyToken(): void {
   // No token verification is performed. This hook does not authenticate the caller.
 }
@@ -180,6 +232,7 @@ export function createHandler<const TOps extends AnyOperations>(
   }
 
   const operations = compileOperations(config, deps.validators);
+  const declaredMeta = compileMeta(deps.meta);
   const logger = createLogger(config.id);
 
   const policy = resolvePolicy(config.policy);
@@ -188,6 +241,17 @@ export function createHandler<const TOps extends AnyOperations>(
     // The runtime's own record of how far a request got, logged beside the source locations
     // of an undeclared error so the step and the site locate it together.
     let step: DispatchStep = "envelope";
+    // Outside the attempt, so what a driver reported before it failed is still to hand.
+    const reported: ReportedMeta = new Map();
+    const metaOf = (): { meta?: EnvelopeMeta } => {
+      const meta = acceptedMeta(declaredMeta, reported, (name, where) => {
+        logger.warn(
+          { operation: loggedOperation(event, operations), metadata: name },
+          `Reported metadata left out: ${where}`,
+        );
+      });
+      return meta === undefined ? {} : { meta };
+    };
     try {
       // Step 1: Parse envelope
       const envelope = parseEnvelope(event);
@@ -237,7 +301,7 @@ export function createHandler<const TOps extends AnyOperations>(
 
       // Step 7: Run pipeline
       step = "execute";
-      const ctx = createDriverContext(policy, requestDeadline);
+      const ctx = createDriverContext(policy, requestDeadline, reported);
       const result = await deps.execute(
         ctx,
         envelope.operation,
@@ -265,6 +329,7 @@ export function createHandler<const TOps extends AnyOperations>(
       const health = recordHealthSignal(envelope.operation, "upstream_success");
 
       // Step 10: Wrap envelope
+      const meta = metaOf();
       logger.info(
         {
           operation: envelope.operation,
@@ -272,6 +337,7 @@ export function createHandler<const TOps extends AnyOperations>(
           ...health,
           input: pickFields(envelope.input, op.logInput),
           output: pickFields(result.data, op.logOutput),
+          ...meta,
         },
         "response",
       );
@@ -280,6 +346,7 @@ export function createHandler<const TOps extends AnyOperations>(
         ok: true as const,
         outcome: result.outcome,
         data: result.data,
+        ...meta,
       };
     } catch (err: unknown) {
       const operation = loggedOperation(event, operations);
@@ -291,25 +358,37 @@ export function createHandler<const TOps extends AnyOperations>(
           ERROR_CODES[err.code].signal,
         );
 
-        logger.warn({ operation, code: err.code, ...health }, err.message);
-        // Detail is logged above, never returned.
-        return { ok: false as const, error: { code: err.code } };
+        const meta = metaOf();
+        logger.warn(
+          { operation, code: err.code, ...health, ...meta },
+          err.message,
+        );
+        // Detail is logged above, never returned. What the gateway declared it may report is
+        // not detail: it is validated, and a failure is when a caller most needs it.
+        return { ok: false as const, error: { code: err.code }, ...meta };
       }
 
       // Step 9: Record health (unhandled)
       const health = recordHealthSignal(operation, ERROR_CODES.INTERNAL.signal);
 
       // Nothing declared this error, so nothing about it is known to be safe to log. The
-      // envelope is returned whatever happens here; logging must not become a second failure.
+      // envelope is returned whatever happens here; logging must not become a second failure,
+      // and neither must what was reported.
+      let meta: { meta?: EnvelopeMeta } = {};
       try {
+        meta = metaOf();
         logger.error(
-          { err: describeUnexpectedError(err), step, ...health },
+          { err: describeUnexpectedError(err), step, ...health, ...meta },
           "Unhandled error in dispatcher",
         );
       } catch {
         // The response still carries the code.
       }
-      return { ok: false as const, error: { code: "INTERNAL" as const } };
+      return {
+        ok: false as const,
+        error: { code: "INTERNAL" as const },
+        ...meta,
+      };
     }
   };
 }

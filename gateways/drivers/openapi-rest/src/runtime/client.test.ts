@@ -208,6 +208,7 @@ describe("client.request", () => {
           order.push("attempt-end");
         });
       },
+      meta: () => undefined,
     };
     const op = compileOperation("getUser", GET_USER);
     const c = createClient(ctx, op, {
@@ -417,6 +418,7 @@ describe("client.request", () => {
         controller.abort();
         return fn(controller.signal);
       },
+      meta: () => undefined,
     };
     const op = compileOperation("getUser", GET_USER);
     const c = createClient(ctx, op, {

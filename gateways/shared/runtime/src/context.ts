@@ -15,11 +15,20 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
   });
 }
 
+// What a driver reported about one exchange, as it reported it. Nothing here is trusted: the
+// handler decides what of it a caller and a log see.
+export type ReportedMeta = Map<string, unknown>;
+
 export function createDriverContext(
   policy: ResolvedPolicy,
   deadline: DeadlineProvider,
+  reported: ReportedMeta = new Map(),
 ): DriverContext {
   return {
+    meta(name: string, value: unknown): void {
+      reported.set(name, value);
+    },
+
     async upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
       const remaining = deadline.remainingMs();
       if (remaining <= 0) {
