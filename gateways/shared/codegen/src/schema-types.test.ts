@@ -9,9 +9,21 @@ const USER_RECORD: JSONSchema = {
   required: ["id"],
 };
 
+// Definitions a union names: the values it knows of, the type that admits them all, and one
+// this cannot read through.
+const DEFINITIONS: Readonly<Record<string, JSONSchema>> = {
+  Composed: { anyOf: [{ type: "string" }, { type: "number" }] },
+  ListedText: { type: ["string", "null"] },
+  MaybeCount: { type: "number", nullable: true },
+  MaybeText: { type: "string", nullable: true },
+  Status: { enum: ["Valid", "Revoked"] },
+  Text: { type: "string" },
+  UserRecord: USER_RECORD,
+};
+
 const ctx: TypeContext = {
-  defs: new Map([["UserRecord", "UserRecord"]]),
-  schemas: new Map([["UserRecord", USER_RECORD]]),
+  defs: new Map(Object.keys(DEFINITIONS).map((key) => [key, key])),
+  schemas: new Map(Object.entries(DEFINITIONS)),
 };
 
 const type = (schema: unknown) => typeExpression(schema, ctx);
@@ -85,6 +97,100 @@ describe("typeExpression", () => {
     expect(hostile).toContain(" * &#64;deprecated");
     expect(hostile).not.toContain("@deprecated");
     expect(hostile.match(/\*\//g)).toHaveLength(1);
+  });
+
+  it("keeps the values a schema knows of beside the type that admits them all", () => {
+    // How an outcome lists what it knows while taking whatever else an upstream sends.
+    expect(
+      type({ anyOf: [{ enum: ["Valid", "Revoked"] }, { type: "string" }] }),
+    ).toBe('"Valid" | "Revoked" | (string & {})');
+    expect(type({ oneOf: [{ const: 1 }, { type: "number" }] })).toBe(
+      "1 | (number & {})",
+    );
+    expect(
+      type({
+        anyOf: [{ enum: ["Valid"] }, { type: "string" }, { type: "null" }],
+      }),
+    ).toBe('"Valid" | (string & {}) | null');
+    expect(
+      type({
+        type: "array",
+        items: { anyOf: [{ enum: ["a"] }, { type: "string" }] },
+      }),
+    ).toBe('readonly ("a" | (string & {}))[]');
+  });
+
+  it("leaves a type alone beside values that are not of it, and values alone without it", () => {
+    expect(type({ anyOf: [{ enum: [1, 2] }, { type: "string" }] })).toBe(
+      "1 | 2 | string",
+    );
+    expect(type({ enum: ["a", "b"] })).toBe('"a" | "b"');
+    expect(type({ anyOf: [{ type: "string" }, { type: "number" }] })).toBe(
+      "string | number",
+    );
+  });
+
+  it("keeps them however the schema writes the same union", () => {
+    // A schema says this four ways: the values and the type beside each other, the type
+    // enclosing a union of them, and either behind a name. What a name stands for is read from
+    // the definition, since a reference emits the name and nothing of the shape.
+    const known = { enum: ["Valid", "Revoked"] };
+    const open = '"Valid" | "Revoked" | (string & {})';
+
+    expect(type({ anyOf: [known, { type: "string" }] })).toBe(open);
+    expect(type({ type: "string", anyOf: [known, { type: "string" }] })).toBe(
+      open,
+    );
+    expect(type({ anyOf: [{ $ref: "Status" }, { type: "string" }] })).toBe(
+      "Status | (string & {})",
+    );
+    expect(type({ anyOf: [known, { $ref: "Text" }] })).toBe(
+      '"Valid" | "Revoked" | (Text & {})',
+    );
+    expect(type({ anyOf: [{ $ref: "Status" }, { $ref: "Text" }] })).toBe(
+      "Status | (Text & {})",
+    );
+  });
+
+  it("leaves a name that also admits null alone, rather than taking the null out", () => {
+    // The alias is `string | null`, and intersecting a name standing for that with `{}` would
+    // leave a caller unable to assign the null the validators accept. The values are lost to an
+    // editor instead, which is the cost of not reading the definition back out.
+    expect(type({ anyOf: [{ enum: ["Valid"] }, { $ref: "MaybeText" }] })).toBe(
+      '"Valid" | MaybeText',
+    );
+    expect(type({ anyOf: [{ const: 1 }, { $ref: "MaybeCount" }] })).toBe(
+      "1 | MaybeCount",
+    );
+    expect(type({ anyOf: [{ enum: ["Valid"] }, { $ref: "ListedText" }] })).toBe(
+      '"Valid" | ListedText',
+    );
+
+    // Written out rather than named, the union holds both: the null is a branch of its own.
+    expect(
+      type({
+        anyOf: [{ enum: ["Valid"] }, { type: "string", nullable: true }],
+      }),
+    ).toBe('"Valid" | (string & {}) | null');
+  });
+
+  it("leaves a name it cannot read alone", () => {
+    // A definition that is a composition, or a reference of its own, is not read through: the
+    // values are lost to an editor, which costs a suggestion and types nothing wrongly.
+    expect(type({ anyOf: [{ $ref: "Composed" }, { type: "string" }] })).toBe(
+      "Composed | string",
+    );
+  });
+
+  it("writes the type that admits them all once, however the union is nested", () => {
+    expect(
+      type({
+        anyOf: [
+          { anyOf: [{ enum: ["a"] }, { type: "string" }] },
+          { type: "string" },
+        ],
+      }),
+    ).toBe('"a" | (string & {})');
   });
 
   it("marks properties the schema does not require as optional", () => {

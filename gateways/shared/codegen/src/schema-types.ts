@@ -35,6 +35,12 @@ interface TypeExpression {
   readonly kind: "leaf" | "array" | "union" | "intersection";
   // The members of a union or an intersection, so nesting one inside the same kind flattens.
   readonly members?: readonly TypeExpression[];
+  // The primitive a literal is one value of, so a union can tell a listed value from the type
+  // that admits them all without reading either back out of the text.
+  readonly literalOf?: "string" | "number";
+  // The primitive this expression is: the type that admits every value of it. A name carries it
+  // too, since a reference emits the name and nothing of the shape behind it.
+  readonly admits?: "string" | "number";
 }
 
 // How deep a schema is read: one level for each step into a subschema, through `properties`,
@@ -88,9 +94,13 @@ function combine(
   const kind = separator === " | " ? "union" : "intersection";
   // A union of unions is one union; the same for intersections. Nesting them would only add
   // brackets, and repeat what they have in common.
-  const flattened = parts.flatMap((part) =>
+  const nested = parts.flatMap((part) =>
     part.kind === kind && part.members !== undefined ? part.members : [part],
   );
+  const flattened =
+    kind === "union"
+      ? keepingKnownValues(nested)
+      : withoutRedundantPrimitives(nested);
   const unique = [
     ...new Map(flattened.map((part) => [part.text, part])).values(),
   ];
@@ -104,7 +114,54 @@ function combine(
     kind === "union" ? unique.filter((part) => part.text !== NEVER) : unique;
   if (members.length === 0) return leaf(NEVER);
   if (members.length === 1) return members[0]!;
-  return { text: members.map(grouped).join(separator), kind, members };
+  // A union of nothing but values of one primitive is values of that primitive, whatever it is
+  // written inside: a `type` enclosing a union, or a branch of one, holds them the same way.
+  const listed = new Set(members.map((member) => member.literalOf));
+  const [only] = [...listed];
+  const literalOf =
+    kind === "union" && listed.size === 1 && only !== undefined
+      ? only
+      : undefined;
+  return {
+    text: members.map(grouped).join(separator),
+    kind,
+    members,
+    ...(literalOf === undefined ? {} : { literalOf }),
+  };
+}
+
+// A union of a primitive and values of it is how a schema lists the values it knows of while
+// admitting any other: an outcome whose upstream may add one. TypeScript reads `"a" | string` as
+// `string` and forgets the values, where `"a" | (string & {})` admits exactly the same and keeps
+// them: an editor goes on offering them, and a switch over them needs a default branch, which
+// is the branch a value added later arrives in.
+//
+// Which member is the primitive is read from what it stands for, not from its text: a schema may
+// name it through a definition, and a definition emits its name. The rewritten member is a leaf
+// of its own, so a union nested in a union does not wrap one twice over.
+function keepingKnownValues(
+  members: readonly TypeExpression[],
+): readonly TypeExpression[] {
+  const listed = new Set(members.map((member) => member.literalOf));
+  return members.map((member) =>
+    member.kind === "leaf" &&
+    member.admits !== undefined &&
+    listed.has(member.admits)
+      ? leaf(`(${member.text} & {})`)
+      : member,
+  );
+}
+
+// A primitive intersected with values of it says only what the values say: `string & ("a" | "b")`
+// is those two. A schema writes that by enclosing a union in the `type` its branches share, and
+// dropping the primitive is what lets the union beside it see the values for what they are.
+function withoutRedundantPrimitives(
+  members: readonly TypeExpression[],
+): readonly TypeExpression[] {
+  const listed = new Set(members.map((member) => member.literalOf));
+  return members.filter(
+    (member) => member.admits === undefined || !listed.has(member.admits),
+  );
 }
 
 const union = (parts: readonly TypeExpression[]) => combine(parts, " | ");
@@ -113,17 +170,62 @@ const intersection = (parts: readonly TypeExpression[]) =>
 
 // A scalar JSON value as a literal type. An object or array in an `enum` has no literal type
 // worth writing, so it widens.
-function literalType(value: unknown): string {
-  if (value === null) return "null";
+function literalType(value: unknown): TypeExpression {
+  if (value === null) return leaf("null");
   switch (typeof value) {
     case "string":
-      return JSON.stringify(value);
+      return { ...leaf(JSON.stringify(value)), literalOf: "string" };
     case "number":
+      return { ...leaf(String(value)), literalOf: "number" };
     case "boolean":
-      return String(value);
+      return leaf(String(value));
     default:
-      return "unknown";
+      return leaf("unknown");
   }
+}
+
+// Keywords that make a definition something other than the one thing its `type` names, so that
+// its name no longer stands for a bare primitive.
+const COMPOSED = ["$ref", "allOf", "anyOf", "oneOf"];
+
+// The primitives a union can list the values of. A Map, since the name is read from a schema.
+const PRIMITIVES: ReadonlyMap<string, "string" | "number"> = new Map([
+  ["integer", "number"],
+  ["number", "number"],
+  ["string", "string"],
+]);
+
+// What a definition's name stands for, where that is a primitive or values of one. A reference
+// emits the name and nothing of the shape behind it, so a union holding one would not otherwise
+// see that a branch lists the values another admits in full. Read from the definition's schema,
+// one level and no further: a definition that is itself a reference, or a composition, is left
+// unclassified, which costs an editor the values and never types anything wrongly.
+function standsFor(
+  schema: unknown,
+): Pick<TypeExpression, "literalOf" | "admits"> {
+  if (!isRecord(schema)) return {};
+  const values = Array.isArray(schema.enum)
+    ? schema.enum
+    : Object.hasOwn(schema, "const")
+      ? [schema.const]
+      : undefined;
+  if (values !== undefined) {
+    const kinds = new Set(values.map((value) => literalType(value).literalOf));
+    const [only] = [...kinds];
+    return kinds.size === 1 && only !== undefined ? { literalOf: only } : {};
+  }
+  if (COMPOSED.some((key) => Object.hasOwn(schema, key))) return {};
+  // The types the emitter reads, rather than the `type` as it is written: a definition that also
+  // admits null is declared as a union with it, and a name standing for that is not the primitive
+  // this may intersect with `{}`, which would take the null back out and leave a caller assigning
+  // a value the validators accept and the contract refuses. One type, or nothing.
+  const declared = declaredTypes(schema);
+  const [named] = declared ?? [];
+  const admits =
+    declared?.length === 1 && named !== undefined
+      ? PRIMITIVES.get(named)
+      : undefined;
+  return admits === undefined ? {} : { admits };
 }
 
 function propertyKey(key: string): string {
@@ -640,10 +742,10 @@ function namedType(
     case "array":
       return arrayType(composition, ctx, depth);
     case "string":
-      return leaf("string");
+      return { ...leaf("string"), admits: "string" };
     case "integer":
     case "number":
-      return leaf("number");
+      return { ...leaf("number"), admits: "number" };
     case "boolean":
       return leaf("boolean");
     case "null":
@@ -682,7 +784,10 @@ function emitComposition(
   depth: number,
 ): TypeExpression {
   const own = ownType(composition, ctx, depth);
-  const refs = composition.refs.map((key) => leaf(ctx.defs.get(key)!));
+  const refs = composition.refs.map((key) => ({
+    ...leaf(ctx.defs.get(key)!),
+    ...standsFor(ctx.schemas.get(key)),
+  }));
 
   return intersection([
     ...refs,
@@ -700,9 +805,9 @@ function expressionOf(
   if (!isRecord(schema)) return leaf("unknown");
 
   if (Array.isArray(schema.enum)) {
-    return union(schema.enum.map((value) => leaf(literalType(value))));
+    return union(schema.enum.map(literalType));
   }
-  if (Object.hasOwn(schema, "const")) return leaf(literalType(schema.const));
+  if (Object.hasOwn(schema, "const")) return literalType(schema.const);
 
   const composition = emptyComposition();
   absorb(schema, composition, ctx, depth);

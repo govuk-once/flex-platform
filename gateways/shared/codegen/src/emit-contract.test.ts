@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas, Validator } from "@repo/gateway-types";
 import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -156,6 +157,37 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
   )?.options,
   types: [],
 };
+
+// What an editor offers where a value of the type goes. Assignability says nothing about this:
+// a type TypeScript has collapsed to `string` accepts every one of the values it forgot, and
+// only asking for the completions shows whether they are still there to offer.
+function stringSuggestions(file: string, at: number): string[] {
+  const host: ts.LanguageServiceHost = {
+    getScriptFileNames: () => [file],
+    getScriptVersion: () => "1",
+    getScriptSnapshot: (name) => {
+      const text = ts.sys.readFile(name);
+      return text === undefined
+        ? undefined
+        : ts.ScriptSnapshot.fromString(text);
+    },
+    getCurrentDirectory: () => path.dirname(file),
+    getCompilationSettings: () => COMPILER_OPTIONS,
+    getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+    fileExists: ts.sys.fileExists.bind(ts.sys),
+    readFile: ts.sys.readFile.bind(ts.sys),
+    readDirectory: ts.sys.readDirectory.bind(ts.sys),
+    directoryExists: ts.sys.directoryExists.bind(ts.sys),
+    getDirectories: ts.sys.getDirectories.bind(ts.sys),
+  };
+  const found = ts
+    .createLanguageService(host)
+    .getCompletionsAtPosition(file, at, {});
+  return (found?.entries ?? [])
+    .filter((entry) => entry.kind === ts.ScriptElementKind.string)
+    .map((entry) => entry.name)
+    .sort();
+}
 
 function compile(...files: string[]): string[] {
   const program = ts.createProgram(files, COMPILER_OPTIONS);
@@ -343,6 +375,171 @@ describe("emitted contract", () => {
       expect(declared).not.toContain("injected");
       expect(deprecated).toEqual([]);
       expect(compile(file)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("lets a caller name the values an outcome knows of, and makes it allow for the rest", async () => {
+    // The same open enumeration, written the four ways a schema writes one: the values and the
+    // type beside each other, the type enclosing them, and either of the two behind a name.
+    const known = { enum: ["Valid", "Revoked"] };
+    const schemas: GatewaySchemas = {
+      defs: {
+        Status: known,
+        Text: { type: "string" },
+        // Names that stand for a union with null, which a caller has to be able to assign.
+        MaybeText: { type: "string", nullable: true },
+        MaybeCount: { type: "number", nullable: true },
+      },
+      operations: {
+        getLicence: {
+          input: {
+            type: "object",
+            properties: { kind: { enum: ["Full", "Provisional"] } },
+            required: ["kind"],
+            additionalProperties: false,
+          },
+          outcomes: {
+            ok: {
+              type: "object",
+              properties: {
+                status: { anyOf: [known, { type: "string" }] },
+                enclosed: {
+                  type: "string",
+                  anyOf: [known, { type: "string" }],
+                },
+                namedValues: {
+                  anyOf: [{ $ref: "Status" }, { type: "string" }],
+                },
+                namedType: { anyOf: [known, { $ref: "Text" }] },
+                maybeText: { anyOf: [known, { $ref: "MaybeText" }] },
+                maybeCount: { anyOf: [{ const: 1 }, { $ref: "MaybeCount" }] },
+              },
+              required: [
+                "status",
+                "enclosed",
+                "namedValues",
+                "namedType",
+                "maybeText",
+                "maybeCount",
+              ],
+            },
+          },
+        },
+      },
+    };
+    const dir = await mkdtemp(path.join(GENERATED_ROOT, "open-enum-"));
+    try {
+      await emitContract(GATEWAY_ID, schemas, dir);
+      const consumer = path.join(dir, "consumer.ts");
+      await writeFile(
+        consumer,
+        `
+import type { GetLicenceInput, GetLicenceResult } from "./${CONTRACT_MODULE}";
+
+type Status = GetLicenceResult["data"]["status"];
+
+// A value it knows of, and one an upstream added since this was generated.
+export const known: Status = "Valid";
+export const added: Status = "Suspended";
+
+export function withDefault(status: Status): string {
+  switch (status) {
+    case "Valid":
+      return "valid";
+    case "Revoked":
+      return "revoked";
+    default:
+      return status;
+  }
+}
+
+// @ts-expect-error without a default branch, a value added later has nowhere to go
+export function withoutDefault(status: Status): string {
+  switch (status) {
+    case "Valid":
+      return "valid";
+    case "Revoked":
+      return "revoked";
+  }
+}
+
+// What a caller sends stays exactly what the schema lists.
+export const sent: GetLicenceInput = { kind: "Full" };
+// @ts-expect-error an input's values are closed
+export const notSent: GetLicenceInput = { kind: "Other" };
+
+// A value it knows of narrows to what the whole type admits, not to the value alone: the branch
+// beside the values takes it too. A caller that needs the literal writes the literal.
+declare function takesValid(value: "Valid"): void;
+export function narrowing(status: Status): void {
+  if (status === "Valid") {
+    // @ts-expect-error equality leaves the open branch in, so this is not "Valid" alone
+    takesValid(status);
+    takesValid("Valid");
+  }
+}
+
+// Written every way a schema writes it, and the same type each time.
+type Data = GetLicenceResult["data"];
+export const enclosed: Data["enclosed"] = "Valid";
+export const namedValues: Data["namedValues"] = "Valid";
+export const namedType: Data["namedType"] = "Valid";
+export const enclosedAdded: Data["enclosed"] = "Suspended";
+export const namedValuesAdded: Data["namedValues"] = "Suspended";
+export const namedTypeAdded: Data["namedType"] = "Suspended";
+
+// A name that also admits null keeps it: the validators take null here, and a contract that
+// took it out would have a caller omit the check and read a property of it.
+export const maybeText: Data["maybeText"] = null;
+export const maybeCount: Data["maybeCount"] = null;
+export const maybeTextValue: Data["maybeText"] = "Valid";
+export const maybeCountValue: Data["maybeCount"] = 1;
+
+export const suggest: Data["status"] = "";
+export const suggestEnclosed: Data["enclosed"] = "";
+export const suggestNamedValues: Data["namedValues"] = "";
+export const suggestNamedType: Data["namedType"] = "";
+`,
+      );
+
+      expect(compile(consumer)).toEqual([]);
+
+      // What the contract admits is what the validators admit: a null the generated validator
+      // takes has to be a null the generated type takes.
+      await emitValidators(schemas, path.join(dir, "validators"));
+      const { validators } = (await import(
+        pathToFileURL(path.join(dir, "validators", "index.js")).href
+      )) as {
+        validators: { getLicence: { outcomes: { ok: Validator } } };
+      };
+      expect(
+        validators.getLicence.outcomes.ok({
+          status: "Valid",
+          enclosed: "Valid",
+          namedValues: "Valid",
+          namedType: "Valid",
+          maybeText: null,
+          maybeCount: null,
+        }),
+      ).toBe(true);
+
+      // An editor offers the values however the schema wrote them: a form that collapses to
+      // `string` still assigns and still switches, and offers nothing.
+      const source = await readFile(consumer, "utf-8");
+      for (const name of [
+        "suggest",
+        "suggestEnclosed",
+        "suggestNamedValues",
+        "suggestNamedType",
+      ]) {
+        const at = source.indexOf(`export const ${name}`);
+        expect(
+          stringSuggestions(consumer, source.indexOf('""', at) + 1),
+          name,
+        ).toEqual(["Revoked", "Valid"]);
+      }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
