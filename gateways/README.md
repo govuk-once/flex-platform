@@ -294,6 +294,7 @@ sides of a call run in opposite directions:
 | Operations | One that is removed | One that is added |
 | Outcomes | One that is removed, and one that is added, since a caller's switch over them was complete | |
 | Shared definitions | One that is removed or replaced by another, since the contract exports each as a named type | One that is added |
+| Metadata | A name whose schema promises less, as for an outcome | A name that is added or removed, since every name is optional to a caller |
 
 Annotations such as `description`, `title`, `deprecated` and `examples` are not differences, and
 neither is the order anything is written in, the branches of an `allOf`, `anyOf` or `oneOf`
@@ -388,10 +389,10 @@ what a schema says of a field is said of the object in front of it.
 import { createHandler, readUpstreamOptions } from "@repo/gateway-runtime";
 
 import config from "../../gateway.config.ts";
-import { validators } from "./validators/index.js";
+import { meta, validators } from "./validators/index.js";
 
 const execute = await config.driver.createExecutor(config, readUpstreamOptions());
-const gateway = createHandler(config, { validators, execute });
+const gateway = createHandler(config, { validators, meta, execute });
 
 export const handler = (event, context) =>
   gateway(event, {
@@ -453,6 +454,13 @@ a line, and escaping one with a backslash stops the compiler parsing the tag wit
 `stripInternal` removing the declaration it marks, so none is left to read. An editor rendering
 the comment shows the `@` back. A tag in the contract is one the generator wrote: `@deprecated`,
 from a schema that declares itself deprecated.
+
+A response is `ErrorResponse` or a success carrying one of the operation's outcomes. Where the
+gateway reports anything [beside a result](#responses-and-errors), both carry
+`meta?: ResponseMeta`, whose every field is optional; the shared envelope types take any name
+under `meta`, since they describe every gateway, so the contract declares its own and a name the
+gateway does not declare is a type error. A gateway that reports nothing has no `meta` in its
+types at all.
 
 `Operations` maps each operation name to its input and result, and `OperationName`,
 `OperationInput`, `OperationResult` and `OperationResponse` name them generically.
@@ -684,6 +692,42 @@ with. The authentication may set no header it did not declare.
 The definition also carries `checkSchemas`, which codegen calls with the configuration and the
 schemas before it emits anything; see [what codegen checks](#what-codegen-checks).
 
+### Response metadata
+
+`metadata` names what the gateway [reports beside a result](#responses-and-errors) and the
+response header each is read from, with the schema of what it carries:
+
+```ts
+openapiRest({
+  spec: "…",
+  auth: noAuth(),
+  metadata: {
+    upstreamRequestId: {
+      header: "X-Request-Id",
+      schema: { type: "string", maxLength: 128, description: "The upstream's id for the request" },
+    },
+  },
+});
+```
+
+A caller reads `meta.upstreamRequestId` and never sees the header's name, which is this
+transport's. The schema is the gateway's own and is best kept loose: it is there to bound what
+reaches a caller and a log, and an upstream that changes how its ids look has changed nothing a
+caller relies on, so what an OpenAPI document says of a response header is not used. Every value is
+returned to the caller and written to the log, so which headers to pass along is the gateway
+author's decision, and a `maxLength` on each string keeps an unexpectedly long one out of both. A
+header is text; one whose schema is a number, an integer or a boolean is read as that where the
+text is one, and left as text where it is not, for the gateway's validator to refuse. Headers are
+read as they arrive, before the body and before the status is mapped, so a response the driver
+turns into an error code reports as a success does, and so does an exchange whose body was too
+large or whose stream broke: what a caller most needs about a request that failed is the upstream's
+own id for it. One that never arrived reports nothing. Deriving copies each schema into the
+gateway's `meta`; codegen fails when a name is in the schemas and not in `metadata`, or the other
+way round, or when the two disagree about what the header holds — the configured schema decides
+what the text is read as and the stored one decides what validates, so a count read from a header
+the schemas hold to a string would be dropped from every response without a word. The executor
+refuses to start on `metadata` it cannot read.
+
 ### Deriving schemas
 
 The driver derives a gateway's schemas from the OpenAPI document its `spec` names, when someone
@@ -879,6 +923,24 @@ would send the request again, duplicating any write. Build paths for hand-writte
 Success responses have the shape `{ ok: true, outcome, data }`. Failures are
 `{ ok: false, error: { code } }`. Error messages are logged, not returned, to keep diagnostic
 detail out of the response contract.
+
+Either may also carry `meta`: what the gateway reports about an exchange beside its result, such
+as an upstream's own id for the request, which is what its support asks for. A gateway's schemas
+declare each name under `meta` with the schema of one scalar, a string, a number, an integer or
+a boolean, never an object or a list. A driver reports a value through its context,
+`ctx.meta(name, value)`, rather than in its result, because a driver that fails throws, and what
+it learnt before it threw is what a caller most needs. The runtime keeps only the names the
+gateway declared, validates each against its schema, returns what passes on a failure as on a
+success, and writes it to that call's log line. What fails is left out and logged as the schema
+location that refused it, never as its value, and nothing reported can fail a call. Every part
+of `meta` is optional to a caller, and so is the whole: a request refused before it reached the
+upstream, or one whose response never arrived, has nothing to report. One that timed out still
+reports what the driver recorded before it did. It is not a second channel for
+diagnostics; only declared, validated scalars travel in it. Between
+[versions](#compatibility-between-versions) a name may be added or removed, since every name is
+optional and a caller already handles one being absent; a caller that upgrades past a removal
+has a branch to delete. A name that stays is compared the way an outcome's data is, since both
+run from the upstream to the caller, so a wider type breaks a caller and a narrower one does not.
 
 `ERROR_CODES` defines the following meanings. A defined code does not imply the corresponding
 control is implemented: authentication, signature verification, circuit breaking and gateway-side
