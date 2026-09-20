@@ -69,10 +69,6 @@
           "required": [
             "linkedId"
           ]
-        },
-        "unlinked": {
-          "type": "null",
-          "description": "No identity is linked for the subject yet."
         }
       }
     }

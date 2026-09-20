@@ -5,9 +5,8 @@
   "scripts": {
     "codegen": "gateway-codegen",
     "schemas": "gateway-schemas",
-    "lint": "eslint gateway.config.ts handlers/",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "lint": "eslint gateway.config.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@repo/gateway-config": "workspace:*",
@@ -19,8 +18,6 @@
     "@repo/gateway-codegen": "workspace:*",
     "@repo/gateway-types": "workspace:*",
     "@repo/tsconfig": "workspace:*",
-    "@repo/vitest-config": "workspace:*",
-    "eslint": "10.10.0",
-    "vitest": "5.0.1"
+    "eslint": "10.10.0"
   }
 }
