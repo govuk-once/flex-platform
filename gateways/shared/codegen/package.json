@@ -6,7 +6,8 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "gateway-codegen": "./bin/gateway-codegen.js"
+    "gateway-codegen": "./bin/gateway-codegen.js",
+    "gateway-schemas": "./bin/gateway-schemas.js"
   },
   "scripts": {
     "lint": "eslint src/ test/",
