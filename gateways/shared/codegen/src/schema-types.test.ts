@@ -25,6 +25,68 @@ describe("typeExpression", () => {
     expect(type({ type: "null" })).toBe("null");
   });
 
+  it("writes what a field's schema says about it in front of the field", () => {
+    expect(
+      type({
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Who it is" },
+          old: { type: "string", deprecated: true },
+          plain: { type: "string" },
+        },
+        additionalProperties: false,
+      }),
+    ).toBe(
+      [
+        "{ ",
+        "/** Who it is */",
+        "readonly id?: string; ",
+        "/** @deprecated */",
+        "readonly old?: string; readonly plain?: string; }",
+      ].join("\n"),
+    );
+  });
+
+  it("documents a field that only refers to a definition with what the definition says", () => {
+    const documented: TypeContext = {
+      defs: new Map([["Licence", "Licence"]]),
+      schemas: new Map([
+        ["Licence", { type: "string", description: "A licence number" }],
+      ]),
+    };
+    const field = (property: JSONSchema) =>
+      typeExpression(
+        { type: "object", properties: { licence: property } },
+        documented,
+      );
+
+    expect(field({ $ref: "Licence" })).toContain("/** A licence number */");
+    // What the field says for itself is about the field, and wins.
+    expect(
+      field({ $ref: "Licence", description: "The driver's own" }),
+    ).toContain("/** The driver's own */");
+    expect(
+      field({ $ref: "Licence", description: "The driver's own" }),
+    ).not.toContain("A licence number");
+  });
+
+  it("keeps a description that tries to leave its comment inside it", () => {
+    const hostile = type({
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "fine */ readonly admin: true; /* \n@deprecated",
+        },
+      },
+    });
+
+    expect(hostile).toContain("fine *\\/ readonly admin: true; /*");
+    expect(hostile).toContain(" * &#64;deprecated");
+    expect(hostile).not.toContain("@deprecated");
+    expect(hostile.match(/\*\//g)).toHaveLength(1);
+  });
+
   it("marks properties the schema does not require as optional", () => {
     expect(
       type({

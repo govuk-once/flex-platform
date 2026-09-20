@@ -1,6 +1,7 @@
 import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
 import { sortedEntries } from "@repo/utils/sorted-entries";
 
+import { docComment, documentationOf } from "./doc-comment.ts";
 import { CONTRACT_MODULE } from "./layout.ts";
 import { assertIdentifier, formatSource, writeGenerated } from "./output.ts";
 import { type TypeContext, typeExpression } from "./schema-types.ts";
@@ -91,18 +92,26 @@ function outcomeUnion(
   outcomes: Record<string, JSONSchema>,
   ctx: TypeContext,
 ): string {
+  // What an outcome's schema says about itself describes the data it carries.
   const members = sortedEntries(outcomes).map(
     ([name, schema]) =>
-      `{ readonly outcome: ${JSON.stringify(name)}; readonly data: ${typeOf(schema, ctx, `outcome "${name}" of operation "${operation}"`)} }`,
+      `{ readonly outcome: ${JSON.stringify(name)}; ${docComment(documentationOf(schema))}readonly data: ${typeOf(schema, ctx, `outcome "${name}" of operation "${operation}"`)} }`,
   );
   // An operation with no outcomes is refused before this runs; `never` would silently stand in.
   return members.join(" | ");
+}
+
+// What the contract is told beyond the schemas. An operation's description is the
+// configuration's, written by whoever wrote the gateway; every other comment is a schema's own.
+export interface ContractOptions {
+  readonly descriptions?: Readonly<Record<string, string | undefined>>;
 }
 
 export async function emitContract(
   gatewayId: string,
   schemas: GatewaySchemas,
   clientDir: string,
+  options: ContractOptions = {},
 ): Promise<void> {
   const claimed = new Map<string, string>([
     ...TYPESCRIPT_NAMES.map((name): [string, string] => [
@@ -129,7 +138,7 @@ export async function emitContract(
 
   for (const [name, schema] of defEntries) {
     declarations.push(
-      `export type ${name} = ${typeOf(schema, ctx, `shared definition "${name}"`)};`,
+      `${docComment(documentationOf(schema))}export type ${name} = ${typeOf(schema, ctx, `shared definition "${name}"`)};`,
     );
   }
 
@@ -140,13 +149,22 @@ export async function emitContract(
       claim(claimed, `${base}${suffix}`, `operation "${opName}"`);
     }
 
+    // Own properties only: an operation named for something every object inherits has no
+    // description because nobody gave it one.
+    const described = Object.hasOwn(options.descriptions ?? {}, opName)
+      ? options.descriptions?.[opName]
+      : undefined;
+    const about = docComment(
+      described === undefined ? {} : { description: described },
+    );
+
     declarations.push(
-      `export type ${base}Input = ${typeOf(opSchemas.input, ctx, `the input of operation "${opName}"`)};`,
-      `export type ${base}Result = ${outcomeUnion(opName, opSchemas.outcomes, ctx)};`,
-      `export type ${base}Response = EnvelopeError | ({ readonly ok: true } & ${base}Result);`,
+      `${about}export type ${base}Input = ${typeOf(opSchemas.input, ctx, `the input of operation "${opName}"`)};`,
+      `${about}export type ${base}Result = ${outcomeUnion(opName, opSchemas.outcomes, ctx)};`,
+      `${about}export type ${base}Response = EnvelopeError | ({ readonly ok: true } & ${base}Result);`,
     );
     operations.push(
-      `readonly ${opName}: { readonly input: ${base}Input; readonly result: ${base}Result };`,
+      `${about}readonly ${opName}: { readonly input: ${base}Input; readonly result: ${base}Result };`,
     );
   }
 
