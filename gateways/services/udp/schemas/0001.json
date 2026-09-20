@@ -1,0 +1,80 @@
+{
+  "defs": {
+    "UserRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    }
+  },
+  "operations": {
+    "createUser": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "email"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "created": {
+          "$ref": "UserRecord"
+        }
+      }
+    },
+    "getIdentityExchange": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "subjectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subjectId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "linkedId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "linkedId"
+          ]
+        },
+        "unlinked": {
+          "type": "null",
+          "description": "No identity is linked for the subject yet."
+        }
+      }
+    }
+  }
+}
