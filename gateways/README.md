@@ -691,6 +691,69 @@ with. The authentication may set no header it did not declare.
 The definition also carries `checkSchemas`, which codegen calls with the configuration and the
 schemas before it emits anything; see [what codegen checks](#what-codegen-checks).
 
+### Deriving schemas
+
+The driver derives a gateway's schemas from the OpenAPI document its `spec` names, when someone
+runs [`gateway-schemas`](#bringing-a-gateways-schemas-up-to-date). `spec` is an https URL, best
+pinned to a release, or a path within the gateway's directory; the document itself is never
+committed, only what is derived from it. Parsing JSON or YAML, checking the document and
+rewriting OpenAPI 3.0's dialect as 3.1's, which is JSON Schema 2020-12, are
+`@scalar/openapi-parser`'s. The module that does this is `src/derive/`, which the definition
+gives as the `deriveSchemasModule` URL and nothing a gateway imports reaches, a lint rule
+included, so the parser is never part of a deployed gateway.
+
+Only the operations the configuration declares are derived, each found by its `upstream` method
+and path; an `operationId` is not used, since a document need not have one and one it has need
+not be a name.
+
+| From the document | In the gateway's schemas |
+|---|---|
+| A parameter the operation's `parameters` map | An input field under the configuration's name for it, with the parameter's schema and, where the schema has none, its description. Headers are matched without regard to case. |
+| A required parameter nothing maps | The run fails. An optional one is left out, with a note. A cookie is never sent, so a required one fails the run and an optional one is a note. |
+| A parameter the driver could not send as written | The run fails: an object anywhere, an array in a path or a header, an array whose elements are not scalars or whose tail nothing describes, an array a query does not repeat (`explode: false`), a `style` other than the one the driver writes, `allowReserved`, a required parameter admitting null, a required query array admitting one with nothing in it, a schema that admits a value of any type, or one that refers to itself. The driver writes a path and a header as one scalar and a query as a scalar or a repeated name; null is how a caller leaves a parameter out, so a required one may not admit it and a path parameter, always required, never may. An empty array leaves one out the same way, since the name is written once per element and no element writes no name, so a required query array has to say it holds something, through `minItems` or a `contains` it cannot satisfy while empty; the check reads that through the definitions a schema names and the branches it is written in, as it reads the types. What a parameter admits is read from the schema the conversion produced, which is what the validators are generated from, and through the definitions it names once those are converted too: reading the document a second time would say something else about the same parameter, since a keyword the declared type says nothing about is gone by then. A part that constrains nothing, written as `true` or as `{}`, admits every value and is carried as that, so a union holding one is refused rather than read as the narrow thing beside it. An array's elements are read the same way: one whose elements nothing describes admits every element, so beside a branch admitting strings a union admits every element and an `allOf` admits strings, and `items` left out past the elements `prefixItems` names describes none of the rest. |
+| A request body | `payload`, always required: a body an operation declares is one its upstream expects, whatever a generator left out. `application/json` only: the driver sends that and nothing else, so a body offered only as `application/merge-patch+json` fails the run rather than being sent as something it is not. A response is parsed as JSON whatever its type says, so any of the `+json` family will do for one. |
+| 200, 201, 202, 204 | The outcome the driver maps that status to. A 204, or a success with no body, is `null`. |
+| 4xx, 5xx, `default` | Nothing: they reach a caller as [error codes](#outcomes-and-errors). |
+| `#/components/schemas/Name` | The shared definition `Name`. Only definitions an input or an outcome reaches are kept, in the order the document declares them. Parameters, request bodies and responses written as references are resolved. |
+| `security` | Nothing: how a gateway authenticates is its configuration's. |
+
+The two sides of a call are converted differently, because they fail differently:
+
+| | Input: what a caller sends | Outcome: what an upstream sends |
+|---|---|---|
+| An object that says nothing of other fields | Closed, so a field can be allowed later and never has to be disallowed. One inside `allOf`, `anyOf` or `oneOf` is left open, with a note: closing one part would refuse the fields the others declare. | Left open, and one the document closes is opened, so an upstream that adds a field does not fail its responses. What it adds reaches a caller undeclared; [the contract does not offer it](#the-call-contract). |
+| `enum` | Kept exactly. | Becomes the values it knows of beside the type that admits the rest, `anyOf: [{ "enum": [...] }, { "type": "string" }]`, so a value the upstream adds breaks no caller. A single listed value on a field of a union's branch stays as it is, since it is what tells the branches apart; `const` is never opened. |
+| Bounds, `pattern`, `format` | Kept exactly. | Dropped: an outcome is held to its shape, the types, the fields and which are required. `minContains: 0` is kept, with the `maxContains` a validator wants beside it: left out, `minContains` is one, so dropping a zero is a bound arriving rather than one going. |
+| A definition both sides use | Takes a name of its own, `NameInput`, where the two sides hold it differently, and so does whatever refers to it from an input. Renaming reaches the places a schema holds a schema and no others: a `const`, an `enum` or a `default` holding an object of its own keeps every key it was written with, including one called `$ref`, which is a value the caller sends rather than a reference to follow. | Keeps the document's name. |
+
+A definition is converted once and stands for every place it is named, so it is converted for
+the strictest of them: one named inside a composition anywhere is left open everywhere, and one
+named as a branch of a union keeps what tells it from the others. A schema written out and the
+same schema written as a name therefore hold a value the same way.
+
+Every conversion above moves what a schema admits one way on purpose, and there are places where
+that turns around: under a `not`, under an `if`, under a `contains` a `maxContains` counts, and
+under a `oneOf` whose branches nothing tells apart, where a branch that came to admit more could
+take a value another already admitted and leave the whole refusing what two of its branches
+match. There the upstream's schema is kept exactly as written, with a note; where it declares no
+type beside keywords that need one, neither keeping it nor supplying the type is safe and the
+run fails. A `oneOf` is told apart by its branches where every one of them is an object that
+requires a field fixed to a scalar of its own, and no two fix it to the same: that field goes on
+telling them apart whatever else is opened. A tag a branch may leave out is no tag, since a value
+omitting it matches every branch, and a tag fixed to an object is no tag either, since two
+objects that are the same value need not be the same text. The elements of a `prefixItems` tuple
+are schemas in their own right, not parts of a composition: an ordinary object among them is
+closed like any other input object.
+
+On either side, what JSON Schema has no keyword for is left out (`example`, `xml`, `externalDocs`,
+`discriminator`, `x-` extensions); `nullable` is read by what it says rather than by being
+written, so only `nullable: true` adds null and it adds none with no type beside it to add to,
+whichever order the two were written in; a schema whose keywords are those of one type and which
+declares none is given it; and a keyword the declared type says nothing about is dropped. The last
+two are documents an upstream's own tools accept and the validators' strict mode refuses. Each is
+noted in what the command prints, for whoever reviews the result, and everything that cannot be
+derived at all is reported together and fails the run.
+
 ### Authentication
 
 The `auth` field of `openapiRest` takes an authentication definition. Three come with the
