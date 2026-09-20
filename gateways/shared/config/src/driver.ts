@@ -54,11 +54,41 @@ export interface DriverDefinition<
     config: GatewayConfig<DriverDefinition, AnyOperations<DriverDefinition>>,
     schemas: GatewaySchemas,
   ): readonly string[];
+  // The module that derives this driver's schemas from its own description of the upstream: an
+  // OpenAPI document, say. Given as a `file:` URL, not imported. A generated entry point imports
+  // the configuration, and the bundler follows every import it can see from there, a dynamic one
+  // included, so a module imported here would carry whatever parses that description into the
+  // deployed gateway. A URL is data: a driver builds it from its own module,
+  // `new URL("../derive/index.ts", import.meta.url).href`, only the command that updates a
+  // gateway's schemas loads it, and it must export a DeriveSchemas as its default. Optional: the
+  // schemas of a driver with nothing to derive them from are written by hand.
+  readonly deriveSchemasModule?: string;
   // Phantom properties - give TypeScript structural anchors to infer TOpFields and THandler
   // from a driver instance via OperationFields<D> and HandlerOf<D>. Never set at runtime.
   readonly __opFields?: TOpFields;
   readonly __handler?: THandler;
 }
+
+// What deriving is given to read an upstream's description with. The command supplies it, so
+// one place decides what may be fetched and for how long, and a driver's derivation reaches the
+// network through nothing else.
+export interface SchemaSources {
+  // The text at a location: an https URL, or a path within the gateway's own directory.
+  load(location: string): Promise<string>;
+}
+
+export interface DerivedSchemas {
+  readonly schemas: GatewaySchemas;
+  // Where deriving departed from what the upstream wrote, or left something out, for whoever
+  // reviews the result: a type it supplied, a parameter the configuration does not map.
+  readonly notes: readonly string[];
+}
+
+// The default export of the module a definition gives in `deriveSchemasModule`.
+export type DeriveSchemas = (
+  config: GatewayConfig<DriverDefinition, AnyOperations<DriverDefinition>>,
+  sources: SchemaSources,
+) => Promise<DerivedSchemas>;
 
 export type OperationFields<D> =
   D extends DriverDefinition<infer F, OperationHandler> ? F : never;
