@@ -45,6 +45,9 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../../packages/eslint-config
+      '@repo/gateway-codegen':
+        specifier: workspace:*
+        version: link:../../shared/codegen
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../../../packages/tsconfig

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { type Conversion, convertSchema, type Side } from "./convert.ts";
+import {
+  type Conversion,
+  convertSchema,
+  eachSubschema,
+  mapSubschemas,
+  type Side,
+} from "./convert.ts";
 
 function converting(side: Side) {
   const conversion: Conversion = {
@@ -491,5 +497,91 @@ describe("convertSchema, for an outcome", () => {
 
     expect([...input.conversion.notes][0]).toContain("marked readOnly");
     expect([...output.conversion.notes][0]).toContain("marked writeOnly");
+  });
+});
+
+// Where a schema holds a schema, which is what tells a reference from an object that is written
+// like one. A walk that went by shape would rewrite a value a caller has to send.
+describe("the positions a schema holds a schema in", () => {
+  const held = (schema: Record<string, unknown>): Record<string, string> => {
+    const found: Record<string, string> = {};
+    eachSubschema(schema, (inner, at) => {
+      found[at] = JSON.stringify(inner);
+    });
+    return found;
+  };
+
+  it("finds one wherever a schema can be", () => {
+    expect(
+      held({
+        properties: { id: { type: "string" } },
+        patternProperties: { "^x-": true },
+        dependentSchemas: { a: { type: "object" } },
+        allOf: [{ type: "integer" }],
+        anyOf: [{ type: "null" }],
+        oneOf: [{ const: 1 }],
+        prefixItems: [{ type: "boolean" }],
+        items: false,
+        not: { type: "array" },
+        contains: { type: "number" },
+        additionalProperties: { type: "string" },
+        propertyNames: { maxLength: 4 },
+        if: { type: "object" },
+        then: { required: ["id"] },
+        else: { required: ["other"] },
+        unevaluatedItems: false,
+        unevaluatedProperties: false,
+      }),
+    ).toEqual({
+      "properties.id": '{"type":"string"}',
+      "patternProperties.^x-": "true",
+      "dependentSchemas.a": '{"type":"object"}',
+      "allOf.0": '{"type":"integer"}',
+      "anyOf.0": '{"type":"null"}',
+      "oneOf.0": '{"const":1}',
+      "prefixItems.0": '{"type":"boolean"}',
+      items: "false",
+      not: '{"type":"array"}',
+      contains: '{"type":"number"}',
+      additionalProperties: '{"type":"string"}',
+      propertyNames: '{"maxLength":4}',
+      if: '{"type":"object"}',
+      then: '{"required":["id"]}',
+      else: '{"required":["other"]}',
+      unevaluatedItems: "false",
+      unevaluatedProperties: "false",
+    });
+  });
+
+  it("finds none where a schema holds values instead", () => {
+    // Each of these is a value the caller sends, and each is written the way a reference is.
+    expect(
+      held({
+        const: { $ref: "Thing" },
+        enum: [{ $ref: "Thing" }],
+        default: { $ref: "Thing" },
+        examples: [{ $ref: "Thing" }],
+        title: "a title",
+        required: ["$ref"],
+      }),
+    ).toEqual({});
+  });
+
+  it("carries what it does not hold through as it was written", () => {
+    const schema = {
+      const: { $ref: "Thing" },
+      enum: [{ $ref: "Thing" }],
+      properties: { thing: { $ref: "Thing" } },
+    };
+    const renamed = mapSubschemas(schema, (inner) =>
+      typeof (inner as { $ref?: unknown }).$ref === "string"
+        ? { $ref: "ThingInput" }
+        : inner,
+    );
+    expect(renamed).toEqual({
+      const: { $ref: "Thing" },
+      enum: [{ $ref: "Thing" }],
+      properties: { thing: { $ref: "ThingInput" } },
+    });
   });
 });

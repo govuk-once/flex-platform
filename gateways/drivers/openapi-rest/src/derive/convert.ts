@@ -118,8 +118,13 @@ const APPLIES_TO: Readonly<Record<string, string>> = {
 const CONTAINS_BOUNDS = ["maxContains", "minContains"];
 
 const COMPOSITION = ["allOf", "anyOf", "oneOf"];
-const SUBSCHEMA_MAPS = ["dependentSchemas", "patternProperties", "properties"];
-const SUBSCHEMAS = [
+export const SUBSCHEMA_MAPS = [
+  "dependentSchemas",
+  "patternProperties",
+  "properties",
+];
+export const SUBSCHEMA_LISTS = [...COMPOSITION, "prefixItems"];
+export const SUBSCHEMAS = [
   "additionalProperties",
   "contains",
   "else",
@@ -131,6 +136,55 @@ const SUBSCHEMAS = [
   "unevaluatedItems",
   "unevaluatedProperties",
 ];
+
+// Where a schema holds another schema, and nowhere else. What a walk finds has to be decided by
+// the position it is in rather than by the shape of what is there: `const`, `enum`, `default`
+// and `examples` hold values, and a value written as `{ "$ref": "Name" }` is that object, not a
+// reference to one. A walk going by shape would rewrite it, and the value a caller has to send
+// would stop being the value the document named.
+//
+// The schema comes back rebuilt, each held schema replaced by what `map` returned for it and
+// everything else carried through as it was written. `at` is where the held schema was, for a
+// walk that reports on what it finds.
+export function mapSubschemas(
+  schema: Readonly<Record<string, unknown>>,
+  map: (held: unknown, at: string) => unknown,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (SUBSCHEMA_MAPS.includes(key) && isRecord(value)) {
+      const members: Record<string, unknown> = {};
+      for (const [name, member] of Object.entries(value)) {
+        setKey(members, name, map(member, `${key}.${name}`));
+      }
+      setKey(result, key, members);
+    } else if (SUBSCHEMA_LISTS.includes(key) && Array.isArray(value)) {
+      setKey(
+        result,
+        key,
+        (value as readonly unknown[]).map((member, index) =>
+          map(member, `${key}.${String(index)}`),
+        ),
+      );
+    } else if (SUBSCHEMAS.includes(key)) {
+      setKey(result, key, map(value, key));
+    } else {
+      setKey(result, key, value);
+    }
+  }
+  return result;
+}
+
+// The same positions, read rather than rebuilt.
+export function eachSubschema(
+  schema: Readonly<Record<string, unknown>>,
+  visit: (held: unknown, at: string) => void,
+): void {
+  mapSubschemas(schema, (held, at) => {
+    visit(held, at);
+    return held;
+  });
+}
 
 // Whether a schema is one branch of a union, where a field with a single listed value is what
 // tells the branches apart, and whether it is inside a composition at all, where closing an

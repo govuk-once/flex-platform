@@ -58,6 +58,15 @@ describe("buildUrl", () => {
     ).toBe("?q=a+b%26c&ids=1&ids=2&ok=true");
   });
 
+  it("writes nothing at all for an array with nothing in it", () => {
+    // The name is written once per element, so an empty array leaves the parameter out of the
+    // request entirely. Deriving refuses a required parameter that admits one, since a
+    // validator admitting the value would let the call through to this.
+    const url = buildUrl(TARGET, "/users", { ids: [], q: "a" });
+    expect(url.search).toBe("?q=a");
+    expect(url.href).toBe("https://api.test/prod/users?q=a");
+  });
+
   it("preserves percent-encoded path characters", () => {
     expect(buildUrl(TARGET, "/files/a%2Fb%3Fc", undefined).pathname).toBe(
       "/prod/files/a%2Fb%3Fc",

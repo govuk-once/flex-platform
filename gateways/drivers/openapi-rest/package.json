@@ -20,6 +20,7 @@
   "devDependencies": {
     "@aws-sdk/client-secrets-manager": "3.1128.0",
     "@repo/eslint-config": "workspace:*",
+    "@repo/gateway-codegen": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "eslint": "10.9.1",
