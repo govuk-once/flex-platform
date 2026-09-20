@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "codegen": "gateway-codegen",
+    "schemas": "gateway-schemas",
     "lint": "eslint gateway.config.ts handlers/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
