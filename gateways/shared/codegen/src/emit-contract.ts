@@ -61,7 +61,9 @@ const TYPESCRIPT_NAMES = [
 // What the contract imports and declares for itself. A shared definition or an operation that
 // needs one of these names would emit a second declaration of it, so generation fails instead.
 const GENERATED_NAMES = [
-  "EnvelopeError",
+  "ErrorCode",
+  "ErrorResponse",
+  "ResponseMeta",
   "SecureValue",
   "Operations",
   "OperationName",
@@ -70,6 +72,14 @@ const GENERATED_NAMES = [
   "OperationResponse",
   "GatewayRequest",
 ];
+
+const META_ABOUT = [
+  "What the gateway reports about an exchange beside its result, on a failure as on a success.",
+  "Every part of it may be absent: a request that never reached the upstream has nothing to report.",
+].join("\n");
+
+const ERROR_ABOUT =
+  "A failure: a code and nothing of what went wrong, which stays in the gateway's logs.";
 
 function pascalCase(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
@@ -136,6 +146,27 @@ export async function emitContract(
   const declarations: string[] = [];
   const operations: string[] = [];
 
+  // What the gateway may report beside a result, every part of it optional: a request that
+  // never reached the upstream has nothing to report. The shared envelope types take any name,
+  // since they describe every gateway; a contract offers the names its own gateway declares and
+  // no others, so `meta` is declared here rather than inherited from them.
+  const metaEntries = sortedEntries(schemas.meta ?? {});
+  const reports = metaEntries.length > 0;
+  if (reports) {
+    const members = metaEntries.map(
+      ([name, schema]) =>
+        `${docComment(documentationOf(schema))}readonly ${JSON.stringify(name)}?: ${typeOf(schema, ctx, `metadata "${name}"`)};`,
+    );
+    declarations.push(
+      `${docComment({ description: META_ABOUT })}export type ResponseMeta = { ${members.join(" ")} };`,
+    );
+  }
+  const META = reports ? "readonly meta?: ResponseMeta" : "";
+  const SUCCESS = ["readonly ok: true", META].filter(Boolean).join("; ");
+  declarations.push(
+    `${docComment({ description: ERROR_ABOUT })}export type ErrorResponse = { ${["readonly ok: false", "readonly error: { readonly code: ErrorCode }", META].filter(Boolean).join("; ")} };`,
+  );
+
   for (const [name, schema] of defEntries) {
     declarations.push(
       `${docComment(documentationOf(schema))}export type ${name} = ${typeOf(schema, ctx, `shared definition "${name}"`)};`,
@@ -161,7 +192,7 @@ export async function emitContract(
     declarations.push(
       `${about}export type ${base}Input = ${typeOf(opSchemas.input, ctx, `the input of operation "${opName}"`)};`,
       `${about}export type ${base}Result = ${outcomeUnion(opName, opSchemas.outcomes, ctx)};`,
-      `${about}export type ${base}Response = EnvelopeError | ({ readonly ok: true } & ${base}Result);`,
+      `${about}export type ${base}Response = ErrorResponse | ({ ${SUCCESS} } & ${base}Result);`,
     );
     operations.push(
       `${about}readonly ${opName}: { readonly input: ${base}Input; readonly result: ${base}Result };`,
@@ -170,7 +201,7 @@ export async function emitContract(
 
   const source = [
     preamble(gatewayId),
-    `import type { EnvelopeError, SecureValue } from "@repo/gateway-types";`,
+    `import type { ErrorCode, SecureValue } from "@repo/gateway-types";`,
     "",
     declarations.join("\n\n"),
     "",
@@ -180,8 +211,8 @@ export async function emitContract(
     'export type OperationInput<TName extends OperationName> = Operations[TName]["input"];',
     'export type OperationResult<TName extends OperationName> = Operations[TName]["result"];',
     "export type OperationResponse<TName extends OperationName> =",
-    "  | EnvelopeError",
-    "  | ({ readonly ok: true } & OperationResult<TName>);",
+    "  | ErrorResponse",
+    `  | ({ ${SUCCESS} } & OperationResult<TName>);`,
     "",
     "// One call as the gateway receives it. `secure` carries the caller's asserted values; an",
     "// operation's secure bindings are compared against them, and the signature is not verified.",

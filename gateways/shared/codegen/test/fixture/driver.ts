@@ -12,8 +12,11 @@ export interface Stub {
 // The default answers an operation, so the bundle can be run in a subprocess that has no way to
 // set one. A test in this process replaces it.
 export const stub: Stub = {
-  execute: () =>
-    Promise.resolve({ outcome: "created", data: { id: "fixture" } }),
+  execute: (ctx) => {
+    // Reported beside the result, under the name the gateway's schemas declare for it.
+    ctx.meta("requestId", "fixture-request");
+    return Promise.resolve({ outcome: "created", data: { id: "fixture" } });
+  },
   options: undefined,
 };
 

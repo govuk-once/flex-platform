@@ -136,6 +136,36 @@ function checkSchema(value: unknown, where: string, problems: string[]): void {
   }
 }
 
+// One schema, as far as its shape goes: that it is a schema object at all, and that nothing in
+// it is named what an object literal would read as its prototype.
+function checkSchemaEntry(
+  schema: unknown,
+  where: string,
+  problems: string[],
+): void {
+  if (isRecord(schema)) checkSchema(schema, where, problems);
+  else problems.push(`${where} must be a schema object`);
+}
+
+// A map of schemas by name: the names, and each schema under one. Every map a version holds is
+// read through here, so a map added to a version later is not a map left out of the checks.
+function checkSchemaMap(
+  value: unknown,
+  label: string,
+  where: string,
+  what: string,
+  problems: string[],
+): void {
+  if (!isRecord(value)) {
+    problems.push(`${label} must be an object of schemas`);
+    return;
+  }
+  checkNames(Object.keys(value), what, problems);
+  for (const [name, schema] of Object.entries(value)) {
+    checkSchemaEntry(schema, `${where}.${name}`, problems);
+  }
+}
+
 function checkOnly(
   value: Readonly<Record<string, unknown>>,
   allowed: readonly string[],
@@ -145,7 +175,7 @@ function checkOnly(
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
       problems.push(
-        `${where} has an unknown field "${key}"; expected ${allowed.map((name) => `"${name}"`).join(" and ")}`,
+        `${where} has an unknown field "${key}"; expected ${allowed.map((name) => `"${name}"`).join(", ")}`,
       );
     }
   }
@@ -200,21 +230,20 @@ function shapeProblems(value: unknown): readonly string[] {
   if (!isRecord(value)) return ["must be a JSON object"];
 
   const problems: string[] = [];
-  checkOnly(value, ["defs", "operations"], "the version", problems);
+  checkOnly(value, ["defs", "meta", "operations"], "the version", problems);
 
   if (Object.hasOwn(value, "defs")) {
-    if (!isRecord(value.defs)) {
-      problems.push(`"defs" must be an object of schemas`);
-    } else {
-      checkNames(Object.keys(value.defs), "a shared definition", problems);
-      for (const [name, schema] of Object.entries(value.defs)) {
-        if (isRecord(schema)) {
-          checkSchema(schema, `defs.${name}`, problems);
-        } else {
-          problems.push(`defs.${name} must be a schema object`);
-        }
-      }
-    }
+    checkSchemaMap(
+      value.defs,
+      `"defs"`,
+      "defs",
+      "a shared definition",
+      problems,
+    );
+  }
+
+  if (Object.hasOwn(value, "meta")) {
+    checkSchemaMap(value.meta, `"meta"`, "meta", "reported metadata", problems);
   }
 
   if (!isRecord(value.operations)) {
@@ -230,23 +259,14 @@ function shapeProblems(value: unknown): readonly string[] {
       continue;
     }
     checkOnly(operation, ["input", "outcomes"], where, problems);
-    if (isRecord(operation.input)) {
-      checkSchema(operation.input, `${where}.input`, problems);
-    } else {
-      problems.push(`${where}.input must be a schema object`);
-    }
-    if (!isRecord(operation.outcomes)) {
-      problems.push(`${where}.outcomes must be an object of schemas`);
-      continue;
-    }
-    checkNames(Object.keys(operation.outcomes), "an outcome", problems);
-    for (const [outcome, schema] of Object.entries(operation.outcomes)) {
-      if (isRecord(schema)) {
-        checkSchema(schema, `${where}.outcomes.${outcome}`, problems);
-      } else {
-        problems.push(`${where}.outcomes.${outcome} must be a schema object`);
-      }
-    }
+    checkSchemaEntry(operation.input, `${where}.input`, problems);
+    checkSchemaMap(
+      operation.outcomes,
+      `${where}.outcomes`,
+      `${where}.outcomes`,
+      "an outcome",
+      problems,
+    );
   }
 
   return problems;

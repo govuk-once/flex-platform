@@ -484,6 +484,56 @@ describe("compareSchemas", () => {
     });
   });
 
+  describe("what a gateway reports beside a result", () => {
+    const reporting = (meta: Record<string, JSONSchema>): GatewaySchemas => ({
+      meta,
+      ...asInput({ type: "object" }),
+    });
+
+    it("accepts a name that is added and one that is removed, since every name is optional", () => {
+      const one = reporting({ requestId: { type: "string" } });
+      const two = reporting({
+        requestId: { type: "string" },
+        remaining: { type: "integer" },
+      });
+
+      expect(compareSchemas(one, two)).toEqual({
+        breaking: [],
+        compatible: ["meta.remaining: was added"],
+      });
+      expect(compareSchemas(two, one)).toEqual({
+        breaking: [],
+        compatible: ["meta.remaining: was removed"],
+      });
+      expect(
+        compareSchemas(asInput({ type: "object" }), one).compatible,
+      ).toEqual(["meta.requestId: was added"]);
+    });
+
+    it("reads each the way an outcome runs", () => {
+      expect(
+        compareSchemas(
+          reporting({ remaining: { type: "integer" } }),
+          reporting({ remaining: { type: "number" } }),
+        ).breaking,
+      ).toEqual(["meta.remaining.type: changed from integer to number"]);
+    });
+
+    it("reads a definition reached only through it the way an outcome runs", () => {
+      // Read both ways, as a definition nothing names is, narrowing it would be a break too.
+      const idOf = (maxLength: number): GatewaySchemas => ({
+        defs: { Id: { type: "string", maxLength } },
+        meta: { requestId: { type: "string", allOf: [{ $ref: "Id" }] } },
+        ...asInput({ type: "object" }),
+      });
+
+      expect(compareSchemas(idOf(10), idOf(5)).breaking).toEqual([]);
+      expect(compareSchemas(idOf(10), idOf(20)).breaking).toEqual([
+        "defs.Id (as output).maxLength: changed from 10 to 20",
+      ]);
+    });
+  });
+
   describe("shared definitions", () => {
     const ref = (name: string): JSONSchema => ({ $ref: name });
 

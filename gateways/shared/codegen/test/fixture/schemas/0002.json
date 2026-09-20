@@ -1,0 +1,52 @@
+{
+  "defs": {
+    "UserRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "meta": {
+    "requestId": {
+      "type": "string",
+      "description": "The upstream's own id for the request"
+    }
+  },
+  "operations": {
+    "createUser": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "email"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "created": {
+          "$ref": "UserRecord"
+        }
+      }
+    }
+  }
+}

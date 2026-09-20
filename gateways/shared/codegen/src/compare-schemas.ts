@@ -1003,6 +1003,12 @@ function usageOf(schemas: GatewaySchemas): ReadonlyMap<string, Set<Position>> {
       pending.push([outcome, "output"]);
     }
   }
+  // What a gateway reports comes from it, so a definition reached through it is read the way an
+  // outcome's is: one reached only this way would otherwise be read both ways, and a change
+  // safe for what a caller reads would be called a break.
+  for (const schema of Object.values(schemas.meta ?? {})) {
+    pending.push([schema, "output"]);
+  }
   for (let held = pending.pop(); held !== undefined; held = pending.pop()) {
     const [value, position] = held;
     eachReference(value, position, (name, at) => {
@@ -1104,6 +1110,30 @@ export function compareSchemas(
   for (const name of sortedNames(Object.keys(next.operations))) {
     if (!Object.hasOwn(previous.operations, name)) {
       comparison.survives(`operations.${name}`, "was added");
+    }
+  }
+
+  // What a gateway reports beside a result runs the way an outcome does. Every name in it is
+  // optional, so a caller already handles one that is absent: a name may come or go, and one
+  // that goes leaves a caller compiled against it with a branch that no longer runs, and one
+  // compiled after it with nothing to name. A name that stays is held to what it promised.
+  const previousMeta = previous.meta ?? {};
+  const nextMeta = next.meta ?? {};
+  for (const name of sortedNames(Object.keys(previousMeta))) {
+    const is = ownValue(nextMeta, name);
+    if (is === undefined) comparison.survives(`meta.${name}`, "was removed");
+    else {
+      comparison.schema(
+        ownValue(previousMeta, name),
+        is,
+        "output",
+        `meta.${name}`,
+      );
+    }
+  }
+  for (const name of sortedNames(Object.keys(nextMeta))) {
+    if (!Object.hasOwn(previousMeta, name)) {
+      comparison.survives(`meta.${name}`, "was added");
     }
   }
 

@@ -37,12 +37,14 @@ describe("emitted entry point", () => {
     );
     expect(entry).toContain('import config from "../../gateway.config.ts";');
     expect(entry).toContain(
-      `import { validators } from "./${VALIDATORS_DIR}/index.js";`,
+      `import { meta, validators } from "./${VALIDATORS_DIR}/index.js";`,
     );
     expect(entry).toContain(
       "config.driver.createExecutor(config, readUpstreamOptions())",
     );
-    expect(entry).toContain("createHandler(config, { validators, execute })");
+    expect(entry).toContain(
+      "createHandler(config, { validators, meta, execute })",
+    );
   });
 
   it("names no driver or transport", () => {
