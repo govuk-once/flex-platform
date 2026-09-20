@@ -44,11 +44,6 @@ export interface DriverDefinition<
     config: GatewayConfig<DriverDefinition, AnyOperations<DriverDefinition>>,
     options: ExecutorOptions,
   ): Promise<ExecuteFn>;
-  // Operation schemas derived from the driver's own description of the upstream. Optional
-  // until every driver provides it; codegen reads schemas.fixture.ts when absent.
-  deriveSchemas?(
-    config: GatewayConfig<DriverDefinition, AnyOperations<DriverDefinition>>,
-  ): Promise<GatewaySchemas>;
   // Whether the configuration and the schemas describe the same requests, in the relations only
   // the driver can read: a path template against the input fields that fill it, say. Codegen
   // calls it before it emits anything and fails the run with every message returned, so a
