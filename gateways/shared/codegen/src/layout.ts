@@ -16,6 +16,11 @@
 export const CONFIG_FILE = "gateway.config.ts";
 export const SCHEMAS_FILE = "schemas.fixture.ts";
 
+// The versions of a gateway's schemas, kept beside its configuration. JSON rather than a module:
+// a version is data to be parsed, never code to be evaluated, and one written once is history,
+// which a type keyed by today's operations could not go on checking.
+export const SCHEMAS_DIR = "schemas";
+
 // Everything a gateway generates, beside the configuration it was generated from.
 export const GENERATED_DIR = ".gen";
 
