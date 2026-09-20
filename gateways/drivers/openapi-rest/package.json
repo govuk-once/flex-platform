@@ -14,7 +14,8 @@
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-runtime": "workspace:*",
     "@repo/gateway-types": "workspace:*",
-    "@repo/utils": "workspace:*"
+    "@repo/utils": "workspace:*",
+    "@scalar/openapi-parser": "0.29.1"
   },
   "devDependencies": {
     "@aws-sdk/client-secrets-manager": "3.1128.0",
