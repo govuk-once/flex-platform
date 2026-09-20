@@ -409,23 +409,36 @@ become one declaration and everything else is intersected around it; a reference
 `anyOf` and `oneOf` become unions, each branch read against what encloses it, so a field the
 schema requires stays required inside every branch and a schema that also admits null keeps
 admitting it. An array whose front `prefixItems` types becomes a tuple, with the elements a length
-does not require left optional. Where a composition has more ways through than are worth writing
-out, the generated type is the wider one: it never rejects a request the gateway accepts, and the
-validators remain what enforces the schema.
+does not require left optional. A composition with more ways through its `anyOf` and `oneOf`
+branches than the generator writes out fails generation rather than being described loosely:
+widening the type would leave a contract that compiles while admitting requests the gateway
+rejects, and the schema is what wants looking at. Factoring the branches into a shared definition
+stops the expansion, since a `$ref` is read as a name.
 
 A `$ref` names a key of the gateway's shared `defs`, which the contract declares as a type of that
 name. A pointer into the schema itself, such as `#/$defs/Body`, compiles to a validator but has no
 name to emit here, so generation fails rather than describing it as `unknown`: declare the
 subschema in `defs` and reference it by that key, and both readers take it from one declaration.
 
-An object the schema does not close carries an index signature. Leaving `additionalProperties` out
-admits every other name, exactly as writing `true` does, so the type has to admit them too;
-`additionalProperties: false` is what narrows it to the fields it names, which is worth setting on
-an input, since a field no `parameters` entry maps fails the request as `INTERNAL`. A field the
-schema requires but describes nowhere is named as `unknown`, so a request the validators would
-reject does not typecheck. A schema nested more than 100 levels deep fails generation rather than
-emitting what it can: nothing written by hand nests that far, and a reference costs no depth at
-all.
+An object is described by the fields its schema declares and no others, unless the schema says it
+holds more: `additionalProperties: true`, or a schema for the rest, gives it an index signature,
+and leaving `additionalProperties` out does not. `patternProperties` types the names its patterns
+match, and joins that signature where `additionalProperties` says what the rest carries — a schema
+for it, or `false`, which admits nothing else at all. Left out, the patterns are left out with
+every other unlisted name: an index signature is a promise about every name, and a schema that says
+nothing about the names its patterns miss cannot make one. `{ "unmatched": 123 }` passes a
+validator whose only pattern is `^x-`, and a signature typed from that pattern would have let a
+caller read it as a string. To a validator, leaving it out admits every other name exactly as
+`true` does, and that is what lets an outcome go on validating when an upstream adds a field; the
+type stays what was declared, so a contract never offers fields that depend on the version of it a
+caller has. What an upstream adds still reaches a caller, unvalidated and undeclared. On an input
+the difference runs the other way: the compiler refuses an object literal with a field of its own
+where the validator would have taken it, so `additionalProperties: false` is still worth setting on
+an input, since it is the validator that decides, and a field no `parameters` entry maps fails the
+request as `INTERNAL`. A field the schema requires but describes nowhere is named as `unknown`, so
+a request the validators would reject does not typecheck. A schema nested more than 100 levels deep
+fails generation rather than emitting what it can: nothing written by hand nests that far, and a
+reference costs no depth at all.
 
 ## The openapi-rest driver
 
