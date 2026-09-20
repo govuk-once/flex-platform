@@ -253,6 +253,21 @@ integrations are implemented.
     authentication definition. Nothing replays an upstream operation after an authentication
     failure.
 
+13. **Schema text is data, wherever it is written.** A version's descriptions can come from an
+    upstream's own document, and the call contract writes them into code a caller compiles.
+    `docComment` is the only way text becomes a comment: it keeps `*/` from ending one, writes
+    every `@` as a character reference so no text can open a JSDoc tag wherever it stands, and
+    writes every line inside one block, on lines of its own, since the compiler attaches nothing to
+    a comment that shares a line with the token before it. A tag the contract carries is one the
+    generator wrote from what a schema declares. Escaping an `@` rather than replacing it is not
+    enough: `stripInternal` reads the comment text and would remove a declaration while what refers
+    to it stays. Names and values reach generated code through `JSON.stringify` or
+    `assertIdentifier`, never by interpolation. Characters that do not display are refused when a
+    version is read, in names and values alike and from the parsed value, so a reviewer sees what
+    the file holds. Keep the tests that compile a contract built from hostile text, the ones that
+    emit declarations from it with `stripInternal` on, and the ones that prove both can see a tag
+    at all.
+
 ## Public documentation and comments
 
 Describe implemented behaviour and the rationale needed to maintain it. Include proposed changes
