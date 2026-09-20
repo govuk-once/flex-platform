@@ -1,5 +1,7 @@
 export { checkGateway, GatewayCheckError } from "./check-gateway.ts";
 export { main } from "./cli.ts";
+export type { SchemaComparison } from "./compare-schemas.ts";
+export { compareSchemas, SchemaCompatibilityError } from "./compare-schemas.ts";
 export { emitContract } from "./emit-contract.ts";
 export { bundleEntry, emitEntry } from "./emit-entry.ts";
 export { emitValidators } from "./emit-validators.ts";
