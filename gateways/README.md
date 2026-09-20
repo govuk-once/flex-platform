@@ -60,8 +60,6 @@ the [openapi-rest driver](#the-openapi-rest-driver). It sends no credential yet,
 import { defineGateway } from "@repo/gateway-config";
 import { openapiRest } from "@repo/gateway-driver-openapi-rest";
 
-import getIdentityExchange from "./handlers/get-identity-exchange.ts";
-
 export default defineGateway({
   id: "udp",
   description: "User Data Platform gateway",
@@ -78,7 +76,6 @@ export default defineGateway({
       description: "Look up a linked identity record for a different service",
       upstream: "GET /v1/identity/exchange",
       parameters: { subjectId: { in: "query" } },
-      handler: getIdentityExchange,
     },
   },
 });
@@ -431,13 +428,11 @@ and an outcome the gateway does not declare is a type error.
 ```ts
 import type { GetIdentityExchangeResponse } from "./.gen/client/rpc.ts";
 
-export function linkedId(response: GetIdentityExchangeResponse): string | null {
+export function linkedId(response: GetIdentityExchangeResponse): string {
   if (!response.ok) throw new Error(response.error.code);
   switch (response.outcome) {
     case "ok":
       return response.data.linkedId;
-    case "unlinked":
-      return null;
   }
 }
 ```
@@ -1056,8 +1051,8 @@ it, so a plain function or a handler written for another driver is a type error 
 `defineHandler` also lets the author name the input type. Both paths use the same client, so every upstream call still goes
 through `ctx.upstream` once and maps transport errors the same way.
 
-The UDP gateway's [identity exchange handler](services/udp/handlers/get-identity-exchange.ts)
-turns the upstream's 404 into an `unlinked` outcome, which its schema declares alongside `ok`:
+A handler for an identity lookup might turn the upstream's 404 into an `unlinked` outcome, which
+the operation's schemas then declare alongside `ok`:
 
 ```ts
 import { defineHandler } from "@repo/gateway-driver-openapi-rest";
