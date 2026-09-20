@@ -33,6 +33,17 @@ export interface OpenApiRestAuthRequest {
   // The attempt's signal. Pass it to the transport so a request that runs out of budget
   // releases an exchange as well.
   readonly signal: AbortSignal;
+  // The request as it is about to be sent, for a scheme that signs what it authenticates rather
+  // than attaching a credential to it. Everything is a copy: what a flow does to it changes
+  // nothing that is sent, and the only way it adds to the request is the headers it returns.
+  readonly method: HttpMethod;
+  // Where it is going, query included, as resolved against the upstream target.
+  readonly url: URL;
+  // The headers set so far: the driver's, the gateway's static ones, the call's and, where
+  // there is a body, its content type. Never the ones this flow owns.
+  readonly headers: Headers;
+  // The body as it will be sent, already serialised, or undefined where there is none.
+  readonly body: string | undefined;
 }
 
 // Per-executor authentication state. `headers` runs inside every request's attempt and returns

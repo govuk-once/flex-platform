@@ -56,10 +56,11 @@ function authHeadersFor(
   instance: OpenApiRestAuthInstance,
   declared: ReadonlySet<string>,
 ): AuthHeaders {
-  return async (operation, signal) => {
+  return async (request) => {
+    const { operation } = request;
     let provided: unknown;
     try {
-      provided = await instance.headers({ operation, signal });
+      provided = await instance.headers(request);
     } catch (err: unknown) {
       if (err instanceof GatewayError) throw err;
       throw new GatewayError(
