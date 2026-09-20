@@ -34,6 +34,7 @@ function client(
     auth: () => Promise.resolve(new Headers()),
     reservedHeaders: new Set(),
     maxResponseBytes: 1_048_576,
+    metadata: [],
     ...overrides,
   });
   return { c, ff, ctx };
@@ -221,6 +222,7 @@ describe("client.request", () => {
         return Promise.resolve(new Headers({ authorization: "Bearer t" }));
       },
       maxResponseBytes: 1_048_576,
+      metadata: [],
     });
     await c.request({ method: "GET", path: "/users/1" });
     expect(order).toEqual(["attempt-start", "auth", "fetch", "attempt-end"]);
@@ -428,6 +430,7 @@ describe("client.request", () => {
       auth: () => Promise.resolve(new Headers()),
       reservedHeaders: new Set(),
       maxResponseBytes: 1_048_576,
+      metadata: [],
     });
     const err = await c
       .request({ method: "GET", path: "/users/1" })
@@ -517,5 +520,107 @@ describe("client.invoke", () => {
       method: "GET",
       path: "/users/u%201",
     });
+  });
+});
+
+describe("what the gateway reports beside a result", () => {
+  const metadata = [
+    { name: "upstreamRequestId", header: "x-request-id", type: "string" },
+    { name: "remaining", header: "x-ratelimit-remaining", type: "integer" },
+    { name: "cached", header: "x-cached", type: "boolean" },
+  ] as const;
+  const answering = (status: number, headers: Record<string, string>) =>
+    client(
+      () => new Response(status === 204 ? null : "{}", { status, headers }),
+      {
+        metadata,
+      },
+    );
+
+  it("reports each header the response carries, under the gateway's name for it and as its type", async () => {
+    const { c, ctx } = answering(200, {
+      "X-Request-Id": "req-1",
+      "X-RateLimit-Remaining": "41",
+      "X-Cached": "true",
+      "X-Undeclared": "never reported",
+    });
+
+    await c.request(c.prepare({ id: "u1" }));
+
+    expect([...ctx.reported]).toEqual([
+      ["upstreamRequestId", "req-1"],
+      ["remaining", 41],
+      ["cached", true],
+    ]);
+  });
+
+  it("reports nothing for a header the response does not carry", async () => {
+    const { c, ctx } = answering(200, { "x-request-id": "req-1" });
+
+    await c.request(c.prepare({ id: "u1" }));
+
+    expect([...ctx.reported]).toEqual([["upstreamRequestId", "req-1"]]);
+  });
+
+  it("leaves text that is not its type as text, for the gateway's validator to refuse", async () => {
+    const { c, ctx } = answering(200, {
+      "x-ratelimit-remaining": "plenty",
+      "x-cached": "yes",
+    });
+
+    await c.request(c.prepare({ id: "u1" }));
+
+    expect([...ctx.reported]).toEqual([
+      ["remaining", "plenty"],
+      ["cached", "yes"],
+    ]);
+  });
+
+  it("reports before the status is read as an error, so a refusal carries it too", async () => {
+    const { c, ctx } = answering(500, { "x-request-id": "req-500" });
+
+    await expect(c.invoke(c.prepare({ id: "u1" }))).rejects.toMatchObject({
+      code: "UPSTREAM_ERROR",
+    });
+    expect(ctx.reported.get("upstreamRequestId")).toBe("req-500");
+  });
+
+  it("reports before the body is read, so an exchange that never finished carries it", async () => {
+    // What a caller most needs about an exchange that failed is the upstream's own id for it.
+    // Read after the body, there is nothing to report when the body is what failed.
+    const { c, ctx } = client(
+      () =>
+        new Response("x".repeat(64), {
+          status: 200,
+          headers: { "x-request-id": "req-too-big" },
+        }),
+      { metadata, maxResponseBytes: 8 },
+    );
+
+    await expect(c.request(c.prepare({ id: "u1" }))).rejects.toMatchObject({
+      code: "UPSTREAM_CONTRACT_VIOLATION",
+    });
+    expect(ctx.reported.get("upstreamRequestId")).toBe("req-too-big");
+  });
+
+  it("reports for a body whose stream breaks part way through", async () => {
+    const { c, ctx } = client(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("{"));
+              controller.error(new Error("the connection went"));
+            },
+          }),
+          { status: 200, headers: { "x-request-id": "req-broken" } },
+        ),
+      { metadata },
+    );
+
+    await expect(c.request(c.prepare({ id: "u1" }))).rejects.toMatchObject({
+      code: "UPSTREAM_ERROR",
+    });
+    expect(ctx.reported.get("upstreamRequestId")).toBe("req-broken");
   });
 });

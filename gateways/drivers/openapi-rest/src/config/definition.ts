@@ -5,6 +5,7 @@ import type {
   GatewayConfig,
 } from "@repo/gateway-config";
 
+import type { MetadataConfig } from "../metadata.ts";
 import {
   type HttpMethod,
   OPENAPI_REST_DRIVER_TYPE,
@@ -24,6 +25,10 @@ export interface OpenApiRestDriverConfig {
   readonly headers?: Readonly<Record<string, string>>;
   // Largest response body the driver buffers, in bytes. Defaults to 1 MiB.
   readonly maxResponseBytes?: number;
+  // What the gateway reports about an exchange beside its result, by the name a caller reads it
+  // under: the response header it is read from, and the schema of the scalar it carries. An
+  // upstream's own id for a request, say. Returned on a failure as on a success, and logged.
+  readonly metadata?: MetadataConfig;
   // How requests are authenticated: bearerToken(), apiKey() or noAuth() from this package, or
   // a definition written with defineAuth. It says what the secret must hold and which headers
   // it owns. Required, so a gateway that sends no credential says so.
@@ -89,5 +94,6 @@ export function openapiRest(
     ...(config.maxResponseBytes !== undefined
       ? { maxResponseBytes: config.maxResponseBytes }
       : {}),
+    ...(config.metadata !== undefined ? { metadata: config.metadata } : {}),
   };
 }
