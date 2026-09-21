@@ -1,7 +1,7 @@
 import { GatewayError } from "@repo/gateway-runtime";
 import { describe, expect, it } from "vitest";
 
-import { encodePathParam } from "./path.ts";
+import { encodePathParam, hasDotSegment } from "./path.ts";
 
 // Requires a throw. Returning a stand-in error here would let a value that is wrongly accepted
 // pass every assertion below.
@@ -98,5 +98,48 @@ describe("encodePathParam", () => {
     expect(err.message).toMatch(/^ctx: /);
     expect(err.message).not.toContain("SYNTHETIC_SECRET");
     expect(err.cause).toBeUndefined();
+  });
+});
+
+describe("hasDotSegment", () => {
+  it.each([
+    "/a/../b",
+    "/a/./b",
+    "/..",
+    "/.",
+    "/a/..",
+    // The spellings the URL parser folds back to a dot before it resolves the segment.
+    "/a/%2e%2e/b",
+    "/a/%2E%2E/b",
+    "/a/.%2e/b",
+    "/a/%2e./b",
+    "/a/%2E/b",
+    // The URL parser separates on a backslash too, so these are dot segments to it.
+    "/a\\..\\b",
+    "/a\\%2e%2e\\b",
+    "/a/..\\b",
+    // The parser removes these before it reads the path, so each of these is ".." to it. The
+    // last splits a percent escape, which it also rejoins before decoding.
+    "/users/.\t./admin",
+    "/users/.\n./admin",
+    "/users/.\r./admin",
+    "/users/%2\te%2e/admin",
+  ])("finds a dot segment in %j", (path) => {
+    expect(hasDotSegment(path)).toBe(true);
+  });
+
+  it.each([
+    "/a/b",
+    "/",
+    "/a.b/c",
+    "/...",
+    "/a%2e/b",
+    "/%2eb/c",
+    // A dot that cannot become a segment: "%2f" is not a separator to the parser.
+    "/a/x%2f..%2fy/b",
+    "/files/a%2Fb%3Fc",
+    "/a%5c..%5cb",
+  ])("leaves %j alone", (path) => {
+    expect(hasDotSegment(path)).toBe(false);
   });
 });
