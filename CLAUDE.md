@@ -181,7 +181,9 @@ integrations are implemented.
    are not logged automatically. Keep tests checking that unselected fields and synthetic
    secrets are absent from captured payload logs. Review diagnostic messages separately: a
    validation failure is logged as the schema locations that rejected it, never as an instance
-   path, whose segments a dictionary schema takes from the caller's own keys.
+   path, whose segments a dictionary schema takes from the caller's own keys. The operation name
+   is the caller's too, so it is logged, in a message or as a field, only once it has matched a
+   configured operation; an unknown one is left out rather than repeated.
 
 7. **Preserve contract compatibility.** Changes to an established gateway contract must be
    additive. An incompatible contract requires a distinct gateway identity. This is a design

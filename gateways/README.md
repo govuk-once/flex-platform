@@ -130,7 +130,9 @@ These allowlists govern selected payload fields. Diagnostic messages require sep
 must not include sensitive values. An input that fails validation is logged as the schema
 locations that rejected it and the keywords' own messages, never as a path into the input: a
 dictionary schema takes such a path's segments from the caller's keys, which no allowlist
-selected.
+selected. The operation name is the caller's in the same way until it matches a configured
+operation, so a request that named none is logged with no `operation` field and a message that
+does not repeat what it sent; a recognised name is the gateway's own vocabulary and is logged.
 
 ### Secure bindings
 

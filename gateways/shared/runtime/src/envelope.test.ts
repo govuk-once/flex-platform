@@ -178,13 +178,17 @@ describe("parseEnvelope: secure.values must be scalars", () => {
     ["Infinity", Number.POSITIVE_INFINITY],
   ])("rejects %s, which would stringify to null when signed", (_l, value) => {
     expect(() => parseEnvelope(withValues({ k: value }))).toThrow(
-      /secure.values.k/,
+      /secure\.values/,
     );
   });
 
-  it("names the offending key in the message", () => {
-    expect(() => parseEnvelope(withValues({ ok: 1, bad: {} }))).toThrow(
-      /secure\.values\.bad/,
-    );
+  it("leaves the offending key out of the message, which is logged as written", () => {
+    // The keys are the caller's, so naming one would log whatever a caller chose to send.
+    expect(() =>
+      parseEnvelope(withValues({ ok: 1, "SYNTHETIC-PRIVATE-VALUE": {} })),
+    ).toThrow(/^Envelope 'secure\.values' must hold /);
+    expect(() =>
+      parseEnvelope(withValues({ ok: 1, "SYNTHETIC-PRIVATE-VALUE": {} })),
+    ).not.toThrow(/SYNTHETIC-PRIVATE-VALUE/);
   });
 });

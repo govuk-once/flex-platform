@@ -140,12 +140,23 @@ function formatValidationErrors(
     .join("; ");
 }
 
-function extractOperation(event: unknown): string | undefined {
-  if (event != null && typeof event === "object" && "operation" in event) {
-    const operation = (event as Record<string, unknown>).operation;
-    return typeof operation === "string" ? operation : undefined;
+// The operation name a failure is logged under, taken from the event rather than the envelope so
+// that a request rejected before parsing has one too. It is the caller's string, so it is logged
+// only once it has been matched against the configured operations: a recognised name is the
+// gateway's own vocabulary and says which contract failed, where an unrecognised one is whatever
+// the caller sent, of any length and content, and the envelope that carried it may be malformed
+// in every other respect. A Map, so a name such as "constructor" is not found on a prototype.
+function loggedOperation(
+  event: unknown,
+  operations: ReadonlyMap<string, CompiledOperation>,
+): string | undefined {
+  if (event == null || typeof event !== "object" || !("operation" in event)) {
+    return undefined;
   }
-  return undefined;
+  const { operation } = event as Record<string, unknown>;
+  return typeof operation === "string" && operations.has(operation)
+    ? operation
+    : undefined;
 }
 
 // Reserve time after the upstream call for outcome validation, logging and the response envelope.
@@ -189,10 +200,9 @@ export function createHandler<const TOps extends AnyOperations>(
       step = "routing";
       const op = operations.get(envelope.operation);
       if (!op) {
-        throw new GatewayError(
-          "OPERATION_NOT_FOUND",
-          `Unknown operation: ${envelope.operation}`,
-        );
+        // The name is the caller's and was not one of ours, so it is not repeated here: the
+        // code says what happened, and the log leaves the operation out.
+        throw new GatewayError("OPERATION_NOT_FOUND", "Unknown operation");
       }
 
       // Step 4: Validate input
@@ -272,26 +282,22 @@ export function createHandler<const TOps extends AnyOperations>(
         data: result.data,
       };
     } catch (err: unknown) {
+      const operation = loggedOperation(event, operations);
+
       if (err instanceof GatewayError) {
         // Step 9: Record health (error path)
         const health = recordHealthSignal(
-          extractOperation(event),
+          operation,
           ERROR_CODES[err.code].signal,
         );
 
-        logger.warn(
-          { operation: extractOperation(event), code: err.code, ...health },
-          err.message,
-        );
+        logger.warn({ operation, code: err.code, ...health }, err.message);
         // Detail is logged above, never returned.
         return { ok: false as const, error: { code: err.code } };
       }
 
       // Step 9: Record health (unhandled)
-      const health = recordHealthSignal(
-        extractOperation(event),
-        ERROR_CODES.INTERNAL.signal,
-      );
+      const health = recordHealthSignal(operation, ERROR_CODES.INTERNAL.signal);
 
       // Nothing declared this error, so nothing about it is known to be safe to log. The
       // envelope is returned whatever happens here; logging must not become a second failure.

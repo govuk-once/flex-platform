@@ -153,7 +153,14 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("OPERATION_NOT_FOUND");
-      expect(capturedOutput()).toContain("unknown");
+    });
+
+    it("keeps the name it did not recognise out of the message", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+
+      await handler(envelope({ operation: "SYNTHETIC-PRIVATE-VALUE" }));
+
+      expect(capturedOutput()).not.toContain("SYNTHETIC-PRIVATE-VALUE");
     });
   });
 
@@ -730,12 +737,40 @@ describe("createHandler", () => {
   });
 
   describe("logging the operation a failed envelope carried", () => {
-    it("names it when the envelope carried a string", async () => {
+    it("names it when the envelope carried a configured operation", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: vi
+            .fn()
+            .mockRejectedValue(
+              new GatewayError("UPSTREAM_REJECTED", "upstream said no"),
+            ),
+        }),
+      );
+
+      await handler(envelope({ operation: "ping" }));
+
+      expect(capturedOutput()).toContain('"operation":"ping"');
+    });
+
+    it("leaves it out when the envelope named no configured operation", async () => {
+      // The name is the caller's own until it matches one of ours, so an unrecognised string
+      // reaches no log: it carries whatever the caller chose to send.
       const handler = createHandler(testConfig(), testDeps());
 
-      await handler(envelope({ operation: "absent" }));
+      const resp = await handler(
+        envelope({ operation: "SYNTHETIC-PRIVATE-VALUE" }),
+      );
 
-      expect(capturedOutput()).toContain('"operation":"absent"');
+      expect(resp).toEqual({
+        ok: false,
+        error: { code: "OPERATION_NOT_FOUND" },
+      });
+      for (const record of capturedRecords()) {
+        expect(record).not.toHaveProperty("operation");
+      }
+      expect(capturedOutput()).not.toContain("SYNTHETIC-PRIVATE-VALUE");
     });
 
     it("leaves it out when the envelope carried no operation at all", async () => {

@@ -43,11 +43,14 @@ export function parseEnvelope(event: unknown): EnvelopeInbound {
     );
   }
 
-  for (const [key, value] of Object.entries(event.secure.values)) {
+  // The keys are the caller's own, and a GatewayError message is logged as written, so the one
+  // that failed is not named: the dictionary would otherwise carry whatever a caller chose into
+  // the logs. Which envelope field was wrong is what the message has to say.
+  for (const value of Object.values(event.secure.values)) {
     if (!isSecureValue(value)) {
       throw new GatewayError(
         "INVALID_INPUT",
-        `Envelope 'secure.values.${key}' must be a string, finite number, boolean or null`,
+        "Envelope 'secure.values' must hold strings, finite numbers, booleans or null",
       );
     }
   }
