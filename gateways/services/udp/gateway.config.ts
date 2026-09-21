@@ -1,6 +1,8 @@
 import { defineGateway } from "@repo/gateway-config";
 import { openapiRest } from "@repo/gateway-driver-openapi-rest";
 
+import { REQUESTING } from "./config/requesting.ts";
+
 export default defineGateway({
   id: "udp",
   description: "User Data Platform gateway",
@@ -12,6 +14,7 @@ export default defineGateway({
     // Sends no credential until this gateway is configured against UDP itself.
     auth: [],
   }),
+  // Every operation UDP describes under a path of its own.
   operations: {
     createUser: {
       description: "Create User Record",
@@ -20,7 +23,60 @@ export default defineGateway({
     getIdentityExchange: {
       description: "Look up a linked identity record for a different service",
       upstream: "GET /v1/identity/exchange",
-      parameters: { subjectId: { in: "query" } },
+      parameters: {
+        requiredService: { in: "query" },
+        ...REQUESTING,
+      },
+    },
+    getIdentity: {
+      description: "Read Identity Record",
+      upstream: "GET /v1/identity/{serviceName}/{identifier}",
+      parameters: {
+        serviceName: { in: "path" },
+        identifier: { in: "path" },
+      },
+    },
+    createIdentity: {
+      description: "Create Identity Record",
+      upstream: "POST /v1/identity/{serviceName}/{identifier}",
+      parameters: {
+        serviceName: { in: "path" },
+        identifier: { in: "path" },
+      },
+    },
+    deleteIdentity: {
+      description: "Delete Identity Record",
+      upstream: "DELETE /v1/identity/{serviceName}/{identifier}",
+      parameters: {
+        serviceName: { in: "path" },
+        identifier: { in: "path" },
+      },
+    },
+    getLinkedServices: {
+      description: "Get All Linked Services",
+      upstream: "GET /v1/identity/{serviceName}/{identifier}/linked-services",
+      parameters: {
+        serviceName: { in: "path" },
+        identifier: { in: "path" },
+      },
+    },
+    startDsar: {
+      description: "Start a DSAR Request",
+      upstream: "POST /v1/dsar",
+      parameters: REQUESTING,
+    },
+    startSar: {
+      description: "Start a SAR Request",
+      upstream: "POST /v1/sar",
+      parameters: REQUESTING,
+    },
+    getSarStatus: {
+      description: "Get SAR Status",
+      upstream: "GET /v1/sar/{sarId}",
+      parameters: {
+        sarId: { in: "path" },
+        ...REQUESTING,
+      },
     },
   },
 });

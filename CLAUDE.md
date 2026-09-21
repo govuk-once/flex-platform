@@ -31,7 +31,8 @@ operations for one upstream, keeping transport details separate from validation 
   keeps the two apart. `src/derive/` derives a gateway's schemas from its upstream's OpenAPI
   document; the definition gives it as a URL and nothing imports it, so its parser is never
   deployed.
-- `gateways/services/udp`: an example gateway configuration and its versioned schemas.
+- `gateways/services/udp`: the User Data Platform gateway, its configuration and its versioned
+  schemas.
 
 The CLI reads the latest version in a gateway's `schemas/` directory, JSON files numbered from
 `0001.json`, checks the configuration against it, and writes the validators, the entry point and

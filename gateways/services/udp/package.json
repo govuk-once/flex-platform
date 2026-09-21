@@ -5,7 +5,7 @@
   "scripts": {
     "codegen": "gateway-codegen",
     "schemas": "gateway-schemas",
-    "lint": "eslint gateway.config.ts",
+    "lint": "eslint gateway.config.ts config/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

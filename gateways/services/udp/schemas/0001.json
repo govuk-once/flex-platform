@@ -1,21 +1,4 @@
 {
-  "defs": {
-    "UserRecord": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id"
-      ]
-    }
-  },
   "operations": {
     "createUser": {
       "input": {
@@ -24,12 +7,13 @@
           "payload": {
             "type": "object",
             "properties": {
-              "email": {
-                "type": "string"
+              "appId": {
+                "type": "string",
+                "description": "The Users Identifier for the GOVUK App"
               }
             },
             "required": [
-              "email"
+              "appId"
             ],
             "additionalProperties": false
           }
@@ -40,8 +24,8 @@
         "additionalProperties": false
       },
       "outcomes": {
-        "created": {
-          "$ref": "UserRecord"
+        "no_content": {
+          "type": "null"
         }
       }
     },
@@ -49,12 +33,26 @@
       "input": {
         "type": "object",
         "properties": {
-          "subjectId": {
-            "type": "string"
+          "requiredService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The service name to look up the linked identity for"
+          },
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
           }
         },
         "required": [
-          "subjectId"
+          "requiredService",
+          "requestingService",
+          "requestingServiceUserId"
         ],
         "additionalProperties": false
       },
@@ -62,12 +60,349 @@
         "ok": {
           "type": "object",
           "properties": {
-            "linkedId": {
-              "type": "string"
+            "serviceId": {
+              "type": "string",
+              "description": "The Identifer for the requested service"
+            },
+            "serviceName": {
+              "type": "string",
+              "description": "The service name for the identity record"
+            },
+            "accessToken": {
+              "type": "string",
+              "description": "The access token for the service from one login"
+            },
+            "refreshToken": {
+              "type": "string",
+              "description": "The refresh token for the service from one login"
+            },
+            "idToken": {
+              "type": "string",
+              "description": "The idToken for the service from one login"
             }
           },
           "required": [
-            "linkedId"
+            "serviceId",
+            "serviceName"
+          ]
+        }
+      }
+    },
+    "getIdentity": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the service for which the identifier belongs"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provided User Identifier for the given service"
+          }
+        },
+        "required": [
+          "serviceName",
+          "identifier"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "serviceId": {
+              "type": "string",
+              "description": "The Identifer for the requested service"
+            },
+            "serviceName": {
+              "type": "string",
+              "description": "The service name for the identity record"
+            },
+            "accessToken": {
+              "type": "string",
+              "description": "The access token for the service from one login"
+            },
+            "refreshToken": {
+              "type": "string",
+              "description": "The refresh token for the service from one login"
+            },
+            "idToken": {
+              "type": "string",
+              "description": "The idToken for the service from one login"
+            }
+          },
+          "required": [
+            "serviceId",
+            "serviceName"
+          ]
+        }
+      }
+    },
+    "createIdentity": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the service for which the identifier belongs"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provided User Identifier for the given service"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "appId": {
+                "type": "string",
+                "description": "The Users Identifier for the GOVUK App"
+              },
+              "expiresAt": {
+                "type": "integer",
+                "exclusiveMinimum": 1776867570,
+                "description": "The expiry time for the identity in EPOCH Timestamp no milliseconds, must be future dated"
+              },
+              "accessToken": {
+                "type": "string",
+                "description": "The access token for the service from one login"
+              },
+              "refreshToken": {
+                "type": "string",
+                "description": "The refresh token for the service from one login"
+              },
+              "idToken": {
+                "type": "string",
+                "description": "The idToken for the service from one login"
+              }
+            },
+            "required": [
+              "appId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "serviceName",
+          "identifier",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "Server response message"
+            }
+          },
+          "required": [
+            "message"
+          ]
+        }
+      }
+    },
+    "deleteIdentity": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the service for which the identifier belongs"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provided User Identifier for the given service"
+          }
+        },
+        "required": [
+          "serviceName",
+          "identifier"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "Server response message"
+            }
+          },
+          "required": [
+            "message"
+          ]
+        }
+      }
+    },
+    "getLinkedServices": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the service for which the identifier belongs"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provided User Identifier for the given service"
+          }
+        },
+        "required": [
+          "serviceName",
+          "identifier"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "linkedServices": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The list of service names linked to the same UDP user"
+            }
+          },
+          "required": [
+            "linkedServices"
+          ]
+        }
+      }
+    },
+    "startDsar": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "accepted": {
+          "type": "object",
+          "properties": {
+            "dsarID": {
+              "type": "string",
+              "description": "UUID of the DSAR request"
+            }
+          },
+          "required": [
+            "dsarID"
+          ]
+        }
+      }
+    },
+    "startSar": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "accepted": {
+          "type": "object",
+          "properties": {
+            "sarID": {
+              "type": "string",
+              "description": "UUID of the SAR request"
+            }
+          },
+          "required": [
+            "sarID"
+          ]
+        }
+      }
+    },
+    "getSarStatus": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "sarId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The SAR request ID"
+          },
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "sarId",
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "sarID": {
+              "type": "string",
+              "description": "UUID of the SAR request"
+            },
+            "expiresAt": {
+              "type": "number",
+              "description": "Timestamp of pre-signed URL expiry (in milliseconds)"
+            },
+            "presignedUrl": {
+              "type": "string",
+              "description": "The pre-signed URL to download the SAR file"
+            }
+          },
+          "required": [
+            "sarID",
+            "expiresAt",
+            "presignedUrl"
           ]
         }
       }
