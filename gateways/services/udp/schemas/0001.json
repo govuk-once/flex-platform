@@ -355,6 +355,424 @@
         }
       }
     },
+    "getNotificationPreferences": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "consentStatus": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "unknown",
+                        "accepted",
+                        "denied"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "description": "Whether the user has agreed to receive notifications"
+                },
+                "pushId": {
+                  "type": "string",
+                  "description": "The id notifications are pushed to"
+                }
+              },
+              "required": [
+                "consentStatus"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "updateNotificationPreferences": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "configuration": {
+                "type": "object",
+                "properties": {
+                  "expiryMechanism": {
+                    "type": "string",
+                    "enum": [
+                      "DELETE"
+                    ],
+                    "description": "The UDP mechanism to execute at expiry"
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 1776867570,
+                    "description": "The expiry time for the data in EPOCH Timestamp no milliseconds, must be future dated"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "consentStatus": {
+                    "type": "string",
+                    "enum": [
+                      "unknown",
+                      "accepted",
+                      "denied"
+                    ],
+                    "description": "Whether the user has agreed to receive notifications"
+                  },
+                  "pushId": {
+                    "type": "string",
+                    "description": "The id notifications are pushed to"
+                  }
+                },
+                "required": [
+                  "consentStatus"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "consentStatus": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "unknown",
+                        "accepted",
+                        "denied"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "description": "Whether the user has agreed to receive notifications"
+                },
+                "pushId": {
+                  "type": "string",
+                  "description": "The id notifications are pushed to"
+                }
+              },
+              "required": [
+                "consentStatus"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "deleteNotificationPreferences": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "Server response message"
+            }
+          },
+          "required": [
+            "message"
+          ]
+        }
+      }
+    },
+    "getGroupSubscriptions": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "groups": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Namespace": {
+                        "type": "string"
+                      },
+                      "Group": {
+                        "type": "string"
+                      },
+                      "Subgroup": {
+                        "type": "string"
+                      },
+                      "Type": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "NOTIFICATION"
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Namespace",
+                      "Group",
+                      "Type"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "groups"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "updateGroupSubscriptions": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "configuration": {
+                "type": "object",
+                "properties": {
+                  "expiryMechanism": {
+                    "type": "string",
+                    "enum": [
+                      "DELETE"
+                    ],
+                    "description": "The UDP mechanism to execute at expiry"
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 1776867570,
+                    "description": "The expiry time for the data in EPOCH Timestamp no milliseconds, must be future dated"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "Namespace": {
+                          "type": "string"
+                        },
+                        "Group": {
+                          "type": "string"
+                        },
+                        "Subgroup": {
+                          "type": "string"
+                        },
+                        "Type": {
+                          "type": "string",
+                          "enum": [
+                            "NOTIFICATION"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Namespace",
+                        "Group",
+                        "Type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "groups"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "groups": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Namespace": {
+                        "type": "string"
+                      },
+                      "Group": {
+                        "type": "string"
+                      },
+                      "Subgroup": {
+                        "type": "string"
+                      },
+                      "Type": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "NOTIFICATION"
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Namespace",
+                      "Group",
+                      "Type"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "groups"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
     "getSarStatus": {
       "input": {
         "type": "object",

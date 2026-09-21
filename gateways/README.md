@@ -81,7 +81,7 @@ export default defineGateway({
         requestingServiceUserId: { in: "header", name: "requesting-service-user-id" },
       },
     },
-    // …and each of UDP's other operations.
+    // …and each of UDP's other operations, and what Flex keeps in UDP's data store.
   },
 });
 ```
