@@ -118,7 +118,10 @@ const APPLIES_TO: Readonly<Record<string, string>> = {
 const CONTAINS_BOUNDS = ["maxContains", "minContains"];
 
 const COMPOSITION = ["allOf", "anyOf", "oneOf"];
+// Where a schema holds other schemas, read the same way wherever a schema is walked: under a
+// name of its own, in a list, or on its own.
 export const SUBSCHEMA_MAPS = [
+  "$defs",
   "dependentSchemas",
   "patternProperties",
   "properties",
