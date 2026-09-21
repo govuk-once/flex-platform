@@ -160,7 +160,7 @@ describe("defineGateway type inference", () => {
   });
 
   it("rejects a misspelled operation field", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       driver: stubDriver(),
       operations: {
@@ -176,16 +176,23 @@ describe("defineGateway type inference", () => {
         },
       },
     });
+    expectTypeOf<keyof typeof gw.operations>().toEqualTypeOf<"op" | "other">();
+    // Nothing strips the misspelled field; the type error is the only protection.
+    expect(gw.operations.other).toEqual({
+      upstream: "GET /other",
+      descripton: "typo",
+    });
   });
 
   it("rejects a misspelled gateway field", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       // @ts-expect-error `descripton` is not a gateway field
       descripton: "typo",
       driver: stubDriver(),
       operations: { op: { upstream: "GET /op" } },
     });
+    expect(gw).toMatchObject({ id: "test", descripton: "typo" });
   });
 
   it("works with a driver that requires no extra fields", () => {
@@ -271,10 +278,10 @@ describe("driver contract types", () => {
 
     // The brand narrows: a branded handler is still an OperationHandler, but a plain function
     // or another driver's handler is not assignable to the branded type.
-    expectTypeOf<ForStub>().toMatchTypeOf<OperationHandler>();
-    expectTypeOf<ForStub>().toMatchTypeOf<Fn>();
-    expectTypeOf<Fn>().not.toMatchTypeOf<ForStub>();
-    expectTypeOf<ForOther>().not.toMatchTypeOf<ForStub>();
+    expectTypeOf<ForStub>().toExtend<OperationHandler>();
+    expectTypeOf<ForStub>().toExtend<Fn>();
+    expectTypeOf<Fn>().not.toExtend<ForStub>();
+    expectTypeOf<ForOther>().not.toExtend<ForStub>();
   });
 
   it("carries an asynchronous createExecutor that receives the configuration", async () => {
@@ -316,6 +323,6 @@ describe("driver contract types", () => {
       type: "typed-stub" as const,
       createExecutor: () => execute,
     };
-    expectTypeOf(synchronous).not.toMatchTypeOf<StubDriver>();
+    expectTypeOf(synchronous).not.toExtend<StubDriver>();
   });
 });

@@ -91,7 +91,7 @@ describe("createSecretProvider", () => {
     "arn:aws:secretsmanager:eu-west-2:123456789012:secret:",
     "arn:aws:secretsmanager:eu-west-2:123456789012:secret:has space",
   ])("rejects %j at creation", (arn) => {
-    expect(() => createSecretProvider(arn)).toThrowError(
+    expect(() => createSecretProvider(arn)).toThrow(
       /needs a Secrets Manager secret ARN/,
     );
   });

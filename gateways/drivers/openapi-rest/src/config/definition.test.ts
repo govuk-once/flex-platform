@@ -53,7 +53,8 @@ describe("openapiRest", () => {
 
   it("requires an auth definition", () => {
     // @ts-expect-error every gateway states how its requests are authenticated
-    openapiRest({ spec: SPEC });
+    const definition = openapiRest({ spec: SPEC });
+    expect(definition.auth).toBeUndefined();
   });
 
   it("types the driver with a literal type discriminator", () => {
@@ -68,7 +69,8 @@ describe("openapiRest", () => {
 
   it("rejects a misspelled driver field", () => {
     // @ts-expect-error `spce` is not a driver field
-    openapiRest({ spec: SPEC, auth: AUTH, spce: SPEC });
+    const definition = openapiRest({ spec: SPEC, auth: AUTH, spce: SPEC });
+    expect(Object.keys(definition)).not.toContain("spce");
   });
 
   it("declares the HTTP operation fields", () => {
@@ -108,7 +110,7 @@ describe("openapiRest with defineGateway", () => {
   });
 
   it("rejects operations without an upstream", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       driver: openapiRest({ spec: SPEC, auth: AUTH }),
       operations: {
@@ -116,10 +118,12 @@ describe("openapiRest with defineGateway", () => {
         missing: { description: "No upstream" },
       },
     });
+    // The requirement is a type-level one; defineGateway passes the operation through.
+    expect(gw.operations.missing).toEqual({ description: "No upstream" });
   });
 
   it("rejects an unknown parameter location", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       driver: openapiRest({ spec: SPEC, auth: AUTH }),
       operations: {
@@ -130,10 +134,13 @@ describe("openapiRest with defineGateway", () => {
         },
       },
     });
+    expect(gw.operations).toMatchObject({
+      op: { parameters: { session: { in: "cookie" } } },
+    });
   });
 
   it("rejects an upstream with an unknown method or no leading slash", () => {
-    defineGateway({
+    const gw = defineGateway({
       id: "test",
       driver: openapiRest({ spec: SPEC, auth: AUTH }),
       operations: {
@@ -142,6 +149,11 @@ describe("openapiRest with defineGateway", () => {
         // @ts-expect-error the path must start with a slash
         badPath: { upstream: "GET x" },
       },
+    });
+    // Nothing parses the template at runtime, so both survive as written.
+    expect(gw.operations).toMatchObject({
+      badMethod: { upstream: "FETCH /x" },
+      badPath: { upstream: "GET x" },
     });
   });
 });

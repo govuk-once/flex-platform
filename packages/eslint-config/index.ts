@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import eslint from "@eslint/js";
-import { includeIgnoreFile } from "eslint/config";
+import { defineConfig, includeIgnoreFile } from "eslint/config";
 import prettier from "eslint-plugin-prettier/recommended";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
 import tseslint from "typescript-eslint";
@@ -11,7 +11,7 @@ import { findUpSync } from "./find-up.ts";
 // Project only has one workspace file at the root
 const rootDir = path.dirname(findUpSync("pnpm-workspace.yaml"));
 
-export const base = tseslint.config(
+export const base = defineConfig(
   includeIgnoreFile(path.join(rootDir, ".gitignore")),
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -33,6 +33,7 @@ export const base = tseslint.config(
       ],
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-deprecated": "error",
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
     },
@@ -41,7 +42,7 @@ export const base = tseslint.config(
 
 // Drivers own transport access. Wrapping upstream calls in ctx.upstream is a contributor
 // requirement; this preset does not enforce that wrapping.
-export const driver = tseslint.config(...base);
+export const driver = defineConfig(...base);
 
 // Services must not make network calls directly — all upstream access goes through a gateway.
 const NETWORK_MESSAGE =
@@ -56,7 +57,7 @@ const NETWORK_PACKAGES = ["undici"];
 
 const NETWORK_GLOBALS = ["fetch", "WebSocket", "EventSource", "XMLHttpRequest"];
 
-export const service = tseslint.config(...base, {
+export const service = defineConfig(...base, {
   rules: {
     "no-restricted-globals": [
       "error",
