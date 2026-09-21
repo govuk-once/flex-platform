@@ -15,12 +15,12 @@ gateways/
   drivers/
     openapi-rest/  HTTP request construction, status mapping, authentication and custom handlers
   services/
-    udp/           Example gateway configuration and schemas
+    udp/           The User Data Platform gateway: configuration and schemas
 ```
 
 The codegen CLI checks a gateway configuration against its schemas and writes the validators,
 the call contract and the entry point to `.gen/`; see [Code generation](#code-generation). For
-the included example, run:
+the UDP gateway, run:
 
 ```bash
 pnpm --filter @govuk-once/flex-gateway-udp codegen
@@ -75,8 +75,13 @@ export default defineGateway({
     getIdentityExchange: {
       description: "Look up a linked identity record for a different service",
       upstream: "GET /v1/identity/exchange",
-      parameters: { subjectId: { in: "query" } },
+      parameters: {
+        requiredService: { in: "query" },
+        requestingService: { in: "header", name: "requesting-service" },
+        requestingServiceUserId: { in: "header", name: "requesting-service-user-id" },
+      },
     },
+    // …and each of UDP's other operations.
   },
 });
 ```
@@ -428,11 +433,11 @@ and an outcome the gateway does not declare is a type error.
 ```ts
 import type { GetIdentityExchangeResponse } from "./.gen/client/rpc.ts";
 
-export function linkedId(response: GetIdentityExchangeResponse): string {
+export function serviceId(response: GetIdentityExchangeResponse): string {
   if (!response.ok) throw new Error(response.error.code);
   switch (response.outcome) {
     case "ok":
-      return response.data.linkedId;
+      return response.data.serviceId;
   }
 }
 ```
@@ -1057,7 +1062,13 @@ the operation's schemas then declare alongside `ok`:
 ```ts
 import { defineHandler } from "@repo/gateway-driver-openapi-rest";
 
-export default defineHandler(async (input: { subjectId: string }, client) => {
+interface IdentityExchangeInput {
+  requiredService: string;
+  requestingService: string;
+  requestingServiceUserId: string;
+}
+
+export default defineHandler(async (input: IdentityExchangeInput, client) => {
   const response = await client.request(client.prepare(input));
   if (response.status === 404) {
     return { outcome: "unlinked", data: null };
