@@ -17,6 +17,12 @@ operations for one upstream, keeping transport details separate from validation 
   value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
   gateway secret from AWS Secrets Manager through Powertools Parameters.
 - `gateways/shared/codegen`: schema loading and standalone JavaScript validator generation.
+- `gateways/drivers/openapi-rest`: the HTTP driver. Builds `fetch` requests from operation
+  mappings, maps statuses to outcomes and error codes, and dispatches to custom handlers the
+  entrypoint supplies. Nothing in it is called by hand; a generated entrypoint wires it.
+  `src/config/` is what a gateway configuration imports and codegen evaluates; `src/runtime/`
+  is reached only through the definition's `createExecutor`, which loads it, and a lint rule
+  keeps the two apart.
 - `gateways/services/udp`: an example gateway configuration and schema fixtures.
 
 The CLI currently reads `schemas.fixture.ts` and writes validators. It does not produce a
@@ -85,6 +91,8 @@ integrations are implemented.
 1. **Transport-neutral contracts.** Runtime and codegen share JSON Schema and opaque driver
    definitions. Upstream methods, paths, status codes and headers belong in transport adapters.
    Adding a transport should not require transport-specific logic in the dispatcher or generator.
+   `gateways/drivers/openapi-rest` is the only package that names methods, paths, status codes
+   or headers; callers see outcome names such as `ok` and `no_content`, never a status.
    A driver definition carries its own `createExecutor`, so codegen and a generated entrypoint
    reach any driver the same way, as `config.driver`, and pass it the neutral `ExecutorOptions`;
    nothing outside a configuration names a driver package. A driver's handler type is a
@@ -144,7 +152,9 @@ integrations are implemented.
    `NOT_FOUND` and `UPSTREAM_REJECTED` represent an upstream response; contract violations and
    timeouts represent failures. Gateway-side rate limits and breaker rejections must remain
    neutral to upstream health to avoid feeding a control's own output back into it. The runtime
-   currently logs these classifications; it does not operate a breaker.
+   currently logs these classifications; it does not operate a breaker. An upstream 429 also
+   maps to `RATE_LIMITED` and keeps that neutral ruling: the gateway's own limit should sit
+   below any upstream threshold, so reaching one is a gateway configuration problem.
 
 6. **Payload logging is explicit and leaf-only.** Select fields with `log.input` and
    `log.output`. Paths resolving to objects or arrays are dropped so newly added nested fields
@@ -187,6 +197,25 @@ integrations are implemented.
     `readUpstreamOptions`, which builds the secret provider, and pass the result in, never
     inside a request. A gateway configuration never names an ARN or a secret value, and
     importing one never reaches the environment or AWS.
+
+12. **Secrets are validated before use and authentication is driver-owned.** The runtime reads
+    the secret through Powertools Parameters as a JSON object, served from its cache for a
+    bounded age and read again after that; concurrent reads on an expired cache may each reach
+    the store, and a read a caller has stopped waiting for completes on its own. It knows
+    nothing of the fields. A driver's validator, or the one its configured authentication
+    definition supplies, runs on the initial secret and on every read after it, in the shared
+    `Validator` convention, before any value reaches authentication code; an invalid secret is
+    never returned and the affected operation fails. Diagnostics about a secret name the
+    schema location that rejected it, never a value, a path into the secret (a dictionary
+    schema takes those segments from its keys), a field it was not expected to have, or a
+    validator's message; a failed read is reported as a fixed message with nothing of the
+    library's error. An authentication definition declares the headers it owns; the driver
+    reserves them before compiling operations, so no static header, mapping or handler can set
+    them, and the definition may set no other. Its state is built per executor, its network
+    access goes through the driver's transport facility, and nothing in a configuration module
+    reads a secret or exchanges a token at import. Token and session expiry belong to the
+    authentication definition. Nothing replays an upstream operation after an authentication
+    failure.
 
 ## Public documentation and comments
 

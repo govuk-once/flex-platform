@@ -1,3 +1,4 @@
+import { hasDotSegment } from "../path.ts";
 import { HTTP_METHODS, type HttpMethod, isHttpMethod } from "../types.ts";
 
 export type PathPart =
@@ -16,10 +17,6 @@ const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 // A "%" a parameter's value could complete. "/x/%2e%{id}" with id "2e" sends "/x/%2e%2e", a
 // dot segment the reviewed template never showed, so each escape must be whole in its literal.
 const INCOMPLETE_ESCAPE = /%(?![0-9A-Fa-f]{2})/;
-// Every spelling the URL parser resolves as a dot segment, which it does before the request
-// leaves: a literal one would silently move the request up, out of the target's own path.
-const DOT_SEGMENT = /^(?:\.|%2e){1,2}$/i;
-
 // Parses "<METHOD> /path/{param}" into a method and path parts. Any failure is a configuration
 // error, so callers run this when creating the executor rather than per request.
 export function parseUpstream(upstream: string): ParsedUpstream {
@@ -98,16 +95,13 @@ export function parseUpstream(upstream: string): ParsedUpstream {
   // Each parameter stands in as one ordinary character: its value is never empty, never only
   // dots and never holds a "%", so a segment containing one cannot be a dot segment whatever
   // the caller sends. Only segments made of literal text can be, and those are fixed here.
-  // Splitting on "/" alone is complete because a backslash is already refused above.
-  for (const segment of parts
+  const literals = parts
     .map((part) => (part.kind === "literal" ? part.value : "x"))
-    .join("")
-    .split("/")) {
-    if (DOT_SEGMENT.test(segment)) {
-      throw new TypeError(
-        `Upstream "${upstream}" has a dot segment in its path, which the URL parser would resolve`,
-      );
-    }
+    .join("");
+  if (hasDotSegment(literals)) {
+    throw new TypeError(
+      `Upstream "${upstream}" has a dot segment in its path, which the URL parser would resolve`,
+    );
   }
 
   return { method, template, parts, params };
