@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@aws-lambda-powertools/parameters": "2.35.0",
-    "@aws-sdk/client-secrets-manager": "3.1128.0",
+    "@aws-sdk/client-secrets-manager": "3.1131.0",
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-types": "workspace:*",
     "pino": "10.3.1"
@@ -21,7 +21,7 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.9.1",
+    "eslint": "10.10.0",
     "vitest": "4.1.11"
   }
 }
