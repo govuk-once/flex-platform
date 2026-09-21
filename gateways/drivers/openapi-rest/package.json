@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "3.1135.0",
+    "@repo/gateway-codegen": "workspace:*",
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-runtime": "workspace:*",
     "@repo/gateway-types": "workspace:*",
@@ -23,7 +24,6 @@
   "devDependencies": {
     "@aws-sdk/client-secrets-manager": "3.1135.0",
     "@repo/eslint-config": "workspace:*",
-    "@repo/gateway-codegen": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "eslint": "10.10.0",

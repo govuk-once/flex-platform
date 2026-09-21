@@ -19,6 +19,7 @@ describe("@repo/gateway-codegen", () => {
       "VALIDATORS_DIR",
       "bundleEntry",
       "checkGateway",
+      "checkValue",
       "compareSchemas",
       "emitContract",
       "emitEntry",
