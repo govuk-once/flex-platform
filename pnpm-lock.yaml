@@ -60,6 +60,9 @@ importers:
       '@repo/gateway-driver-openapi-rest':
         specifier: workspace:*
         version: link:../../drivers/openapi-rest
+      '@repo/gateway-runtime':
+        specifier: workspace:*
+        version: link:../../shared/runtime
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -107,9 +110,15 @@ importers:
         specifier: 4.23.13
         version: 4.23.13
     devDependencies:
+      '@aws-sdk/client-secrets-manager':
+        specifier: 3.1128.0
+        version: 3.1128.0
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../../packages/eslint-config
+      '@repo/gateway-runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../../../packages/tsconfig
