@@ -257,9 +257,10 @@ non-obvious decision over a roadmap, a deployment narrative or a repeat of this 
 ## Build and test notes
 
 - Nothing is compiled, apart from the generated entry point, which codegen bundles with esbuild
-  so a gateway that cannot be bundled fails generation. The AWS SDK stays external: the Lambda
-  runtime provides it. Workspace packages resolve to each other's sources, so typecheck and
-  tests see a dependency change immediately and no task waits on another package.
+  so a gateway that cannot be bundled fails generation. Only Node's builtins are left external:
+  the AWS SDK is bundled at the version the lockfile pins, although the Lambda runtime ships one
+  of its own. Workspace packages resolve to each other's sources, so typecheck and tests see a
+  dependency change immediately and no task waits on another package.
 - Test the libraries, not each gateway. Generation, bundling and dispatch are covered against
   the fixture gateway in `gateways/shared/codegen/test/`; a gateway package tests only its own
   custom handlers, since there will be many gateways and a deployment is what exercises one.
