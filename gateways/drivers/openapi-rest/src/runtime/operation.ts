@@ -1,5 +1,6 @@
 import type { OperationConfig } from "@repo/gateway-config";
 import { GatewayError } from "@repo/gateway-runtime";
+import { isRecord } from "@repo/utils/is-record";
 import { isScalar } from "@repo/utils/is-scalar";
 import { ownValue } from "@repo/utils/own-value";
 
@@ -184,13 +185,12 @@ export function compileOperation(
   const acceptsBody = METHODS_WITH_BODY.has(upstream.method);
 
   function prepare(input: unknown): OpenApiRestCall {
-    if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    if (!isRecord(input)) {
       throw new GatewayError("INTERNAL", `${context}: input must be an object`);
     }
-    const fields = input as Record<string, unknown>;
     // Own properties only: an omitted field named like an inherited member, `toString` say,
     // must read as absent rather than as Object.prototype's function.
-    const read = (field: string): unknown => ownValue(fields, field);
+    const read = (field: string): unknown => ownValue(input, field);
 
     let path = "";
     for (const step of steps) {
@@ -240,8 +240,8 @@ export function compileOperation(
     }
 
     let body: unknown;
-    if (Object.hasOwn(fields, PAYLOAD_FIELD)) {
-      body = fields[PAYLOAD_FIELD];
+    if (Object.hasOwn(input, PAYLOAD_FIELD)) {
+      body = input[PAYLOAD_FIELD];
       if (body !== undefined && !acceptsBody) {
         throw new GatewayError(
           "INTERNAL",
@@ -252,7 +252,7 @@ export function compileOperation(
 
     // Counted, never named: a schema that allows additional properties lets the caller choose
     // the names, and the message is logged.
-    const unmapped = Object.keys(fields).filter((key) => !recognised.has(key));
+    const unmapped = Object.keys(input).filter((key) => !recognised.has(key));
     if (unmapped.length > 0) {
       throw new GatewayError(
         "INTERNAL",

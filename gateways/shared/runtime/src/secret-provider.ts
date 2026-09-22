@@ -1,5 +1,6 @@
 import { SecretsProvider } from "@aws-lambda-powertools/parameters/secrets";
 import type { SecretObject, SecretProvider } from "@repo/gateway-types";
+import { isRecord } from "@repo/utils/is-record";
 
 import { GatewayError } from "./errors.ts";
 
@@ -33,13 +34,13 @@ export function asSecretObject(value: unknown): SecretObject {
       "Gateway secret has no value; it must be a JSON object",
     );
   }
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new GatewayError(
       "INTERNAL",
       `Gateway secret must be a JSON object, not ${describeJsonType(value)}`,
     );
   }
-  return value as SecretObject;
+  return value;
 }
 
 // One Powertools SecretsProvider per gateway, reading the secret the ARN names with the
