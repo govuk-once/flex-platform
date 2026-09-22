@@ -24,12 +24,12 @@
     "tsx": "4.23.13"
   },
   "devDependencies": {
-    "@aws-sdk/client-secrets-manager": "3.1128.0",
+    "@aws-sdk/client-secrets-manager": "3.1132.0",
     "@repo/eslint-config": "workspace:*",
     "@repo/gateway-runtime": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.9.1",
+    "eslint": "10.10.0",
     "typescript": "6.0.3",
     "vitest": "4.1.11"
   }
