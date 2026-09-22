@@ -473,3 +473,68 @@ describe("generation errors", () => {
     ).rejects.toThrow();
   });
 });
+
+// A field a schema names is a field of the object, never one it inherits. Every object reaching
+// a validator came from `JSON.parse`, so it has `Object.prototype` behind it and its every
+// member is there to be found under a name a schema happens to use.
+describe("fields an object inherits rather than holds", () => {
+  const inherited: GatewaySchemas = {
+    // Each holds the object to one thing, so what a case proves is the one it names.
+    operations: {
+      demanding: {
+        // Constrained by nothing, so what the case turns on is whether the field is there.
+        input: {
+          type: "object",
+          properties: { constructor: {} },
+          required: ["constructor"],
+        },
+        outcomes: { ok: { type: "object" } },
+      },
+      typing: {
+        input: { type: "object" },
+        outcomes: {
+          ok: { type: "object", properties: { valueOf: { type: "string" } } },
+        },
+      },
+    },
+  };
+
+  interface Naming {
+    validators: {
+      demanding: { input: Validator; outcomes: { ok: Validator } };
+      typing: { input: Validator; outcomes: { ok: Validator } };
+    };
+  }
+  let naming: Naming;
+  // Parsed rather than written, which is how one reaches a validator and the only way an object
+  // literal here would carry the prototype at all.
+  const empty = (): unknown => JSON.parse("{}");
+
+  beforeAll(async () => {
+    const dir = path.join(tmp, "inherited");
+    await emitValidators(inherited, dir);
+    naming = (await import(
+      pathToFileURL(path.join(dir, "index.js")).href
+    )) as Naming;
+  });
+
+  it("does not take an inherited member for a required field that is there", () => {
+    expect(naming.validators.demanding.input(empty())).toBe(false);
+  });
+
+  it("does not hold an inherited member to the schema for a field that is not", () => {
+    expect(naming.validators.typing.outcomes.ok(empty())).toBe(true);
+  });
+
+  it("holds the field to its schema where the object does hold it", () => {
+    expect(
+      naming.validators.demanding.input(JSON.parse('{"constructor":1}')),
+    ).toBe(true);
+    expect(
+      naming.validators.typing.outcomes.ok(JSON.parse('{"valueOf":1}')),
+    ).toBe(false);
+    expect(
+      naming.validators.typing.outcomes.ok(JSON.parse('{"valueOf":"v"}')),
+    ).toBe(true);
+  });
+});

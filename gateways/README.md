@@ -235,6 +235,13 @@ off: strict mode wants a tuple's length pinned, which would refuse an array that
 elements by position and the rest with `items`. A schema whose validation is asynchronous is
 refused outright, since the dispatcher validates synchronously.
 
+A field is one the object holds, never one it inherits. Every value a validator sees was parsed
+from JSON, so `Object.prototype` is behind it and a schema naming `constructor`, `toString` or
+any other member of it would otherwise be answered by the prototype: an object holding nothing
+would satisfy a requirement for such a field, and fail a type stated for one, since what got
+validated is the inherited function. The validators are generated to read own fields only, so
+what a schema says of a field is said of the object in front of it.
+
 ### The generated entry point
 
 ```js

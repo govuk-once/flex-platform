@@ -58,6 +58,14 @@ export function compileValidators(schemas: GatewaySchemas): CompiledValidators {
     // requiring the elements it names, would fail generation. Both describe an array the
     // validators and the call contract handle, so only this check is off.
     strictTuples: false,
+    // A field is a field the object has, not one it inherits. Every object a validator sees came
+    // from `JSON.parse`, which builds objects on `Object.prototype`, so left off this reads
+    // `constructor`, `toString` and the rest off the prototype: `{}` satisfies a required
+    // `constructor`, and `{}` fails an optional one typed as a string, since the inherited
+    // function is what gets validated. Refusing `__proto__` in a version does not reach this:
+    // the names are the prototype's own and no schema has to mention them for a caller to be
+    // held to what they hold.
+    ownProperties: true,
     allErrors: false,
   });
 

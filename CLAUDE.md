@@ -136,7 +136,13 @@ integrations are implemented.
    authentication state before it resolves, so a missing or invalid secret fails at startup and
    never on the first request. Look
    up outcome validators through a `Map`, never a plain object: the outcome name arrives from
-   the driver at request time, and an object lookup finds inherited members.
+   the driver at request time, and an object lookup finds inherited members. A validator reads
+   the fields an object holds and never one it inherits, for the same reason at the other end:
+   every value it sees came from `JSON.parse`, so `Object.prototype` is behind it and a schema
+   naming `constructor`, `toString` or any other member of it would be answered by the
+   prototype. Ajv is asked for that by name, wherever a schema is read; refusing `__proto__`
+   does not reach it, since the names are the prototype's own and no schema has to mention them
+   for a caller to be held to what they hold.
 
    Each step owns a code: `INVALID_INPUT` for envelope parsing and input validation,
    `OPERATION_NOT_FOUND` for an unknown operation, `SECURE_VALUE_MISMATCH` for bindings,
