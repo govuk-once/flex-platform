@@ -6,6 +6,7 @@ export { generate } from "./generate.ts";
 export {
   CLIENT_DIR,
   CONTRACT_MODULE,
+  GENERATED_DIR,
   RUNTIME_DIR,
   VALIDATORS_DIR,
 } from "./layout.ts";

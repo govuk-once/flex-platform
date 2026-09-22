@@ -9,6 +9,7 @@ describe("@repo/gateway-codegen", () => {
     expect(Object.keys(codegen).toSorted()).toEqual([
       "CLIENT_DIR",
       "CONTRACT_MODULE",
+      "GENERATED_DIR",
       "GatewayCheckError",
       "RUNTIME_DIR",
       "VALIDATORS_DIR",
@@ -24,11 +25,14 @@ describe("@repo/gateway-codegen", () => {
   });
 
   it("names the directories and files a generated gateway holds", () => {
+    // Every segment of a generated path, the directory they are all under included: a caller
+    // that can name the rest and not that one cannot build a path at all.
     expect([
+      codegen.GENERATED_DIR,
       codegen.RUNTIME_DIR,
       codegen.VALIDATORS_DIR,
       codegen.CLIENT_DIR,
       codegen.CONTRACT_MODULE,
-    ]).toEqual(["runtime", "validators", "client", "rpc.ts"]);
+    ]).toEqual([".gen", "runtime", "validators", "client", "rpc.ts"]);
   });
 });
