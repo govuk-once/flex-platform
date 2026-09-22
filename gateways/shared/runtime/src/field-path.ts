@@ -1,3 +1,5 @@
+import { ownValue } from "@repo/utils/own-value";
+
 export interface CompiledPath {
   readonly raw: string;
   readonly segments: readonly string[];
@@ -29,8 +31,8 @@ export function resolvePath(
 
       if (segment === "*") {
         expandWildcard(node, next);
-      } else if (Object.hasOwn(node, segment)) {
-        pushDefined(next, (node as Record<string, unknown>)[segment]);
+      } else {
+        pushDefined(next, ownValue(node as Record<string, unknown>, segment));
       }
     }
 
@@ -48,8 +50,8 @@ export function valueAt(data: unknown, segments: readonly string[]): unknown {
 
   for (const segment of segments) {
     if (node === null || typeof node !== "object") return undefined;
-    if (!Object.hasOwn(node, segment)) return undefined;
-    node = (node as Record<string, unknown>)[segment];
+    node = ownValue(node as Record<string, unknown>, segment);
+    if (node === undefined) return undefined;
   }
 
   return node;

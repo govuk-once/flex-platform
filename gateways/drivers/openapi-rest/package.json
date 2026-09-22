@@ -13,7 +13,8 @@
   "dependencies": {
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-runtime": "workspace:*",
-    "@repo/gateway-types": "workspace:*"
+    "@repo/gateway-types": "workspace:*",
+    "@repo/utils": "workspace:*"
   },
   "devDependencies": {
     "@aws-sdk/client-secrets-manager": "3.1128.0",

@@ -1,4 +1,5 @@
 import type { SecretProvider, Validator } from "@repo/gateway-types";
+import { isRecord } from "@repo/utils/is-record";
 
 import { isVerbatimHeaderValue, normaliseHeaderName } from "../headers.ts";
 import type { HttpMethod, OpenApiRestResponse } from "../types.ts";
@@ -92,17 +93,13 @@ function validator<T>(
   return result;
 }
 
-function isObject(data: unknown): data is Record<string, unknown> {
-  return data !== null && typeof data === "object" && !Array.isArray(data);
-}
-
 // Findings name paths and keywords only: a value never appears, and neither does the name of
 // an unexpected field, which is not the validator's to repeat.
 function objectWithFields(
   data: unknown,
   fields: readonly string[],
 ): ValidationError[] {
-  if (!isObject(data)) {
+  if (!isRecord(data)) {
     return [
       { instancePath: "", schemaPath: "#/type", message: "must be object" },
     ];
