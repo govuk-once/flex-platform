@@ -164,6 +164,29 @@ const RENAMED_SCHEMAS = {
 
 const FIRST_VERSION = path.join(SCHEMAS_DIR, "0001.json");
 
+// Waits for the file a loading gateway writes when it has reached the point it holds at. A run
+// that fails before it gets there ends the wait too: that failure is the more useful report, and
+// the case makes it against the run itself.
+async function reached(marker: string, run: Promise<unknown>): Promise<void> {
+  const settled = run.then(
+    () => true,
+    () => true,
+  );
+  const until = Date.now() + 30_000;
+  while (!existsSync(marker)) {
+    const ended = await Promise.race([
+      settled,
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), 5);
+      }),
+    ]);
+    if (ended) return;
+    if (Date.now() > until) {
+      throw new Error(`${path.basename(marker)} was never written`);
+    }
+  }
+}
+
 async function writeGateway(
   dir: string,
   config: string,
@@ -275,8 +298,14 @@ import { existsSync, writeFileSync } from "node:fs";
 
 // Held here so a case can change a file while this module is being evaluated. A gateway's own
 // configuration reaches nothing of the sort; this is the test standing in the middle of a load.
+// The wait is bounded: a case that fails before it releases this module ends its run all the
+// same, and the failure it reports is its own rather than a timeout around a module still held.
 writeFileSync(new URL("./started", import.meta.url), "");
-while (!existsSync(new URL("./proceed", import.meta.url))) {
+const held = Date.now() + 30_000;
+while (
+  !existsSync(new URL("./proceed", import.meta.url)) &&
+  Date.now() < held
+) {
   await new Promise((resolve) => setTimeout(resolve, 5));
 }
 ${gatewayModule("{ createUser: {} }")}`,
@@ -284,15 +313,17 @@ ${gatewayModule("{ createUser: {} }")}`,
     );
 
     const run = generate(tmp);
-    while (!existsSync(path.join(tmp, "started"))) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
+    try {
+      await reached(path.join(tmp, "started"), run);
+      // What the bundle would read from here on, and what nothing in this run has checked.
+      await writeFile(
+        path.join(tmp, "gateway.config.ts"),
+        gatewayModule("{ createUser: {}, andAnother: {} }"),
+      );
+    } finally {
+      // Released whatever happened above, so the run ends and reports what it found.
+      await writeFile(path.join(tmp, "proceed"), "");
     }
-    // What the bundle would read from here on, and what nothing in this run has checked.
-    await writeFile(
-      path.join(tmp, "gateway.config.ts"),
-      gatewayModule("{ createUser: {}, andAnother: {} }"),
-    );
-    await writeFile(path.join(tmp, "proceed"), "");
 
     await expect(run).rejects.toThrow(/changed while it was being generated/);
     await expect(readdir(generated())).rejects.toThrow();
