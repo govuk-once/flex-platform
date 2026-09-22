@@ -1,5 +1,12 @@
 import type * as FsPromises from "node:fs/promises";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -287,6 +294,31 @@ describe("generate", () => {
 
     expect(await readFile(contractPath(), "utf-8")).toBe(before);
     expect(await leftovers()).toEqual([]);
+  });
+
+  it("clears out what an interrupted run left behind", async () => {
+    // A run that fails removes its own directory; one that is killed cannot, and what it was
+    // building is still there when the next run starts.
+    const abandoned = await mkdtemp(stagingPrefix(outDir()));
+    await writeFile(path.join(abandoned, "half-written.js"), "");
+
+    await writeGateway(CREATE_USER, schemasModule(CREATE_USER_SCHEMAS));
+    await generate(tmp);
+
+    expect(await leftovers()).toEqual([]);
+    expect(await readdir(outDir())).not.toEqual([]);
+  });
+
+  it("leaves the copy a failed publication kept", async () => {
+    // The last complete run's output, where publication could neither finish nor be undone. A
+    // run that swept it away would take the only copy of it with it.
+    const previous = `${await mkdtemp(stagingPrefix(outDir()))}.previous`;
+    await mkdir(previous);
+
+    await writeGateway(CREATE_USER, schemasModule(CREATE_USER_SCHEMAS));
+    await generate(tmp);
+
+    expect(await leftovers()).toEqual([path.basename(previous)]);
   });
 
   it("still reports the failure when the last run cannot be put back", async () => {

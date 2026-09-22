@@ -1,4 +1,4 @@
-import { mkdtemp, rename, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { checkGateway } from "./check-gateway.ts";
@@ -17,6 +17,32 @@ import { loadConfig, loadGatewaySchemas } from "./load-config.ts";
 // generated directory, so the depth from a gateway's own modules is the one the emitted paths
 // were written for.
 export const stagingPrefix = (outDir: string): string => `${outDir}.staging-`;
+
+// What a run that was interrupted rather than failed left beside the generated directory: a
+// failure cleans up after itself, a signal gives it no chance to. Swept before this run builds
+// its own, so abandoned directories do not accumulate.
+//
+// A ".previous" directory is not one of these. It is the last complete run's output, kept where
+// publication could neither finish nor be undone, and the only copy of it left; the next run to
+// publish replaces what it was a copy of, and removing it before that is what would lose it.
+// Failing to remove one of these is not a failed generation: nothing was generated yet, and the
+// name is this gateway's own, so a directory left here is only ever its own to tidy.
+async function sweepAbandoned(outDir: string): Promise<void> {
+  const prefix = path.basename(stagingPrefix(outDir));
+  const parent = path.dirname(outDir);
+  const entries = await readdir(parent).catch(() => []);
+  await Promise.all(
+    entries
+      .filter(
+        (entry) => entry.startsWith(prefix) && !entry.endsWith(".previous"),
+      )
+      .map((entry) =>
+        rm(path.join(parent, entry), { recursive: true, force: true }).catch(
+          () => undefined,
+        ),
+      ),
+  );
+}
 
 function errorCode(error: unknown): string | undefined {
   return error instanceof Error
@@ -71,6 +97,7 @@ export async function generate(gatewayDir: string): Promise<void> {
   checkGateway(config, schemas);
 
   const outDir = path.join(dir, GENERATED_DIR);
+  await sweepAbandoned(outDir);
   // One directory to clean up, whichever step fails: what a run leaves behind is the last
   // complete run's output, never its own.
   const staging = await mkdtemp(stagingPrefix(outDir));
