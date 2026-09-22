@@ -48,10 +48,6 @@ export async function emitEntry(
   );
 }
 
-// The AWS SDK ships with the Lambda runtime, so it stays an import rather than a copy in every
-// gateway's bundle. Everything else a gateway needs is its own.
-const RUNTIME_PROVIDED = ["@aws-sdk/*"];
-
 // A bundled CommonJS dependency, pino among them, reaches Node's builtins through `require`,
 // which an ES module does not have: esbuild leaves a shim that throws unless one is in scope,
 // so the module would fail to load rather than fail a request. The bundle makes its own.
@@ -79,7 +75,6 @@ export async function bundleEntry(runtime: string): Promise<void> {
     format: "esm",
     platform: "node",
     target: "node24",
-    external: RUNTIME_PROVIDED,
     // esbuild's own report would print beside the error it throws, which carries the same
     // messages and reaches the CLI.
     logLevel: "silent",

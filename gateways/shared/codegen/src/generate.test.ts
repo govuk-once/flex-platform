@@ -562,9 +562,9 @@ describe("the generated gateway", () => {
     expect(await leftovers(outDir)).toEqual([]);
   }, 60_000);
 
-  it("bundles everything but what the platform provides", () => {
-    // A gateway that cannot be bundled fails generation; nothing is left to resolve at
-    // deployment except Node's builtins and the AWS SDK the Lambda runtime ships.
+  it("bundles everything but Node's own builtins", () => {
+    // A gateway that cannot be bundled fails generation, and nothing but a builtin is left for
+    // the platform to resolve: what the deployment runs is the version the lockfile pinned.
     const imported = [
       ...bundle.matchAll(/^\s*(?:import|export)\b[^;]*?from\s+"([^"]+)"/gm),
     ]
@@ -572,7 +572,7 @@ describe("the generated gateway", () => {
       .filter((specifier) => !specifier.startsWith("node:"));
 
     expect(bundle.startsWith("// GENERATED FILE.")).toBe(true);
-    expect(imported.toSorted()).toEqual(["@aws-sdk/client-secrets-manager"]);
+    expect(imported).toEqual([]);
     expect(bundle).toMatch(/export\s*\{[^}]*\bhandler\b/);
   });
 
