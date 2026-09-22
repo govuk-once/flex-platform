@@ -26,9 +26,11 @@ example, run:
 pnpm --filter @govuk-once/flex-gateway-udp codegen
 ```
 
-There is no build step: the CLI runs from source. It does not generate a client; a consumer
-takes the generated contract and invokes the deployed gateway itself. The runtime's
-`createHandler` accepts validators keyed by the configuration's operations and an execution
+There is no build step: the CLI runs from source. It generates no client library yet: a consumer
+takes the generated contract, which is types alone, and invokes the deployed gateway itself. One
+is planned, and the contract is what it would be built from; that is why the types a caller reads
+are generated apart from what the gateway runs, rather than beside them.
+The runtime's `createHandler` accepts validators keyed by the configuration's operations and an execution
 function, compiles once, and returns a handler that takes each invocation's deadline; the openapi-rest driver's `createExecutor`
 supplies the execution function once it has retrieved and validated the gateway's secret.
 Outcome validators are held in a `Map`, so an outcome name matching an inherited object
@@ -157,9 +159,11 @@ otherwise; no driver implements `deriveSchemas` yet.
 | Path | Contents |
 |---|---|
 | `.gen/runtime/validators/` | Standalone Ajv validators, one for each operation's input and one for each declared outcome. Self-contained JavaScript with no package imports. |
-| `.gen/client/rpc.ts` | The call contract as types: each operation's input and the union of its outcomes. Types only, so a consumer takes it without the gateway's dependencies. |
+| `.gen/client/rpc.ts` | The call contract as types: each operation's input and the union of its outcomes. Types only; its one import is a type import of `@repo/gateway-types` for the envelope shapes, erased on compile. That package is of this workspace and declares no dependencies of its own, so a consumer here needs neither the runtime nor the generator. |
 
-Generated code is not typechecked, and nothing outside `.gen/` imports it.
+Neither half is typechecked where it is written: no package takes `.gen/` into its TypeScript
+project. `runtime/` is JavaScript, and the gateway's own entry point is all that imports it.
+`client/rpc.ts` is TypeScript, and the service that imports it typechecks it with its own sources.
 
 Nothing is written unless the configuration and the schemas agree, so a failed run never leaves
 output that builds but dispatches to validators that do not match it.
@@ -384,7 +388,7 @@ nothing outside the configuration names a driver package.
 import { createHandler, readUpstreamOptions } from "@repo/gateway-runtime";
 
 import config from "./gateway.config.ts";
-import { validators } from "./.gen/validators/index.js";
+import { validators } from "./.gen/runtime/validators/index.js";
 
 // Retrieves and validates the secret, so a misconfigured deployment fails here.
 const execute = await config.driver.createExecutor(config, readUpstreamOptions());
