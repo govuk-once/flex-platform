@@ -7,9 +7,16 @@ import * as codegen from "./index.ts";
 describe("@repo/gateway-codegen", () => {
   it("exports what the CLI and its callers use", () => {
     expect(Object.keys(codegen).toSorted()).toEqual([
+      "CLIENT_DIR",
+      "CONTRACT_MODULE",
+      "GENERATED_DIR",
       "GatewayCheckError",
+      "RUNTIME_DIR",
+      "VALIDATORS_DIR",
       "checkGateway",
+      "emitContract",
       "emitValidators",
+      "generate",
       "loadConfig",
       "loadGatewaySchemas",
       "loadSchemas",
@@ -17,9 +24,15 @@ describe("@repo/gateway-codegen", () => {
     ]);
   });
 
-  it("exports them as functions", () => {
-    for (const [name, value] of Object.entries(codegen)) {
-      expect(typeof value, name).toBe("function");
-    }
+  it("names the directories and files a generated gateway holds", () => {
+    // Every segment of a generated path, the directory they are all under included: a caller
+    // that can name the rest and not that one cannot build a path at all.
+    expect([
+      codegen.GENERATED_DIR,
+      codegen.RUNTIME_DIR,
+      codegen.VALIDATORS_DIR,
+      codegen.CLIENT_DIR,
+      codegen.CONTRACT_MODULE,
+    ]).toEqual([".gen", "runtime", "validators", "client", "rpc.ts"]);
   });
 });
