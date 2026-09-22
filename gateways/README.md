@@ -11,15 +11,16 @@ gateways/
     config/        defineGateway, driver definition and executor contract, policy presets
     types/         Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
     runtime/       Envelope parsing, dispatch, timeouts, bindings, logging and secret retrieval
-    codegen/       Schema loading and standalone validator generation
+    codegen/       Schema loading, configuration checks and standalone validator generation
   drivers/
     openapi-rest/  HTTP request construction, status mapping, authentication and custom handlers
   services/
     udp/           Example gateway configuration and schema fixtures
 ```
 
-The codegen CLI reads `schemas.fixture.ts` and writes JavaScript validators to `.gen/validators/`.
-For the included example, run:
+The codegen CLI checks a gateway configuration against its schemas and writes JavaScript
+validators to `.gen/validators/`; see [Code generation](#code-generation). For the included
+example, run:
 
 ```bash
 pnpm --filter @govuk-once/flex-gateway-udp codegen
@@ -145,6 +146,53 @@ Secure values must be strings, finite numbers, booleans or null. Other values pr
 `INVALID_INPUT`. The scalar restriction keeps payload preparation simple and deterministic.
 The envelope requires a string `secure.signature`, but the runtime does not verify it.
 
+## Code generation
+
+`gateway-codegen` runs in a gateway package, loads `gateway.config.ts` and writes the compiled
+validators to `.gen/validators/`. Schemas come from the driver's `deriveSchemas` when it has one
+and from the gateway's `schemas.fixture.ts` otherwise; no driver implements `deriveSchemas` yet.
+
+Nothing is written unless the configuration and the schemas agree, so a failed run never leaves
+output that builds but dispatches to validators that do not match it.
+
+### What codegen checks
+
+Each operation must have schemas and each set of schemas an operation, and every operation must
+declare at least one outcome. Whether an operation's mappings and its input schema describe the
+same request is the driver's own reading, through `checkSchemas` on its definition; the generator
+names no method, path, query parameter or header. For the openapi-rest driver, codegen fails
+when:
+
+- a `{param}` in the template has no `parameters` entry with `in: "path"` naming it, or an entry
+  names a parameter the template does not declare;
+- a mapped field, for a path, query or header parameter, is not a field of the input schema;
+- an input field is neither mapped nor `payload`, so nothing would carry it upstream;
+- a path parameter's input field is not required by the schema, which would leave a segment of
+  the path with no value;
+- two fields supply one path parameter, query parameter or header, so only one would be sent;
+- the input schema declares `payload` for a method that cannot carry a body, or a mapping names
+  a header the gateway's authentication owns.
+
+Each of these is otherwise a failure when the executor is created or an `INTERNAL` failure on a
+request that reached production. The messages name every problem found in one run.
+
+An operation with a `handler` builds its own request, so what the automatic mapping would need of
+its input schema is not checked for it: an unmapped field, a mapping naming a field the schema
+does not declare, a path parameter whose field the schema leaves optional, and a `payload` the
+method could not carry are the handler's to decide: it calls `prepare` with an object it builds,
+if it calls it at all. What the executor compiles for every operation is checked either way — the
+template's parameters, the names a mapping takes, the headers authentication owns. A handler that
+calls `prepare` is bound by the mapping after all, and the runtime reports that as `INTERNAL`;
+nothing at generation can tell the two apart.
+
+Schemas are compiled before any of this is read, so a schema that is not a valid schema is
+reported as itself rather than as whatever the checks above make of it; the output is written only
+once both have passed. Compilation is in Ajv's strict mode, so a misspelled keyword or a
+constraint that applies to nothing fails generation rather than passing silently. One check is
+off: strict mode wants a tuple's length pinned, which would refuse an array that types its first
+elements by position and the rest with `items`. A schema whose validation is asynchronous is
+refused outright, since the dispatcher validates synchronously.
+
 ## The openapi-rest driver
 
 `@repo/gateway-driver-openapi-rest` is the only package that knows HTTP: methods, paths, status
@@ -152,12 +200,13 @@ codes and headers live here. The runtime and codegen see opaque driver metadata 
 function.
 
 The package is split by when its code runs. `src/config/` holds what a gateway configuration
-imports: the driver and authentication definitions and `defineHandler`. Codegen evaluates these
-when it loads a configuration, and nothing in them reaches the network or a secret.
-`src/runtime/` holds the executor and everything under it, reached only through the
-definition's `createExecutor`, which imports it on first call; a lint rule stops `config/` and
-the shared modules from importing it statically. The shared modules at the top of `src/` are
-the vocabulary both sides use: the client and handler types, header rules and path parameter
+imports and what codegen calls: the driver and authentication definitions, `defineHandler` and
+the build-time check of an operation against its schemas. Codegen evaluates these when it loads
+a configuration, and nothing in them reaches the network or a secret. `src/runtime/` holds the
+executor and everything under it, reached only through the definition's `createExecutor`, which
+imports it on first call; a lint rule stops `config/` and the shared modules from importing it
+statically. The shared modules at the top of `src/` are the vocabulary both sides use: the
+client and handler types, the upstream template parser, header rules and path parameter
 encoding.
 
 ### Input convention
@@ -189,20 +238,24 @@ updateUser: {
 Read `parameters` against the operation's input schema: every schema field appears there or is
 `payload`, and every template parameter appears there with `in: "path"`. A template parameter
 without an entry that names it, or a path entry naming a parameter the template lacks, is a type
-error at `defineGateway` as well as a failure at executor creation. The type error reports the
-corrected `parameters` shape: a missing entry keyed by the parameter, or an entry whose `name`
-must be one of the template's.
+error at `defineGateway`, a failure at executor creation, and a generation failure. The type
+error reports the corrected `parameters` shape: a missing entry keyed by the parameter, or an
+entry whose `name` must be one of the template's. Codegen sees the schemas as well, so it also
+reports a mapping for a field the schema does not declare and a field the request would not
+carry; see [what codegen checks](#what-codegen-checks).
 
-Every input field must be mapped or be `payload`; an unmapped field is a configuration error
-and fails the request as `INTERNAL`. That diagnostic counts the unmapped fields and never names
-them: a schema that allows additional properties lets the caller choose the names. Path values
-must be scalars and are percent-encoded as one segment. Values that are only dots, or that
-contain `/`, `\`, `?`, `#`, `%` or a control character, are rejected: this gateway's URL parser would collapse `..`, and an upstream that
+Every input field must be mapped or be `payload` wherever the request is built from the mapping;
+an unmapped field is a configuration error and fails the request as `INTERNAL`. That diagnostic
+counts the unmapped fields and never names them: a schema that allows additional properties lets
+the caller choose the names, so a field the schema declares is reported by codegen and one the
+caller invented is only counted. Path values must be scalars and are percent-encoded as one
+segment. Values that are only dots, or that contain `/`, `\`, `?`, `#`, `%` or a control
+character, are rejected: this gateway's URL parser would collapse `..`, and an upstream that
 decodes before it routes would reinterpret the rest, sending `../../admin` to `/admin` with the
 gateway's credentials. Constrain path parameter formats in the input schema so callers receive
 `INVALID_INPUT` rather than relying on this check. Query values may be scalars or arrays of
-scalars, arrays repeating the key. Null and undefined query and header values are omitted.
-A `payload` on GET is an error. Bodies are JSON with `Content-Type: application/json`, and every
+scalars, arrays repeating the key. Null and undefined query and header values are omitted. A
+`payload` on GET is an error. Bodies are JSON with `Content-Type: application/json`, and every
 request sends `Accept: application/json`.
 
 Configuration problems such as an unsupported method, a template parameter without an entry, an
@@ -312,9 +365,11 @@ parameter mapping or a handler's call that names one fails, at creation for the 
 as `INTERNAL` for the third, so mapped input cannot replace what the gateway authenticates
 with. The authentication may set no header it did not declare.
 
-The contract also reserves `deriveSchemas`, through which a driver will produce operation
-schemas from its own description of the upstream. This driver does not implement it yet;
-codegen reads `schemas.fixture.ts` until it does.
+The definition also carries `checkSchemas`, which codegen calls with the configuration and the
+schemas before it emits anything; see [what codegen checks](#what-codegen-checks). The contract
+reserves `deriveSchemas` as well, through which a driver will produce operation schemas from its
+own description of the upstream. This driver does not implement that yet; codegen reads
+`schemas.fixture.ts` until it does.
 
 ### Authentication
 
@@ -482,6 +537,8 @@ upstream health; upstream responses and failures have separate classifications.
   driver validates it on every read before authentication code sees a field.
 - Emitted validators have no package imports or type declarations. Their helpers are bundled
   during generation so they can run independently of codegen's installed dependencies.
+- Keep transport vocabulary out of the generator. A relation between an operation and its
+  schemas that only a driver can read belongs in that driver's `checkSchemas`.
 - Preserve compatibility of established contracts. Incompatible changes require a distinct
   gateway identity.
 

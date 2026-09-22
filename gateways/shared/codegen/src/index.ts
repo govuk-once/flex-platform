@@ -1,2 +1,5 @@
+export { checkGateway, GatewayCheckError } from "./check-gateway.ts";
+export { main } from "./cli.ts";
 export { emitValidators } from "./emit-validators.ts";
-export { loadConfig, loadSchemas } from "./load-config.ts";
+export type { AnyGatewayConfig } from "./load-config.ts";
+export { loadConfig, loadGatewaySchemas, loadSchemas } from "./load-config.ts";
