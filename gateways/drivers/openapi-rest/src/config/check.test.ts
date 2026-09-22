@@ -210,6 +210,53 @@ describe("checkOperationSchemas", () => {
     ]);
   });
 
+  it("reports parameter entries the executor refuses outright", () => {
+    // Nothing about these needs the schemas: they are what compileOperation throws on, said at
+    // build time rather than at the first cold start after a deployment.
+    expect(
+      check(
+        { upstream: "GET /v1/users", parameters: { "": { in: "query" } } },
+        withSchemas(stringFields()),
+      ),
+    ).toEqual(['Operation "op": parameter fields must be non-empty']);
+
+    expect(
+      check(
+        {
+          upstream: "POST /v1/users",
+          parameters: { payload: { in: "query" } },
+        },
+        withSchemas(stringFields()),
+      ),
+    ).toEqual([
+      'Operation "op": "payload" is the request body and cannot be a parameter',
+    ]);
+
+    expect(
+      check(
+        {
+          upstream: "GET /v1/users",
+          parameters: { page: { in: "query", name: "" } },
+        },
+        withSchemas(stringFields("page")),
+      ),
+    ).toEqual(['Operation "op": parameter "page" has an empty upstream name']);
+  });
+
+  it("reports a location the driver does not know, rather than reading it as a query", () => {
+    // Not reachable from typed configuration; a JavaScript caller can still write it, and the
+    // executor refuses it. Read as a query parameter it would pass here and fail there.
+    expect(
+      check(
+        {
+          upstream: "GET /v1/users",
+          parameters: { q: { in: "cookie" as "query" } },
+        },
+        withSchemas(stringFields("q")),
+      ),
+    ).toEqual(['Operation "op": parameter "q" has unknown location "cookie"']);
+  });
+
   it("reports two fields that fill one path parameter", () => {
     expect(
       check(

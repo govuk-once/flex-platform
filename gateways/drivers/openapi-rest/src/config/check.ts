@@ -232,7 +232,22 @@ function checkOperation(
   const headers = new Set<string>();
 
   for (const [field, mapping] of Object.entries(operation.parameters ?? {})) {
+    // Counted as accounted for before anything is read of it: a field the configuration tried
+    // to map is not also one that reaches no part of the request.
     mapped.add(field);
+    // What the executor refuses outright when it compiles the operation, said at build time
+    // rather than at the first cold start after a deployment. Nothing further is read of the
+    // entry, because there is no field for the schema to declare.
+    if (field.length === 0) {
+      problems.push(`${context}: parameter fields must be non-empty`);
+      continue;
+    }
+    if (field === PAYLOAD_FIELD) {
+      problems.push(
+        `${context}: "${PAYLOAD_FIELD}" is the request body and cannot be a parameter`,
+      );
+      continue;
+    }
     // Only the automatic mapping reads the operation's input: a handler calls `prepare` with an
     // object it builds, so the fields a mapping names are the handler's to supply and need not
     // be declared in the schema at all.
@@ -240,6 +255,14 @@ function checkOperation(
       problems.push(
         `${context}: parameter "${field}" has no field of that name in the input schema`,
       );
+    }
+    // An empty upstream name reaches no parameter and no header. Reading further would record
+    // it as a name of its own, and report a second field renamed onto the same nothing.
+    if (mapping.name !== undefined && mapping.name.length === 0) {
+      problems.push(
+        `${context}: parameter "${field}" has an empty upstream name`,
+      );
+      continue;
     }
     const upstreamName = mapping.name ?? field;
 
@@ -284,13 +307,19 @@ function checkOperation(
       } catch (error: unknown) {
         problems.push(messageOf(error));
       }
-    } else {
+    } else if (mapping.in === "query") {
       if (queries.has(upstreamName)) {
         problems.push(
           `${context}: query parameter "${upstreamName}" is supplied by more than one field`,
         );
       }
       queries.add(upstreamName);
+    } else {
+      // Not reachable from typed configuration; guards a JavaScript caller, and says what the
+      // executor refuses rather than reading an unknown location as a query parameter.
+      problems.push(
+        `${context}: parameter "${field}" has unknown location "${String(mapping.in)}"`,
+      );
     }
   }
 
