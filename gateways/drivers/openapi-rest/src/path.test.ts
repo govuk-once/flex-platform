@@ -16,34 +16,14 @@ function rejection(value: string): GatewayError {
 }
 
 describe("encodePathParam", () => {
-  it("leaves unreserved characters alone", () => {
-    expect(encodePathParam("abc-123_x.y~z", "ctx")).toBe("abc-123_x.y~z");
-  });
-
-  // An accepted value reaches the upstream as the caller wrote it, in one segment.
-  it.each([
-    "file.tar.gz",
-    "..hidden",
-    "trailing..",
-    "..a..",
-    "1 2",
-    "a@b.test",
-    "x=y&z",
-    "a:b;c",
-    "!$'()*+,",
-    "\u017c\u00f3\u0142\u0107",
-    "a\u{1f600}b",
-  ])("accepts %j and decodes back unchanged", (value) => {
-    const encoded = encodePathParam(value, "ctx");
-    expect(encoded).not.toContain("/");
-    expect(decodeURIComponent(encoded)).toBe(value);
-  });
-
-  // Round-tripping alone would also accept an unencoded value, so the output is pinned.
+  // An accepted value reaches the upstream as the caller wrote it, in one segment. Round-tripping
+  // alone would also accept an unencoded value, so the output is pinned beside it.
   it.each([
     ["abc-123_x.y~z", "abc-123_x.y~z"],
     ["file.tar.gz", "file.tar.gz"],
     ["..hidden", "..hidden"],
+    ["trailing..", "trailing.."],
+    ["..a..", "..a.."],
     ["1 2", "1%202"],
     ["a@b.test", "a%40b.test"],
     ["x=y&z", "x%3Dy%26z"],
@@ -51,8 +31,11 @@ describe("encodePathParam", () => {
     ["!$'()*+,", "!%24'()*%2B%2C"],
     ["\u017c\u00f3\u0142\u0107", "%C5%BC%C3%B3%C5%82%C4%87"],
     ["a\u{1f600}b", "a%F0%9F%98%80b"],
-  ])("encodes %j as %j", (value, expected) => {
-    expect(encodePathParam(value, "ctx")).toBe(expected);
+  ])("encodes %j as %j, in one segment", (value, expected) => {
+    const encoded = encodePathParam(value, "ctx");
+    expect(encoded).toBe(expected);
+    expect(encoded).not.toContain("/");
+    expect(decodeURIComponent(encoded)).toBe(value);
   });
 
   it.each([

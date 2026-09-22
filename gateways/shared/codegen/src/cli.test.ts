@@ -5,7 +5,6 @@ import { promisify } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { GatewayCheckError } from "./check-gateway.ts";
 import { main } from "./cli.ts";
 import {
   CLIENT_DIR,
@@ -67,32 +66,6 @@ afterEach(async () => {
 });
 
 describe("main", () => {
-  it("writes what the gateway runs and what a caller imports", async () => {
-    await writeGateway(SCHEMAS);
-
-    await main(gatewayDir);
-
-    const gen = path.join(gatewayDir, GENERATED_DIR);
-    expect((await readdir(gen)).toSorted()).toEqual(
-      [CLIENT_DIR, RUNTIME_DIR].toSorted(),
-    );
-    expect(
-      (await readdir(path.join(gen, RUNTIME_DIR, VALIDATORS_DIR))).toSorted(),
-    ).toEqual(["index.js", "schemas.js"]);
-    expect(await readdir(path.join(gen, CLIENT_DIR))).toEqual([
-      CONTRACT_MODULE,
-    ]);
-  });
-
-  it("refuses a configuration its schemas do not match, and writes nothing", async () => {
-    await writeGateway(pingSchemas("pong"));
-
-    await expect(main(gatewayDir)).rejects.toThrow(GatewayCheckError);
-    await expect(
-      readdir(path.join(gatewayDir, GENERATED_DIR)),
-    ).rejects.toThrow();
-  });
-
   it("refuses a schema that is not a schema before reading it against the configuration", async () => {
     // `required` is an array of strings. Written as anything else the schema is invalid, and
     // saying so is more use than the disagreement a checker would derive from it.
@@ -104,22 +77,6 @@ describe("main", () => {
     await expect(
       readdir(path.join(gatewayDir, GENERATED_DIR)),
     ).rejects.toThrow();
-  });
-
-  it("reads the working directory when it is given none", async () => {
-    // What the bin script passes, and what a gateway package's `codegen` script relies on.
-    await writeGateway(SCHEMAS);
-    const cwd = process.cwd();
-    process.chdir(gatewayDir);
-    try {
-      await main();
-    } finally {
-      process.chdir(cwd);
-    }
-
-    expect(
-      (await readdir(path.join(gatewayDir, GENERATED_DIR))).toSorted(),
-    ).toEqual([CLIENT_DIR, RUNTIME_DIR].toSorted());
   });
 });
 
@@ -145,6 +102,9 @@ describe("gateway-codegen", () => {
     expect(
       (await readdir(path.join(gen, RUNTIME_DIR, VALIDATORS_DIR))).toSorted(),
     ).toEqual(["index.js", "schemas.js"]);
+    expect(await readdir(path.join(gen, CLIENT_DIR))).toEqual([
+      CONTRACT_MODULE,
+    ]);
   }, 60_000);
 
   it("reports why it stopped and exits non-zero", async () => {

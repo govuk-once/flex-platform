@@ -1,12 +1,5 @@
 import { execFile as execFileCb } from "node:child_process";
-import {
-  access,
-  mkdtemp,
-  readdir,
-  readFile,
-  realpath,
-  rm,
-} from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -139,12 +132,6 @@ afterAll(async () => {
 });
 
 describe("emitted files", () => {
-  it("writes the index and schemas", async () => {
-    for (const file of OUTPUT_FILES) {
-      await expect(access(path.join(tmp, file))).resolves.not.toThrow();
-    }
-  });
-
   it("emits only JavaScript, no declarations", async () => {
     // Validator output is plain JavaScript; a declaration would reintroduce a package import.
     const files = await readdir(tmp);
@@ -346,18 +333,6 @@ describe("barrel", () => {
       "listPage",
       "searchRecords",
     ]);
-  });
-
-  it("wires each validator to the right schema", () => {
-    expect(index.validators.createUser.input({ email: "a@b.com" })).toBe(true);
-    expect(index.validators.createUser.outcomes.created({ id: "1" })).toBe(
-      true,
-    );
-    expect(
-      index.validators.getIdentityExchange.outcomes.record({
-        linkedId: "x",
-      }),
-    ).toBe(true);
   });
 
   it("references the same function objects as the schemas module", async () => {

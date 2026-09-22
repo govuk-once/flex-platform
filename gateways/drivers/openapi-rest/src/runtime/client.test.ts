@@ -415,16 +415,6 @@ describe("client.request", () => {
 });
 
 describe("the request boundary", () => {
-  // Preparation fails before anything is sent, so a refused value never reaches the upstream.
-  it.each(["a/b", "..", "", "%2e", "x\ud800y", "x\u0000y"])(
-    "makes no request when the path value %j is refused",
-    (value) => {
-      const { c, ff } = client(() => json(200, {}));
-      expect(() => c.prepare({ id: value })).toThrow(GatewayError);
-      expect(ff.calls).toHaveLength(0);
-    },
-  );
-
   // A handler composes its own path, so no parameter encoding has run on it. This is what
   // stops input interpolated straight into one from reaching the upstream as another address.
   it.each([

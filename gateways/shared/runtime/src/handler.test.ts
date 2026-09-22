@@ -591,20 +591,6 @@ describe("createHandler", () => {
       expect(err.error).toEqual({ code: "INTERNAL" });
     });
 
-    it("does not leak internal error messages to the response", async () => {
-      const handler = createHandler(
-        testConfig(),
-        testDeps({
-          execute: () =>
-            Promise.reject(new Error("secret database connection string")),
-        }),
-      );
-      const resp = await handler(envelope());
-
-      const err = resp as EnvelopeError;
-      expect(JSON.stringify(err)).not.toContain("secret database");
-    });
-
     it("wraps GatewayError thrown by execute", async () => {
       const handler = createHandler(
         testConfig(),

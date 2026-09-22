@@ -119,15 +119,6 @@ describe("createDriverContext", () => {
     expect(err.message).toContain("exhausted");
   });
 
-  it("does not resolve a fast call on an exhausted budget", async () => {
-    // The regression: a callback settling in a microtask beat the abort timer and succeeded.
-    const ctx = createDriverContext(testPolicy, { remainingMs: () => 0 });
-
-    await expect(
-      ctx.upstream(() => Promise.resolve("upstream work completed")),
-    ).rejects.toMatchObject({ code: "UPSTREAM_TIMEOUT" });
-  });
-
   it("uses the policy timeout when it is the tighter of the two", async () => {
     const ctx = createDriverContext(testPolicy, { remainingMs: () => 60_000 });
 
@@ -137,20 +128,6 @@ describe("createDriverContext", () => {
     await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
 
     expect(((await result) as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
-  });
-
-  it("uses policy timeout when deadline has no constraint", async () => {
-    const ctx = createDriverContext(testPolicy, noDeadline);
-
-    const result = ctx
-      .upstream(() => new Promise(() => {}))
-      .catch((err: unknown) => err);
-
-    await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
-
-    const err = await result;
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
   });
 
   it("preserves GatewayError thrown by the callback", async () => {

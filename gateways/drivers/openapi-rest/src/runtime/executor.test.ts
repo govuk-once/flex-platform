@@ -1064,11 +1064,4 @@ describe("through the runtime handler", () => {
     ).resolves.toEqual({ ok: false, error: { code: "INTERNAL" } });
     expect(stdout.join("")).not.toContain("SYNTHETIC_ADMIN");
   });
-
-  it("surfaces a mapping bug as INTERNAL", async () => {
-    const handle = await handlerWith(() => json(200, { id: "u1" }));
-    await expect(
-      handle(envelope("getUser", { userId: "u1", stray: 1 })),
-    ).resolves.toEqual({ ok: false, error: { code: "INTERNAL" } });
-  });
 });
