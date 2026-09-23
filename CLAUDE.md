@@ -189,15 +189,13 @@ integrations are implemented.
 
 7. **Preserve contract compatibility.** Changes to an established gateway contract must be
    additive. An incompatible contract requires a distinct gateway identity. Codegen enforces
-   this for the schemas: it compares each version in a gateway's `schemas/` with the one before
-   it and refuses to generate when a step would break a caller, an input that admits less or an
-   outcome that promises less, an added outcome included. Whatever the comparison cannot place
-   counts as a break; keep it that way. `oneOf` is not a union there, whatever the call contract
-   makes of it, and a definition is read on each side of the call it is used on, taken from the
-   schemas rather than from how far a comparison got, with one reached under a negation, a
-   condition or a `oneOf` branch read as neither side. It does not cover the types the generator emits for an
-   unchanged schema, or the error codes, so a change to either still needs this rule applied by
-   hand.
+   this for the schemas by comparing each version in a gateway's `schemas/` with the one before
+   it, and CI refuses a change to a merged version, which would move where that comparison
+   starts. Keep three things true of the comparison: whatever it cannot place counts as a break,
+   `oneOf` is not read as a union, and a definition is read on each side of the call it is used
+   on. It does not cover the types the generator emits for an unchanged schema, or the error
+   codes, so a change to either still needs this rule applied by hand. The rules are in
+   [the gateway guide](gateways/README.md#compatibility-between-versions).
 
 8. **Avoid duplicate upstream writes.** Any invocation client must disable automatic SDK
    retries (`maxAttempts: 1`). Retry decisions require operation and deadline awareness;

@@ -288,10 +288,9 @@ so only one whose branches say what they said, and name what they named, is read
 same: a definition a branch refers to is frozen with it.
 
 A change refused that was safe costs a look, where one accepted that was not costs every caller.
-The check covers the schemas only:
-nothing compares the generated types across a change to the generator, or the error codes, which
-live in `@repo/gateway-types`. A contract that has to break takes a gateway of its own, under
-another id.
+The check covers the schemas only: nothing compares the generated types across a change to the
+generator, or the error codes, which live in `@repo/gateway-types`. A contract that has to break
+takes a gateway of its own, under another id.
 
 ### What codegen checks
 
