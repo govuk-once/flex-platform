@@ -249,10 +249,3 @@ export async function loadVersions(
     })),
   );
 }
-
-// The schemas a gateway is generated from: its latest version.
-export async function loadSchemas(gatewayDir: string): Promise<GatewaySchemas> {
-  const versions = await schemaVersions(gatewayDir);
-  // schemaVersions refuses a directory with no versions, so there is a last one.
-  return readSchemas(gatewayDir, versions.at(-1) ?? versionName(0));
-}

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { SCHEMAS_DIR } from "./layout.ts";
 import {
-  loadSchemas,
+  loadVersions,
   readSchemas,
   SchemaStoreError,
   schemaVersions,
@@ -248,19 +248,20 @@ describe("readSchemas", () => {
   });
 });
 
-describe("loadSchemas", () => {
-  it("reads the latest version", async () => {
+describe("loadVersions", () => {
+  it("reads every version, oldest first", async () => {
     await writeVersion("0001", schemasOf("ok"));
     await writeVersion("0002", schemasOf("created"));
 
-    await expect(loadSchemas(gatewayDir)).resolves.toEqual(
-      schemasOf("created"),
-    );
+    await expect(loadVersions(gatewayDir)).resolves.toEqual([
+      { version: "0001", schemas: schemasOf("ok") },
+      { version: "0002", schemas: schemasOf("created") },
+    ]);
   });
 
   it("refuses a gateway whose versions cannot be listed", async () => {
     await writeVersion("0002", schemasOf("ok"));
 
-    await expect(loadSchemas(gatewayDir)).rejects.toThrow(SchemaStoreError);
+    await expect(loadVersions(gatewayDir)).rejects.toThrow(SchemaStoreError);
   });
 });

@@ -25,7 +25,7 @@ describe("@repo/gateway-codegen", () => {
       "emitValidators",
       "generate",
       "loadConfig",
-      "loadSchemas",
+      "loadVersions",
       "main",
     ]);
   });
