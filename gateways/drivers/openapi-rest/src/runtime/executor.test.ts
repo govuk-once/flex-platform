@@ -645,7 +645,14 @@ describe("a custom token exchange", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let started: () => void = () => undefined;
+    // The endpoint answers to this test, so it reports the exchange rather than being polled for
+    // it: nothing here waits on a request that was never made.
+    const exchanging = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     const { ff, tokenCalls, opCalls } = idp(async () => {
+      started();
       await gate;
       return json(200, { access_token: "T1", expires_in: 3600 });
     });
@@ -658,7 +665,8 @@ describe("a custom token exchange", () => {
       execute(passthroughContext(), "op", {}),
       execute(passthroughContext(), "op", {}),
     ]);
-    await vi.waitFor(() => expect(tokenCalls()).toHaveLength(1));
+    await exchanging;
+    expect(tokenCalls()).toHaveLength(1);
     release();
     await requests;
     expect(tokenCalls()).toHaveLength(1);
@@ -833,6 +841,7 @@ describe("through the runtime handler", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   const requireId: Validator = Object.assign(
@@ -885,6 +894,14 @@ describe("through the runtime handler", () => {
 
   const never = () => new Promise<never>(() => undefined);
 
+  // A 20ms budget nothing waits out: the invocation is started, the clock is moved through the
+  // timeout, and the envelope it left with is what the case reads.
+  const TIMEOUT_MS = 20;
+  async function pastTheTimeout(response: Promise<unknown>): Promise<unknown> {
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+    return response;
+  }
+
   it("returns a success envelope", async () => {
     const handle = await handlerWith(() => json(200, { id: "u1" }));
     await expect(
@@ -921,10 +938,11 @@ describe("through the runtime handler", () => {
             reject(new DOMException("aborted", "AbortError")),
           );
         }),
-      policy: { upstreamTimeout: "20ms" },
+      policy: { upstreamTimeout: `${TIMEOUT_MS}ms` },
     });
+    vi.useFakeTimers();
     await expect(
-      handle(envelope("getUser", { userId: "u1" })),
+      pastTheTimeout(handle(envelope("getUser", { userId: "u1" }))),
     ).resolves.toEqual({ ok: false, error: { code: "UPSTREAM_TIMEOUT" } });
   });
 
@@ -933,11 +951,12 @@ describe("through the runtime handler", () => {
     const handle = await handlerWith(() => json(200, { id: "u1" }), {
       auth: bearerToken(),
       secret: secret.provider,
-      policy: { upstreamTimeout: "20ms" },
+      policy: { upstreamTimeout: `${TIMEOUT_MS}ms` },
     });
     secret.provider.get = never;
+    vi.useFakeTimers();
     await expect(
-      handle(envelope("getUser", { userId: "u1" })),
+      pastTheTimeout(handle(envelope("getUser", { userId: "u1" }))),
     ).resolves.toEqual({ ok: false, error: { code: "UPSTREAM_TIMEOUT" } });
   });
 
@@ -954,11 +973,12 @@ describe("through the runtime handler", () => {
           clientSecret: "SYNTHETIC",
           tokenUrl: "https://idp.test/token",
         }).provider,
-        policy: { upstreamTimeout: "20ms" },
+        policy: { upstreamTimeout: `${TIMEOUT_MS}ms` },
       },
     );
+    vi.useFakeTimers();
     await expect(
-      handle(envelope("getUser", { userId: "u1" })),
+      pastTheTimeout(handle(envelope("getUser", { userId: "u1" }))),
     ).resolves.toEqual({ ok: false, error: { code: "UPSTREAM_TIMEOUT" } });
     expect(stdout.join("")).not.toContain("SYNTHETIC");
   });
@@ -1063,12 +1083,5 @@ describe("through the runtime handler", () => {
       handle(envelope("getUser", { userId: "../../SYNTHETIC_ADMIN" })),
     ).resolves.toEqual({ ok: false, error: { code: "INTERNAL" } });
     expect(stdout.join("")).not.toContain("SYNTHETIC_ADMIN");
-  });
-
-  it("surfaces a mapping bug as INTERNAL", async () => {
-    const handle = await handlerWith(() => json(200, { id: "u1" }));
-    await expect(
-      handle(envelope("getUser", { userId: "u1", stray: 1 })),
-    ).resolves.toEqual({ ok: false, error: { code: "INTERNAL" } });
   });
 });

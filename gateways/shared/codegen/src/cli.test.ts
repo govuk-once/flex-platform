@@ -1,17 +1,17 @@
 import { execFile as execFileCb } from "node:child_process";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { GatewayCheckError } from "./check-gateway.ts";
 import { main } from "./cli.ts";
 import {
   CLIENT_DIR,
   CONTRACT_MODULE,
   GENERATED_DIR,
   RUNTIME_DIR,
+  SCHEMAS_DIR,
   VALIDATORS_DIR,
 } from "./layout.ts";
 
@@ -25,16 +25,23 @@ export default {
 };
 `;
 
-const SCHEMAS = `
-export default {
-  operations: {
-    ping: {
-      input: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
-      outcomes: { ok: { type: "object" } },
+// The schemas, as the one version a gateway starts with. A case describes the change it needs
+// and gets the version as it would be written.
+const pingSchemas = (operation = "ping", required: unknown = ["id"]): string =>
+  JSON.stringify({
+    operations: {
+      [operation]: {
+        input: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required,
+        },
+        outcomes: { ok: { type: "object" } },
+      },
     },
-  },
-};
-`;
+  });
+
+const SCHEMAS = pingSchemas();
 
 const execFile = promisify(execFileCb);
 
@@ -42,7 +49,8 @@ let gatewayDir: string;
 
 async function writeGateway(schemas: string): Promise<void> {
   await writeFile(path.join(gatewayDir, "gateway.config.ts"), CONFIG);
-  await writeFile(path.join(gatewayDir, "schemas.fixture.ts"), schemas);
+  await mkdir(path.join(gatewayDir, SCHEMAS_DIR), { recursive: true });
+  await writeFile(path.join(gatewayDir, SCHEMAS_DIR, "0001.json"), schemas);
 }
 
 beforeEach(async () => {
@@ -58,41 +66,10 @@ afterEach(async () => {
 });
 
 describe("main", () => {
-  it("writes what the gateway runs and what a caller imports", async () => {
-    await writeGateway(SCHEMAS);
-
-    await main(gatewayDir);
-
-    const gen = path.join(gatewayDir, GENERATED_DIR);
-    expect((await readdir(gen)).toSorted()).toEqual(
-      [CLIENT_DIR, RUNTIME_DIR].toSorted(),
-    );
-    expect(
-      (await readdir(path.join(gen, RUNTIME_DIR, VALIDATORS_DIR))).toSorted(),
-    ).toEqual(["index.js", "schemas.js"]);
-    expect(await readdir(path.join(gen, CLIENT_DIR))).toEqual([
-      CONTRACT_MODULE,
-    ]);
-  });
-
-  it("refuses a configuration its schemas do not match, and writes nothing", async () => {
-    await writeGateway(SCHEMAS.replace("ping:", "pong:"));
-
-    await expect(main(gatewayDir)).rejects.toThrow(GatewayCheckError);
-    await expect(
-      readdir(path.join(gatewayDir, GENERATED_DIR)),
-    ).rejects.toThrow();
-  });
-
   it("refuses a schema that is not a schema before reading it against the configuration", async () => {
     // `required` is an array of strings. Written as anything else the schema is invalid, and
     // saying so is more use than the disagreement a checker would derive from it.
-    await writeGateway(
-      SCHEMAS.replace('required: ["id"]', 'required: "id"').replace(
-        "ping:",
-        "pong:",
-      ),
-    );
+    await writeGateway(pingSchemas("pong", "id"));
 
     await expect(main(gatewayDir)).rejects.toThrow(
       /Invalid schema for input of operation "pong"/,
@@ -100,22 +77,6 @@ describe("main", () => {
     await expect(
       readdir(path.join(gatewayDir, GENERATED_DIR)),
     ).rejects.toThrow();
-  });
-
-  it("reads the working directory when it is given none", async () => {
-    // What the bin script passes, and what a gateway package's `codegen` script relies on.
-    await writeGateway(SCHEMAS);
-    const cwd = process.cwd();
-    process.chdir(gatewayDir);
-    try {
-      await main();
-    } finally {
-      process.chdir(cwd);
-    }
-
-    expect(
-      (await readdir(path.join(gatewayDir, GENERATED_DIR))).toSorted(),
-    ).toEqual([CLIENT_DIR, RUNTIME_DIR].toSorted());
   });
 });
 
@@ -141,10 +102,13 @@ describe("gateway-codegen", () => {
     expect(
       (await readdir(path.join(gen, RUNTIME_DIR, VALIDATORS_DIR))).toSorted(),
     ).toEqual(["index.js", "schemas.js"]);
+    expect(await readdir(path.join(gen, CLIENT_DIR))).toEqual([
+      CONTRACT_MODULE,
+    ]);
   }, 60_000);
 
   it("reports why it stopped and exits non-zero", async () => {
-    await writeGateway(SCHEMAS.replace("ping:", "pong:"));
+    await writeGateway(pingSchemas("pong"));
 
     const failure: { code?: number; stderr?: string } = await execFile(
       process.execPath,

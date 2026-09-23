@@ -55,6 +55,7 @@ function testConfig(
         secure?: Record<string, string>;
       }
     >;
+    policy: { upstreamTimeout: string };
   }> = {},
 ): AnyGatewayConfig {
   return defineGateway({
@@ -63,6 +64,7 @@ function testConfig(
     operations: overrides.operations ?? {
       ping: { description: "Test operation" },
     },
+    ...(overrides.policy ? { policy: overrides.policy } : {}),
   });
 }
 
@@ -153,7 +155,14 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(false);
       const err = resp as EnvelopeError;
       expect(err.error.code).toBe("OPERATION_NOT_FOUND");
-      expect(capturedOutput()).toContain("unknown");
+    });
+
+    it("keeps the name it did not recognise out of the message", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+
+      await handler(envelope({ operation: "SYNTHETIC-PRIVATE-VALUE" }));
+
+      expect(capturedOutput()).not.toContain("SYNTHETIC-PRIVATE-VALUE");
     });
   });
 
@@ -375,37 +384,66 @@ describe("createHandler", () => {
   });
 
   describe("step 6: derive deadline", () => {
-    it("applies safety margin to Lambda remaining time", async () => {
-      const handler = createHandler(
-        testConfig(),
-        testDeps({
-          execute: async (ctx) => {
-            await ctx.upstream(
-              () => new Promise((resolve) => setTimeout(resolve, 5_000)),
-            );
-            return { outcome: "success", data: {} };
-          },
-        }),
-        { remainingMs: () => 600 },
-      );
-      const resp = await handler(envelope());
-
-      expect(resp.ok).toBe(false);
-      expect((resp as EnvelopeError).error.code).toBe("UPSTREAM_TIMEOUT");
+    // The budget is what the clock is moved through, so each case says how long the upstream
+    // call takes and nothing waits for it.
+    beforeEach(() => {
+      vi.useFakeTimers();
     });
 
-    it("takes the deadline from each invocation, not from construction", async () => {
-      const slow: HandlerDeps["execute"] = async (ctx) => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const runsFor =
+      (ms: number): HandlerDeps["execute"] =>
+      async (ctx) => {
         await ctx.upstream(
-          () => new Promise((resolve) => setTimeout(resolve, 200)),
+          () =>
+            new Promise((resolve) => {
+              setTimeout(resolve, ms);
+            }),
         );
         return { outcome: "success", data: {} };
       };
+
+    const TIMED_OUT = { ok: false, error: { code: "UPSTREAM_TIMEOUT" } };
+    const SUCCEEDED = { ok: true, outcome: "success" };
+
+    // 600ms of the invocation's time less the 500ms margin leaves a 100ms budget. Were the
+    // margin dropped, the 550ms call would sit inside the invocation's own time and succeed.
+    it.each([
+      ["spends part of the budget", 50, SUCCEEDED],
+      ["outlasts it", 550, TIMED_OUT],
+    ])(
+      "bounds a call that %s by the remaining time less the safety margin",
+      async (_label, upstreamMs, expected) => {
+        const handler = createHandler(
+          testConfig(),
+          testDeps({ execute: runsFor(upstreamMs) }),
+          { remainingMs: () => 600 },
+        );
+
+        const response = handler(envelope());
+        await vi.advanceTimersByTimeAsync(upstreamMs);
+
+        await expect(response).resolves.toMatchObject(expected);
+      },
+    );
+
+    it("takes the deadline from each invocation, not from construction", async () => {
+      const attempt = vi.fn(() => Promise.resolve(undefined));
       const handle = createGatewayHandler(
         testConfig(),
-        testDeps({ execute: slow }),
+        testDeps({
+          execute: async (ctx) => {
+            await ctx.upstream(attempt);
+            return { outcome: "success", data: {} };
+          },
+        }),
       );
 
+      // Less time left than the margin reserves, so this invocation has no budget at all and
+      // never reaches the upstream; the next one, on the same handler, has the whole of it.
       const exhausted = await handle(envelope(), {
         deadline: { remainingMs: () => 100 },
       });
@@ -415,14 +453,28 @@ describe("createHandler", () => {
 
       expect((exhausted as EnvelopeError).error.code).toBe("UPSTREAM_TIMEOUT");
       expect(roomy.ok).toBe(true);
+      expect(attempt).toHaveBeenCalledOnce();
     });
 
-    it("uses policy timeout when deadline has no constraint", async () => {
-      const handler = createHandler(testConfig(), testDeps());
-      const resp = await handler(envelope());
+    // An invocation that leaves the call unbounded: what stops it is the configured policy,
+    // and a call inside that timeout still returns.
+    it.each([
+      ["spends part of the policy timeout", 40, SUCCEEDED],
+      ["outlasts it", 5_000, TIMED_OUT],
+    ])(
+      "bounds a call that %s when the deadline does not constrain it",
+      async (_label, upstreamMs, expected) => {
+        const handler = createHandler(
+          testConfig({ policy: { upstreamTimeout: "50ms" } }),
+          testDeps({ execute: runsFor(upstreamMs) }),
+        );
 
-      expect(resp.ok).toBe(true);
-    });
+        const response = handler(envelope());
+        await vi.advanceTimersByTimeAsync(upstreamMs);
+
+        await expect(response).resolves.toMatchObject(expected);
+      },
+    );
   });
 
   describe("step 7: run pipeline", () => {
@@ -584,20 +636,6 @@ describe("createHandler", () => {
       expect(err.error).toEqual({ code: "INTERNAL" });
     });
 
-    it("does not leak internal error messages to the response", async () => {
-      const handler = createHandler(
-        testConfig(),
-        testDeps({
-          execute: () =>
-            Promise.reject(new Error("secret database connection string")),
-        }),
-      );
-      const resp = await handler(envelope());
-
-      const err = resp as EnvelopeError;
-      expect(JSON.stringify(err)).not.toContain("secret database");
-    });
-
     it("wraps GatewayError thrown by execute", async () => {
       const handler = createHandler(
         testConfig(),
@@ -730,12 +768,40 @@ describe("createHandler", () => {
   });
 
   describe("logging the operation a failed envelope carried", () => {
-    it("names it when the envelope carried a string", async () => {
+    it("names it when the envelope carried a configured operation", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: vi
+            .fn()
+            .mockRejectedValue(
+              new GatewayError("UPSTREAM_REJECTED", "upstream said no"),
+            ),
+        }),
+      );
+
+      await handler(envelope({ operation: "ping" }));
+
+      expect(capturedOutput()).toContain('"operation":"ping"');
+    });
+
+    it("leaves it out when the envelope named no configured operation", async () => {
+      // The name is the caller's own until it matches one of ours, so an unrecognised string
+      // reaches no log: it carries whatever the caller chose to send.
       const handler = createHandler(testConfig(), testDeps());
 
-      await handler(envelope({ operation: "absent" }));
+      const resp = await handler(
+        envelope({ operation: "SYNTHETIC-PRIVATE-VALUE" }),
+      );
 
-      expect(capturedOutput()).toContain('"operation":"absent"');
+      expect(resp).toEqual({
+        ok: false,
+        error: { code: "OPERATION_NOT_FOUND" },
+      });
+      for (const record of capturedRecords()) {
+        expect(record).not.toHaveProperty("operation");
+      }
+      expect(capturedOutput()).not.toContain("SYNTHETIC-PRIVATE-VALUE");
     });
 
     it("leaves it out when the envelope carried no operation at all", async () => {

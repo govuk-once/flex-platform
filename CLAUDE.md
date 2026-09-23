@@ -26,11 +26,12 @@ operations for one upstream, keeping transport details separate from validation 
   `src/config/` is what a gateway configuration imports and codegen evaluates; `src/runtime/`
   is reached only through the definition's `createExecutor`, which loads it, and a lint rule
   keeps the two apart.
-- `gateways/services/udp`: an example gateway configuration and schema fixtures.
+- `gateways/services/udp`: an example gateway configuration and its versioned schemas.
 
-The CLI reads `schemas.fixture.ts`, checks the configuration against it, and writes the
-validators, the entry point and its esbuild bundle to `.gen/runtime/` and the call contract to
-`.gen/client/`. It does not produce a client:
+The CLI reads the latest version in a gateway's `schemas/` directory, JSON files numbered from
+`0001.json`, checks the configuration against it, and writes the validators, the entry point and
+its esbuild bundle to `.gen/runtime/` and the call contract to `.gen/client/`. It does not
+produce a client:
 a consumer takes the generated types and invokes the deployed gateway itself. Token and
 signature verification are not implemented; secure bindings check value consistency only. Of
 the policy settings, only `upstreamTimeout` is enforced.
@@ -181,7 +182,9 @@ integrations are implemented.
    are not logged automatically. Keep tests checking that unselected fields and synthetic
    secrets are absent from captured payload logs. Review diagnostic messages separately: a
    validation failure is logged as the schema locations that rejected it, never as an instance
-   path, whose segments a dictionary schema takes from the caller's own keys.
+   path, whose segments a dictionary schema takes from the caller's own keys. The operation name
+   is the caller's too, so it is logged, in a message or as a field, only once it has matched a
+   configured operation; an unknown one is left out rather than repeated.
 
 7. **Preserve contract compatibility.** Changes to an established gateway contract must be
    additive. An incompatible contract requires a distinct gateway identity. This is a design
@@ -257,9 +260,10 @@ non-obvious decision over a roadmap, a deployment narrative or a repeat of this 
 ## Build and test notes
 
 - Nothing is compiled, apart from the generated entry point, which codegen bundles with esbuild
-  so a gateway that cannot be bundled fails generation. The AWS SDK stays external: the Lambda
-  runtime provides it. Workspace packages resolve to each other's sources, so typecheck and
-  tests see a dependency change immediately and no task waits on another package.
+  so a gateway that cannot be bundled fails generation. Only Node's builtins are left external:
+  the AWS SDK is bundled at the version the lockfile pins, although the Lambda runtime ships one
+  of its own. Workspace packages resolve to each other's sources, so typecheck and tests see a
+  dependency change immediately and no task waits on another package.
 - Test the libraries, not each gateway. Generation, bundling and dispatch are covered against
   the fixture gateway in `gateways/shared/codegen/test/`; a gateway package tests only its own
   custom handlers, since there will be many gateways and a deployment is what exercises one.

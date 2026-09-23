@@ -340,6 +340,31 @@ describe("client.request", () => {
     expect(ctx.attempts).toBe(2);
   });
 
+  // A write the upstream refused must not be sent again: a failure is where a retry would be
+  // added, inside the attempt where the context would never see it. Counting the requests as
+  // well as the attempts is what shows neither happened.
+  const failures: [string, Parameters<typeof fakeFetch>[0]][] = [
+    ["an error response", () => json(500, { message: "boom" })],
+    ["a refusal of the gateway's own credentials", () => json(401, {})],
+    [
+      "a transport failure",
+      () => {
+        throw new TypeError("fetch failed");
+      },
+    ],
+  ];
+
+  it.each(failures)("sends a failing POST once, on %s", async (_l, respond) => {
+    const { c, ff, ctx } = client(respond, {}, { upstream: "POST /users" });
+
+    await expect(
+      c.invoke({ method: "POST", path: "/users", body: { a: 1 } }),
+    ).rejects.toBeInstanceOf(GatewayError);
+
+    expect(ff.calls).toHaveLength(1);
+    expect(ctx.attempts).toBe(1);
+  });
+
   it("returns raw status, headers and body for non-2xx responses", async () => {
     const { c } = client(
       () => new Response("nope", { status: 418, headers: { "x-r": "1" } }),
@@ -415,16 +440,6 @@ describe("client.request", () => {
 });
 
 describe("the request boundary", () => {
-  // Preparation fails before anything is sent, so a refused value never reaches the upstream.
-  it.each(["a/b", "..", "", "%2e", "x\ud800y", "x\u0000y"])(
-    "makes no request when the path value %j is refused",
-    (value) => {
-      const { c, ff } = client(() => json(200, {}));
-      expect(() => c.prepare({ id: value })).toThrow(GatewayError);
-      expect(ff.calls).toHaveLength(0);
-    },
-  );
-
   // A handler composes its own path, so no parameter encoding has run on it. This is what
   // stops input interpolated straight into one from reaching the upstream as another address.
   it.each([

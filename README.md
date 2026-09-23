@@ -6,7 +6,7 @@ Gateway libraries and shared development tooling for the Flex Platform.
 
 ```txt
 gateways/shared/     Configuration, shared types, runtime and validator generation
-gateways/services/   Gateway configurations and schema fixtures
+gateways/services/   Gateway configurations and their versioned schemas
 packages/           Shared TypeScript, ESLint and Vitest tooling, and generic utilities
 ```
 
@@ -21,7 +21,7 @@ libraries handle schema validation, dispatch, upstream timeouts and payload logg
 transport-specific details separate from common runtime behaviour.
 
 The repository includes `defineGateway`, a dispatcher and a generator that emits standalone
-JavaScript validators from schema fixtures. It does not yet provide a complete deployable gateway
+JavaScript validators from a gateway's schemas. It does not yet provide a complete deployable gateway
 or generated client. Caller authentication is not implemented, and only the upstream-timeout
 policy is enforced. Authentication towards an upstream is configured per gateway on its driver
 definition, with the secret read from AWS Secrets Manager when the gateway starts. See [the gateway guide](gateways/README.md) for supported behaviour and limitations.

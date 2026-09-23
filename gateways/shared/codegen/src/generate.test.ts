@@ -35,6 +35,7 @@ import {
   ENTRY_MODULE,
   GENERATED_DIR,
   RUNTIME_DIR,
+  SCHEMAS_DIR,
   VALIDATORS_DIR,
 } from "./layout.ts";
 import { loadConfig } from "./load-config.ts";
@@ -134,11 +135,11 @@ export default {
 };
 `;
 
-const schemasModule = (operations: string) => `
-export default { operations: ${operations} };
-`;
+// A gateway's schemas as its first version holds them.
+const schemasVersion = (operations: object): string =>
+  JSON.stringify({ operations });
 
-const CREATE_USER_SCHEMAS = `{
+const CREATE_USER_SCHEMAS = {
   createUser: {
     input: {
       type: "object",
@@ -147,10 +148,10 @@ const CREATE_USER_SCHEMAS = `{
     },
     outcomes: { created: { type: "object" } },
   },
-}`;
+};
 
 // The same operation described differently, so the output of one run can be told from another's.
-const RENAMED_SCHEMAS = `{
+const RENAMED_SCHEMAS = {
   createUser: {
     input: {
       type: "object",
@@ -159,7 +160,32 @@ const RENAMED_SCHEMAS = `{
     },
     outcomes: { created: { type: "object" } },
   },
-}`;
+};
+
+const FIRST_VERSION = path.join(SCHEMAS_DIR, "0001.json");
+
+// Waits for the file a loading gateway writes when it has reached the point it holds at. A run
+// that fails before it gets there ends the wait too: that failure is the more useful report, and
+// the case makes it against the run itself.
+async function reached(marker: string, run: Promise<unknown>): Promise<void> {
+  const settled = run.then(
+    () => true,
+    () => true,
+  );
+  const until = Date.now() + 30_000;
+  while (!existsSync(marker)) {
+    const ended = await Promise.race([
+      settled,
+      new Promise<boolean>((resolve) => {
+        setTimeout(() => resolve(false), 5);
+      }),
+    ]);
+    if (ended) return;
+    if (Date.now() > until) {
+      throw new Error(`${path.basename(marker)} was never written`);
+    }
+  }
+}
 
 async function writeGateway(
   dir: string,
@@ -167,7 +193,8 @@ async function writeGateway(
   schemas: string,
 ): Promise<void> {
   await writeFile(path.join(dir, "gateway.config.ts"), config);
-  await writeFile(path.join(dir, "schemas.fixture.ts"), schemas);
+  await mkdir(path.join(dir, SCHEMAS_DIR), { recursive: true });
+  await writeFile(path.join(dir, FIRST_VERSION), schemas);
 }
 
 describe("generate", () => {
@@ -195,7 +222,7 @@ describe("generate", () => {
     await writeGateway(
       tmp,
       gatewayModule("{ other: {} }"),
-      schemasModule(CREATE_USER_SCHEMAS),
+      schemasVersion(CREATE_USER_SCHEMAS),
     );
 
     await expect(generate(tmp)).rejects.toThrow(GatewayCheckError);
@@ -209,7 +236,7 @@ describe("generate", () => {
         "{ createUser: {} }",
         ', checkSchemas: () => ["the driver disagrees"]',
       ),
-      schemasModule(CREATE_USER_SCHEMAS),
+      schemasVersion(CREATE_USER_SCHEMAS),
     );
 
     await expect(generate(tmp)).rejects.toThrow(/the driver disagrees/);
@@ -222,7 +249,7 @@ describe("generate", () => {
     await writeGateway(
       tmp,
       gatewayModule("{ createUser: {} }"),
-      schemasModule(CREATE_USER_SCHEMAS),
+      schemasVersion(CREATE_USER_SCHEMAS),
     );
     await loadConfig(tmp);
 
@@ -236,12 +263,12 @@ describe("generate", () => {
   });
 
   it("generates from the schemas as they are, not as a run before it read them", async () => {
-    // The validators and the contract are generated from the fixture, and a module is cached by
-    // URL: a second run in this process must not describe what the first one read.
+    // The validators and the contract are generated from the latest version, which is parsed
+    // from the file each time: a second run in this process must not describe what the first read.
     await writeGateway(
       tmp,
       gatewayModule("{ createUser: {} }"),
-      schemasModule(CREATE_USER_SCHEMAS),
+      schemasVersion(CREATE_USER_SCHEMAS),
     );
     await generate(tmp);
     expect(await readFile(contractPath(), "utf-8")).toContain(
@@ -251,7 +278,7 @@ describe("generate", () => {
     await writeGateway(
       tmp,
       gatewayModule("{ createUser: {} }"),
-      schemasModule(RENAMED_SCHEMAS),
+      schemasVersion(RENAMED_SCHEMAS),
     );
     await generate(tmp);
 
@@ -271,24 +298,32 @@ import { existsSync, writeFileSync } from "node:fs";
 
 // Held here so a case can change a file while this module is being evaluated. A gateway's own
 // configuration reaches nothing of the sort; this is the test standing in the middle of a load.
+// The wait is bounded: a case that fails before it releases this module ends its run all the
+// same, and the failure it reports is its own rather than a timeout around a module still held.
 writeFileSync(new URL("./started", import.meta.url), "");
-while (!existsSync(new URL("./proceed", import.meta.url))) {
+const held = Date.now() + 30_000;
+while (
+  !existsSync(new URL("./proceed", import.meta.url)) &&
+  Date.now() < held
+) {
   await new Promise((resolve) => setTimeout(resolve, 5));
 }
 ${gatewayModule("{ createUser: {} }")}`,
-      schemasModule(CREATE_USER_SCHEMAS),
+      schemasVersion(CREATE_USER_SCHEMAS),
     );
 
     const run = generate(tmp);
-    while (!existsSync(path.join(tmp, "started"))) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
+    try {
+      await reached(path.join(tmp, "started"), run);
+      // What the bundle would read from here on, and what nothing in this run has checked.
+      await writeFile(
+        path.join(tmp, "gateway.config.ts"),
+        gatewayModule("{ createUser: {}, andAnother: {} }"),
+      );
+    } finally {
+      // Released whatever happened above, so the run ends and reports what it found.
+      await writeFile(path.join(tmp, "proceed"), "");
     }
-    // What the bundle would read from here on, and what nothing in this run has checked.
-    await writeFile(
-      path.join(tmp, "gateway.config.ts"),
-      gatewayModule("{ createUser: {}, andAnother: {} }"),
-    );
-    await writeFile(path.join(tmp, "proceed"), "");
 
     await expect(run).rejects.toThrow(/changed while it was being generated/);
     await expect(readdir(generated())).rejects.toThrow();
@@ -298,7 +333,7 @@ ${gatewayModule("{ createUser: {} }")}`,
     await writeGateway(
       tmp,
       gatewayModule("{ createUser: {} }"),
-      schemasModule(CREATE_USER_SCHEMAS),
+      schemasVersion(CREATE_USER_SCHEMAS),
     );
 
     // Changed after it was read and checked, while the output was being built: the bundle would
@@ -317,9 +352,29 @@ ${gatewayModule("{ createUser: {} }")}`,
     expect(await leftovers(generated())).toEqual([]);
   }, 60_000);
 
+  it("publishes nothing when the schemas change while it runs", async () => {
+    // The validators were compiled from the version as it was read. One rewritten since then is
+    // what the next run would generate from, and what this run would be published beside.
+    await writeGateway(
+      tmp,
+      gatewayModule("{ createUser: {} }"),
+      schemasVersion(CREATE_USER_SCHEMAS),
+    );
+
+    onceEntryIsWritten(() =>
+      writeFile(path.join(tmp, FIRST_VERSION), schemasVersion(RENAMED_SCHEMAS)),
+    );
+
+    await expect(generate(tmp)).rejects.toThrow(
+      /changed while it was being generated/,
+    );
+    await expect(readdir(generated())).rejects.toThrow();
+    expect(await leftovers(generated())).toEqual([]);
+  }, 60_000);
+
   it("publishes nothing when a module it imports changes while it runs", async () => {
     // The bundle reads whatever the configuration imports, so what is read at the end is every
-    // module the gateway is made of, not only the two that are read as themselves.
+    // file the gateway is made of, not only the configuration and the schemas.
     await writeFile(
       path.join(tmp, "handler-of-sorts.ts"),
       "export default { note: 'first' };\n",
@@ -327,7 +382,7 @@ ${gatewayModule("{ createUser: {} }")}`,
     await writeGateway(
       tmp,
       gatewayModule("{ createUser: {} }"),
-      schemasModule(CREATE_USER_SCHEMAS),
+      schemasVersion(CREATE_USER_SCHEMAS),
     );
 
     onceEntryIsWritten(() =>
