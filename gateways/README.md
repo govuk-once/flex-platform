@@ -249,7 +249,7 @@ sides of a call run in opposite directions:
 | | Breaks a caller | Safe |
 |---|---|---|
 | Input | Admitting less: a field that becomes required or is removed, a narrower type, a removed `enum` value, a tighter bound, a new `pattern` or `format`, an object that closes | Admitting more: an optional field on a closed object, a wider type, an added `enum` value, a looser bound |
-| Outcome | Promising less: a field that is removed or stops being required, a wider type, an added `enum` value, a looser bound | Promising more: an added field no dictionary already spoke for, a field that becomes required, a narrower type |
+| Outcome | Promising less: a field that is removed or stops being required, a dictionary that closes, a wider type, an added `enum` value, a looser bound | Promising more: an added field no dictionary already spoke for, a field that becomes required, a narrower type |
 | Operations | One that is removed | One that is added |
 | Outcomes | One that is removed, and one that is added, since a caller's switch over them was complete | |
 | Shared definitions | One that is removed or replaced by another, since the contract exports each as a named type | One that is added |

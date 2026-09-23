@@ -334,6 +334,12 @@ describe("compareSchemas", () => {
         { type: "string", maxLength: 10 },
         "operations.op.outcomes.ok.maxLength: changed from 5 to 10",
       ],
+      [
+        "a dictionary that closes, which takes away every entry a caller read",
+        { type: "object", additionalProperties: { type: "string" } },
+        { type: "object", additionalProperties: false },
+        "operations.op.outcomes.ok.additionalProperties: no longer admits the entries it promised values for",
+      ],
     ])("refuses %s", (_what, previous, next, problem) => {
       expect(outcome(previous, next).breaking).toEqual([problem]);
     });
@@ -374,6 +380,12 @@ describe("compareSchemas", () => {
         { type: "object", additionalProperties: false },
         { type: "object" },
         "operations.op.outcomes.ok.additionalProperties: changed from false to true",
+      ],
+      [
+        "an object that closes where it promised nothing of what it did not declare",
+        { type: "object", additionalProperties: {} },
+        { type: "object", additionalProperties: false },
+        "operations.op.outcomes.ok.additionalProperties: changed from {} to false",
       ],
     ])("accepts %s", (_what, previous, next, change) => {
       expect(outcome(previous, next)).toEqual({

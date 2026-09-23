@@ -716,10 +716,20 @@ class Comparison {
     // is told the same either way, and that is what this reads.
     if (
       position === "output" &&
-      typeof before === "boolean" &&
-      typeof after === "boolean"
+      typeof after === "boolean" &&
+      !constrains(before)
     ) {
-      this.survives(at, `changed from ${String(before)} to ${String(after)}`);
+      this.survives(
+        at,
+        `changed from ${JSON.stringify(before)} to ${String(after)}`,
+      );
+      return;
+    }
+    // A dictionary did promise its entries a value, and a caller reads them by name, as it reads
+    // a declared field. Closing it takes every entry away, which is a field removed, however
+    // little it admits in values.
+    if (position === "output" && after === false) {
+      this.breaks(at, "no longer admits the entries it promised values for");
       return;
     }
     this.schema(before, after, position, at, depth + 1);
