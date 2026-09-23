@@ -208,7 +208,10 @@ schemas/
   0002.json
 ```
 
-Codegen generates from the highest-numbered version. Versions are four digits, numbered from
+Codegen generates from the highest-numbered version, and a merged version is never changed or
+removed: a change to the contract is the next version. Each version is checked against the one
+before it as the files are now, so one rewritten in place would move what the check starts from;
+CI refuses a pull request that changes or removes one. Versions are four digits, numbered from
 `0001` with none left out, so the names sort into the order they were written in; a directory
 that holds anything else, or whose numbering has a gap, fails generation rather than being read
 around. A version holds the shared definitions and, for each operation, an input schema and a
