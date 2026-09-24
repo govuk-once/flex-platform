@@ -230,6 +230,124 @@ describe("emitted contract", () => {
     );
   });
 
+  it("documents definitions, operations, outcomes and fields, and still compiles", async () => {
+    const documented: GatewaySchemas = {
+      defs: {
+        Licence: {
+          type: "object",
+          description: "A driving licence\nas the upstream holds it",
+          properties: {
+            number: { type: "string", description: "The licence number" },
+            status: { type: "string", deprecated: true },
+          },
+          required: ["number"],
+        },
+      },
+      operations: {
+        getLicence: {
+          input: {
+            type: "object",
+            properties: { number: { type: "string", title: "Licence number" } },
+            required: ["number"],
+            additionalProperties: false,
+          },
+          outcomes: {
+            ok: { $ref: "Licence", description: "The licence that was found" },
+          },
+        },
+      },
+    };
+    const dir = await mkdtemp(path.join(GENERATED_ROOT, "documented-"));
+    try {
+      await emitContract(GATEWAY_ID, documented, dir, {
+        descriptions: { getLicence: "Look a licence up by its number" },
+      });
+      const emitted = await readFile(path.join(dir, CONTRACT_MODULE), "utf-8");
+
+      expect(emitted).toContain(
+        [
+          "/**",
+          " * A driving licence",
+          " * as the upstream holds it",
+          " */",
+          "export type Licence = {",
+          "  /** The licence number */",
+          "  readonly number: string;",
+          "  /** @deprecated */",
+          "  readonly status?: string;",
+          "};",
+        ].join("\n"),
+      );
+      expect(emitted).toContain(
+        [
+          "/** Look a licence up by its number */",
+          "export type GetLicenceInput = {",
+          "  /** Licence number */",
+          "  readonly number: string;",
+          "};",
+        ].join("\n"),
+      );
+      expect(emitted).toContain(
+        [
+          "  /** The licence that was found */",
+          "  readonly data: Licence;",
+        ].join("\n"),
+      );
+      expect(emitted).toContain(
+        [
+          "  /** Look a licence up by its number */",
+          "  readonly getLicence: {",
+        ].join("\n"),
+      );
+      expect(compile(path.join(dir, CONTRACT_MODULE))).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("keeps hostile text inside its comments, wherever a comment is written", async () => {
+    // The same text in every place a comment comes from. Were any of it to leave its comment,
+    // the contract would declare `injected`, or stop compiling.
+    const hostile = "fine */ export type injected = true; /* \n@deprecated\n*/";
+    const schemas: GatewaySchemas = {
+      defs: { Thing: { type: "object", description: hostile } },
+      operations: {
+        op: {
+          input: {
+            type: "object",
+            properties: { field: { type: "string", description: hostile } },
+          },
+          outcomes: { ok: { $ref: "Thing", description: hostile } },
+        },
+      },
+    };
+    const dir = await mkdtemp(path.join(GENERATED_ROOT, "hostile-"));
+    try {
+      await emitContract(GATEWAY_ID, schemas, dir, {
+        descriptions: { op: hostile },
+      });
+      const file = path.join(dir, CONTRACT_MODULE);
+      const parsed = ts.createSourceFile(
+        file,
+        await readFile(file, "utf-8"),
+        ts.ScriptTarget.Latest,
+        true,
+      );
+      const declared = parsed.statements
+        .filter(ts.isTypeAliasDeclaration)
+        .map((statement) => statement.name.text);
+      const deprecated = parsed.statements.filter(
+        (statement) => ts.getJSDocDeprecatedTag(statement) !== undefined,
+      );
+
+      expect(declared).not.toContain("injected");
+      expect(deprecated).toEqual([]);
+      expect(compile(file)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("describes schemas the validators are generated from", async () => {
     // The contract and the validators read the same schemas: a shape one of them accepts and
     // the other refuses would reach a gateway as a type that does not match its validation.

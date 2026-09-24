@@ -268,6 +268,20 @@ describe("generate", () => {
     );
   }, 60_000);
 
+  it("describes each operation in the contract as the configuration describes it", async () => {
+    await writeGateway(
+      tmp,
+      gatewayModule('{ createUser: { description: "Creates a user record" } }'),
+      schemasVersion(CREATE_USER_SCHEMAS),
+    );
+
+    await generate(tmp);
+
+    expect(await readFile(contractPath(), "utf-8")).toContain(
+      "/** Creates a user record */\nexport type CreateUserInput",
+    );
+  }, 60_000);
+
   it("emits nothing when a version breaks the one before it", async () => {
     // A caller written against the first version sends `email`, which the second has no field
     // for. The configuration agrees with the second, so nothing else would refuse it.

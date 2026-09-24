@@ -2,6 +2,7 @@ import type { JSONSchema } from "@repo/gateway-types";
 import { isRecord } from "@repo/utils/is-record";
 import { stringsIn } from "@repo/utils/strings-in";
 
+import { docComment, documentationOf, type Documented } from "./doc-comment.ts";
 import { isIdentifier } from "./output.ts";
 
 // JSON Schema as a TypeScript type expression, for the call contract a caller writes against.
@@ -134,6 +135,8 @@ interface ObjectShape {
   // Field -> every declaration of it, which `allOf` may spread over several branches.
   readonly properties: Map<string, TypeExpression[]>;
   readonly required: Set<string>;
+  // Field -> what its schema says about it, from the first declaration that says anything.
+  readonly docs: Map<string, Documented>;
   // The value types of `patternProperties`. TypeScript has no pattern-keyed index signature, so
   // they widen the one it does have rather than being dropped.
   readonly patterns: TypeExpression[];
@@ -174,6 +177,7 @@ function emptyComposition(): Composition {
     shape: {
       properties: new Map(),
       required: new Set(),
+      docs: new Map(),
       patterns: [],
       additional: undefined,
       present: false,
@@ -205,6 +209,7 @@ function cloneComposition(composition: Composition): Composition {
         ]),
       ),
       required: new Set(composition.shape.required),
+      docs: new Map(composition.shape.docs),
       patterns: [...composition.shape.patterns],
       additional: composition.shape.additional,
       present: composition.shape.present,
@@ -268,6 +273,28 @@ function mergeable(branch: unknown): branch is JSONSchema {
   return branch.type === undefined || branch.type === "object";
 }
 
+// What a field's schema says about it. A field that only refers to a shared definition says
+// nothing of its own, and an editor shows a field's comment rather than its type's, so what the
+// definition says stands in: a schema factored into definitions documents its fields as well as
+// one written out in full.
+function propertyDocumentation(
+  property: unknown,
+  ctx: TypeContext,
+): Documented {
+  const own = documentationOf(property);
+  const referred =
+    isRecord(property) && typeof property.$ref === "string"
+      ? documentationOf(ctx.schemas.get(property.$ref))
+      : {};
+  const description = own.description ?? referred.description;
+  return {
+    ...(description === undefined ? {} : { description }),
+    ...(own.deprecated === true || referred.deprecated === true
+      ? { deprecated: true }
+      : {}),
+  };
+}
+
 function absorb(
   schema: JSONSchema,
   into: Composition,
@@ -306,6 +333,10 @@ function absorb(
       const declarations = shape.properties.get(name) ?? [];
       declarations.push(expressionOf(property, ctx, depth + 1));
       shape.properties.set(name, declarations);
+      if (!shape.docs.has(name)) {
+        const documented = propertyDocumentation(property, ctx);
+        if (docComment(documented) !== "") shape.docs.set(name, documented);
+      }
     }
   }
   if (Object.hasOwn(schema, "required")) {
@@ -488,7 +519,9 @@ function objectFromShape(
     const type = intersection(declarations);
     declared.push(type);
     const optional = shape.required.has(name) ? "" : "?";
-    members.push(`readonly ${propertyKey(name)}${optional}: ${type.text};`);
+    members.push(
+      `${docComment(shape.docs.get(name) ?? {})}readonly ${propertyKey(name)}${optional}: ${type.text};`,
+    );
   }
 
   // Fields under a name the schema does not list. Leaving `additionalProperties` out admits them

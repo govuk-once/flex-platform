@@ -127,7 +127,14 @@ export async function generate(gatewayDir: string): Promise<void> {
     await writeValidators(compiled, path.join(runtimeDir, VALIDATORS_DIR));
     await emitEntry(config.id, runtimeDir);
     await bundleEntry(runtimeDir);
-    await emitContract(config.id, schemas, path.join(staging, CLIENT_DIR));
+    await emitContract(config.id, schemas, path.join(staging, CLIENT_DIR), {
+      descriptions: Object.fromEntries(
+        Object.entries(config.operations).map(([name, operation]) => [
+          name,
+          operation.description,
+        ]),
+      ),
+    });
 
     // The bundle is built by reading the gateway's modules from disk again, the configuration
     // and whatever it imports, so a file that changed while this ran would be deployed having

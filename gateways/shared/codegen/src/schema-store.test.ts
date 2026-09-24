@@ -248,6 +248,63 @@ describe("readSchemas", () => {
   });
 });
 
+describe("readSchemas, on text that does not display", () => {
+  const describedAs = (description: string, name = "note") => ({
+    operations: {
+      op: {
+        input: { type: "object", properties: { [name]: { description } } },
+        outcomes: { ok: { type: "null", enum: [description] } },
+      },
+    },
+  });
+
+  it.each([
+    ["a bidirectional override", "\u202E", "U+202E"],
+    ["a bidirectional isolate", "\u2066", "U+2066"],
+    ["a zero-width space", "\u200B", "U+200B"],
+    ["a byte order mark", "\uFEFF", "U+FEFF"],
+    ["a control character", "\u0007", "U+0007"],
+    ["a line separator", "\u2028", "U+2028"],
+  ])(
+    "refuses %s wherever a version holds one",
+    async (_what, hidden, named) => {
+      await writeVersion("0001", describedAs(`safe${hidden}text`));
+
+      expect(await problemsOf(readSchemas(gatewayDir, "0001"))).toEqual([
+        `operations.op.input.properties.note.description holds a character that does not display (${named})`,
+        `operations.op.outcomes.ok.enum.0 holds a character that does not display (${named})`,
+      ]);
+    },
+  );
+
+  it("finds one written as an escape, which the file's own text would not show", async () => {
+    await writeVersion(
+      "0001",
+      JSON.stringify(describedAs("safe")).replace("safe", "sa\\u202Efe"),
+    );
+
+    const [problem] = await problemsOf(readSchemas(gatewayDir, "0001"));
+    expect(problem).toContain("U+202E");
+  });
+
+  it("refuses one in a name as well as in a value", async () => {
+    await writeVersion("0001", describedAs("safe", "no\u200Bte"));
+
+    expect(await problemsOf(readSchemas(gatewayDir, "0001"))).toEqual([
+      "operations.op.input.properties has a field whose name holds a character that does not display (U+200B)",
+    ]);
+  });
+
+  it("accepts what a description is laid out with, and text in any script", async () => {
+    const schemas = describedAs(
+      "First line\n\tindented\r\nTrwydded yrru — 運転免許",
+    );
+    await writeVersion("0001", schemas);
+
+    await expect(readSchemas(gatewayDir, "0001")).resolves.toEqual(schemas);
+  });
+});
+
 describe("loadVersions", () => {
   it("reads every version, oldest first", async () => {
     await writeVersion("0001", schemasOf("ok"));

@@ -236,8 +236,12 @@ unknown field is refused, since a misspelt one would otherwise be ignored, and s
 `__proto__`, which JSON makes an ordinary key and an object literal does not: not as a definition,
 an operation or an outcome, and not anywhere inside a schema, where Ajv skips a property of that
 name rather than compiling it, reads a required one off the prototype, and writes the schema back
-out as an object literal that the key would reshape. Whether each schema is a valid schema is
-Ajv's to say when the validators are built.
+out as an object literal that the key would reshape. A character that does not display is refused
+wherever a version holds one, in a name or a value: control characters, and the format characters
+that reorder or hide the text around them. A version is reviewed by a person and its text is
+written into generated code, so one of these would let it show a reviewer one thing and hold
+another; it is read from the parsed value, so one written as a `\u` escape is found as well.
+Whether each schema is a valid schema is Ajv's to say when the validators are built.
 
 #### Compatibility between versions
 
@@ -396,6 +400,22 @@ export function linkedId(response: GetIdentityExchangeResponse): string | null {
   }
 }
 ```
+
+The contract carries what the schemas say about themselves as comments, which is what a caller's
+editor shows: a `description`, or a `title` where there is none, in front of each shared
+definition and each field, with `@deprecated` where the schema sets `deprecated`. A field that
+only refers to a definition takes the definition's, since an editor shows a field's comment and
+not its type's, and an outcome's describes the data it carries. An operation is described by the
+`description` its configuration gives it. That text is not the gateway's own: a schema derived
+from an upstream's document carries whatever the document said, and it is written into code a
+caller compiles. So every comment is written one way, which keeps `*/` from ending it, writes
+every `@` the text holds as the character reference `&#64;`, and writes each line of the text as
+a line of one block comment; names and values reach the contract as string literals or checked
+identifiers, never as text. An `@` opens a JSDoc tag wherever it stands, not only at the start of
+a line, and escaping one with a backslash stops the compiler parsing the tag without stopping
+`stripInternal` removing the declaration it marks, so none is left to read. An editor rendering
+the comment shows the `@` back. A tag in the contract is one the generator wrote: `@deprecated`,
+from a schema that declares itself deprecated.
 
 `Operations` maps each operation name to its input and result, and `OperationName`,
 `OperationInput`, `OperationResult` and `OperationResponse` name them generically.
