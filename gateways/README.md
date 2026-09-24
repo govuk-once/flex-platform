@@ -435,6 +435,32 @@ widening the type would leave a contract that compiles while admitting requests 
 rejects, and the schema is what wants looking at. Factoring the branches into a shared definition
 stops the expansion, since a `$ref` is read as a name.
 
+A union of a type and values of it, `anyOf: [{ "enum": ["Valid", "Revoked"] }, { "type": "string" }]`,
+is how an outcome lists the values it knows of while admitting whatever else an upstream comes to
+send. It is emitted as `"Valid" | "Revoked" | (string & {})`: written with a bare `string`,
+TypeScript would read the whole union as `string` and forget the values. A caller's editor goes on
+offering them, a switch over them does not compile without a `default` branch, and that branch is
+where a value added later arrives, so adding one [breaks no caller](#compatibility-between-versions).
+The compatibility check reads the union this way where the type is written in it; where the type
+is behind a `$ref`, an added value is refused, which is the safe mistake. An `enum` on its own
+stays the closed union it is, which is what an input wants.
+
+The same union is read whichever way a schema writes it: the values and the type beside each
+other, the type enclosing a union of them, or either of the two behind a `$ref`, whose name is
+read back to the definition it points at. What a name is read for is the types the definition
+declares, not the `type` it writes: one that also admits null, through `nullable` or a list, is
+declared as a union with it, and a name standing for that is not the type to mark open — doing so
+would take the null out and leave a caller unable to assign what the validators accept. A
+definition that also admits null, or that is itself a reference or a composition, is not read
+through, and the values are then lost to an editor, which costs a suggestion and types nothing
+wrongly.
+
+What this type does not do is narrow to a value on its own. `if (status === "Valid")` leaves
+`"Valid" | (string & {})`, since the open branch admits that string too, so a function taking
+`"Valid"` refuses what the comparison established; pass the literal rather than the variable. A
+caller compiled against a plain `string` and given one of these types can stop compiling for that
+reason, with the schemas unchanged, so it is worth saying before the types go out.
+
 A `$ref` names a key of the gateway's shared `defs`, which the contract declares as a type of that
 name. A pointer into the schema itself, such as `#/$defs/Body`, compiles to a validator but has no
 name to emit here, so generation fails rather than describing it as `unknown`: declare the
