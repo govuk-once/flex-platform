@@ -112,8 +112,9 @@ function combine(
   }
   const members =
     kind === "union" ? unique.filter((part) => part.text !== NEVER) : unique;
-  if (members.length === 0) return leaf(NEVER);
-  if (members.length === 1) return members[0]!;
+  const [first, ...others] = members;
+  if (first === undefined) return leaf(NEVER);
+  if (others.length === 0) return first;
   // A union of nothing but values of one primitive is values of that primitive, whatever it is
   // written inside: a `type` enclosing a union, or a branch of one, holds them the same way.
   const listed = new Set(members.map((member) => member.literalOf));
@@ -252,10 +253,17 @@ interface DeferredUnion {
   readonly depth: number;
 }
 
+// A reference as it was read: the definition's key, and the type name the contract declares it
+// under, found when the reference was, so nothing has to find it again.
+interface Reference {
+  readonly key: string;
+  readonly name: string;
+}
+
 interface Composition {
   readonly shape: ObjectShape;
   // References, which stay named, in the order they were written.
-  readonly refs: string[];
+  readonly refs: Reference[];
   // Branches that are not objects, already emitted.
   readonly parts: TypeExpression[];
   // `items` as each part of the composition declared them, and `prefixItems`, which names the
@@ -421,7 +429,7 @@ function absorb(
           : `Schema references shared definition "${schema.$ref}", which is not declared`,
       );
     }
-    into.refs.push(schema.$ref);
+    into.refs.push({ key: schema.$ref, name });
   }
 
   // Every part of an `allOf` must hold at once, so each one narrows what the composition admits:
@@ -590,7 +598,7 @@ function propertyOf(
 
 function objectFromShape(
   shape: ObjectShape,
-  refs: readonly string[],
+  refs: readonly Reference[],
   ctx: TypeContext,
   depth: number,
 ): TypeExpression {
@@ -603,7 +611,7 @@ function objectFromShape(
   for (const field of shape.required) {
     if (shape.properties.has(field)) continue;
     let declaration: unknown;
-    for (const key of refs) {
+    for (const { key } of refs) {
       declaration = propertyOf(key, field, ctx);
       if (declaration !== undefined) break;
     }
@@ -784,8 +792,8 @@ function emitComposition(
   depth: number,
 ): TypeExpression {
   const own = ownType(composition, ctx, depth);
-  const refs = composition.refs.map((key) => ({
-    ...leaf(ctx.defs.get(key)!),
+  const refs = composition.refs.map(({ key, name }) => ({
+    ...leaf(name),
     ...standsFor(ctx.schemas.get(key)),
   }));
 
