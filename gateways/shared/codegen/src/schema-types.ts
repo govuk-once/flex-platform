@@ -491,21 +491,28 @@ function objectFromShape(
     members.push(`readonly ${propertyKey(name)}${optional}: ${type.text};`);
   }
 
-  // Fields under a name the schema does not list. `additionalProperties: true`, and leaving it
-  // out, both admit any value under any name a pattern does not match, so one index signature
-  // for the lot has to admit that too.
-  // Omitting `additionalProperties` admits every other name, which is what writing `true` says;
-  // JSON Schema has no third state, so the two cannot emit different types. Without the index
-  // signature the caller's own object literal would be refused for a field the gateway accepts.
-  const unconstrained =
-    shape.additional === true || shape.additional === undefined;
+  // Fields under a name the schema does not list. Leaving `additionalProperties` out admits them
+  // as `true` does, and JSON Schema has no third state, but what a caller is offered does: only
+  // a schema that says so is described as holding more than it lists. Left out, a validator goes
+  // on admitting what an upstream adds or a caller's plain JavaScript sends, and the type stays
+  // what was declared, so a contract never suggests fields that depend on the version of it a
+  // caller happens to have. An object literal with a field of its own is then refused by the
+  // compiler where the gateway would have taken it, which is the narrower of the two on purpose.
+  const unconstrained = shape.additional === true;
 
   if (unconstrained) {
     members.push("readonly [key: string]: unknown;");
-  } else {
-    // A schema for the rest, or patterns with nothing else admitted: one index signature holds
-    // them all, and TypeScript makes it govern the declared properties as well, which JSON
-    // Schema does not, so their types join it.
+  } else if (shape.additional !== undefined) {
+    // A schema for the rest, or `false` with patterns beside it: every name the schema admits
+    // carries one of these, so one index signature holds them all, and TypeScript makes it
+    // govern the declared properties as well, which JSON Schema does not, so their types join it.
+    //
+    // Patterns are read only here, where something is said about the names they do not match. A
+    // schema that leaves `additionalProperties` out says what some names carry and nothing about
+    // the rest, and an index signature typed from the patterns alone would offer a pattern's
+    // type under every name: a validator takes `{ "unmatched": 123 }` where the pattern is
+    // `^x-`, and `data.unmatched.toUpperCase()` would compile and fail. An index signature is a
+    // promise about every name, so it is made only where the schema covers every name.
     const other = [
       ...(isRecord(shape.additional)
         ? [expressionOf(shape.additional, ctx, depth + 1)]
@@ -519,11 +526,12 @@ function objectFromShape(
   }
 
   if (members.length === 0) {
-    return leaf(
-      shape.additional === false
-        ? "Record<string, never>"
-        : "Record<string, unknown>",
-    );
+    if (shape.additional === false) return leaf("Record<string, never>");
+    // Nothing declared, and nothing said about the rest. On its own that is any object; beside a
+    // reference it is the reference, and an index signature intersected with one would offer
+    // every name the definition does not declare, reopening what naming it kept closed. `object`
+    // says what is left, that the value is not a primitive, and takes nothing back.
+    return leaf(refs.length > 0 ? "object" : "Record<string, unknown>");
   }
   // An index signature with nothing declared beside it is the whole of the type, and `Record`
   // says it in fewer characters. Whichever way the schema spelt it, it reads the same here.
