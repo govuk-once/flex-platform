@@ -275,11 +275,10 @@ compared with the latest version:
 
 A version is two-space JSON in the order its source was written in, so the contract lists an
 object's fields as the upstream documents them, and nothing a formatter decides, so the same
-schemas are the same bytes whatever is installed. Each run writes its own staging file and links
-that into place rather than renaming it, so a version that exists is never written over and two
-runs racing for one version publish whichever run's the link took, whole. A gateway whose driver
-derives nothing keeps its versions by hand; for it the command writes none and reads the latest
-as the generator reads it, since nothing else has.
+schemas are the same bytes whatever is installed. The file is created exclusively, so a version
+that exists is never written over, and of two runs racing for one version only one writes it. A
+gateway whose driver derives nothing keeps its versions by hand; for it the command writes none
+and reads the latest as the generator reads it, since nothing else has.
 
 What the command prints carries an upstream's own words — a field name through the comparison, a
 driver's notes through its derivation — and writes any character that does not display as its

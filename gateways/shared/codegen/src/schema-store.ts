@@ -1,12 +1,4 @@
-import { randomUUID } from "node:crypto";
-import {
-  link,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { GatewaySchemas } from "@repo/gateway-types";
@@ -320,8 +312,8 @@ export const versionAfter = (versions: readonly string[]): string =>
 // Writes schemas as a version, in the order they were given: a version keeps the order its
 // source was written in, so the contract lists an object's fields as the upstream documents
 // them. Two-space JSON and nothing a formatter decides, so the same schemas are the same bytes
-// whatever is installed. Written beside the file and moved into place, so a run that is
-// interrupted leaves no half of a version behind for the next to generate from.
+// whatever is installed. Created exclusively, so a version that exists is never written over,
+// and of two runs writing the same version only one can.
 export async function writeVersion(
   gatewayDir: string,
   version: string,
@@ -329,20 +321,11 @@ export async function writeVersion(
 ): Promise<string> {
   const dir = path.resolve(gatewayDir, SCHEMAS_DIR);
   const file = path.join(dir, `${version}.json`);
-  // One staging file per run, created exclusively, and dotted so a run that dies here leaves
-  // nothing the next one reads as a version. The name has to be this run's alone: linking makes
-  // the published version and the staging file one inode, so a second run writing to a staging
-  // file of the same name would write through the link and into what the first published, while
-  // its own link failed and told it nothing had been written.
-  const staged = path.join(dir, `.${version}.json.${randomUUID()}`);
   await mkdir(dir, { recursive: true });
-  await writeFile(staged, `${JSON.stringify(schemas, null, 2)}\n`, {
-    flag: "wx",
-  });
   try {
-    // A link, not a rename: a rename replaces what is there, and a version is history. Linking
-    // fails where the name is taken, in one step, so two runs cannot both write the same version.
-    await link(staged, file);
+    await writeFile(file, `${JSON.stringify(schemas, null, 2)}\n`, {
+      flag: "wx",
+    });
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw cause;
     throw new SchemaStoreError(
@@ -350,8 +333,6 @@ export async function writeVersion(
       ["already exists; a version is never written over"],
       { cause },
     );
-  } finally {
-    await rm(staged, { force: true });
   }
   return file;
 }
