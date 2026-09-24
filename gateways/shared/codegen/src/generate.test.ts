@@ -27,6 +27,7 @@ import {
 
 import { stub } from "../test/fixture/driver.ts";
 import { GatewayCheckError } from "./check-gateway.ts";
+import { SchemaCompatibilityError } from "./compare-schemas.ts";
 import { generate, stagingPrefix } from "./generate.ts";
 import {
   BUNDLE_MODULE,
@@ -240,6 +241,51 @@ describe("generate", () => {
     );
 
     await expect(generate(tmp)).rejects.toThrow(/the driver disagrees/);
+    await expect(readdir(generated())).rejects.toThrow();
+  });
+
+  it("generates from the latest version when each follows the one before it safely", async () => {
+    await writeGateway(
+      tmp,
+      gatewayModule("{ createUser: {} }"),
+      schemasVersion(CREATE_USER_SCHEMAS),
+    );
+    // The same input, with a field a caller may now leave out.
+    await writeFile(
+      path.join(tmp, SCHEMAS_DIR, "0002.json"),
+      schemasVersion({
+        createUser: {
+          ...CREATE_USER_SCHEMAS.createUser,
+          input: { ...CREATE_USER_SCHEMAS.createUser.input, required: [] },
+        },
+      }),
+    );
+
+    await generate(tmp);
+
+    expect(await readFile(contractPath(), "utf-8")).toContain(
+      "readonly email?: string",
+    );
+  }, 60_000);
+
+  it("emits nothing when a version breaks the one before it", async () => {
+    // A caller written against the first version sends `email`, which the second has no field
+    // for. The configuration agrees with the second, so nothing else would refuse it.
+    await writeGateway(
+      tmp,
+      gatewayModule("{ createUser: {} }"),
+      schemasVersion(CREATE_USER_SCHEMAS),
+    );
+    await writeFile(
+      path.join(tmp, SCHEMAS_DIR, "0002.json"),
+      schemasVersion(RENAMED_SCHEMAS),
+    );
+
+    const run = generate(tmp);
+    await expect(run).rejects.toThrow(SchemaCompatibilityError);
+    await expect(run).rejects.toThrow(
+      /0001 -> 0002: operations\.createUser\.input\.properties\.email: was removed/,
+    );
     await expect(readdir(generated())).rejects.toThrow();
   });
 

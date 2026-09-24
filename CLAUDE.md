@@ -17,9 +17,10 @@ operations for one upstream, keeping transport details separate from validation 
 - `gateways/shared/runtime`: envelope parsing, dispatch, input and outcome validation, secure
   value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
   gateway secret from AWS Secrets Manager through Powertools Parameters.
-- `gateways/shared/codegen`: schema loading, the build-time check of a configuration against
-  its schemas, standalone JavaScript validator generation, the call contract and the entry
-  point that wires a gateway to the dispatcher.
+- `gateways/shared/codegen`: schema loading, the comparison of each version of a gateway's
+  schemas with the one before it, the build-time check of a configuration against its schemas,
+  standalone JavaScript validator generation, the call contract and the entry point that wires
+  a gateway to the dispatcher.
 - `gateways/drivers/openapi-rest`: the HTTP driver. Builds `fetch` requests from operation
   mappings, maps statuses to outcomes and error codes, and dispatches to custom handlers the
   entrypoint supplies. Nothing in it is called by hand; a generated entrypoint wires it.
@@ -187,8 +188,14 @@ integrations are implemented.
    configured operation; an unknown one is left out rather than repeated.
 
 7. **Preserve contract compatibility.** Changes to an established gateway contract must be
-   additive. An incompatible contract requires a distinct gateway identity. This is a design
-   rule, not a claim of automated compatibility checking.
+   additive. An incompatible contract requires a distinct gateway identity. Codegen enforces
+   this for the schemas by comparing each version in a gateway's `schemas/` with the one before
+   it, and CI refuses a change to a merged version, which would move where that comparison
+   starts. Keep three things true of the comparison: whatever it cannot place counts as a break,
+   `oneOf` is not read as a union, and a definition is read on each side of the call it is used
+   on. It does not cover the types the generator emits for an unchanged schema, or the error
+   codes, so a change to either still needs this rule applied by hand. The rules are in
+   [the gateway guide](gateways/README.md#compatibility-between-versions).
 
 8. **Avoid duplicate upstream writes.** Any invocation client must disable automatic SDK
    retries (`maxAttempts: 1`). Retry decisions require operation and deadline awareness;

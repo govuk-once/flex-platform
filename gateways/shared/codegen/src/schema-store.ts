@@ -230,9 +230,22 @@ export async function readSchemas(
   return parsed as GatewaySchemas;
 }
 
-// The schemas a gateway is generated from: its latest version.
-export async function loadSchemas(gatewayDir: string): Promise<GatewaySchemas> {
+// One version as it was read, under the name it is kept by.
+export interface SchemaVersion {
+  readonly version: string;
+  readonly schemas: GatewaySchemas;
+}
+
+// Every version a gateway holds, oldest first. The last is what it is generated from; the ones
+// before it are what that has to remain compatible with.
+export async function loadVersions(
+  gatewayDir: string,
+): Promise<readonly SchemaVersion[]> {
   const versions = await schemaVersions(gatewayDir);
-  // schemaVersions refuses a directory with no versions, so there is a last one.
-  return readSchemas(gatewayDir, versions.at(-1) ?? versionName(0));
+  return Promise.all(
+    versions.map(async (version) => ({
+      version,
+      schemas: await readSchemas(gatewayDir, version),
+    })),
+  );
 }

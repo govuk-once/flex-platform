@@ -20,6 +20,34 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_URL: ${{ secrets.SONAR_URL }}
 
+  # Codegen compares each version of a gateway's schemas with the one before it, as the files are
+  # now. A version edited or removed in place rewrites what the comparison starts from, so a break
+  # would pass it; a merged version is history, and only a new one may follow it.
+  schema-history:
+    name: Schema History
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # the merge commit and the base it was made against
+          persist-credentials: false
+
+      - name: Refuse changes to merged schema versions
+        run: |
+          set -euo pipefail
+          # Without rename detection a moved version shows as the removal it is.
+          changed=$(git diff --no-renames --name-only --diff-filter=DMT HEAD^1 HEAD \
+            -- ':(glob)gateways/**/schemas/[0-9][0-9][0-9][0-9].json')
+          if [ -n "$changed" ]; then
+            echo "A merged schema version is never changed or removed; add the next version instead:"
+            echo "$changed" | sed 's/^/  - /'
+            exit 1
+          fi
+
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
