@@ -255,13 +255,16 @@ sides of a call run in opposite directions:
 | Shared definitions | One that is removed or replaced by another, since the contract exports each as a named type | One that is added |
 
 Annotations such as `description`, `title`, `deprecated` and `examples` are not differences, and
-neither is the order anything is written in. They are annotations only where a schema goes: a
-property, a pattern, a name a map such as `dependentSchemas` or `$defs` keys its schemas by, and a
-name a keyword such as `dependentRequired` lists are each read as the name they are. A
-bound is read as what it is in effect, so one written at the value its keyword means by saying
-nothing is no difference, and `minContains: 0` removed is a bound arriving rather than one going,
-since an array with a `contains` and no `minContains` has to hold a match. `const` and `enum`
-are read together where both appear, since each restricts what the other admits.
+neither is the order anything is written in, the branches of an `allOf`, `anyOf` or `oneOf`
+included: a branch that only moved is matched with where it was, and one that changed is read
+against what is left on the other side. `prefixItems` types the element at each place, so its order
+is a difference. Annotations are annotations only where a schema goes: a property, a pattern, a
+name a map such as `dependentSchemas` or `$defs` keys its schemas by, and a name a keyword such as
+`dependentRequired` lists are each read as the name they are. A bound is read as what it is in
+effect, so one written at the value its keyword means by saying nothing is no difference, and
+`minContains: 0` removed is a bound arriving rather than one going, since an array with a
+`contains` and no `minContains` has to hold a match. `const` and `enum` are read together where
+both appear, since each restricts what the other admits.
 
 An outcome may list the values it knows of beside a type it admits in full,
 `anyOf: [{ "enum": [...] }, { "type": "string" }]`; those known values can change freely, because

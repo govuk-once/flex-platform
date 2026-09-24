@@ -94,6 +94,22 @@ describe("compareSchemas", () => {
       ).toEqual({ breaking: [], compatible: [] });
     });
 
+    it.each(["allOf", "anyOf", "oneOf"])(
+      "reads past the order of the branches of %s",
+      (keyword) => {
+        const text: JSONSchema = { type: "string", maxLength: 1 };
+        const record: JSONSchema = { type: "object", required: ["a"] };
+        const previous: JSONSchema = { [keyword]: [text, record] };
+        const next: JSONSchema = { [keyword]: [record, text] };
+
+        expect(input(previous, next)).toEqual({ breaking: [], compatible: [] });
+        expect(outcome(previous, next)).toEqual({
+          breaking: [],
+          compatible: [],
+        });
+      },
+    );
+
     it("reads a number beside an integer as a number", () => {
       expect(
         input({ type: ["number", "integer"] }, { type: "number" }),
@@ -506,6 +522,21 @@ describe("compareSchemas", () => {
       });
     });
 
+    it("reads a definition a reordered branch refers to", () => {
+      const ref: JSONSchema = { $ref: "Record" };
+      const text: JSONSchema = { type: "string" };
+      const record = (...required: string[]): Defs => ({
+        Record: { type: "object", required },
+      });
+
+      expect(
+        compareSchemas(
+          asInput({ anyOf: [ref, text] }, record("a")),
+          asInput({ anyOf: [text, ref] }, record("a", "b")),
+        ).breaking,
+      ).toEqual(['defs.Record (as input).required: "b" is now required']);
+    });
+
     it("refuses a definition that is removed, and accepts one that is added", () => {
       expect(
         compareSchemas(
@@ -600,6 +631,44 @@ describe("compareSchemas", () => {
       ).toEqual(["operations.op.input.allOf: has 0 parts where it had 1"]);
     });
 
+    it("pairs the branches that did not change before reading the ones that did", () => {
+      const short: JSONSchema = { type: "string", maxLength: 5 };
+      const long: JSONSchema = { type: "string", maxLength: 10 };
+      const record: JSONSchema = { type: "object" };
+
+      expect(
+        input({ anyOf: [short, record] }, { anyOf: [record, long] }),
+      ).toEqual({
+        breaking: [],
+        compatible: [
+          "operations.op.input.anyOf.1.maxLength: changed from 5 to 10",
+        ],
+      });
+      expect(
+        input(
+          { allOf: [{ type: "object" }, { required: ["a"] }] },
+          { allOf: [{ required: ["a", "b"] }, { type: "object" }] },
+        ).breaking,
+      ).toEqual(['operations.op.input.allOf.0.required: "b" is now required']);
+    });
+
+    it("reads prefixItems by position, since each types the element at its place", () => {
+      expect(
+        input(
+          {
+            type: "array",
+            prefixItems: [{ type: "string" }, { type: "number" }],
+          },
+          {
+            type: "array",
+            prefixItems: [{ type: "number" }, { type: "string" }],
+          },
+        ).breaking,
+      ).toEqual([
+        "operations.op.input.prefixItems: changed in a way that cannot be read as safe",
+      ]);
+    });
+
     it("reads a branch added to a union as admitting more", () => {
       const one: JSONSchema = { anyOf: [{ type: "object" }] };
       const two: JSONSchema = {
@@ -678,6 +747,17 @@ describe("compareSchemas", () => {
         breaking: [],
         compatible: [],
       });
+    });
+
+    it("refuses only the branch that changed when the others moved", () => {
+      expect(
+        input(
+          { oneOf: [{ type: "string", maxLength: 1 }, { type: "number" }] },
+          { oneOf: [{ type: "number" }, { type: "string", maxLength: 2 }] },
+        ).breaking,
+      ).toEqual([
+        "operations.op.input.oneOf.1: changed, and a branch of a oneOf that changes can leave another matching too",
+      ]);
     });
 
     it("refuses a branch added, which can leave a value matching two", () => {

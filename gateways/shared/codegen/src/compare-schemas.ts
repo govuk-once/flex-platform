@@ -111,6 +111,10 @@ const SUBSCHEMA_MAPS = [
   "properties",
 ];
 const SUBSCHEMA_LISTS = ["allOf", "anyOf", "oneOf", "prefixItems"];
+// Lists whose branches are read as a set: every one holds, one at least does, or exactly one
+// does, none of which depends on where a branch is written. `prefixItems` types the element at
+// each place, so its order is what it says.
+const BRANCH_LISTS = ["allOf", "anyOf", "oneOf"];
 const SUBSCHEMAS = [
   "additionalProperties",
   "contains",
@@ -165,6 +169,8 @@ function shapeOf(value: unknown): unknown {
           shapeOf(held[name]),
         ]),
       );
+    } else if (BRANCH_LISTS.includes(key) && Array.isArray(held)) {
+      shape[key] = byJson(held.map(shapeOf));
     } else if (SUBSCHEMA_LISTS.includes(key) && Array.isArray(held)) {
       shape[key] = held.map(shapeOf);
     } else if (SUBSCHEMAS.includes(key)) {
@@ -180,6 +186,50 @@ function shapeOf(value: unknown): unknown {
 
 const sameShape = (previous: unknown, next: unknown): boolean =>
   isDeepStrictEqual(shapeOf(previous), shapeOf(next));
+
+// A branch of a composition, with the place it holds in the version it is written in.
+interface Branch {
+  readonly branch: unknown;
+  readonly index: number;
+}
+
+const indexed = (branches: readonly unknown[]): Branch[] =>
+  branches.map((branch, index) => ({ branch, index }));
+
+// The branches of a composition matched across two versions. Branches that say the same are
+// paired wherever each is written, so a branch that only moved is not read as one that changed;
+// what is left on each side is returned in the order that side writes it.
+function pairBranches(
+  previous: readonly Branch[],
+  next: readonly Branch[],
+): {
+  readonly same: readonly (readonly [Branch, Branch])[];
+  readonly previous: readonly Branch[];
+  readonly next: readonly Branch[];
+} {
+  const unmatched = [...previous];
+  const same: [Branch, Branch][] = [];
+  const rest: Branch[] = [];
+  for (const branch of next) {
+    const at = unmatched.findIndex((candidate) =>
+      sameShape(candidate.branch, branch.branch),
+    );
+    const [match] = at === -1 ? [] : unmatched.splice(at, 1);
+    if (match === undefined) rest.push(branch);
+    else same.push([match, branch]);
+  }
+  return { same, previous: unmatched, next: rest };
+}
+
+// What two versions have left over, paired in the order each writes it, where the counts agree.
+const inOrder = (
+  previous: readonly Branch[],
+  next: readonly Branch[],
+): (readonly [Branch, Branch])[] =>
+  previous.flatMap((branch, index) => {
+    const other = next[index];
+    return other === undefined ? [] : [[branch, other] as const];
+  });
 
 // Two values of one keyword, read the way that keyword is read. What a value means depends on
 // what holds it: `patternProperties` and `dependentSchemas` hold schemas under names of their
@@ -754,15 +804,20 @@ class Comparison {
       );
       return;
     }
-    previous.forEach((branch, index) => {
+    // The counts agree, so what is left over on each side does too.
+    const pairing = pairBranches(indexed(previous), indexed(next));
+    for (const [was, is] of [
+      ...pairing.same,
+      ...inOrder(pairing.previous, pairing.next),
+    ]) {
       this.schema(
-        branch,
-        next[index],
+        was.branch,
+        is.branch,
         position,
-        `${where}.allOf.${String(index)}`,
+        `${where}.allOf.${String(is.index)}`,
         depth + 1,
       );
-    });
+    }
   }
 
   // `anyOf`: a value is admitted when any branch admits it, so a branch that admits more makes
@@ -794,12 +849,16 @@ class Comparison {
     );
     const known = (branches: readonly unknown[]): unknown[] =>
       branches.filter((branch) => isKnownValueOf(branch, open));
-    const rest = (branches: readonly unknown[]): unknown[] =>
-      branches.filter((branch) => !isKnownValueOf(branch, open));
+    const rest = (branches: readonly unknown[]): Branch[] =>
+      indexed(branches).filter(({ branch }) => !isKnownValueOf(branch, open));
 
-    // Branch by branch, so annotations inside one are read past here as anywhere else.
+    // Branch by branch, so annotations inside one are read past here as anywhere else, and in no
+    // order, as the branches themselves are.
     if (
-      !isDeepStrictEqual(known(previous).map(shapeOf), known(next).map(shapeOf))
+      !isDeepStrictEqual(
+        byJson(known(previous).map(shapeOf)),
+        byJson(known(next).map(shapeOf)),
+      )
     ) {
       this.survives(
         at,
@@ -807,33 +866,36 @@ class Comparison {
       );
     }
 
-    const previousRest = rest(previous);
-    const nextRest = rest(next);
-    if (previousRest.length === nextRest.length) {
-      previousRest.forEach((branch, index) => {
+    const pairing = pairBranches(rest(previous), rest(next));
+    for (const [was, is] of pairing.same) {
+      this.schema(
+        was.branch,
+        is.branch,
+        position,
+        `${at}.${String(is.index)}`,
+        depth + 1,
+      );
+    }
+    if (pairing.previous.length === pairing.next.length) {
+      for (const [was, is] of inOrder(pairing.previous, pairing.next)) {
         this.schema(
-          branch,
-          nextRest[index],
+          was.branch,
+          is.branch,
           position,
-          `${at}.${String(index)}`,
+          `${at}.${String(is.index)}`,
           depth + 1,
         );
-      });
+      }
       return;
     }
-    const [shorter, longer] =
-      previousRest.length < nextRest.length
-        ? [previousRest, nextRest]
-        : [nextRest, previousRest];
-    const kept = shorter.every((branch) =>
-      longer.some((other) => sameShape(branch, other)),
-    );
+    // Branches that only came, or only went, move the whole the way they move it. Some of each
+    // is a union that changed too much to place.
     this.add(
-      !kept
-        ? "unknown"
-        : nextRest.length > previousRest.length
-          ? "widens"
-          : "narrows",
+      pairing.previous.length === 0
+        ? "widens"
+        : pairing.next.length === 0
+          ? "narrows"
+          : "unknown",
       position,
       at,
       `has ${String(next.length)} branches where it had ${String(previous.length)}`,
@@ -876,22 +938,24 @@ class Comparison {
       );
       return;
     }
-    previous.forEach((branch, index) => {
-      if (sameShape(branch, next[index])) {
-        // Unchanged as written, which says the same only if what it refers to still does. Read
-        // as uncertain, not as the side the `oneOf` is on: a definition that comes to admit more
-        // can leave its branch overlapping the one beside it, which is the change this refuses
-        // when it is written out rather than referred to.
-        this.#references(branch, "uncertain");
-        return;
-      }
+    // Which branch matches a value does not depend on where it is written, so one that only moved
+    // is one that says what it said.
+    const pairing = pairBranches(indexed(previous), indexed(next));
+    for (const [, is] of pairing.same) {
+      // Unchanged as written, which says the same only if what it refers to still does. Read as
+      // uncertain, not as the side the `oneOf` is on: a definition that comes to admit more can
+      // leave its branch overlapping the one beside it, which is the change this refuses when it
+      // is written out rather than referred to.
+      this.#references(is.branch, "uncertain");
+    }
+    for (const changed of pairing.next) {
       this.add(
         "unknown",
         position,
-        `${at}.${String(index)}`,
+        `${at}.${String(changed.index)}`,
         "changed, and a branch of a oneOf that changes can leave another matching too",
       );
-    });
+    }
   }
 }
 
