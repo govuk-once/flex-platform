@@ -13,6 +13,7 @@ import {
 } from "../types.ts";
 import type { OpenApiRestAuth } from "./auth.ts";
 import { checkOperationSchemas } from "./check.ts";
+import type { SecretField } from "./secret-field.ts";
 
 // Behaviour lives here, reviewed with the gateway. Deployment values, the target and the
 // secret, arrive as executor options instead; the configuration names only the secret's fields.
@@ -33,6 +34,10 @@ export interface OpenApiRestDriverConfig {
   // it set, so `[apiKey(…), sigV4(…)]` signs the key. Each names the secret fields it reads and
   // the headers it owns. Required, so a gateway that sends no credential says so, as `[]`.
   readonly auth: readonly OpenApiRestAuth[];
+  // Where the upstream is, when a field of the secret says so: an upstream that provides the
+  // secret often keeps its address there too. Read when the executor is created, and used in
+  // place of UPSTREAM_TARGET when both are there; with neither, the executor refuses to start.
+  readonly target?: SecretField;
 }
 
 // What derives a gateway's schemas from `spec`, found from this module wherever the package is
@@ -90,6 +95,7 @@ export function openapiRest(
     deriveSchemasModule: DERIVE_MODULE,
     spec: config.spec,
     auth: config.auth,
+    ...(config.target !== undefined ? { target: config.target } : {}),
     ...(config.headers !== undefined ? { headers: config.headers } : {}),
     ...(config.maxResponseBytes !== undefined
       ? { maxResponseBytes: config.maxResponseBytes }
