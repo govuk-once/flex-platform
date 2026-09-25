@@ -15,15 +15,15 @@
     "@repo/gateway-runtime": "workspace:*",
     "@repo/gateway-types": "workspace:*",
     "@repo/utils": "workspace:*",
-    "@scalar/openapi-parser": "0.29.1"
+    "@scalar/openapi-parser": "0.29.2"
   },
   "devDependencies": {
-    "@aws-sdk/client-secrets-manager": "3.1128.0",
+    "@aws-sdk/client-secrets-manager": "3.1135.0",
     "@repo/eslint-config": "workspace:*",
     "@repo/gateway-codegen": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.9.1",
+    "eslint": "10.10.0",
     "vitest": "4.1.11"
   }
 }
