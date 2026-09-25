@@ -1,5 +1,5 @@
 import { GatewayError } from "@repo/gateway-runtime";
-import type { SecretProvider } from "@repo/gateway-types";
+import type { SecretProvider, SecretReadOptions } from "@repo/gateway-types";
 import { isRecord } from "@repo/utils/is-record";
 
 import type { SecretField, SecretValues } from "../config/secret-field.ts";
@@ -34,12 +34,12 @@ export function secretFields(
   gatewayId: string,
   provider: SecretProvider,
   fields: readonly SecretField[],
-): { get(): Promise<SecretValues> } {
+): { get(options?: SecretReadOptions): Promise<SecretValues> } {
   return {
-    async get() {
+    async get(options) {
       let secret: unknown;
       try {
-        secret = await provider.get();
+        secret = await provider.get(options);
       } catch (err: unknown) {
         // The runtime's provider raises GatewayErrors; any other provider's error is unknown.
         if (err instanceof GatewayError) throw err;

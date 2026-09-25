@@ -223,6 +223,10 @@ export function sigV4With(
       };
 
       return {
+        // Credentials the upstream refused are assumed again, not held until they expire.
+        refused: () => {
+          roles.clear();
+        },
         async headers({ method, url, headers, body }) {
           const values = await secret.get();
           const roleArn = read(values, arn);

@@ -248,6 +248,16 @@ export async function buildExecutor(
     fetch: deps.fetch,
     staticHeaders,
     auth: authHeadersFor(steps),
+    ...(steps.length === 0
+      ? {}
+      : {
+          reauthenticate: async () => {
+            await secret.get({ fresh: true });
+            for (const { instance } of steps) {
+              if (typeof instance.refused === "function") instance.refused();
+            }
+          },
+        }),
     reservedHeaders,
     maxResponseBytes,
     metadata,

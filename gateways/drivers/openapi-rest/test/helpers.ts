@@ -83,6 +83,8 @@ export interface FakeSecret {
   readonly provider: SecretProvider;
   // How many times get() has been called.
   readonly reads: () => number;
+  // How many of those asked for a fresh copy from the store.
+  readonly freshReads: () => number;
   // Serves a new value from the next get(), as a rotation seen after the cache age would.
   rotate(value: unknown): void;
   // Makes every get() reject until the next rotate(), as a failed read would.
@@ -95,16 +97,19 @@ export function fakeSecret(value: unknown): FakeSecret {
   let current = value as SecretObject;
   let error: Error | undefined;
   let reads = 0;
+  let freshReads = 0;
   return {
     provider: {
-      get() {
+      get(options) {
         reads += 1;
+        if (options?.fresh === true) freshReads += 1;
         return error === undefined
           ? Promise.resolve(current)
           : Promise.reject(error);
       },
     },
     reads: () => reads,
+    freshReads: () => freshReads,
     rotate(nextValue) {
       current = nextValue as SecretObject;
       error = undefined;

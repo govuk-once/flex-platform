@@ -566,6 +566,154 @@ describe("where the upstream is", () => {
   });
 });
 
+describe("a refusal of the gateway's credentials", () => {
+  // The upstream answers each request in turn from the list, repeating the last.
+  function answering(...statuses: number[]) {
+    let index = 0;
+    return fakeFetch(() => {
+      const status = statuses[Math.min(index, statuses.length - 1)] ?? 200;
+      index += 1;
+      return json(status, { id: "u1" });
+    });
+  }
+
+  it.each([401, 403])(
+    "reads the secret again from the store and sends a GET once more after a %i",
+    async (status) => {
+      const ff = answering(status, 200);
+      const secret = fakeSecret({ token: "before-rotation" });
+      const execute = await buildExecutor(
+        gatewayWith([TOKEN]),
+        { target: TARGET, secret: secret.provider },
+        { fetch: ff.fetch },
+      );
+      // Rotated at the store; what the gateway last read is the old value.
+      secret.rotate({ token: "after-rotation" });
+
+      const ctx = passthroughContext();
+      await expect(execute(ctx, "op", {})).resolves.toMatchObject({
+        outcome: "ok",
+      });
+      expect(ff.calls).toHaveLength(2);
+      expect(secret.freshReads()).toBe(1);
+      expect(ctx.logged).toEqual([
+        {
+          level: "info",
+          message:
+            "The upstream refused the gateway's credentials; the secret is read again and the request sent once more",
+          fields: { status },
+        },
+      ]);
+      expect(headerOf(ff.calls[1]!, "authorization")).toBe("after-rotation");
+    },
+  );
+
+  it.each(["POST", "PUT", "PATCH", "DELETE"] as const)(
+    "never sends a %s twice, but reads the secret again for the next request",
+    async (method) => {
+      // The upstream may have acted before it refused: a status is whatever the service behind
+      // an API Gateway chose to answer with.
+      const ff = answering(403, 200);
+      const secret = fakeSecret({ token: "before-rotation" });
+      const execute = await buildExecutor(
+        defineGateway({
+          id: "x",
+          driver: openapiRest({ spec: SPEC, auth: [TOKEN] }),
+          operations: { op: { upstream: `${method} /x` } },
+        }),
+        { target: TARGET, secret: secret.provider },
+        { fetch: ff.fetch },
+      );
+      secret.rotate({ token: "after-rotation" });
+
+      const ctx = passthroughContext();
+      await expect(execute(ctx, "op", {})).rejects.toMatchObject({
+        code: "UPSTREAM_REJECTED",
+      });
+      expect(ff.calls).toHaveLength(1);
+      expect(secret.freshReads()).toBe(1);
+      expect(ctx.logged).toEqual([
+        {
+          level: "info",
+          message:
+            "The upstream refused the gateway's credentials; the secret is read again for the next request, and this one is not sent again",
+          fields: { status: 403 },
+        },
+      ]);
+
+      await execute(passthroughContext(), "op", {});
+      expect(headerOf(ff.calls[1]!, "authorization")).toBe("after-rotation");
+    },
+  );
+
+  it("takes a second refusal as the upstream's answer", async () => {
+    const ff = answering(401, 401, 200);
+    const execute = await buildExecutor(
+      gatewayWith([TOKEN]),
+      { target: TARGET, secret: fakeSecret({ token: "tok" }).provider },
+      { fetch: ff.fetch },
+    );
+
+    await expect(execute(passthroughContext(), "op", {})).rejects.toMatchObject(
+      { code: "UPSTREAM_REJECTED" },
+    );
+    expect(ff.calls).toHaveLength(2);
+  });
+
+  it("does not replay for a gateway that sends no credential", async () => {
+    const ff = answering(401, 200);
+    const secret = fakeSecret({});
+    const execute = await buildExecutor(
+      gatewayWith([]),
+      { target: TARGET, secret: secret.provider },
+      { fetch: ff.fetch },
+    );
+
+    await expect(execute(passthroughContext(), "op", {})).rejects.toMatchObject(
+      { code: "UPSTREAM_REJECTED" },
+    );
+    expect(ff.calls).toHaveLength(1);
+    expect(secret.freshReads()).toBe(0);
+  });
+
+  it("has every part drop what it holds before the replay", async () => {
+    const ff = answering(401, 200);
+    let dropped = 0;
+    const holding = defineAuth({
+      headers: ["x-held"],
+      fields: [],
+      create: () => ({
+        headers: () => Promise.resolve({ "x-held": String(dropped) }),
+        refused: () => {
+          dropped += 1;
+        },
+      }),
+    });
+    const execute = await buildExecutor(
+      gatewayWith([TOKEN, holding]),
+      { target: TARGET, secret: fakeSecret({ token: "tok" }).provider },
+      { fetch: ff.fetch },
+    );
+
+    await execute(passthroughContext(), "op", {});
+    expect(ff.calls.map((c) => headerOf(c, "x-held"))).toEqual(["0", "1"]);
+  });
+
+  it("does not replay after an answer that is not a refusal", async () => {
+    const ff = answering(500, 200);
+    const execute = await buildExecutor(
+      gatewayWith([TOKEN]),
+      { target: TARGET, secret: fakeSecret({ token: "tok" }).provider },
+      { fetch: ff.fetch },
+    );
+
+    await expect(execute(passthroughContext(), "op", {})).rejects.toMatchObject(
+      { code: "UPSTREAM_ERROR" },
+    );
+    expect(ff.calls).toHaveLength(1);
+  });
+});
+
 describe("secret rotation and refresh", () => {
   it("follows a rotated secret without recreating the executor", async () => {
     const ff = fakeFetch(() => json(200, {}));
@@ -1069,6 +1217,48 @@ describe("through the runtime handler", () => {
     await expect(
       pastTheTimeout(handle(envelope("getUser", { userId: "u1" }))),
     ).resolves.toEqual({ ok: false, error: { code: "UPSTREAM_TIMEOUT" } });
+  });
+
+  it("counts only the answer to a replay, as one attempt", async () => {
+    let calls = 0;
+    const handle = await handlerWith(
+      () => {
+        calls += 1;
+        return calls === 1 ? json(401, {}) : json(200, { id: "u1" });
+      },
+      { auth: [TOKEN], secret: fakeSecret({ token: "tok" }).provider },
+    );
+
+    await expect(
+      handle(envelope("getUser", { userId: "u1" })),
+    ).resolves.toEqual({ ok: true, outcome: "ok", data: { id: "u1" } });
+    expect(calls).toBe(2);
+    const logged = stdout.join("");
+    expect(logged).toContain('"signal":"upstream_success"');
+    expect(logged).not.toContain("UPSTREAM_REJECTED");
+  });
+
+  it("bounds a refusal and its replay by one timeout", async () => {
+    let calls = 0;
+    const handle = await handlerWith(() => json(200, {}), {
+      auth: [TOKEN],
+      secret: fakeSecret({ token: "tok" }).provider,
+      fetch: (_input, init) => {
+        calls += 1;
+        if (calls === 1) return Promise.resolve(json(401, {}));
+        return new Promise((_, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        });
+      },
+      policy: { upstreamTimeout: `${TIMEOUT_MS}ms` },
+    });
+    vi.useFakeTimers();
+    await expect(
+      pastTheTimeout(handle(envelope("getUser", { userId: "u1" }))),
+    ).resolves.toEqual({ ok: false, error: { code: "UPSTREAM_TIMEOUT" } });
+    expect(calls).toBe(2);
   });
 
   it("times out a secret refresh that never resolves", async () => {
