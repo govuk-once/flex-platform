@@ -28,7 +28,7 @@ import { apiKey, defineAuth } from "../config/auth.ts";
 import type { OpenApiRestDriverConfig } from "../config/definition.ts";
 import { openapiRest } from "../config/definition.ts";
 import { defineHandler } from "../config/handler.ts";
-import { fromSecret } from "../config/secret-field.ts";
+import { fromSecret, type SecretField } from "../config/secret-field.ts";
 import { encodePathParam } from "../path.ts";
 import { buildExecutor, createExecutor } from "./executor.ts";
 
@@ -482,6 +482,87 @@ describe("createExecutor", () => {
         secret: emptySecret(),
       }),
     ).rejects.toThrow(/Driver headers: header "host"/);
+  });
+});
+
+describe("where the upstream is", () => {
+  const API_URL = fromSecret("apiUrl");
+
+  it("sends to the address the secret field names, over UPSTREAM_TARGET", async () => {
+    const ff = fakeFetch(() => json(200, {}));
+    const execute = await buildExecutor(
+      gatewayWith([], { target: API_URL }),
+      {
+        target: "https://environment.test",
+        secret: fakeSecret({ apiUrl: "https://secret.test/prod" }).provider,
+      },
+      { fetch: ff.fetch },
+    );
+    await execute(passthroughContext(), "op", {});
+    expect(ff.calls[0]?.url).toBe("https://secret.test/prod/x");
+  });
+
+  it("needs no UPSTREAM_TARGET where the secret names the address", async () => {
+    const ff = fakeFetch(() => json(200, {}));
+    const execute = await buildExecutor(
+      gatewayWith([], { target: API_URL }),
+      { secret: fakeSecret({ apiUrl: "https://secret.test" }).provider },
+      { fetch: ff.fetch },
+    );
+    await execute(passthroughContext(), "op", {});
+    expect(ff.calls[0]?.url).toBe("https://secret.test/x");
+  });
+
+  it("falls back to UPSTREAM_TARGET where an optional field is absent", async () => {
+    const ff = fakeFetch(() => json(200, {}));
+    const execute = await buildExecutor(
+      gatewayWith([], { target: fromSecret("apiUrl", { optional: true }) }),
+      { target: "https://environment.test", secret: emptySecret() },
+      { fetch: ff.fetch },
+    );
+    await execute(passthroughContext(), "op", {});
+    expect(ff.calls[0]?.url).toBe("https://environment.test/x");
+  });
+
+  it("refuses to start with no address, before it reads the secret", async () => {
+    const secret = fakeSecret({});
+    await expect(
+      createExecutor(gatewayWith([]), { secret: secret.provider }),
+    ).rejects.toThrow(
+      'Gateway "x" has no upstream: set UPSTREAM_TARGET, or name the secret field that holds it as the driver\'s target',
+    );
+    expect(secret.reads()).toBe(0);
+  });
+
+  it("refuses an address from the secret as UPSTREAM_TARGET's is refused, never quoting it", async () => {
+    const err = await rejection(
+      createExecutor(gatewayWith([], { target: API_URL }), {
+        secret: fakeSecret({ apiUrl: "http://SYNTHETIC.test" }).provider,
+      }),
+    );
+    expect(err.message).toBe(
+      'Secret field "apiUrl" must use https; http is accepted only for a loopback host',
+    );
+
+    const scheme = await rejection(
+      createExecutor(gatewayWith([], { target: API_URL }), {
+        secret: fakeSecret({ apiUrl: "ftp://SYNTHETIC.test" }).provider,
+      }),
+    );
+    expect(scheme.message).toBe('Secret field "apiUrl" must use http or https');
+  });
+
+  it("refuses a target that is not a secret field", async () => {
+    await expect(
+      createExecutor(
+        gatewayWith([], {
+          target: "https://SYNTHETIC.test" as unknown as SecretField,
+        }),
+        { target: TARGET, secret: emptySecret() },
+      ),
+    ).rejects.toThrow(
+      /driver target must name the secret field that holds it, with fromSecret/,
+    );
   });
 });
 

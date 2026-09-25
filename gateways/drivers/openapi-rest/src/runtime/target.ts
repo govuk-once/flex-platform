@@ -17,34 +17,40 @@ export function isCleartextAllowed(url: URL): boolean {
 }
 
 // For this driver the shared upstream target is the base URL of the REST API. The path of the
-// target, if any, prefixes every operation path.
-export function parseUpstreamTarget(value: string): URL {
+// target, if any, prefixes every operation path. `source` names where it came from in a failure:
+// the environment variable, or the secret field a configuration names, whose value is a secret's
+// and so is never repeated, not even its scheme.
+export function parseUpstreamTarget(
+  value: string,
+  source: string = UPSTREAM_TARGET_ENV,
+): URL {
+  const fromEnvironment = source === UPSTREAM_TARGET_ENV;
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw new TypeError(
-      `${UPSTREAM_TARGET_ENV} must be an absolute http or https URL`,
-    );
+    throw new TypeError(`${source} must be an absolute http or https URL`);
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new TypeError(
-      `${UPSTREAM_TARGET_ENV} must use http or https, got "${url.protocol}"`,
+      fromEnvironment
+        ? `${source} must use http or https, got "${url.protocol}"`
+        : `${source} must use http or https`,
     );
   }
   if (!isCleartextAllowed(url)) {
     throw new TypeError(
-      `${UPSTREAM_TARGET_ENV} must use https; http is accepted only for a loopback host`,
+      `${source} must use https; http is accepted only for a loopback host`,
     );
   }
   if (url.search !== "" || url.hash !== "") {
     throw new TypeError(
-      `${UPSTREAM_TARGET_ENV} must not contain a query string or fragment`,
+      `${source} must not contain a query string or fragment`,
     );
   }
   if (url.username !== "" || url.password !== "") {
-    throw new TypeError(`${UPSTREAM_TARGET_ENV} must not embed credentials`);
+    throw new TypeError(`${source} must not embed credentials`);
   }
 
   return url;

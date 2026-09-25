@@ -262,10 +262,10 @@ describe("driver contract types", () => {
     });
   });
 
-  it("keeps the executor options to the target and the secret provider", () => {
-    expectTypeOf<ExecutorOptions>()
-      .toHaveProperty("target")
-      .toEqualTypeOf<string>();
+  it("keeps the executor options to the target, when set, and the secret provider", () => {
+    expectTypeOf<ExecutorOptions["target"]>().toEqualTypeOf<
+      string | undefined
+    >();
     expectTypeOf<ExecutorOptions>()
       .toHaveProperty("secret")
       .toEqualTypeOf<SecretProvider>();

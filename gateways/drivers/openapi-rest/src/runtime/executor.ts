@@ -1,5 +1,5 @@
 import type { ExecutorOptions } from "@repo/gateway-config";
-import { GatewayError } from "@repo/gateway-runtime";
+import { GatewayError, UPSTREAM_TARGET_ENV } from "@repo/gateway-runtime";
 import type { ExecuteFn } from "@repo/gateway-types";
 import { isRecord } from "@repo/utils/is-record";
 
@@ -166,7 +166,12 @@ export async function buildExecutor(
   const parts = checkAuthParts(config.id, config.driver.auth);
   const owned = ownedHeaders(parts);
   const reservedHeaders = new Set(owned.flatMap((names) => [...names]));
-
+  const targetField: unknown = config.driver.target;
+  if (targetField !== undefined && !isSecretField(targetField)) {
+    throw new TypeError(
+      `Gateway "${config.id}" driver target must name the secret field that holds it, with fromSecret`,
+    );
+  }
   const staticHeaders = validateHeaders(
     config.driver.headers ?? {},
     "Driver headers",
@@ -181,7 +186,19 @@ export async function buildExecutor(
 
   const metadata = compileMetadata(config.driver.metadata);
 
-  const target = parseUpstreamTarget(options.target);
+  // With no field of the secret naming the upstream, UPSTREAM_TARGET is the only place it can
+  // come from, and it is checked with the rest of the configuration, before the secret is read.
+  const noUpstream = () =>
+    new TypeError(
+      `Gateway "${config.id}" has no upstream: set ${UPSTREAM_TARGET_ENV}, or name the secret field that holds it as the driver's target`,
+    );
+  const fromEnvironment =
+    options.target === undefined
+      ? undefined
+      : parseUpstreamTarget(options.target);
+  if (targetField === undefined && fromEnvironment === undefined) {
+    throw noUpstream();
+  }
 
   const operations = new Map<string, CompiledOperation>();
   for (const [name, opConfig] of Object.entries(config.operations)) {
@@ -191,12 +208,25 @@ export async function buildExecutor(
   // Configuration is checked; now the deployment is. The initial secret is retrieved and every
   // field the configuration names is checked, and the authentication state built on it, before
   // there is an executor: a missing or invalid secret fails here, never on a request.
-  const secret = secretFields(
-    config.id,
-    options.secret,
-    parts.flatMap((part) => part.fields),
-  );
-  await secret.get();
+  const secret = secretFields(config.id, options.secret, [
+    ...(targetField === undefined ? [] : [targetField]),
+    ...parts.flatMap((part) => part.fields),
+  ]);
+  const initial = await secret.get();
+
+  // A target the secret names is used in place of UPSTREAM_TARGET, so the environment variable
+  // and the secret can each be set without the other. Read once, here: an address that moves
+  // takes effect when the executor is next created.
+  const fromSecret =
+    targetField === undefined ? undefined : initial.get(targetField);
+  const target =
+    fromSecret !== undefined && targetField !== undefined
+      ? parseUpstreamTarget(
+          fromSecret,
+          `Secret field "${targetField.secretField}"`,
+        )
+      : fromEnvironment;
+  if (target === undefined) throw noUpstream();
 
   const transport = createAuthTransport({
     fetch: deps.fetch,
