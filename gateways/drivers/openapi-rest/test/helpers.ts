@@ -1,5 +1,6 @@
 import type {
   DriverContext,
+  DriverLogFields,
   SecretObject,
   SecretProvider,
 } from "@repo/gateway-types";
@@ -45,10 +46,24 @@ export function json(status: number, body: unknown): Response {
 export function passthroughContext(): DriverContext & {
   attempts: number;
   reported: Map<string, unknown>;
+  logged: { level: string; message: string; fields?: DriverLogFields }[];
 } {
+  const logged: { level: string; message: string; fields?: DriverLogFields }[] =
+    [];
+  const line =
+    (level: string) =>
+    (message: string, fields?: DriverLogFields): void => {
+      logged.push({
+        level,
+        message,
+        ...(fields === undefined ? {} : { fields }),
+      });
+    };
   const ctx = {
     attempts: 0,
     reported: new Map<string, unknown>(),
+    logged,
+    log: { info: line("info"), warn: line("warn") },
     upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
       ctx.attempts += 1;
       return fn(new AbortController().signal);

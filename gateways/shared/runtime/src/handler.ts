@@ -301,7 +301,13 @@ export function createHandler<const TOps extends AnyOperations>(
 
       // Step 7: Run pipeline
       step = "execute";
-      const ctx = createDriverContext(policy, requestDeadline, reported);
+      // The operation has matched a configured one, so it is the configuration's to log.
+      const ctx = createDriverContext(
+        policy,
+        requestDeadline,
+        reported,
+        logger.child({ operation: envelope.operation }),
+      );
       const result = await deps.execute(
         ctx,
         envelope.operation,

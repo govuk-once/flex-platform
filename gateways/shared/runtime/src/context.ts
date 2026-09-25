@@ -1,4 +1,9 @@
-import type { DriverContext } from "@repo/gateway-types";
+import type {
+  DriverContext,
+  DriverLogFields,
+  DriverLogger,
+} from "@repo/gateway-types";
+import { isScalar } from "@repo/utils/is-scalar";
 
 import { GatewayError } from "./errors.ts";
 import type { ResolvedPolicy } from "./policy.ts";
@@ -19,12 +24,45 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
 // handler decides what of it a caller and a log see.
 export type ReportedMeta = Map<string, unknown>;
 
+// Where a driver's lines go: a logger that already names the operation.
+export interface DriverLogSink {
+  info(fields: object, message: string): void;
+  warn(fields: object, message: string): void;
+}
+
+const SILENT: DriverLogSink = { info: () => undefined, warn: () => undefined };
+
+// Scalars only, whatever a JavaScript driver passes, and under a key of their own, so a field
+// cannot stand in for the runtime's `operation` or `msg`.
+function driverFields(fields: DriverLogFields | undefined): object {
+  if (fields === undefined) return {};
+  const kept = Object.fromEntries(
+    Object.entries(fields).filter(
+      ([, value]) => value === null || isScalar(value),
+    ),
+  );
+  return Object.keys(kept).length === 0 ? {} : { driver: kept };
+}
+
+function driverLogger(sink: DriverLogSink): DriverLogger {
+  return {
+    info: (message, fields) => {
+      sink.info(driverFields(fields), message);
+    },
+    warn: (message, fields) => {
+      sink.warn(driverFields(fields), message);
+    },
+  };
+}
+
 export function createDriverContext(
   policy: ResolvedPolicy,
   deadline: DeadlineProvider,
   reported: ReportedMeta = new Map(),
+  log: DriverLogSink = SILENT,
 ): DriverContext {
   return {
+    log: driverLogger(log),
     meta(name: string, value: unknown): void {
       reported.set(name, value);
     },
