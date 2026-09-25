@@ -57,7 +57,13 @@ describe("buildUrl", () => {
   it("serialises query values with URLSearchParams and repeats arrays", () => {
     expect(
       buildUrl(TARGET, "/users", { q: "a b&c", ids: [1, 2], ok: true }).search,
-    ).toBe("?q=a+b%26c&ids=1&ids=2&ok=true");
+    ).toBe("?q=a%20b%26c&ids=1&ids=2&ok=true");
+  });
+
+  it("writes a space as %20 and a plus as %2B, so neither reads as the other", () => {
+    expect(buildUrl(TARGET, "/users", { q: "a b+c" }).search).toBe(
+      "?q=a%20b%2Bc",
+    );
   });
 
   it("writes nothing at all for an array with nothing in it", () => {

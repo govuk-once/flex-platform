@@ -26,6 +26,8 @@ export type {
   Setting,
 } from "./config/secret-field.ts";
 export { fromSecret } from "./config/secret-field.ts";
+export type { SigV4Options, SigV4Role } from "./config/sigv4.ts";
+export { sigV4 } from "./config/sigv4.ts";
 export type { MetadataConfig, ResponseMetadata } from "./metadata.ts";
 export { encodePathParam } from "./path.ts";
 export type { OpenApiRestOperationConfig } from "./runtime/operation.ts";
