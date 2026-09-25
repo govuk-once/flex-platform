@@ -53,12 +53,12 @@ definition; see [Authentication](#authentication).
 
 `defineGateway` preserves operation names in the inferred type and supplies policy defaults.
 The [UDP gateway](services/udp/gateway.config.ts) describes the User Data Platform API using
-the [openapi-rest driver](#the-openapi-rest-driver). Its upstream takes no credential, so it
-declares `noAuth()`; its deployment still names a secret, which must be the empty object.
+the [openapi-rest driver](#the-openapi-rest-driver). It sends no credential yet, so its `auth` is
+`[]`; its deployment still names a secret, from which nothing is read.
 
 ```ts
 import { defineGateway } from "@repo/gateway-config";
-import { noAuth, openapiRest } from "@repo/gateway-driver-openapi-rest";
+import { openapiRest } from "@repo/gateway-driver-openapi-rest";
 
 import getIdentityExchange from "./handlers/get-identity-exchange.ts";
 
@@ -67,7 +67,7 @@ export default defineGateway({
   description: "User Data Platform gateway",
   driver: openapiRest({
     spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/refs/heads/main/docs/openapi.yml",
-    auth: noAuth(),
+    auth: [],
   }),
   operations: {
     createUser: {
@@ -386,12 +386,15 @@ what a schema says of a field is said of the object in front of it.
 
 ```js
 // .gen/runtime/entry.js
-import { createHandler, readUpstreamOptions } from "@repo/gateway-runtime";
+import { createHandler, createStartupLog, readUpstreamOptions } from "@repo/gateway-runtime";
 
 import config from "../../gateway.config.ts";
 import { meta, validators } from "./validators/index.js";
 
-const execute = await config.driver.createExecutor(config, readUpstreamOptions());
+const execute = await config.driver.createExecutor(config, {
+  ...readUpstreamOptions(),
+  log: createStartupLog(config.id),
+});
 const gateway = createHandler(config, { validators, meta, execute });
 
 export const handler = (event, context) =>
@@ -592,7 +595,8 @@ character, are rejected: this gateway's URL parser would collapse `..`, and an u
 decodes before it routes would reinterpret the rest, sending `../../admin` to `/admin` with the
 gateway's credentials. Constrain path parameter formats in the input schema so callers receive
 `INVALID_INPUT` rather than relying on this check. Query values may be scalars or arrays of
-scalars, arrays repeating the key. Null and undefined query and header values are omitted. A
+scalars, arrays repeating the key; a space is written `%20` and a plus `%2B`, so no upstream reads
+one as the other. Null and undefined query and header values are omitted. A
 `payload` on GET is an error. Bodies are JSON with `Content-Type: application/json`, and every
 request sends `Accept: application/json`.
 
@@ -630,7 +634,9 @@ Any other status becomes an error code.
 
 Redirects are not followed. Every request is one `ctx.upstream` attempt that includes
 authentication, the request and reading the body, so the policy timeout bounds the whole
-exchange; an aborted attempt is reported by the runtime as `UPSTREAM_TIMEOUT`. Nothing retries.
+exchange; an aborted attempt is reported by the runtime as `UPSTREAM_TIMEOUT`. Nothing retries,
+apart from the one replay of a GET after a refused credential described under
+[Authentication](#authentication).
 Bodies are buffered up to the driver's `maxResponseBytes` (1 MiB by default); a larger declared
 or streamed body is cancelled and reported as `UPSTREAM_CONTRACT_VIOLATION`.
 
@@ -660,15 +666,17 @@ driver package.
 
 | Executor option | Purpose |
 |---|---|
-| `target` | `UPSTREAM_TARGET`. For this driver an absolute https base URL with no query, fragment or credentials; http is accepted only for a loopback host. A path prefix is kept. |
-| `secret` | A provider for the secret `UPSTREAM_SECRET_ARN` names, built by `readUpstreamOptions`. The driver's `auth` says what it must hold. |
+| `target` | `UPSTREAM_TARGET`, when it is set. For this driver an absolute https base URL with no query, fragment or credentials; http is accepted only for a loopback host. A path prefix is kept. |
+| `secret` | A provider for the secret `UPSTREAM_SECRET_ARN` names, built by `readUpstreamOptions`. The fields the driver's `target` and `auth` name are all it reads. |
+| `log` | Where the driver logs while the executor is created, from `createStartupLog`: the runtime's logger under the gateway's name, with a driver's fields under `driver`, as a request's context writes them. |
 
 Behaviour is configured on the driver definition, where it is reviewed with the gateway.
 
 | Driver field | Purpose |
 |---|---|
 | `spec` | Location of the OpenAPI document. Recorded for review; never fetched. |
-| `auth` | Required. How requests are authenticated and what the secret must contain; see [Authentication](#authentication). |
+| `auth` | Required. How requests are authenticated, as a list of parts, `[]` for none, and the secret fields each reads; see [Authentication](#authentication). |
+| `target` | A secret field that holds the upstream's address, `fromSecret("apiUrl")`, for an upstream whose secret carries it. Used in place of `UPSTREAM_TARGET` when both are there, and held to the same rules; with neither, the executor refuses to start. Read when the executor is created. |
 | `headers` | Static headers on every request, such as an API version. |
 | `maxResponseBytes` | Largest response body to buffer. Defaults to 1 MiB. |
 
@@ -700,7 +708,7 @@ response header each is read from, with the schema of what it carries:
 ```ts
 openapiRest({
   spec: "…",
-  auth: noAuth(),
+  auth: [],
   metadata: {
     upstreamRequestId: {
       header: "X-Request-Id",
@@ -793,51 +801,107 @@ derived at all is reported together and fails the run.
 
 ### Authentication
 
-The `auth` field of `openapiRest` takes an authentication definition. Three come with the
-driver:
+The `auth` field of `openapiRest` lists how a request is authenticated, in order, and `[]` for an
+upstream that takes no credential. Each part names the headers it sets and the fields of the
+gateway's secret it reads, and is shown the headers the parts before it set, so a signature can
+cover a key. Two parts come with the driver:
 
-| Definition | Secret | Sends |
+| Part | Reads | Sends |
 |---|---|---|
-| `noAuth()` | `{}` | Nothing. For an upstream that needs no credential; the deployment still names a secret. |
-| `bearerToken()` | `{ "token": "..." }` | `Authorization: Bearer <token>` |
-| `apiKey({ header })` | `{ "apiKey": "..." }` | The key in the named header. |
+| `apiKey({ header, key })` | `key` | The key in the named header. |
+| `sigV4({ service, region, role })` | `role.arn`, `role.externalId`, and `region` where it names a field | An AWS Signature Version 4 over the request, in `Authorization`, `X-Amz-Date` and `X-Amz-Security-Token`. It owns `X-Amz-Content-Sha256` as well, and sets none. |
 
-Each validates its secret strictly: the field must be a non-empty string that the transport
-sends exactly as stored, so it may contain no control character other than tab and no leading
-or trailing space or tab, which the `Headers` class would strip; and no other field may be
-present, so a token placed in the wrong secret, or under a misspelled field, fails at startup.
-
-A definition is data. It declares the validator for its secret, the header names it owns and a
-`create` function that builds its per-executor state, and nothing in it reads a secret or
-exchanges a token when the configuration is imported, so codegen loads a configuration without
-an environment or AWS access. A custom flow is one more definition, written with `defineAuth`,
-which types `create` from the validator. The validator follows the shared `Validator`
-convention, so a generated standalone validator fits as well as a hand-written predicate:
+A value a part reads from the secret is named by its field, with `fromSecret("field")`, or
+`fromSecret("field", { optional: true })` for one the secret's owner does not always provide.
+Nothing has a default: a secret may be the gateway's own, or one the upstream provides in a shape
+of its own, and only the configuration says which field means what. A field that is required
+and missing stops the gateway starting; one that is optional and missing is logged by name as
+the gateway starts, and what reads it goes without, a header left out or `UPSTREAM_TARGET`
+used instead. Mark a field optional only where going without it is a valid deployment: an
+upstream that still expects the header refuses every request instead. A credential takes only
+`fromSecret`, so none can be written into a configuration. UDP, whose secret is UDP's own:
 
 ```ts
-import { defineAuth } from "@repo/gateway-driver-openapi-rest";
+openapiRest({
+  spec: "…",
+  target: fromSecret("apiUrl"),
+  auth: [
+    apiKey({ header: "x-api-key", key: fromSecret("apiKey") }),
+    sigV4({
+      service: "execute-api",
+      region: fromSecret("region"),
+      role: {
+        arn: fromSecret("consumerRoleArn"),
+        externalId: fromSecret("externalId", { optional: true }),
+        sessionName: "udp-consumer-session",
+      },
+    }),
+  ],
+});
+```
+
+The secret is held to the fields the configuration names and to nothing else. Each named field
+must be there unless it is optional, and must be a non-empty string that can be sent exactly as
+stored, so it may contain no control character other than tab and no leading or trailing space or
+tab, which the `Headers` class would strip. A field no part names is never read, so an upstream's
+secret may hold what it likes. Diagnostics name the field and the rule, never a value.
+
+`sigV4` is for an upstream behind IAM authorisation, such as an API Gateway stage. Its `service`
+must be `"execute-api"`: signing is not one algorithm with a service name in it, and S3, say,
+wants the hash of the body in a header and its path left unnormalised, neither of which this
+does. Another service is added by implementing what it needs, so one that is only named is
+refused where the authentication is built. `region` is the upstream's and part of what is signed,
+written in the configuration or read from the secret where the upstream keeps it there.
+
+It signs as a role the upstream's owner grants the gateway's account. The gateway assumes the role
+through STS with its own credentials, passing the external ID where the role's trust policy asks
+for one, which guards the role against a caller acting on someone else's behalf, and a session name
+that appears in the upstream's audit trail. The credentials STS returns are held until five
+minutes before they expire and assumed again then; a secret rotated to another role is assumed on
+its next request. The signature covers the method, the address, the headers set before it and a
+hash of the body. The signer leaves out the few headers a transport may add or change,
+`user-agent`, `expect` and any `proxy-` or `sec-` header, which are sent unsigned. The signer and
+the credential providers are the AWS SDK's own, which every gateway already carries to read its
+secret.
+
+The hash of the body goes in the signature, not in a header, and `X-Amz-Content-Sha256` is owned
+so that nothing can supply one: the signer takes a hash already on a request in place of hashing
+the body, so a mapping that sent `UNSIGNED-PAYLOAD` would sign every body alike and the signature
+would stop binding what was sent. One that reaches the signer anyway is taken off first. A query
+parameter named `__proto__` is refused rather than signed: the signer reads a query through an
+ordinary object, where that name is the prototype and not a name, so the request would carry a
+parameter the signature did not cover.
+
+A part is data. It declares the headers it owns, the fields it reads and a `create` function that
+builds its per-executor state, and nothing in it reads a secret or exchanges a token when the
+configuration is imported, so codegen loads a configuration without an environment or AWS access.
+No two parts may own a header. A custom flow is one more part, written with `defineAuth`:
+
+```ts
+import { defineAuth, fromSecret } from "@repo/gateway-driver-openapi-rest";
 import { GatewayError } from "@repo/gateway-runtime";
 
-// A Validator<{ clientId: string; clientSecret: string; tokenUrl: string }>.
-import { isClientSecret } from "./client-secret.ts";
+const CLIENT_ID = fromSecret("clientId");
+const CLIENT_SECRET = fromSecret("clientSecret");
+const TOKEN_URL = fromSecret("tokenUrl");
 
 export const clientCredentials = defineAuth({
-  validateSecret: isClientSecret,
   headers: ["authorization"],
+  fields: [CLIENT_ID, CLIENT_SECRET, TOKEN_URL],
   create: ({ secret, transport }) => {
     let token: { value: string; expiresAt: number } | undefined;
     return {
       async headers({ signal }) {
         if (token === undefined || token.expiresAt <= Date.now()) {
-          const { clientId, clientSecret, tokenUrl } = await secret.get();
+          const values = await secret.get();
           const response = await transport.request(
             {
               method: "POST",
-              url: tokenUrl,
+              url: values.get(TOKEN_URL) ?? "",
               form: {
                 grant_type: "client_credentials",
-                client_id: clientId,
-                client_secret: clientSecret,
+                client_id: values.get(CLIENT_ID) ?? "",
+                client_secret: values.get(CLIENT_SECRET) ?? "",
               },
             },
             signal,
@@ -858,26 +922,47 @@ export const clientCredentials = defineAuth({
 Concurrent requests on an expired token each exchange in this example; keep one pending
 promise for the exchange when the token endpoint should see it once.
 
+`headers` is given the request it is authenticating as well as the operation's name and the
+attempt's signal: the `method`, the `url` it is going to with its query, the `headers` set so far,
+the body's content type and the headers of earlier parts among them, and the `body` as it will be
+sent. Each is a copy, so what a flow does to one changes nothing that is sent; the headers it
+returns are the only thing it adds, and only the ones it declares. A scheme that signs a request
+needs all of it; one that attaches a token needs none.
+
 `headers` runs inside every request's attempt, so a secret read or an exchange counts against
 the operation's timeout, and a request that runs out of budget stops waiting; a read the
 runtime has already started completes on its own and fills the cache. `secret.get` returns the
-current secret: the runtime reads it through Powertools Parameters, which serves a retrieved
-copy for five minutes and reads again on the first call after that. Concurrent calls on a cold
-or expired cache may each read; nothing coordinates them. Every value passes the definition's
-validator before it is returned, on every read; one that fails is never returned, and the
-operation fails instead, as `INTERNAL`, as it does when a read fails. Rotating the secret
-therefore needs no restart: a built-in definition sends the new value on the first read after
-the cache age. Token and session expiry are the flow's own concern.
+named fields of the current secret: the runtime reads it through Powertools Parameters, which
+serves a retrieved copy for five minutes and reads again on the first call after that. Concurrent
+calls on a cold or expired cache may each read; nothing coordinates them. Every named field is
+checked on every read; a secret that fails is never returned, and the operation fails instead, as
+`INTERNAL`, as it does when a read fails. Rotating the secret therefore needs no restart: a part
+sends the new value on the first read after the cache age. Token and session expiry are the
+flow's own concern.
 
 `transport.request` is the only way a flow reaches the network. It sends one request with the
 signal the flow was given, to an absolute URL or to a path on the target, with a JSON or a form
 body, applies the response limit and returns the raw status, headers and body. It takes the same
 transport rule as the target: https, or http only for a loopback host, since a token exchange
-carries the credentials that obtain the credential.
-Statuses are not mapped, since what a token endpoint's answer means is the flow's decision. A
-flow's own `GatewayError` is reported as it is; any other error it raises is replaced with an
-`INTERNAL` diagnostic that names the operation only. Nothing replays an upstream operation
-after an authentication failure.
+carries the credentials that obtain the credential. Statuses are not mapped, since what a token
+endpoint's answer means is the flow's decision. `sigV4`'s role assumption is the one exception to
+this transport: it goes to STS through the AWS SDK, as the secret itself is read. A flow's own
+`GatewayError` is reported as it is; any other error it raises is replaced with an `INTERNAL`
+diagnostic that names the operation only.
+
+When the upstream refuses a request's credentials, with a 401 or a 403, the secret may have been
+rotated since it was cached: DVLA's rotation, for one, invalidates the old password and key the
+moment it runs. The driver then reads the secret again from the store, bypassing the cache and
+refreshing it, and calls each part's `refused()`, where a part drops what it holds, a token or an
+assumed role's credentials, so the next request authenticates afresh. A GET is sent once more,
+inside the same attempt, so the policy timeout bounds both requests, and only the second answer is
+mapped to an outcome or an error and counted towards upstream health: the refusal it answered is
+not. A second refusal is the answer, as `UPSTREAM_REJECTED`. Any other method is not sent again,
+and its refusal is the answer: a 401 or a 403 does not show that the upstream refused before it
+acted, since API Gateway passes on whatever status the service behind it chose, and that service
+may have done the work first. A gateway whose `auth` is `[]` does none of this, since a refusal
+there is not about a credential. The driver logs each refusal, with its status and whether the
+request was sent again.
 
 ### Custom handlers
 
@@ -969,7 +1054,10 @@ upstream health; upstream responses and failures have separate classifications.
 ## Design constraints
 
 - Keep transport details in adapters. Make each upstream call with `ctx.upstream(fn)`; the
-  runtime applies the timeout and passes an abort signal to `fn`.
+  runtime applies the timeout and passes an abort signal to `fn`. A driver logs through
+  `ctx.log.info` and `ctx.log.warn`: its own message and scalar fields, which the runtime writes
+  under `driver` beside the operation, and never a credential, a payload value or an upstream's
+  text.
 - Keep deployment-specific addresses, credentials and environment names out of gateway code.
   A gateway names no secret ARN and no secret value; the runtime reads the secret and the
   driver validates it on every read before authentication code sees a field.

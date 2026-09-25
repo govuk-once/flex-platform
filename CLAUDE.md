@@ -130,14 +130,15 @@ integrations are implemented.
    specific driver or gateway is a design error.
 
 2. **Upstream calls use the driver context.** Make each upstream call with `ctx.upstream(fn)`,
-   invoked once per call. The runtime invokes `fn` once per attempt, so `fn` must build its
-   request each time and must not retry internally: a driver never expresses retry behaviour and
-   so cannot get it wrong. Each attempt passes a fresh abort signal, which the driver should wire
-   into its transport; the runtime bounds the whole of `fn` regardless, so a driver that ignores
-   it stays correct but leaks the connection. Distinct calls are separate `upstream` invocations
-   and share no attempt state, so parallel calls cannot spend each other's allowance. Convert
-   transport errors to `GatewayError` with controlled diagnostic messages; library errors can
-   contain payload data.
+   invoked once per call. The runtime invokes `fn` once per attempt, so `fn` must build its request
+   each time and must not retry internally: a driver never expresses retry behaviour and so cannot
+   get it wrong. The one exception is sending a GET once more after the upstream refused the
+   gateway's credentials, with the secret read again (constraint 12), inside the same attempt. Each
+   attempt passes a fresh abort signal, which the driver should wire into its transport; the
+   runtime bounds the whole of `fn` regardless, so a driver that ignores it stays correct but leaks
+   the connection. Distinct calls are separate `upstream` invocations and share no attempt state,
+   so parallel calls cannot spend each other's allowance. Convert transport errors to
+   `GatewayError` with controlled diagnostic messages; library errors can contain payload data.
 
 3. **Validate before dispatch and before returning data.** Preserve the handler's order:
    envelope parsing, token-verification hook, routing, input validation, secure bindings,
@@ -203,7 +204,11 @@ integrations are implemented.
    validation failure is logged as the schema locations that rejected it, never as an instance
    path, whose segments a dictionary schema takes from the caller's own keys. The operation name
    is the caller's too, so it is logged, in a message or as a field, only once it has matched a
-   configured operation; an unknown one is left out rather than repeated.
+   configured operation; an unknown one is left out rather than repeated. A driver logs through
+   `ctx.log`, a message and scalar fields of its own that the runtime keeps under `driver`,
+   beside the matched operation. Driver code is reviewed like the runtime's, and its lines are
+   held to the same rule: never a credential, a payload value, or text a caller or an upstream
+   wrote.
 
 7. **Preserve contract compatibility.** Changes to an established gateway contract must be
    additive. An incompatible contract requires a distinct gateway identity. The exception is
@@ -220,7 +225,10 @@ integrations are implemented.
 8. **Avoid duplicate upstream writes.** Any invocation client must disable automatic SDK
    retries (`maxAttempts: 1`). Retry decisions require operation and deadline awareness;
    transport retries alone do not provide that, and neither does an attempt count in the
-   policy, which is why there is none. Nothing retries a call today.
+   policy, which is why there is none. Nothing retries a call today. The single replay after a
+   refused credential is for a GET only: a 401 or a 403 does not show that the upstream refused
+   before acting, since API Gateway passes on whatever status the service behind it chose, so a
+   write that is refused is never sent again.
 
 9. **Emitted validators are self-contained JavaScript.** Bundle Ajv runtime helpers and formats
    at generation time, resolving them from codegen's dependencies. Do not maintain a manual
@@ -244,34 +252,46 @@ integrations are implemented.
 
 11. **Keep configuration environment-independent.** Do not hard-code deployed addresses,
     credentials or environment names in gateway code. Deployment-specific configuration belongs
-    at the integration boundary. Every driver takes its upstream location from
-    `UPSTREAM_TARGET` and its secret from the AWS Secrets Manager secret whose ARN is in
-    `UPSTREAM_SECRET_ARN`, both named in the runtime and both required, a gateway that sends no
-    credential included. What the target means, and what the secret must contain, are the
-    driver's decisions, declared on its definition; the runtime only retrieves the secret as a
-    JSON object and caches it for a bounded age. Read the variables at the entrypoint through
-    `readUpstreamOptions`, which builds the secret provider, and pass the result in, never
-    inside a request. A gateway configuration never names an ARN or a secret value, and
-    importing one never reaches the environment or AWS.
+    at the integration boundary. Every driver takes its secret from the AWS Secrets Manager
+    secret whose ARN is in `UPSTREAM_SECRET_ARN`, required, a gateway that sends no credential
+    included, and its upstream location from `UPSTREAM_TARGET` where that is set; both are named
+    in the runtime. A secret may be the gateway's own or one an upstream provides in a shape of
+    its own, so a driver may also take the location from a field of the secret its configuration
+    names. That field is used in place of `UPSTREAM_TARGET` when both are there, and a driver
+    with neither refuses to start. What the target means, and which fields of the secret are
+    read, are the driver's decisions, declared on its definition; the runtime only retrieves the
+    secret as a JSON object and caches it for a bounded age. Read the variables at the
+    entrypoint through `readUpstreamOptions`, which builds the secret provider, and pass the
+    result in, never inside a request. A gateway configuration never names an ARN or a secret
+    value, and importing one never reaches the environment or AWS.
 
 12. **Secrets are validated before use and authentication is driver-owned.** The runtime reads
     the secret through Powertools Parameters as a JSON object, served from its cache for a
     bounded age and read again after that; concurrent reads on an expired cache may each reach
     the store, and a read a caller has stopped waiting for completes on its own. It knows
-    nothing of the fields. A driver's validator, or the one its configured authentication
-    definition supplies, runs on the initial secret and on every read after it, in the shared
-    `Validator` convention, before any value reaches authentication code; an invalid secret is
-    never returned and the affected operation fails. Diagnostics about a secret name the
-    schema location that rejected it, never a value, a path into the secret (a dictionary
-    schema takes those segments from its keys), a field it was not expected to have, or a
-    validator's message; a failed read is reported as a fixed message with nothing of the
-    library's error. An authentication definition declares the headers it owns; the driver
-    reserves them before compiling operations, so no static header, mapping or handler can set
-    them, and the definition may set no other. Its state is built per executor, its network
-    access goes through the driver's transport facility, and nothing in a configuration module
-    reads a secret or exchanges a token at import. Token and session expiry belong to the
-    authentication definition. Nothing replays an upstream operation after an authentication
-    failure.
+    nothing of the fields. A driver reads only the fields its configuration names, each with
+    `fromSecret` and none by default, checks every one on the initial secret and on every read
+    after it, before any value reaches authentication code, and ignores the rest; an invalid
+    secret is never returned and the affected operation fails. Diagnostics about a secret name
+    the field and the rule it broke, never a value or a field the configuration did not name; a
+    failed read is reported as a fixed message with nothing of the library's error. An optional
+    field the secret does not hold is logged by name as the gateway starts. A gateway's
+    authentication is a list of parts, each shown the headers the ones before it set. A part
+    declares the headers it owns and the fields it reads; the driver reserves the owned headers
+    before compiling operations, so no static header, mapping, handler or other part can set
+    them, and a part may set no other. It is shown a copy of the request it is authenticating,
+    method, address, headers and body, because a scheme such as `sigV4` signs the request rather
+    than attaching a credential; nothing it does to the copy is sent. `sigV4` signs as a role the
+    secret names, assumed through STS with the gateway's own credentials. A part's state is built
+    per executor, its network access goes through the driver's transport facility, and nothing
+    in a configuration module reads a secret or exchanges a token at import. Assuming a role is
+    the one exception to the transport: it goes to STS through the AWS SDK, as the secret itself
+    is read. Token and session expiry belong to the part. When the upstream refuses the
+    gateway's credentials, with a 401 or a 403, the driver reads the secret again from the store
+    and has every part drop what it holds: a rotation replaces credentials faster than the cache
+    expires. A GET is then sent once more, inside the same attempt, and only the second answer is
+    mapped and counted; any other method is not sent again (constraint 8). Only for a gateway
+    that sends a credential.
 
 13. **Schema text is data, wherever it is written.** A version's descriptions can come from an
     upstream's own document, and the call contract writes them into code a caller compiles.
