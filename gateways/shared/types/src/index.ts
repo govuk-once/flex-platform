@@ -2,6 +2,8 @@
 // contract without installing the runtime. Parsing and GatewayError remain in the runtime.
 export type {
   DriverContext,
+  DriverLogFields,
+  DriverLogger,
   ExecuteFn,
   OperationHandler,
   OperationResult,

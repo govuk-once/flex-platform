@@ -291,6 +291,7 @@ describe("client.request", () => {
         });
       },
       meta: () => undefined,
+      log: passthroughContext().log,
     };
     const op = compileOperation("getUser", GET_USER);
     const c = createClient(ctx, op, {
@@ -502,6 +503,7 @@ describe("client.request", () => {
         return fn(controller.signal);
       },
       meta: () => undefined,
+      log: passthroughContext().log,
     };
     const op = compileOperation("getUser", GET_USER);
     const c = createClient(ctx, op, {
