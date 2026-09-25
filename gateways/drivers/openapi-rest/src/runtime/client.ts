@@ -82,7 +82,10 @@ export function buildUrl(
       search.append(name, String(value));
     }
   }
-  url.search = search.toString();
+  // A space as %20, not as the + that form encoding writes: %20 is a space to every reader of a
+  // URL, where + is one only to a form decoder, and a signature over the query encodes it as
+  // %20. A literal + is already written %2B, so nothing else changes.
+  url.search = search.toString().replaceAll("+", "%20");
   return url;
 }
 
