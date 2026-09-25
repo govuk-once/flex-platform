@@ -14,8 +14,8 @@ import {
 import type { OpenApiRestAuth } from "./auth.ts";
 import { checkOperationSchemas } from "./check.ts";
 
-// Behaviour lives here, reviewed with the gateway. Deployment values such as the target and
-// the secret arrive as executor options instead.
+// Behaviour lives here, reviewed with the gateway. Deployment values, the target and the
+// secret, arrive as executor options instead; the configuration names only the secret's fields.
 export interface OpenApiRestDriverConfig {
   // Location of the OpenAPI document describing the upstream: an https URL, or a path within
   // the gateway's directory. The gateway's schemas are derived from it when someone runs
@@ -29,10 +29,10 @@ export interface OpenApiRestDriverConfig {
   // under: the response header it is read from, and the schema of the scalar it carries. An
   // upstream's own id for a request, say. Returned on a failure as on a success, and logged.
   readonly metadata?: MetadataConfig;
-  // How requests are authenticated: bearerToken(), apiKey() or noAuth() from this package, or
-  // a definition written with defineAuth. It says what the secret must hold and which headers
-  // it owns. Required, so a gateway that sends no credential says so.
-  readonly auth: OpenApiRestAuth;
+  // How requests are authenticated: the parts in order, each shown the headers the ones before
+  // it set, so `[apiKey(…), sigV4(…)]` signs the key. Each names the secret fields it reads and
+  // the headers it owns. Required, so a gateway that sends no credential says so, as `[]`.
+  readonly auth: readonly OpenApiRestAuth[];
 }
 
 // What derives a gateway's schemas from `spec`, found from this module wherever the package is

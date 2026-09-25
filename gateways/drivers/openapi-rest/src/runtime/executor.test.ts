@@ -20,11 +20,15 @@ import {
   json,
   passthroughContext,
 } from "../../test/helpers.ts";
-import type { OpenApiRestAuth } from "../config/auth.ts";
-import { apiKey, bearerToken, defineAuth, noAuth } from "../config/auth.ts";
+import type {
+  OpenApiRestAuth,
+  OpenApiRestAuthInstance,
+} from "../config/auth.ts";
+import { apiKey, defineAuth } from "../config/auth.ts";
 import type { OpenApiRestDriverConfig } from "../config/definition.ts";
 import { openapiRest } from "../config/definition.ts";
 import { defineHandler } from "../config/handler.ts";
+import { fromSecret } from "../config/secret-field.ts";
 import { encodePathParam } from "../path.ts";
 import { buildExecutor, createExecutor } from "./executor.ts";
 
@@ -33,14 +37,17 @@ const TARGET = "https://api.test";
 const ARN = "arn:aws:secretsmanager:eu-west-2:123456789012:secret:x-AbCdEf";
 const DRIVER = openapiRest({
   spec: SPEC,
-  auth: noAuth(),
+  auth: [],
   headers: { "x-api-version": "2" },
 });
 
-// A gateway that sends no credential still has a secret: the empty object.
+// A gateway that sends no credential still has a secret, and reads nothing from it.
 function emptySecret(): SecretProvider {
   return fakeSecret({}).provider;
 }
+
+// A token sent as it is kept, in the Authorization header, from the secret's "token" field.
+const TOKEN = apiKey({ header: "authorization", key: fromSecret("token") });
 
 // A handler is any value from defineHandler; it lives wherever the config author puts it.
 const customHandler = defineHandler(async (input: { id: string }, client) => {
@@ -74,7 +81,7 @@ const gateway = defineGateway({
 
 // One operation on a driver with the given auth; the shape most tests here need.
 function gatewayWith(
-  auth: OpenApiRestAuth,
+  auth: readonly OpenApiRestAuth[],
   driver: Partial<OpenApiRestDriverConfig> = {},
 ) {
   return defineGateway({
@@ -100,7 +107,7 @@ async function rejection(promise: Promise<unknown>): Promise<Error> {
 
 describe("createExecutor", () => {
   it("is carried by the driver definition, as an entrypoint reaches it", async () => {
-    const config = gatewayWith(noAuth());
+    const config = gatewayWith([]);
     const execute = await config.driver.createExecutor(config, {
       target: TARGET,
       secret: emptySecret(),
@@ -170,70 +177,113 @@ describe("createExecutor", () => {
     expect(secret.reads()).toBe(0);
   });
 
-  it("sends a bearer token from the secret", async () => {
+  it("sends each part's headers, in order, each part shown what the ones before it set", async () => {
     const ff = fakeFetch(() => json(200, {}));
+    const seen: (string | null)[] = [];
+    const after = defineAuth({
+      headers: ["x-after"],
+      fields: [],
+      create: () => ({
+        headers: ({ headers }) => {
+          seen.push(headers.get("x-api-key"));
+          return Promise.resolve({ "x-after": "yes" });
+        },
+      }),
+    });
     const execute = await buildExecutor(
-      gatewayWith(bearerToken()),
-      { target: TARGET, secret: fakeSecret({ token: "tok" }).provider },
-      { fetch: ff.fetch },
-    );
-    await execute(passthroughContext(), "op", {});
-    expect(headerOf(ff.calls[0]!, "authorization")).toBe("Bearer tok");
-  });
-
-  it("sends an API key in the declared header", async () => {
-    const ff = fakeFetch(() => json(200, {}));
-    const execute = await buildExecutor(
-      gatewayWith(apiKey({ header: "X-Api-Key" })),
+      gatewayWith([
+        apiKey({ header: "X-Api-Key", key: fromSecret("apiKey") }),
+        after,
+      ]),
       { target: TARGET, secret: fakeSecret({ apiKey: "key" }).provider },
       { fetch: ff.fetch },
     );
     await execute(passthroughContext(), "op", {});
+    expect(seen).toEqual(["key"]);
     expect(headerOf(ff.calls[0]!, "x-api-key")).toBe("key");
+    expect(headerOf(ff.calls[0]!, "x-after")).toBe("yes");
   });
 
-  it("sends no credential for noAuth and requires the empty object", async () => {
+  it("shows each part the address being sent, whatever a part before it did to its copy", async () => {
     const ff = fakeFetch(() => json(200, {}));
+    const seen: string[] = [];
+    const mutating = defineAuth({
+      headers: ["x-before"],
+      fields: [],
+      create: () => ({
+        headers: ({ url }) => {
+          url.pathname = "/changed-by-auth";
+          return Promise.resolve({});
+        },
+      }),
+    });
+    const after = defineAuth({
+      headers: ["x-after"],
+      fields: [],
+      create: () => ({
+        headers: ({ url }) => {
+          seen.push(url.href);
+          return Promise.resolve({});
+        },
+      }),
+    });
     const execute = await buildExecutor(
-      gatewayWith(noAuth()),
+      gatewayWith([mutating, after]),
       { target: TARGET, secret: emptySecret() },
       { fetch: ff.fetch },
     );
     await execute(passthroughContext(), "op", {});
-    expect(headerOf(ff.calls[0]!, "authorization")).toBeNull();
+    expect(seen).toEqual([`${TARGET}/x`]);
+    expect(ff.calls[0]?.url).toBe(`${TARGET}/x`);
+  });
 
-    const err = await rejection(
-      createExecutor(gatewayWith(noAuth()), {
+  it("sends no credential with no parts, and reads nothing the configuration did not name", async () => {
+    const ff = fakeFetch(() => json(200, {}));
+    const execute = await buildExecutor(
+      gatewayWith([]),
+      {
         target: TARGET,
-        secret: fakeSecret({ token: "SYNTHETIC" }).provider,
-      }),
+        // A secret an upstream provides may hold fields no part reads.
+        secret: fakeSecret({ apiAccountId: "SYNTHETIC" }).provider,
+      },
+      { fetch: ff.fetch },
     );
-    expect(err.message).toBe(
-      'Gateway "x" secret failed validation at #/additionalProperties',
+    await execute(passthroughContext(), "op", {});
+    expect(headerOf(ff.calls[0]!, "authorization")).toBeNull();
+  });
+
+  it("refuses two parts that own the same header", async () => {
+    await expect(
+      createExecutor(
+        gatewayWith([
+          TOKEN,
+          apiKey({ header: "Authorization", key: fromSecret("other") }),
+        ]),
+        { target: TARGET, secret: emptySecret() },
+      ),
+    ).rejects.toThrow(
+      'Driver auth: header "authorization" is owned by more than one part',
     );
-    expect(err.message).not.toContain("SYNTHETIC");
   });
 
   it("does not initialise on a missing or invalid secret, and never quotes it", async () => {
     const missing = await rejection(
-      createExecutor(gatewayWith(bearerToken()), {
+      createExecutor(gatewayWith([TOKEN]), {
         target: TARGET,
         secret: emptySecret(),
       }),
     );
     expect(missing).toBeInstanceOf(GatewayError);
-    expect(missing.message).toBe(
-      'Gateway "x" secret failed validation at #/required',
-    );
+    expect(missing.message).toBe('Gateway "x" secret field "token" is missing');
 
     const invalid = await rejection(
-      createExecutor(gatewayWith(bearerToken()), {
+      createExecutor(gatewayWith([TOKEN]), {
         target: TARGET,
         secret: fakeSecret({ token: "SYNTHETIC\nSECRET" }).provider,
       }),
     );
     expect(invalid.message).toBe(
-      'Gateway "x" secret failed validation at #/properties/token/pattern',
+      'Gateway "x" secret field "token" holds a character or a surrounding space it cannot be sent with',
     );
     expect(invalid.message).not.toContain("SYNTHETIC");
 
@@ -244,7 +294,7 @@ describe("createExecutor", () => {
     const failing: SecretProvider = { get: () => Promise.reject(unavailable) };
     expect(
       await rejection(
-        createExecutor(gatewayWith(bearerToken()), {
+        createExecutor(gatewayWith([TOKEN]), {
           target: TARGET,
           secret: failing,
         }),
@@ -252,39 +302,45 @@ describe("createExecutor", () => {
     ).toBe(unavailable);
   });
 
-  it("rejects an auth definition that is not one, and one whose create returns no instance", async () => {
+  it("rejects auth that is not a list of parts, a part that is not one, and one whose create returns no instance", async () => {
     await expect(
-      createExecutor(gatewayWith({} as unknown as OpenApiRestAuth), {
+      createExecutor(gatewayWith({} as unknown as readonly OpenApiRestAuth[]), {
+        target: TARGET,
+        secret: emptySecret(),
+      }),
+    ).rejects.toThrow(/driver auth must be a list of authentication parts/);
+    await expect(
+      createExecutor(gatewayWith([{} as unknown as OpenApiRestAuth]), {
         target: TARGET,
         secret: emptySecret(),
       }),
     ).rejects.toThrow(
-      /driver auth must be a definition with validateSecret, headers and create/,
+      /driver auth part 0 must be a definition with headers, fields and create/,
     );
 
     const broken = defineAuth({
-      validateSecret: accept,
       headers: [],
-      create: () => undefined as never,
+      fields: [],
+      create: () => undefined as unknown as OpenApiRestAuthInstance,
     });
     await expect(
-      createExecutor(gatewayWith(broken), {
+      createExecutor(gatewayWith([broken]), {
         target: TARGET,
         secret: emptySecret(),
       }),
     ).rejects.toThrow(
-      /auth create\(\) must return an instance with a headers function/,
+      /auth part 0 create\(\) must return an instance with a headers function/,
     );
   });
 
   it("rejects an auth definition declaring a reserved header", async () => {
     const reserved = defineAuth({
-      validateSecret: accept,
       headers: ["host"],
+      fields: [],
       create: () => ({ headers: () => Promise.resolve({}) }),
     });
     await expect(
-      createExecutor(gatewayWith(reserved), {
+      createExecutor(gatewayWith([reserved]), {
         target: TARGET,
         secret: emptySecret(),
       }),
@@ -294,7 +350,7 @@ describe("createExecutor", () => {
   });
 
   it("reserves the authentication's headers against static headers and mappings", async () => {
-    const staticCollision = gatewayWith(bearerToken(), {
+    const staticCollision = gatewayWith([TOKEN], {
       headers: { Authorization: "Bearer static" },
     });
     await expect(
@@ -310,7 +366,7 @@ describe("createExecutor", () => {
       id: "x",
       driver: openapiRest({
         spec: SPEC,
-        auth: apiKey({ header: "X-Api-Key" }),
+        auth: [apiKey({ header: "X-Api-Key", key: fromSecret("apiKey") })],
       }),
       operations: {
         op: {
@@ -341,7 +397,7 @@ describe("createExecutor", () => {
     const execute = await buildExecutor(
       defineGateway({
         id: "x",
-        driver: openapiRest({ spec: SPEC, auth: bearerToken() }),
+        driver: openapiRest({ spec: SPEC, auth: [TOKEN] }),
         operations: { op: { upstream: "GET /x", handler: override } },
       }),
       { target: TARGET, secret: fakeSecret({ token: "tok" }).provider },
@@ -357,15 +413,15 @@ describe("createExecutor", () => {
   it("rejects a header the authentication did not declare", async () => {
     const ff = fakeFetch(() => json(200, {}));
     const undeclared = defineAuth({
-      validateSecret: accept,
       headers: ["authorization"],
+      fields: [],
       create: () => ({
         headers: () =>
           Promise.resolve({ authorization: "Bearer t", "X-Extra": "1" }),
       }),
     });
     const execute = await buildExecutor(
-      gatewayWith(undeclared),
+      gatewayWith([undeclared]),
       { target: TARGET, secret: emptySecret() },
       { fetch: ff.fetch },
     );
@@ -412,7 +468,7 @@ describe("createExecutor", () => {
 
   it("rejects a non-positive maxResponseBytes on the driver", async () => {
     await expect(
-      createExecutor(gatewayWith(noAuth(), { maxResponseBytes: 0 }), {
+      createExecutor(gatewayWith([], { maxResponseBytes: 0 }), {
         target: TARGET,
         secret: emptySecret(),
       }),
@@ -421,7 +477,7 @@ describe("createExecutor", () => {
 
   it("rejects reserved static headers on the driver", async () => {
     await expect(
-      createExecutor(gatewayWith(noAuth(), { headers: { host: "x" } }), {
+      createExecutor(gatewayWith([], { headers: { host: "x" } }), {
         target: TARGET,
         secret: emptySecret(),
       }),
@@ -434,7 +490,7 @@ describe("secret rotation and refresh", () => {
     const ff = fakeFetch(() => json(200, {}));
     const secret = fakeSecret({ token: "first" });
     const execute = await buildExecutor(
-      gatewayWith(bearerToken()),
+      gatewayWith([TOKEN]),
       { target: TARGET, secret: secret.provider },
       { fetch: ff.fetch },
     );
@@ -442,8 +498,8 @@ describe("secret rotation and refresh", () => {
     secret.rotate({ token: "second" });
     await execute(passthroughContext(), "op", {});
     expect(ff.calls.map((c) => headerOf(c, "authorization"))).toEqual([
-      "Bearer first",
-      "Bearer second",
+      "first",
+      "second",
     ]);
     // One read at initialisation, then one per request: nothing is kept from an earlier read.
     expect(secret.reads()).toBe(3);
@@ -453,7 +509,7 @@ describe("secret rotation and refresh", () => {
     const ff = fakeFetch(() => json(200, {}));
     const secret = fakeSecret({ token: "first" });
     const execute = await buildExecutor(
-      gatewayWith(bearerToken()),
+      gatewayWith([TOKEN]),
       { target: TARGET, secret: secret.provider },
       { fetch: ff.fetch },
     );
@@ -462,20 +518,20 @@ describe("secret rotation and refresh", () => {
     expect(err).toMatchObject({
       code: "INTERNAL",
       message:
-        'Gateway "x" secret failed validation at #/properties/token/pattern',
+        'Gateway "x" secret field "token" holds a character or a surrounding space it cannot be sent with',
     });
     expect(ff.calls).toHaveLength(0);
 
     secret.rotate({ token: "third" });
     await execute(passthroughContext(), "op", {});
-    expect(headerOf(ff.calls[0]!, "authorization")).toBe("Bearer third");
+    expect(headerOf(ff.calls[0]!, "authorization")).toBe("third");
   });
 
   it("fails the operation when a refresh fails", async () => {
     const ff = fakeFetch(() => json(200, {}));
     const secret = fakeSecret({ token: "first" });
     const execute = await buildExecutor(
-      gatewayWith(bearerToken()),
+      gatewayWith([TOKEN]),
       { target: TARGET, secret: secret.provider },
       { fetch: ff.fetch },
     );
@@ -500,7 +556,7 @@ describe("secret rotation and refresh", () => {
     try {
       const ff = fakeFetch(() => json(200, {}));
       const execute = await buildExecutor(
-        gatewayWith(bearerToken()),
+        gatewayWith([TOKEN]),
         { target: TARGET, secret: createSecretProvider(ARN) },
         { fetch: ff.fetch },
       );
@@ -510,9 +566,9 @@ describe("secret rotation and refresh", () => {
       vi.setSystemTime(301_000);
       await execute(passthroughContext(), "op", {});
       expect(ff.calls.map((c) => headerOf(c, "authorization"))).toEqual([
-        "Bearer first",
-        "Bearer first",
-        "Bearer second",
+        "first",
+        "first",
+        "second",
       ]);
       expect(send).toHaveBeenCalledTimes(2);
     } finally {
@@ -525,26 +581,14 @@ describe("secret rotation and refresh", () => {
 // A synthetic client-credentials flow: the secret holds the client and the token endpoint,
 // the flow exchanges them for a bearer token, caches it until it expires, and shares one
 // exchange between concurrent requests.
-interface ExchangeSecret {
-  readonly clientId: string;
-  readonly clientSecret: string;
-  readonly tokenUrl: string;
-}
-
-const isExchangeSecret: Validator<ExchangeSecret> = Object.assign(
-  (data: unknown): data is ExchangeSecret =>
-    typeof data === "object" &&
-    data !== null &&
-    typeof (data as ExchangeSecret).clientId === "string" &&
-    typeof (data as ExchangeSecret).clientSecret === "string" &&
-    typeof (data as ExchangeSecret).tokenUrl === "string",
-  { errors: null },
-);
+const CLIENT_ID = fromSecret("clientId");
+const CLIENT_SECRET = fromSecret("clientSecret");
+const TOKEN_URL_FIELD = fromSecret("tokenUrl");
 
 function tokenExchange() {
   return defineAuth({
-    validateSecret: isExchangeSecret,
     headers: ["authorization"],
+    fields: [CLIENT_ID, CLIENT_SECRET, TOKEN_URL_FIELD],
     create: ({ secret, transport }) => {
       interface Token {
         readonly value: string;
@@ -554,15 +598,15 @@ function tokenExchange() {
       let inflight: Promise<Token> | undefined;
 
       async function exchange(signal: AbortSignal): Promise<Token> {
-        const { clientId, clientSecret, tokenUrl } = await secret.get();
+        const values = await secret.get();
         const response = await transport.request(
           {
             method: "POST",
-            url: tokenUrl,
+            url: values.get(TOKEN_URL_FIELD) ?? "",
             form: {
               grant_type: "client_credentials",
-              client_id: clientId,
-              client_secret: clientSecret,
+              client_id: values.get(CLIENT_ID) ?? "",
+              client_secret: values.get(CLIENT_SECRET) ?? "",
             },
           },
           signal,
@@ -621,7 +665,7 @@ describe("a custom token exchange", () => {
   it("exchanges the secret for a token once and reuses it", async () => {
     const { ff, tokenCalls, opCalls } = idp();
     const execute = await buildExecutor(
-      gatewayWith(tokenExchange()),
+      gatewayWith([tokenExchange()]),
       { target: TARGET, secret: fakeSecret(CLIENT).provider },
       { fetch: ff.fetch },
     );
@@ -657,7 +701,7 @@ describe("a custom token exchange", () => {
       return json(200, { access_token: "T1", expires_in: 3600 });
     });
     const execute = await buildExecutor(
-      gatewayWith(tokenExchange()),
+      gatewayWith([tokenExchange()]),
       { target: TARGET, secret: fakeSecret(CLIENT).provider },
       { fetch: ff.fetch },
     );
@@ -685,7 +729,7 @@ describe("a custom token exchange", () => {
         json(200, { access_token: `T${(issued += 1)}`, expires_in: 60 }),
       );
       const execute = await buildExecutor(
-        gatewayWith(tokenExchange()),
+        gatewayWith([tokenExchange()]),
         { target: TARGET, secret: fakeSecret(CLIENT).provider },
         { fetch: ff.fetch },
       );
@@ -704,7 +748,7 @@ describe("a custom token exchange", () => {
   it("surfaces a refused exchange without replaying anything", async () => {
     const { ff, tokenCalls, opCalls } = idp(() => json(401, {}));
     const execute = await buildExecutor(
-      gatewayWith(tokenExchange()),
+      gatewayWith([tokenExchange()]),
       { target: TARGET, secret: fakeSecret(CLIENT).provider },
       { fetch: ff.fetch },
     );
@@ -722,7 +766,7 @@ describe("a custom token exchange", () => {
       });
     });
     const execute = await buildExecutor(
-      gatewayWith(tokenExchange()),
+      gatewayWith([tokenExchange()]),
       { target: TARGET, secret: fakeSecret(CLIENT).provider },
       { fetch: ff.fetch },
     );
@@ -742,7 +786,7 @@ describe("a custom token exchange", () => {
         : json(200, {}),
     );
     const execute = await buildExecutor(
-      gatewayWith(tokenExchange()),
+      gatewayWith([tokenExchange()]),
       {
         target: "https://api.test/v1",
         secret: fakeSecret({ ...CLIENT, tokenUrl: "/oauth/token" }).provider,
@@ -818,7 +862,7 @@ describe("execute", () => {
   });
 
   it("uses the global fetch by default", async () => {
-    const execute = await createExecutor(gatewayWith(noAuth()), {
+    const execute = await createExecutor(gatewayWith([]), {
       target: "http://127.0.0.1:1",
       secret: emptySecret(),
     });
@@ -861,7 +905,7 @@ describe("through the runtime handler", () => {
   async function handlerWith(
     respond: Parameters<typeof fakeFetch>[0],
     options: {
-      auth?: OpenApiRestAuth;
+      auth?: readonly OpenApiRestAuth[];
       secret?: SecretProvider;
       fetch?: typeof fetch;
       policy?: { upstreamTimeout?: string };
@@ -871,7 +915,7 @@ describe("through the runtime handler", () => {
       ...gateway,
       driver: openapiRest({
         spec: SPEC,
-        auth: options.auth ?? noAuth(),
+        auth: options.auth ?? [],
         headers: { "x-api-version": "2" },
       }),
       policy: { ...gateway.policy, ...options.policy },
@@ -949,7 +993,7 @@ describe("through the runtime handler", () => {
   it("times out a secret refresh that never resolves", async () => {
     const secret = fakeSecret({ token: "tok" });
     const handle = await handlerWith(() => json(200, { id: "u1" }), {
-      auth: bearerToken(),
+      auth: [TOKEN],
       secret: secret.provider,
       policy: { upstreamTimeout: `${TIMEOUT_MS}ms` },
     });
@@ -967,7 +1011,7 @@ describe("through the runtime handler", () => {
           ? never()
           : json(200, { id: "u1" }),
       {
-        auth: tokenExchange(),
+        auth: [tokenExchange()],
         secret: fakeSecret({
           clientId: "c",
           clientSecret: "SYNTHETIC",
@@ -985,8 +1029,8 @@ describe("through the runtime handler", () => {
 
   it("keeps a failing authentication flow out of the logs", async () => {
     const failing = defineAuth({
-      validateSecret: accept,
       headers: ["authorization"],
+      fields: [],
       create: () => ({
         headers: () => {
           throw Object.assign(new Error("token=SYNTHETIC_MESSAGE"), {
@@ -998,7 +1042,7 @@ describe("through the runtime handler", () => {
       }),
     });
     const handle = await handlerWith(() => json(200, { id: "u1" }), {
-      auth: failing,
+      auth: [failing],
     });
     await expect(
       handle(envelope("getUser", { userId: "u1" })),
@@ -1012,7 +1056,7 @@ describe("through the runtime handler", () => {
   it("keeps an invalid replacement secret out of the logs", async () => {
     const secret = fakeSecret({ token: "tok" });
     const handle = await handlerWith(() => json(200, { id: "u1" }), {
-      auth: bearerToken(),
+      auth: [TOKEN],
       secret: secret.provider,
     });
     secret.rotate({ token: "SYNTHETIC_TOKEN\n" });
@@ -1020,14 +1064,14 @@ describe("through the runtime handler", () => {
       handle(envelope("getUser", { userId: "u1" })),
     ).resolves.toEqual({ ok: false, error: { code: "INTERNAL" } });
     const logged = stdout.join("");
-    expect(logged).toContain("failed validation at #/properties/token");
+    expect(logged).toContain('field \\"token\\" holds a character');
     expect(logged).not.toContain("SYNTHETIC_TOKEN");
   });
 
   it("reports a failed refresh with the provider's diagnostic", async () => {
     const secret = fakeSecret({ token: "tok" });
     const handle = await handlerWith(() => json(200, { id: "u1" }), {
-      auth: bearerToken(),
+      auth: [TOKEN],
       secret: secret.provider,
     });
     secret.fail(

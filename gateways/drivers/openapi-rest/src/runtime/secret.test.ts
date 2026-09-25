@@ -1,33 +1,13 @@
 import { GatewayError } from "@repo/gateway-runtime";
-import type { SecretProvider, Validator } from "@repo/gateway-types";
-import { describe, expect, it, vi } from "vitest";
+import type { SecretProvider } from "@repo/gateway-types";
+import { describe, expect, it } from "vitest";
 
 import { fakeSecret } from "../../test/helpers.ts";
-import { describeSecretFindings, validatedSecret } from "./secret.ts";
+import { fromSecret } from "../config/secret-field.ts";
+import { secretFields } from "./secret.ts";
 
-interface TokenSecret {
-  readonly token: string;
-}
-
-function tokenValidator(
-  onCall: () => void = () => undefined,
-): Validator<TokenSecret> {
-  const validator: Validator<TokenSecret> = Object.assign(
-    (data: unknown): data is TokenSecret => {
-      onCall();
-      const ok =
-        typeof data === "object" &&
-        data !== null &&
-        typeof (data as { token?: unknown }).token === "string";
-      validator.errors = ok
-        ? null
-        : [{ instancePath: "/token", schemaPath: "#/properties/token/type" }];
-      return ok;
-    },
-    { errors: null },
-  );
-  return validator;
-}
+const KEY = fromSecret("apiKey");
+const EXTERNAL_ID = fromSecret("externalId", { optional: true });
 
 async function failure(promise: Promise<unknown>): Promise<GatewayError> {
   const err = await promise.then(
@@ -38,90 +18,80 @@ async function failure(promise: Promise<unknown>): Promise<GatewayError> {
   return err as GatewayError;
 }
 
-describe("describeSecretFindings", () => {
-  it("lists schema locations, at most five, and never messages or paths", () => {
-    expect(
-      describeSecretFindings([
-        { instancePath: "", schemaPath: "#/required", message: "SYNTHETIC" },
-        { instancePath: "/token", schemaPath: "#/properties/token/type" },
-      ]),
-    ).toBe("failed validation at #/required, #/properties/token/type");
-    // Under a dictionary schema the instance path is made of the secret's own keys.
-    const described = describeSecretFindings([
-      {
-        instancePath: "/credentials/SYNTHETIC_SECRET_KEY",
-        schemaPath: "#/properties/credentials/additionalProperties/type",
-      },
-    ]);
-    expect(described).toBe(
-      "failed validation at #/properties/credentials/additionalProperties/type",
-    );
-    expect(described).not.toContain("SYNTHETIC");
-    expect(describeSecretFindings(null)).toBe(
-      "did not match the expected shape",
-    );
-    expect(
-      describeSecretFindings(
-        Array.from({ length: 7 }, (_, i) => ({
-          instancePath: `/f${i}`,
-          schemaPath: "#/type",
-        })),
-      ).match(/#\/type/g),
-    ).toHaveLength(5);
-  });
-});
+describe("secretFields", () => {
+  it("reads the fields a gateway names, and nothing else, on every read", async () => {
+    // An upstream's own secret, holding fields no part of this gateway reads.
+    const secret = fakeSecret({
+      apiKey: "k1",
+      apiAccountId: "000000000000",
+      region: "eu-west-2",
+    });
+    const fields = secretFields("gw", secret.provider, [KEY, EXTERNAL_ID]);
 
-describe("validatedSecret", () => {
-  it("validates every read and returns the typed value", async () => {
-    const calls = vi.fn();
-    const secret = fakeSecret({ token: "t1" });
-    const validated = validatedSecret(
-      "gw",
-      secret.provider,
-      tokenValidator(calls),
-    );
-    await expect(validated.get()).resolves.toEqual({ token: "t1" });
-    await expect(validated.get()).resolves.toEqual({ token: "t1" });
-    expect(calls).toHaveBeenCalledTimes(2);
+    const first = await fields.get();
+    expect(first.get(KEY)).toBe("k1");
+    expect(first.get(EXTERNAL_ID)).toBeUndefined();
+    expect(first.get(fromSecret("region"))).toBeUndefined();
 
-    secret.rotate({ token: "t2" });
-    await expect(validated.get()).resolves.toEqual({ token: "t2" });
-    expect(calls).toHaveBeenCalledTimes(3);
+    secret.rotate({ apiKey: "k2", externalId: "e1" });
+    const rotated = await fields.get();
+    expect(rotated.get(KEY)).toBe("k2");
+    expect(rotated.get(EXTERNAL_ID)).toBe("e1");
+    expect(secret.reads()).toBe(2);
   });
 
-  it("never returns an invalid value, whatever it read before", async () => {
-    const secret = fakeSecret({ token: "t1" });
-    const validated = validatedSecret("gw", secret.provider, tokenValidator());
-    await validated.get();
+  it.each([
+    ["missing", {}, 'field "apiKey" is missing'],
+    [
+      "not a string",
+      { apiKey: 42 },
+      'field "apiKey" is not a non-empty string',
+    ],
+    ["empty", { apiKey: "" }, 'field "apiKey" is not a non-empty string'],
+    [
+      "not something a header can carry as written",
+      { apiKey: " SYNTHETIC" },
+      'field "apiKey" holds a character or a surrounding space it cannot be sent with',
+    ],
+  ])(
+    "refuses a named field that is %s, never quoting it",
+    async (_what, value, problem) => {
+      const err = await failure(
+        secretFields("gw", fakeSecret(value).provider, [KEY]).get(),
+      );
+      expect(err.code).toBe("INTERNAL");
+      expect(err.message).toBe(`Gateway "gw" secret ${problem}`);
+      expect(err.message).not.toContain("SYNTHETIC");
+    },
+  );
 
-    secret.rotate({ token: 42 });
-    const err = await failure(validated.get());
-    expect(err.code).toBe("INTERNAL");
-    expect(err.message).toBe(
-      'Gateway "gw" secret failed validation at #/properties/token/type',
-    );
-    expect(err.message).not.toContain("42");
-    await failure(validated.get());
-
-    secret.rotate({ token: "t3" });
-    await expect(validated.get()).resolves.toEqual({ token: "t3" });
-  });
-
-  it("replaces a validator that throws with a fixed diagnostic", async () => {
-    const throwing: Validator<TokenSecret> = Object.assign(
-      (_data: unknown): _data is TokenSecret => {
-        throw new Error("SYNTHETIC token=abc");
-      },
-      { errors: null },
-    );
+  it("holds an optional field that is there to the same rules", async () => {
     const err = await failure(
-      validatedSecret(
-        "gw",
-        fakeSecret({ token: "t" }).provider,
-        throwing,
-      ).get(),
+      secretFields("gw", fakeSecret({ externalId: 7 }).provider, [
+        EXTERNAL_ID,
+      ]).get(),
     );
-    expect(err.message).toBe('Gateway "gw" secret validator threw');
+    expect(err.message).toBe(
+      'Gateway "gw" secret field "externalId" is not a non-empty string',
+    );
+  });
+
+  it("reads a field only as the secret's own, not as one every object inherits", async () => {
+    const err = await failure(
+      secretFields("gw", fakeSecret({}).provider, [
+        fromSecret("constructor"),
+      ]).get(),
+    );
+    expect(err.message).toBe(
+      'Gateway "gw" secret field "constructor" is missing',
+    );
+  });
+
+  it("refuses a secret that is not an object", async () => {
+    const err = await failure(
+      secretFields("gw", fakeSecret("SYNTHETIC").provider, [KEY]).get(),
+    );
+    expect(err.message).toBe('Gateway "gw" secret is not an object');
   });
 
   it("keeps a GatewayError from the provider and replaces anything else", async () => {
@@ -130,16 +100,12 @@ describe("validatedSecret", () => {
       "Failed to retrieve gateway secret",
     );
     const failing: SecretProvider = { get: () => Promise.reject(own) };
-    expect(
-      await failure(validatedSecret("gw", failing, tokenValidator()).get()),
-    ).toBe(own);
+    expect(await failure(secretFields("gw", failing, [KEY]).get())).toBe(own);
 
     const library: SecretProvider = {
       get: () => Promise.reject(new Error("SYNTHETIC")),
     };
-    const err = await failure(
-      validatedSecret("gw", library, tokenValidator()).get(),
-    );
+    const err = await failure(secretFields("gw", library, [KEY]).get());
     expect(err.message).toBe('Gateway "gw" secret retrieval failed');
   });
 });

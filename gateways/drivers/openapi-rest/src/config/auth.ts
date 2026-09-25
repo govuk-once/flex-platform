@@ -1,8 +1,10 @@
-import type { SecretProvider, Validator } from "@repo/gateway-types";
-import { isRecord } from "@repo/utils/is-record";
-
-import { isVerbatimHeaderValue, normaliseHeaderName } from "../headers.ts";
+import { normaliseHeaderName } from "../headers.ts";
 import type { HttpMethod, OpenApiRestResponse } from "../types.ts";
+import {
+  isSecretField,
+  type SecretField,
+  type SecretValues,
+} from "./secret-field.ts";
 
 // One request an authentication flow makes for itself, a token exchange say. The driver sends
 // it inside the operation's attempt, so the attempt's budget bounds it, and maps transport
@@ -54,154 +56,57 @@ export interface OpenApiRestAuthInstance {
   ): Promise<Readonly<Record<string, string>>>;
 }
 
-export interface OpenApiRestAuthDeps<TSecret> {
-  // The gateway secret, validated: every value returned here has passed `validateSecret` on
-  // that read. Reads are cheap, since the runtime caches the secret for a bounded age, and a
-  // read after the age sees a rotated value.
-  readonly secret: SecretProvider<TSecret>;
+export interface OpenApiRestAuthDeps {
+  // The secret fields the gateway's configuration names, read afresh: every value has passed the
+  // checks a field is held to on that read. Reads are cheap, since the runtime caches the secret
+  // for a bounded age, and a read after the age sees a rotated value.
+  readonly secret: { get(): Promise<SecretValues> };
   readonly transport: OpenApiRestAuthTransport;
 }
 
-// How a gateway's requests are authenticated. A definition is data: it declares what the secret
-// must hold and which headers it sets, and builds its state only when the executor is created,
-// so a configuration that names one can be imported without a secret or a network. Additional
-// schemes are further definitions, not cases in the driver.
-export interface OpenApiRestAuth<TSecret = unknown> {
-  // Accepts the parsed secret object. Runs on the initial secret and on every read after it;
-  // nothing from a secret reaches `create`d state until it has passed.
-  readonly validateSecret: Validator<TSecret>;
-  // Header names this implementation sets. Reserved before operations compile: no static
-  // header, parameter mapping or handler call may set them, and the instance may set no other.
+// One part of how a gateway's requests are authenticated: an API key, a signature, a token. A
+// gateway lists its parts in order, and each is shown the headers the ones before it set, so a
+// signature covers a key. A part is data: it declares which headers it sets and which fields of
+// the secret it reads, and builds its state only when the executor is created, so a
+// configuration that names one can be imported without a secret or a network. Additional schemes
+// are further parts, not cases in the driver.
+export interface OpenApiRestAuth {
+  // Header names this part sets. Reserved before operations compile: no static header,
+  // parameter mapping or handler call may set them, no other part may own them, and the
+  // instance may set no other.
   readonly headers: readonly string[];
+  // The fields of the secret it reads, each named by the configuration. The secret must hold
+  // every one not marked optional, as a non-empty string a header can carry as written.
+  readonly fields: readonly SecretField[];
   // Builds the mutable state for one executor. Never performs a retrieval or an exchange
   // itself; those happen when a request's `headers` runs, inside its attempt.
-  create(deps: OpenApiRestAuthDeps<TSecret>): OpenApiRestAuthInstance;
+  create(deps: OpenApiRestAuthDeps): OpenApiRestAuthInstance;
 }
 
-// Names the secret type once, on the validator, and types `create` from it.
-export function defineAuth<TSecret>(
-  auth: OpenApiRestAuth<TSecret>,
-): OpenApiRestAuth<TSecret> {
+// Types a part written for one gateway.
+export function defineAuth(auth: OpenApiRestAuth): OpenApiRestAuth {
   return auth;
 }
 
-type ValidationError = NonNullable<Validator["errors"]>[number];
-
-// A validator in the shared convention: a type predicate that leaves its findings on `errors`,
-// as a generated one would. The built-in definitions need three shapes, which is not worth a
-// schema compiler in the driver; a custom definition may use a generated validator.
-function validator<T>(
-  check: (data: unknown) => ValidationError[],
-): Validator<T> {
-  const result: Validator<T> = Object.assign(
-    (data: unknown): data is T => {
-      const errors = check(data);
-      result.errors = errors.length === 0 ? null : errors;
-      return errors.length === 0;
-    },
-    { errors: null as Validator<T>["errors"] },
-  );
-  return result;
-}
-
-// Findings name paths and keywords only: a value never appears, and neither does the name of
-// an unexpected field, which is not the validator's to repeat.
-function objectWithFields(
-  data: unknown,
-  fields: readonly string[],
-): ValidationError[] {
-  if (!isRecord(data)) {
-    return [
-      { instancePath: "", schemaPath: "#/type", message: "must be object" },
-    ];
-  }
-  const errors: ValidationError[] = [];
-  for (const field of fields) {
-    if (!Object.hasOwn(data, field)) {
-      errors.push({
-        instancePath: "",
-        schemaPath: "#/required",
-        message: `must have required property '${field}'`,
-      });
-      continue;
-    }
-    const value = data[field];
-    if (typeof value !== "string") {
-      errors.push({
-        instancePath: `/${field}`,
-        schemaPath: `#/properties/${field}/type`,
-        message: "must be string",
-      });
-    } else if (value.length === 0) {
-      errors.push({
-        instancePath: `/${field}`,
-        schemaPath: `#/properties/${field}/minLength`,
-        message: "must NOT have fewer than 1 characters",
-      });
-    } else if (!isVerbatimHeaderValue(value)) {
-      errors.push({
-        instancePath: `/${field}`,
-        schemaPath: `#/properties/${field}/pattern`,
-        message: "must be a header value the transport sends as stored",
-      });
-    }
-  }
-  if (Object.keys(data).some((key) => !fields.includes(key))) {
-    errors.push({
-      instancePath: "",
-      schemaPath: "#/additionalProperties",
-      message: "must NOT have additional properties",
-    });
-  }
-  return errors;
-}
-
-export type EmptySecret = Readonly<Record<never, never>>;
-export type BearerTokenSecret = { readonly token: string };
-export type ApiKeySecret = { readonly apiKey: string };
-
-// For an upstream that needs no credential. The deployment still names a secret, which must be
-// the empty object, so an unused token cannot sit in one unnoticed.
-export function noAuth(): OpenApiRestAuth<EmptySecret> {
-  return {
-    validateSecret: validator<EmptySecret>((data) =>
-      objectWithFields(data, []),
-    ),
-    headers: [],
-    create: () => ({ headers: () => Promise.resolve({}) }),
-  };
-}
-
-// Sends `Authorization: Bearer <token>` from a secret of the form { "token": "..." }.
-export function bearerToken(): OpenApiRestAuth<BearerTokenSecret> {
-  return {
-    validateSecret: validator<BearerTokenSecret>((data) =>
-      objectWithFields(data, ["token"]),
-    ),
-    headers: ["authorization"],
-    create: ({ secret }) => ({
-      async headers() {
-        const { token } = await secret.get();
-        return { authorization: `Bearer ${token}` };
-      },
-    }),
-  };
-}
-
-// Sends the key from a secret of the form { "apiKey": "..." } in the named header.
+// Sends a key from the secret in the named header.
 export function apiKey(options: {
   readonly header: string;
-}): OpenApiRestAuth<ApiKeySecret> {
+  readonly key: SecretField;
+}): OpenApiRestAuth {
   const header = normaliseHeaderName(options.header, "apiKey auth");
+  if (!isSecretField(options.key)) {
+    throw new TypeError(
+      "apiKey auth: key must name the secret field that holds it, with fromSecret",
+    );
+  }
+  const { key } = options;
   return {
-    validateSecret: validator<ApiKeySecret>((data) =>
-      objectWithFields(data, ["apiKey"]),
-    ),
     headers: [header],
+    fields: [key],
     create: ({ secret }) => ({
       async headers() {
-        const { apiKey } = await secret.get();
-        return { [header]: apiKey };
+        const value = (await secret.get()).get(key);
+        return value === undefined ? {} : { [header]: value };
       },
     }),
   };

@@ -11,7 +11,7 @@ import type {
 } from "@repo/gateway-types";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { noAuth, openapiRest } from "../index.ts";
+import { openapiRest } from "../index.ts";
 import { type Conversion, convertSchema, type Side } from "./convert.ts";
 import derive from "./index.ts";
 
@@ -335,7 +335,7 @@ describe("a schema written out and the same schema named", () => {
     const { schemas } = await derive(
       {
         id: "test",
-        driver: openapiRest({ spec: "openapi.json", auth: noAuth() }),
+        driver: openapiRest({ spec: "openapi.json", auth: [] }),
         operations: {
           inline: { upstream: "POST /inline" },
           referenced: { upstream: "POST /referenced" },

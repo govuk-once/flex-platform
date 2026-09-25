@@ -8,6 +8,7 @@ import type {
   OpenApiRestAuthInstance,
 } from "../config/auth.ts";
 import type { OpenApiRestGatewayConfig } from "../config/definition.ts";
+import { isSecretField } from "../config/secret-field.ts";
 import { normaliseHeaderName, validateHeaders } from "../headers.ts";
 import { compileMetadata } from "../metadata.ts";
 import { OPENAPI_REST_DRIVER_TYPE } from "../types.ts";
@@ -15,30 +16,62 @@ import { createAuthTransport } from "./auth-transport.ts";
 import { type AuthHeaders, type ClientDeps, createClient } from "./client.ts";
 import { requestFailure } from "./failure.ts";
 import { type CompiledOperation, compileOperation } from "./operation.ts";
-import { validatedSecret } from "./secret.ts";
+import { secretFields } from "./secret.ts";
 import { parseUpstreamTarget } from "./target.ts";
 
 const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576;
 
 // Not reachable from typed configuration; guards a JavaScript caller.
-function checkAuthDefinition(
+function checkAuthParts(
   gatewayId: string,
   auth: unknown,
-): OpenApiRestAuth {
-  const candidate = auth as Partial<OpenApiRestAuth> | null | undefined;
-  if (
-    candidate === null ||
-    typeof candidate !== "object" ||
-    typeof candidate.validateSecret !== "function" ||
-    typeof candidate.create !== "function" ||
-    !Array.isArray(candidate.headers) ||
-    !candidate.headers.every((name) => typeof name === "string")
-  ) {
+): readonly OpenApiRestAuth[] {
+  if (!Array.isArray(auth)) {
     throw new TypeError(
-      `Gateway "${gatewayId}" driver auth must be a definition with validateSecret, headers and create`,
+      `Gateway "${gatewayId}" driver auth must be a list of authentication parts, [] for none`,
     );
   }
-  return candidate as OpenApiRestAuth;
+  return auth.map((part: unknown, index) => {
+    const candidate = part as Partial<OpenApiRestAuth> | null | undefined;
+    if (
+      candidate === null ||
+      typeof candidate !== "object" ||
+      typeof candidate.create !== "function" ||
+      !Array.isArray(candidate.headers) ||
+      !candidate.headers.every((name) => typeof name === "string") ||
+      !Array.isArray(candidate.fields) ||
+      !candidate.fields.every(isSecretField)
+    ) {
+      throw new TypeError(
+        `Gateway "${gatewayId}" driver auth part ${String(index)} must be a definition with headers, fields and create`,
+      );
+    }
+    return candidate as OpenApiRestAuth;
+  });
+}
+
+// The headers each part owns, lowercased. No two parts may own one: whichever ran second would
+// replace what the first set, and a signature over the first's value would no longer match.
+function ownedHeaders(
+  parts: readonly OpenApiRestAuth[],
+): readonly ReadonlySet<string>[] {
+  const claimed = new Set<string>();
+  return parts.map((part) => {
+    const owned = new Set(
+      part.headers.map((name) =>
+        normaliseHeaderName(name, "Driver auth headers"),
+      ),
+    );
+    for (const name of owned) {
+      if (claimed.has(name)) {
+        throw new TypeError(
+          `Driver auth: header "${name}" is owned by more than one part`,
+        );
+      }
+      claimed.add(name);
+    }
+    return owned;
+  });
 }
 
 function isAuthInstance(value: unknown): value is OpenApiRestAuthInstance {
@@ -48,46 +81,58 @@ function isAuthInstance(value: unknown): value is OpenApiRestAuthInstance {
   );
 }
 
-// An authentication flow fails with its own error, or a library's, which can carry the request
-// it was making or the secret it read in its message, its properties, its cause or its name.
-// The runtime logs all of those, so nothing of the error survives unless the flow raised a
+interface AuthStep {
+  readonly instance: OpenApiRestAuthInstance;
+  readonly owned: ReadonlySet<string>;
+}
+
+// Each part in order, shown the request with what the parts before it set, so a signature covers
+// a key. An authentication flow fails with its own error, or a library's, which can carry the
+// request it was making or the secret it read in its message, its properties, its cause or its
+// name. The runtime logs all of those, so nothing of the error survives unless the flow raised a
 // GatewayError, which is its declaration that the message is safe.
-function authHeadersFor(
-  instance: OpenApiRestAuthInstance,
-  declared: ReadonlySet<string>,
-): AuthHeaders {
+function authHeadersFor(steps: readonly AuthStep[]): AuthHeaders {
   return async (request) => {
     const { operation } = request;
-    let provided: unknown;
-    try {
-      provided = await instance.headers(request);
-    } catch (err: unknown) {
-      if (err instanceof GatewayError) throw err;
-      throw new GatewayError(
-        "INTERNAL",
-        `Authentication failed for operation "${operation}"`,
-      );
-    }
-    if (!isRecord(provided)) {
-      throw new GatewayError(
-        "INTERNAL",
-        `Authentication must return a record of header values for operation "${operation}"`,
-      );
-    }
-    const headers = validateHeaders(
-      provided as Readonly<Record<string, string>>,
-      `Operation "${operation}" authentication`,
-      requestFailure,
-    );
-    for (const name of headers.keys()) {
-      if (!declared.has(name)) {
+    const added = new Headers();
+    for (const { instance, owned } of steps) {
+      // A copy of the address and the headers for each part, so one part cannot change what a
+      // later one sees: a signature over an address the transport does not send is refused.
+      const url = new URL(request.url.href);
+      const headers = new Headers(request.headers);
+      for (const [name, value] of added) headers.set(name, value);
+      let provided: unknown;
+      try {
+        provided = await instance.headers({ ...request, url, headers });
+      } catch (err: unknown) {
+        if (err instanceof GatewayError) throw err;
         throw new GatewayError(
           "INTERNAL",
-          `Operation "${operation}": authentication set header "${name}", which its definition does not declare`,
+          `Authentication failed for operation "${operation}"`,
         );
       }
+      if (!isRecord(provided)) {
+        throw new GatewayError(
+          "INTERNAL",
+          `Authentication must return a record of header values for operation "${operation}"`,
+        );
+      }
+      const set = validateHeaders(
+        provided as Readonly<Record<string, string>>,
+        `Operation "${operation}" authentication`,
+        requestFailure,
+      );
+      for (const [name, value] of set) {
+        if (!owned.has(name)) {
+          throw new GatewayError(
+            "INTERNAL",
+            `Operation "${operation}": authentication set header "${name}", which its definition does not declare`,
+          );
+        }
+        added.set(name, value);
+      }
     }
-    return headers;
+    return added;
   };
 }
 
@@ -118,12 +163,10 @@ export async function buildExecutor(
   // The headers authentication owns are reserved before anything else is compiled: neither
   // the driver's static headers, an operation's mappings nor a handler's call may set them, so
   // mapped input cannot replace what the gateway authenticates with.
-  const auth = checkAuthDefinition(config.id, config.driver.auth);
-  const reservedHeaders = new Set(
-    auth.headers.map((name) =>
-      normaliseHeaderName(name, "Driver auth headers"),
-    ),
-  );
+  const parts = checkAuthParts(config.id, config.driver.auth);
+  const owned = ownedHeaders(parts);
+  const reservedHeaders = new Set(owned.flatMap((names) => [...names]));
+
   const staticHeaders = validateHeaders(
     config.driver.headers ?? {},
     "Driver headers",
@@ -145,34 +188,36 @@ export async function buildExecutor(
     operations.set(name, compileOperation(name, opConfig, reservedHeaders));
   }
 
-  // Configuration is checked; now the deployment is. The initial secret is retrieved and
-  // validated, and the authentication state built on it, before there is an executor: a
-  // missing or invalid secret fails here, never on a request.
-  const secret = validatedSecret(
+  // Configuration is checked; now the deployment is. The initial secret is retrieved and every
+  // field the configuration names is checked, and the authentication state built on it, before
+  // there is an executor: a missing or invalid secret fails here, never on a request.
+  const secret = secretFields(
     config.id,
     options.secret,
-    auth.validateSecret,
+    parts.flatMap((part) => part.fields),
   );
   await secret.get();
-  const instance: unknown = auth.create({
-    secret,
-    transport: createAuthTransport({
-      fetch: deps.fetch,
-      target,
-      maxResponseBytes,
-    }),
+
+  const transport = createAuthTransport({
+    fetch: deps.fetch,
+    target,
+    maxResponseBytes,
   });
-  if (!isAuthInstance(instance)) {
-    throw new TypeError(
-      `Gateway "${config.id}" driver auth create() must return an instance with a headers function`,
-    );
-  }
+  const steps = parts.map((part, index): AuthStep => {
+    const instance: unknown = part.create({ secret, transport });
+    if (!isAuthInstance(instance)) {
+      throw new TypeError(
+        `Gateway "${config.id}" driver auth part ${String(index)} create() must return an instance with a headers function`,
+      );
+    }
+    return { instance, owned: owned[index] ?? new Set() };
+  });
 
   const clientDeps: ClientDeps = {
     target,
     fetch: deps.fetch,
     staticHeaders,
-    auth: authHeadersFor(instance, reservedHeaders),
+    auth: authHeadersFor(steps),
     reservedHeaders,
     maxResponseBytes,
     metadata,

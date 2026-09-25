@@ -2,11 +2,12 @@ import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
 import { describe, expect, it } from "vitest";
 
 import type { MetadataConfig } from "../metadata.ts";
-import { bearerToken, noAuth } from "./auth.ts";
+import { apiKey } from "./auth.ts";
 import { checkOperationSchemas } from "./check.ts";
 import type { OpenApiRestGatewayConfig } from "./definition.ts";
 import { openapiRest } from "./definition.ts";
 import { defineHandler } from "./handler.ts";
+import { fromSecret } from "./secret-field.ts";
 
 // The mismatches a configuration and its schemas can have. Each would otherwise surface when
 // the executor is created, or as an INTERNAL failure on a request that reached production.
@@ -17,7 +18,7 @@ type Operation = OpenApiRestGatewayConfig["operations"][string];
 
 function gateway(
   operations: Record<string, Operation>,
-  auth: Auth = noAuth(),
+  auth: Auth = [],
 ): OpenApiRestGatewayConfig {
   return {
     id: "test",
@@ -190,7 +191,7 @@ describe("checkOperationSchemas", () => {
           parameters: { token: { in: "header", name: "Authorization" } },
         },
         withSchemas(stringFields("token")),
-        bearerToken(),
+        [apiKey({ header: "Authorization", key: fromSecret("token") })],
       ),
     ).toEqual([
       'Operation "op": parameter "token" maps to header "Authorization", which the gateway\'s authentication owns',
@@ -623,7 +624,7 @@ describe("checkOperationSchemas, on what the gateway reports beside a result", (
         id: "test",
         driver: openapiRest({
           spec: "openapi.yml",
-          auth: noAuth(),
+          auth: [],
           metadata,
         }),
         operations: { op: OPERATION },
