@@ -492,6 +492,20 @@ describe("sigV4", () => {
     expect(assume).toHaveBeenCalledTimes(2);
   });
 
+  it("assumes the role again once the upstream has refused its credentials", async () => {
+    const assume = vi.fn(() => Promise.resolve(ROLE));
+    const instance = sigV4With(
+      { service: "service", region: "us-east-1", role: ROLE_OPTIONS },
+      { assumeRole: () => assume },
+    ).create({ secret: fields({ roleArn: ROLE_ARN }), transport });
+
+    const url = new URL("https://example.amazonaws.com/");
+    await instance.headers(request({ url }));
+    instance.refused?.();
+    await instance.headers(request({ url }));
+    expect(assume).toHaveBeenCalledTimes(2);
+  });
+
   it("assumes the new role when the secret is rotated to another", async () => {
     const assumed: string[] = [];
     let current = ROLE_ARN;
