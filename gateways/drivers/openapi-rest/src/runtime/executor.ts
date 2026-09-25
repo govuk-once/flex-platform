@@ -9,6 +9,7 @@ import type {
 } from "../config/auth.ts";
 import type { OpenApiRestGatewayConfig } from "../config/definition.ts";
 import { normaliseHeaderName, validateHeaders } from "../headers.ts";
+import { compileMetadata } from "../metadata.ts";
 import { OPENAPI_REST_DRIVER_TYPE } from "../types.ts";
 import { createAuthTransport } from "./auth-transport.ts";
 import { type AuthHeaders, type ClientDeps, createClient } from "./client.ts";
@@ -134,6 +135,8 @@ export async function buildExecutor(
     }
   }
 
+  const metadata = compileMetadata(config.driver.metadata);
+
   const target = parseUpstreamTarget(options.target);
 
   const operations = new Map<string, CompiledOperation>();
@@ -171,6 +174,7 @@ export async function buildExecutor(
     auth: authHeadersFor(instance, reservedHeaders),
     reservedHeaders,
     maxResponseBytes,
+    metadata,
   };
 
   return async (ctx, operation, input) => {

@@ -1188,6 +1188,62 @@ paths:
     });
   });
 
+  it("declares what the gateway reports beside a result from the configuration, not the document", async () => {
+    const sources: SchemaSources = {
+      load: () =>
+        Promise.resolve(
+          JSON.stringify(
+            document({
+              "/things": {
+                get: {
+                  responses: {
+                    "200": {
+                      description: "OK",
+                      // What the document says of the header is not what a caller is offered.
+                      headers: {
+                        "X-Request-Id": {
+                          schema: { type: "string", format: "uuid" },
+                        },
+                      },
+                      content: { "application/json": { schema: THING } },
+                    },
+                  },
+                },
+              },
+            }),
+          ),
+        ),
+    };
+    const config = {
+      id: "test",
+      driver: openapiRest({
+        spec: "openapi.json",
+        auth: noAuth(),
+        metadata: {
+          upstreamRequestId: {
+            header: "X-Request-Id",
+            schema: {
+              type: "string",
+              maxLength: 128,
+              description: "The upstream's id for the request",
+            },
+          },
+        },
+      }),
+      operations: { getThing: { upstream: "GET /things" } },
+    };
+
+    const { schemas } = await derive(config, sources);
+
+    expect(schemas.meta).toEqual({
+      upstreamRequestId: {
+        type: "string",
+        maxLength: 128,
+        description: "The upstream's id for the request",
+      },
+    });
+  });
+
   it("reports everything it cannot derive from together", async () => {
     expect(
       await problemsOf(

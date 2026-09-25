@@ -80,6 +80,40 @@ describe("checkGateway", () => {
     ).toEqual(['operation "constructor" has no schemas']);
   });
 
+  it("holds what is reported beside a result to one scalar type", () => {
+    const reporting = (meta: Record<string, unknown>): GatewaySchemas =>
+      ({ meta, operations: { ping: opSchemas } }) as GatewaySchemas;
+
+    expect(
+      problemsOf(() => {
+        checkGateway(
+          gateway({ ping: {} }),
+          reporting({
+            requestId: { type: "string" },
+            remaining: { type: "integer" },
+            flagged: { type: "boolean" },
+          }),
+        );
+      }),
+    ).toEqual([]);
+    expect(
+      problemsOf(() => {
+        checkGateway(
+          gateway({ ping: {} }),
+          reporting({
+            trace: { type: "object" },
+            either: { type: ["string", "null"] },
+            untyped: {},
+          }),
+        );
+      }),
+    ).toEqual([
+      'metadata "trace" must declare one type, of string, number, integer, boolean',
+      'metadata "either" must declare one type, of string, number, integer, boolean',
+      'metadata "untyped" must declare one type, of string, number, integer, boolean',
+    ]);
+  });
+
   it("surfaces the driver's own findings", () => {
     const problems = problemsOf(() =>
       checkGateway(

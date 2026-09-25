@@ -12,6 +12,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
+import { GatewayError } from "@repo/gateway-runtime";
 import type { EnvelopeResponse } from "@repo/gateway-types";
 import {
   afterAll,
@@ -402,7 +403,7 @@ describe("the generated gateway", () => {
       .find((line) => line.startsWith("RESPONSE "));
 
     expect(answer).toBe(
-      `RESPONSE ${JSON.stringify({ ok: true, outcome: "created", data: { id: "fixture" } })}`,
+      `RESPONSE ${JSON.stringify({ ok: true, outcome: "created", data: { id: "fixture" }, meta: { requestId: "fixture-request" } })}`,
     );
   }, 60_000);
 
@@ -423,6 +424,32 @@ describe("the generated gateway", () => {
     expect(seen).toEqual([
       { operation: "createUser", input: { payload: { email: "a@b.test" } } },
     ]);
+  });
+
+  it("returns what the driver reported beside a failure, validated as the gateway declares it", async () => {
+    stub.execute = (ctx) => {
+      ctx.meta("requestId", "req-1");
+      ctx.meta("undeclared", "never returned");
+      return Promise.reject(
+        new GatewayError("UPSTREAM_ERROR", "upstream said 500"),
+      );
+    };
+    await expect(
+      handler(call("createUser", { payload: { email: "a@b.test" } }), context),
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: "UPSTREAM_ERROR" },
+      meta: { requestId: "req-1" },
+    });
+
+    // The generated validator decides: what it refuses is left out, and the call still answers.
+    stub.execute = (ctx) => {
+      ctx.meta("requestId", 42);
+      return Promise.resolve({ outcome: "created", data: { id: "u-1" } });
+    };
+    await expect(
+      handler(call("createUser", { payload: { email: "a@b.test" } }), context),
+    ).resolves.toEqual({ ok: true, outcome: "created", data: { id: "u-1" } });
   });
 
   it("rejects input the generated validators refuse", async () => {

@@ -144,6 +144,27 @@ describe("readSchemas", () => {
     await expect(readSchemas(gatewayDir, "0001")).resolves.toEqual(schemas);
   });
 
+  it("accepts what the gateway reports beside a result, and refuses it in any other shape", async () => {
+    const schemas = {
+      meta: { requestId: { type: "string" } },
+      ...schemasOf("ok"),
+    };
+    await writeVersion("0001", schemas);
+    await expect(readSchemas(gatewayDir, "0001")).resolves.toEqual(schemas);
+
+    await writeVersion("0002", {
+      meta: { requestId: "string" },
+      ...schemasOf("ok"),
+    });
+    expect(await problemsOf(readSchemas(gatewayDir, "0002"))).toEqual([
+      "meta.requestId must be a schema object",
+    ]);
+    await writeVersion("0003", { meta: [], ...schemasOf("ok") });
+    expect(await problemsOf(readSchemas(gatewayDir, "0003"))).toEqual([
+      '"meta" must be an object of schemas',
+    ]);
+  });
+
   it("refuses a version that is not JSON, naming the file", async () => {
     await writeVersion("0001", "export default {};");
 
@@ -180,12 +201,12 @@ describe("readSchemas", () => {
     });
 
     expect(await problemsOf(readSchemas(gatewayDir, "0001"))).toEqual([
-      'the version has an unknown field "definitions"; expected "defs" and "operations"',
+      'the version has an unknown field "definitions"; expected "defs", "meta", "operations"',
       "defs.Thing must be a schema object",
       "operations.bare must be an object",
       "operations.noInput.input must be a schema object",
       "operations.noOutcomes.outcomes must be an object of schemas",
-      'operations.extra has an unknown field "output"; expected "input" and "outcomes"',
+      'operations.extra has an unknown field "output"; expected "input", "outcomes"',
       "operations.extra.outcomes.broken must be a schema object",
     ]);
   });
@@ -217,6 +238,37 @@ describe("readSchemas", () => {
       'a shared definition cannot be named "__proto__"',
       'an operation cannot be named "__proto__"',
       'an outcome cannot be named "__proto__"',
+    ]);
+  });
+
+  it("refuses that name inside every map of schemas a version holds", async () => {
+    // Every map is read the same way, so one the version gained later is not one left out: a
+    // schema reached only through the metadata is reached all the same, and what it declares
+    // can be referred to from an input.
+    await writeVersion(
+      "0001",
+      `{
+        "meta": {
+          "requestId": {
+            "type": "object",
+            "$defs": {
+              "Held": {
+                "type": "object",
+                "properties": { "__proto__": { "type": "string" } },
+                "required": ["__proto__"]
+              }
+            }
+          }
+        },
+        "operations": {
+          "op": { "input": {}, "outcomes": { "ok": {} } }
+        }
+      }`,
+    );
+
+    expect(await problemsOf(readSchemas(gatewayDir, "0001"))).toEqual([
+      'meta.requestId.$defs.Held.properties cannot declare "__proto__"',
+      'meta.requestId.$defs.Held.required cannot list "__proto__"',
     ]);
   });
 
