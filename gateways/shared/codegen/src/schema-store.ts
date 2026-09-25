@@ -1,4 +1,12 @@
-import { readdir, readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  link,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import type { GatewaySchemas } from "@repo/gateway-types";
@@ -39,12 +47,19 @@ export class SchemaStoreError extends Error {
 // The versions a gateway holds, oldest first. A directory that holds anything else, or whose
 // numbers leave a gap, is refused rather than read around: a version is history, and a missing
 // or a misnamed one is a history that no longer says what was generated from.
-export async function schemaVersions(gatewayDir: string): Promise<string[]> {
+export async function schemaVersions(
+  gatewayDir: string,
+  // A gateway whose first version is about to be written has none, and no directory for them.
+  { allowNone = false }: { readonly allowNone?: boolean } = {},
+): Promise<string[]> {
   const dir = path.resolve(gatewayDir, SCHEMAS_DIR);
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (cause) {
+    if (allowNone && (cause as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
     throw new SchemaStoreError(
       dir,
       [
@@ -73,7 +88,7 @@ export async function schemaVersions(gatewayDir: string): Promise<string[]> {
   }
 
   const found = sortedNames(versions);
-  if (found.length === 0 && problems.length === 0) {
+  if (found.length === 0 && problems.length === 0 && !allowNone) {
     problems.push(`holds no versions; the first is ${versionName(0)}.json`);
   }
   found.forEach((version, index) => {
@@ -245,6 +260,14 @@ function shapeProblems(value: unknown): readonly string[] {
   return problems;
 }
 
+// Everything wrong with schemas that are about to become a version, or were read as one: the
+// shape the generator reads, and nothing in them that does not display.
+export function schemasProblems(value: unknown): readonly string[] {
+  const problems = [...shapeProblems(value)];
+  hiddenCharacters(value, "", problems);
+  return problems;
+}
+
 // One version, read from the bytes on disk each time it is asked for. Nothing is cached and
 // nothing is evaluated, so a run always generates from what the file says now.
 export async function readSchemas(
@@ -265,8 +288,7 @@ export async function readSchemas(
     );
   }
 
-  const problems = [...shapeProblems(parsed)];
-  hiddenCharacters(parsed, "", problems);
+  const problems = schemasProblems(parsed);
   if (problems.length > 0) throw new SchemaStoreError(file, problems);
   return parsed as GatewaySchemas;
 }
@@ -289,4 +311,47 @@ export async function loadVersions(
       schemas: await readSchemas(gatewayDir, version),
     })),
   );
+}
+
+// The version after the ones a gateway holds.
+export const versionAfter = (versions: readonly string[]): string =>
+  versionName(versions.length);
+
+// Writes schemas as a version, in the order they were given: a version keeps the order its
+// source was written in, so the contract lists an object's fields as the upstream documents
+// them. Two-space JSON and nothing a formatter decides, so the same schemas are the same bytes
+// whatever is installed. Written beside the file and moved into place, so a run that is
+// interrupted leaves no half of a version behind for the next to generate from.
+export async function writeVersion(
+  gatewayDir: string,
+  version: string,
+  schemas: GatewaySchemas,
+): Promise<string> {
+  const dir = path.resolve(gatewayDir, SCHEMAS_DIR);
+  const file = path.join(dir, `${version}.json`);
+  // One staging file per run, created exclusively, and dotted so a run that dies here leaves
+  // nothing the next one reads as a version. The name has to be this run's alone: linking makes
+  // the published version and the staging file one inode, so a second run writing to a staging
+  // file of the same name would write through the link and into what the first published, while
+  // its own link failed and told it nothing had been written.
+  const staged = path.join(dir, `.${version}.json.${randomUUID()}`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(staged, `${JSON.stringify(schemas, null, 2)}\n`, {
+    flag: "wx",
+  });
+  try {
+    // A link, not a rename: a rename replaces what is there, and a version is history. Linking
+    // fails where the name is taken, in one step, so two runs cannot both write the same version.
+    await link(staged, file);
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw cause;
+    throw new SchemaStoreError(
+      file,
+      ["already exists; a version is never written over"],
+      { cause },
+    );
+  } finally {
+    await rm(staged, { force: true });
+  }
+  return file;
 }

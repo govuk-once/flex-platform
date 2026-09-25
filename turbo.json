@@ -4,6 +4,9 @@
     "codegen": {
       "cache": false
     },
+    "schemas": {
+      "cache": false
+    },
     "typecheck": {},
     "lint": {},
     "test": {}

@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -10,6 +17,8 @@ import {
   readSchemas,
   SchemaStoreError,
   schemaVersions,
+  versionAfter,
+  writeVersion as writeNextVersion,
 } from "./schema-store.ts";
 
 const schemasOf = (outcome: string) => ({
@@ -302,6 +311,91 @@ describe("readSchemas, on text that does not display", () => {
     await writeVersion("0001", schemas);
 
     await expect(readSchemas(gatewayDir, "0001")).resolves.toEqual(schemas);
+  });
+});
+
+describe("writeVersion", () => {
+  it("writes the version after the ones there are, in the order it was given", async () => {
+    await writeVersion("0001", schemasOf("ok"));
+    const next = {
+      operations: { op: { outcomes: { ok: { type: "null" } }, input: {} } },
+    };
+
+    const version = versionAfter(await schemaVersions(gatewayDir));
+    const file = await writeNextVersion(gatewayDir, version, next);
+
+    expect(version).toBe("0002");
+    expect(file).toBe(inStore("0002.json"));
+    // `outcomes` before `input`, as given: nothing here puts a version in an order of its own.
+    expect(await readFile(file, "utf-8")).toBe(
+      `${JSON.stringify(next, null, 2)}\n`,
+    );
+    expect(
+      (await readdir(path.join(gatewayDir, SCHEMAS_DIR))).toSorted(),
+    ).toEqual(["0001.json", "0002.json"]);
+  });
+
+  it("makes the directory for a gateway's first version", async () => {
+    await rm(path.join(gatewayDir, SCHEMAS_DIR), { recursive: true });
+
+    expect(await schemaVersions(gatewayDir, { allowNone: true })).toEqual([]);
+    await writeNextVersion(gatewayDir, versionAfter([]), schemasOf("ok"));
+
+    await expect(loadVersions(gatewayDir)).resolves.toEqual([
+      { version: "0001", schemas: schemasOf("ok") },
+    ]);
+  });
+
+  it("publishes one run's bytes when two write the same version at once", async () => {
+    // The published version and the file a run stages are one inode once they are linked, so a
+    // second run staging under the same name writes through the link and into what the first
+    // published, while its own link fails and tells it nothing was written. Each run stages
+    // under a name of its own, so what is published is whichever run's the link took.
+    const runs = [schemasOf("first"), schemasOf("second"), schemasOf("third")];
+    const settled = await Promise.allSettled(
+      runs.map((schemas) => writeNextVersion(gatewayDir, "0001", schemas)),
+    );
+
+    const wrote = settled.findIndex((run) => run.status === "fulfilled");
+    expect(settled.filter((run) => run.status === "fulfilled")).toHaveLength(1);
+    for (const refused of settled.filter((run) => run.status === "rejected")) {
+      expect(refused.reason).toBeInstanceOf(SchemaStoreError);
+      expect((refused.reason as Error).message).toContain(
+        "a version is never written over",
+      );
+    }
+    // Byte for byte the bytes of the run that said it had written them. A run told it wrote
+    // nothing must not be what is on disk, which is what writing through a shared staging file
+    // would leave: the one that published is the one whose link took.
+    expect(await readFile(inStore("0001.json"), "utf-8")).toBe(
+      `${JSON.stringify(runs[wrote], null, 2)}\n`,
+    );
+    // Nothing of a run that lost is left beside it, staged or otherwise.
+    expect(await readdir(path.join(gatewayDir, SCHEMAS_DIR))).toEqual([
+      "0001.json",
+    ]);
+  });
+
+  it("never writes over a version, and leaves nothing behind when it refuses", async () => {
+    await writeVersion("0001", schemasOf("ok"));
+
+    await expect(
+      writeNextVersion(gatewayDir, "0001", schemasOf("created")),
+    ).rejects.toThrow(/a version is never written over/);
+    await expect(readSchemas(gatewayDir, "0001")).resolves.toEqual(
+      schemasOf("ok"),
+    );
+    expect(await readdir(path.join(gatewayDir, SCHEMAS_DIR))).toEqual([
+      "0001.json",
+    ]);
+  });
+
+  it("still refuses what is not a version when a gateway may have none", async () => {
+    await writeFile(inStore("notes.md"), "");
+
+    await expect(
+      schemaVersions(gatewayDir, { allowNone: true }),
+    ).rejects.toThrow(SchemaStoreError);
   });
 });
 

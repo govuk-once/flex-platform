@@ -243,6 +243,50 @@ written into generated code, so one of these would let it show a reviewer one th
 another; it is read from the parsed value, so one written as a `\u` escape is found as well.
 Whether each schema is a valid schema is Ajv's to say when the validators are built.
 
+#### Bringing a gateway's schemas up to date
+
+`gateway-schemas` runs in a gateway package, as `gateway-codegen` does, and `pnpm schemas` runs
+it for every gateway, carrying on past one that fails. A person runs it, reads what it says and
+commits what it wrote; it reaches the network, so nothing runs it in CI, where codegen's
+comparison of the committed versions is what holds.
+
+A driver that can derive its schemas gives the module that does as `deriveSchemasModule` on its
+definition: a `file:` URL it builds from its own module,
+`new URL("../derive/index.ts", import.meta.url).href`. It is a URL and not an import because a
+generated entry point imports the configuration and the bundler follows every import it can see
+from there, a dynamic one included: a module imported by the definition would carry whatever
+parses the upstream's description into the deployed gateway. Built from the driver's own module,
+it finds the driver's files wherever they are installed, with nothing to resolve. The command
+loads it and calls the default export with the configuration and the one thing it may read a
+description through: `load`, which fetches over https, following no redirect, or reads a path
+within the gateway's directory. What arrives over https is counted as it arrives and the
+connection dropped at 16 MiB, so the limit bounds what is held rather than what a host sends.
+
+What comes back is held to everything a version on disk is held to, the shape, each schema
+compiling as the validators compile it and agreement with the configuration, before it is
+compared with the latest version:
+
+| Upstream | What the command does |
+|---|---|
+| Its shape is what the latest version holds | Writes nothing. A reworded `description` is not a change of shape, so the contract's comments can lag the upstream's until its shape next changes. |
+| Its shape changed and no caller breaks | Writes the next version, in the order it was derived in, and lists the changes. |
+| A change would break a caller | Writes nothing, says so loudly with every break, and fails. The latest version stays what the gateway is generated from. |
+| The gateway has no versions | Writes `0001.json`. |
+
+A version is two-space JSON in the order its source was written in, so the contract lists an
+object's fields as the upstream documents them, and nothing a formatter decides, so the same
+schemas are the same bytes whatever is installed. Each run writes its own staging file and links
+that into place rather than renaming it, so a version that exists is never written over and two
+runs racing for one version publish whichever run's the link took, whole. A gateway whose driver
+derives nothing keeps its versions by hand; for it the command writes none and reads the latest
+as the generator reads it, since nothing else has.
+
+What the command prints carries an upstream's own words — a field name through the comparison, a
+driver's notes through its derivation — and writes any character that does not display as its
+code point, so nothing it is given can move a terminal's cursor back over the report above it.
+The error that stops a run goes out the same way: a version refused for its shape is refused
+before anything reads its characters, and the diagnostic names the field that caused it.
+
 #### Compatibility between versions
 
 A caller written against one version has to survive the next, so codegen compares each version
