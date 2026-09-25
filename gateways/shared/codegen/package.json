@@ -21,17 +21,17 @@
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "esbuild": "0.28.2",
-    "prettier": "3.9.6",
+    "prettier": "3.9.8",
     "tsx": "4.23.13"
   },
   "devDependencies": {
-    "@aws-sdk/client-secrets-manager": "3.1128.0",
+    "@aws-sdk/client-secrets-manager": "3.1135.0",
     "@repo/eslint-config": "workspace:*",
     "@repo/gateway-runtime": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.9.1",
+    "eslint": "10.10.0",
     "typescript": "6.0.3",
-    "vitest": "4.1.11"
+    "vitest": "5.0.1"
   }
 }
