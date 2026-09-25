@@ -1,13 +1,12 @@
 import { defineGateway } from "@repo/gateway-config";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { noAuth } from "./auth.ts";
 import { openapiRest, type UpstreamTemplate } from "./definition.ts";
 import type { PathParameters, RefineOpenApiRestOperation } from "./refine.ts";
 
 const DRIVER = openapiRest({
   spec: "https://example.test/openapi.yml",
-  auth: noAuth(),
+  auth: [],
 });
 
 describe("PathParameters", () => {

@@ -2,9 +2,6 @@
 import "./config/refine.ts";
 
 export type {
-  ApiKeySecret,
-  BearerTokenSecret,
-  EmptySecret,
   OpenApiRestAuth,
   OpenApiRestAuthCall,
   OpenApiRestAuthDeps,
@@ -12,7 +9,7 @@ export type {
   OpenApiRestAuthRequest,
   OpenApiRestAuthTransport,
 } from "./config/auth.ts";
-export { apiKey, bearerToken, defineAuth, noAuth } from "./config/auth.ts";
+export { apiKey, defineAuth } from "./config/auth.ts";
 export type {
   OpenApiRestDriver,
   OpenApiRestDriverConfig,
@@ -23,6 +20,12 @@ export type {
 export type { OpenApiRestGatewayConfig } from "./config/definition.ts";
 export { openapiRest } from "./config/definition.ts";
 export { defineHandler } from "./config/handler.ts";
+export type {
+  SecretField,
+  SecretValues,
+  Setting,
+} from "./config/secret-field.ts";
+export { fromSecret } from "./config/secret-field.ts";
 export type { MetadataConfig, ResponseMetadata } from "./metadata.ts";
 export { encodePathParam } from "./path.ts";
 export type { OpenApiRestOperationConfig } from "./runtime/operation.ts";
