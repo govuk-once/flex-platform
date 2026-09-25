@@ -7,8 +7,22 @@
     "schemas": {
       "cache": false
     },
-    "typecheck": {},
-    "lint": {},
-    "test": {}
+    // Workspace packages export their TypeScript sources, so a package's checks read its
+    // dependencies' files, which Turborepo leaves out of a task's hash unless the task depends
+    // on them. This task does nothing and has no script; depending on it puts every workspace
+    // dependency's files in the hash, so a dependency's change invalidates a dependent's cached
+    // result, without making the checks wait on each other.
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    "typecheck": {
+      "dependsOn": ["transit"]
+    },
+    "lint": {
+      "dependsOn": ["transit"]
+    },
+    "test": {
+      "dependsOn": ["transit"]
+    }
   }
 }
