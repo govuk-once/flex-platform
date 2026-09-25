@@ -346,11 +346,9 @@ describe("writeVersion", () => {
     ]);
   });
 
-  it("publishes one run's bytes when two write the same version at once", async () => {
-    // The published version and the file a run stages are one inode once they are linked, so a
-    // second run staging under the same name writes through the link and into what the first
-    // published, while its own link fails and tells it nothing was written. Each run stages
-    // under a name of its own, so what is published is whichever run's the link took.
+  it("writes one run's bytes when several write the same version at once", async () => {
+    // The file is created exclusively, so one run creates it and every other is refused before
+    // it writes a byte.
     const runs = [schemasOf("first"), schemasOf("second"), schemasOf("third")];
     const settled = await Promise.allSettled(
       runs.map((schemas) => writeNextVersion(gatewayDir, "0001", schemas)),
@@ -364,13 +362,10 @@ describe("writeVersion", () => {
         "a version is never written over",
       );
     }
-    // Byte for byte the bytes of the run that said it had written them. A run told it wrote
-    // nothing must not be what is on disk, which is what writing through a shared staging file
-    // would leave: the one that published is the one whose link took.
+    // Byte for byte the bytes of the run that said it had written them.
     expect(await readFile(inStore("0001.json"), "utf-8")).toBe(
       `${JSON.stringify(runs[wrote], null, 2)}\n`,
     );
-    // Nothing of a run that lost is left beside it, staged or otherwise.
     expect(await readdir(path.join(gatewayDir, SCHEMAS_DIR))).toEqual([
       "0001.json",
     ]);
