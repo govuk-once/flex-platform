@@ -27,7 +27,9 @@ operations for one upstream, keeping transport details separate from validation 
   entrypoint supplies. Nothing in it is called by hand; a generated entrypoint wires it.
   `src/config/` is what a gateway configuration imports and codegen evaluates; `src/runtime/`
   is reached only through the definition's `createExecutor`, which loads it, and a lint rule
-  keeps the two apart.
+  keeps the two apart. `src/derive/` derives a gateway's schemas from its upstream's OpenAPI
+  document; the definition gives it as a URL and nothing imports it, so its parser is never
+  deployed.
 - `gateways/services/udp`: an example gateway configuration and its versioned schemas.
 
 The CLI reads the latest version in a gateway's `schemas/` directory, JSON files numbered from
@@ -70,6 +72,7 @@ when a tool has no package script.
 | Validator bundler | esbuild, ESM output targeting Node 24 |
 | Tests | Vitest with `globals: false`; import test helpers explicitly |
 | Validation | Ajv standalone validators from JSON Schema |
+| OpenAPI | `@scalar/openapi-parser` reads a document and rewrites 3.0 as 3.1; build-time only, in `openapi-rest/src/derive/` |
 | Logging | pino, with payload fields selected through `log.input` and `log.output` |
 
 Check installed dependencies and APIs before using them. Dependency version pins are exact
@@ -275,6 +278,16 @@ integrations are implemented.
     the file holds. Keep the tests that compile a contract built from hostile text, the ones that
     emit declarations from it with `stripInternal` on, and the ones that prove both can see a tag
     at all.
+
+14. **Inputs are held to everything, outcomes to their shape.** Deriving closes every object of
+    an input the upstream left open and keeps every constraint and `enum` exactly; for an
+    outcome it opens closed objects, drops bounds, `pattern` and `format`, and turns an `enum`
+    into the values it knows of beside their type. The reason is the direction each can move in
+    without breaking a caller: an input can be loosened later and never tightened, and an
+    upstream adds fields, values and length to what it sends without asking. Making an outcome
+    stricter makes a minor release upstream a failed response in production; making an input
+    looser cannot be undone. The contract's types stay closed either way, so nothing suggests
+    fields a caller's version does not declare.
 
 ## Public documentation and comments
 

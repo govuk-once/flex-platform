@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import type { HandlerOf, OperationFields } from "@repo/gateway-config";
 import { defineGateway } from "@repo/gateway-config";
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -23,9 +26,21 @@ describe("openapiRest", () => {
       "type",
       "createExecutor",
       "checkSchemas",
+      "deriveSchemasModule",
       "spec",
       "auth",
     ]);
+  });
+
+  it("gives the module that derives its schemas as a file: URL to its own derive/", () => {
+    // A URL and not an import: what the module needs to read an OpenAPI document must not
+    // follow the definition into a deployed gateway.
+    const { deriveSchemasModule } = openapiRest({ spec: SPEC, auth: AUTH });
+    const url = new URL(deriveSchemasModule ?? "");
+
+    expect(url.protocol).toBe("file:");
+    expect(url.pathname.endsWith("/src/derive/index.ts")).toBe(true);
+    expect(existsSync(fileURLToPath(url))).toBe(true);
   });
 
   it("carries headers and the response limit when given", () => {
@@ -46,6 +61,7 @@ describe("openapiRest", () => {
       "type",
       "createExecutor",
       "checkSchemas",
+      "deriveSchemasModule",
       "spec",
       "auth",
       "headers",
