@@ -135,20 +135,24 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Lowercased header names the gateway's authentication owns. Malformed entries are the
-// executor's to report; here they only mean no name is reserved.
+// Lowercased header names the gateway's authentication parts own, together. Malformed entries
+// are the executor's to report; here they only mean no name is reserved.
 function reservedHeaders(
   config: OpenApiRestGatewayConfig,
 ): ReadonlySet<string> {
-  const declared: unknown = config.driver.auth?.headers;
-  if (!Array.isArray(declared)) return new Set();
+  const parts: unknown = config.driver.auth;
   const names = new Set<string>();
-  for (const name of declared) {
-    if (typeof name !== "string") continue;
-    try {
-      names.add(normaliseHeaderName(name, "Driver auth headers"));
-    } catch {
-      continue;
+  if (!Array.isArray(parts)) return names;
+  for (const part of parts) {
+    const declared: unknown = isRecord(part) ? part.headers : undefined;
+    if (!Array.isArray(declared)) continue;
+    for (const name of declared) {
+      if (typeof name !== "string") continue;
+      try {
+        names.add(normaliseHeaderName(name, "Driver auth headers"));
+      } catch {
+        continue;
+      }
     }
   }
   return names;

@@ -7,12 +7,13 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type { OpenApiRestHandler } from "../types.ts";
 import { OPENAPI_REST_DRIVER_TYPE } from "../types.ts";
-import { noAuth } from "./auth.ts";
+import type { OpenApiRestAuth } from "./auth.ts";
 import type { OpenApiRestOperationFields } from "./definition.ts";
 import { openapiRest } from "./definition.ts";
+import { fromSecret } from "./secret-field.ts";
 
 const SPEC = "https://example.test/openapi.yml";
-const AUTH = noAuth();
+const AUTH: readonly OpenApiRestAuth[] = [];
 
 const METADATA = {
   upstreamRequestId: { header: "X-Request-Id", schema: { type: "string" } },
@@ -51,6 +52,7 @@ describe("openapiRest", () => {
     const definition = openapiRest({
       spec: SPEC,
       auth: AUTH,
+      target: fromSecret("apiUrl"),
       headers: { "x-api-version": "2" },
       maxResponseBytes: 4096,
       metadata: METADATA,
@@ -59,6 +61,7 @@ describe("openapiRest", () => {
       type: OPENAPI_REST_DRIVER_TYPE,
       spec: SPEC,
       auth: AUTH,
+      target: fromSecret("apiUrl"),
       headers: { "x-api-version": "2" },
       maxResponseBytes: 4096,
       metadata: METADATA,
@@ -70,6 +73,7 @@ describe("openapiRest", () => {
       "deriveSchemasModule",
       "spec",
       "auth",
+      "target",
       "headers",
       "maxResponseBytes",
       "metadata",

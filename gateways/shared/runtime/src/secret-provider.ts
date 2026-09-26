@@ -65,12 +65,13 @@ export function createSecretProvider(arn: string): SecretProvider {
     },
   });
   return {
-    async get() {
+    async get(options) {
       let value: unknown;
       try {
         value = await secrets.get(arn, {
           maxAge: MAX_AGE_SECONDS,
           transform: "json",
+          ...(options?.fresh === true ? { forceFetch: true } : {}),
         });
       } catch {
         // The SDK's or the transform's error can carry the request, the response or the text

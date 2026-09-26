@@ -1,5 +1,6 @@
 import type {
   DriverContext,
+  DriverLogFields,
   SecretObject,
   SecretProvider,
 } from "@repo/gateway-types";
@@ -45,10 +46,24 @@ export function json(status: number, body: unknown): Response {
 export function passthroughContext(): DriverContext & {
   attempts: number;
   reported: Map<string, unknown>;
+  logged: { level: string; message: string; fields?: DriverLogFields }[];
 } {
+  const logged: { level: string; message: string; fields?: DriverLogFields }[] =
+    [];
+  const line =
+    (level: string) =>
+    (message: string, fields?: DriverLogFields): void => {
+      logged.push({
+        level,
+        message,
+        ...(fields === undefined ? {} : { fields }),
+      });
+    };
   const ctx = {
     attempts: 0,
     reported: new Map<string, unknown>(),
+    logged,
+    log: { info: line("info"), warn: line("warn") },
     upstream<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
       ctx.attempts += 1;
       return fn(new AbortController().signal);
@@ -68,6 +83,8 @@ export interface FakeSecret {
   readonly provider: SecretProvider;
   // How many times get() has been called.
   readonly reads: () => number;
+  // How many of those asked for a fresh copy from the store.
+  readonly freshReads: () => number;
   // Serves a new value from the next get(), as a rotation seen after the cache age would.
   rotate(value: unknown): void;
   // Makes every get() reject until the next rotate(), as a failed read would.
@@ -80,16 +97,19 @@ export function fakeSecret(value: unknown): FakeSecret {
   let current = value as SecretObject;
   let error: Error | undefined;
   let reads = 0;
+  let freshReads = 0;
   return {
     provider: {
-      get() {
+      get(options) {
         reads += 1;
+        if (options?.fresh === true) freshReads += 1;
         return error === undefined
           ? Promise.resolve(current)
           : Promise.reject(error);
       },
     },
     reads: () => reads,
+    freshReads: () => freshReads,
     rotate(nextValue) {
       current = nextValue as SecretObject;
       error = undefined;

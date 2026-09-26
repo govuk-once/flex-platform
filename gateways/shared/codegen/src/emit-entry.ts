@@ -17,7 +17,7 @@ import { formatSource, HEADER, writeGenerated } from "./output.ts";
 
 const entryModule = (id: string) => `
 // Entry point for gateway "${id}". The platform calls the handler; nothing else is exported.
-import { createHandler, readUpstreamOptions } from "@repo/gateway-runtime";
+import { createHandler, createStartupLog, readUpstreamOptions } from "@repo/gateway-runtime";
 
 import config from "${CONFIG_MODULE}";
 import { meta, validators } from "./${VALIDATORS_DIR}/${VALIDATORS_MODULE}";
@@ -26,7 +26,10 @@ import { meta, validators } from "./${VALIDATORS_DIR}/${VALIDATORS_MODULE}";
 // compile and the driver retrieves and validates the gateway secret once, before any request
 // rather than during the first one. UPSTREAM_TARGET and UPSTREAM_SECRET_ARN are read here and
 // nowhere else.
-const execute = await config.driver.createExecutor(config, readUpstreamOptions());
+const execute = await config.driver.createExecutor(config, {
+  ...readUpstreamOptions(),
+  log: createStartupLog(config.id),
+});
 const gateway = createHandler(config, { validators, meta, execute });
 
 // The deadline is all that varies per invocation, and the platform reports it.

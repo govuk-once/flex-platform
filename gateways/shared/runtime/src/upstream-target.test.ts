@@ -27,14 +27,11 @@ describe("readUpstreamTarget", () => {
     );
   });
 
-  it("throws when unset", () => {
-    expect(() => readUpstreamTarget({})).toThrow(/UPSTREAM_TARGET must be set/);
-  });
-
-  it("throws when blank", () => {
-    expect(() => readUpstreamTarget({ [UPSTREAM_TARGET_ENV]: "   " })).toThrow(
-      /UPSTREAM_TARGET must be set/,
-    );
+  it("is no target when unset or blank, for the driver to take one from elsewhere", () => {
+    expect(readUpstreamTarget({})).toBeUndefined();
+    expect(
+      readUpstreamTarget({ [UPSTREAM_TARGET_ENV]: "   " }),
+    ).toBeUndefined();
   });
 });
 
@@ -92,10 +89,10 @@ describe("readUpstreamOptions", () => {
     ).toThrow(/needs a Secrets Manager secret ARN/);
   });
 
-  it("requires both variables", () => {
-    expect(() =>
+  it("requires the secret and leaves the target out where none is set", () => {
+    expect(
       readUpstreamOptions({ [UPSTREAM_SECRET_ARN_ENV]: ARN }),
-    ).toThrow(/UPSTREAM_TARGET must be set/);
+    ).not.toHaveProperty("target");
     expect(() =>
       readUpstreamOptions({ [UPSTREAM_TARGET_ENV]: "https://x.test" }),
     ).toThrow(/UPSTREAM_SECRET_ARN must be set/);
