@@ -1,5 +1,10 @@
 import { defineGateway } from "@repo/gateway-config";
-import { openapiRest } from "@repo/gateway-driver-openapi-rest";
+import {
+  apiKey,
+  fromSecret,
+  openapiRest,
+  sigV4,
+} from "@repo/gateway-driver-openapi-rest";
 
 import { DATA_STORE, stored } from "./config/data-store.ts";
 import { GROUP_SUBSCRIPTIONS } from "./config/groups.ts";
@@ -14,8 +19,24 @@ export default defineGateway({
     // from what this names, and a branch names something else tomorrow. Moving it on to a later
     // one is how this gateway takes a newer UDP.
     spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/7ed6c9a3c57c06a64995eaae00195189f533926b/docs/openapi.yml",
-    // Sends no credential until this gateway is configured against UDP itself.
-    auth: [],
+    // Where UDP is and what Flex authenticates with are UDP's, in a secret UDP provides in its own
+    // shape. Its API Gateway takes the key and a signature as the role UDP grants Flex, assumed
+    // through STS; the key is set first, so the signature covers it.
+    target: fromSecret("apiUrl"),
+    auth: [
+      apiKey({ header: "x-api-key", key: fromSecret("apiKey") }),
+      sigV4({
+        service: "execute-api",
+        region: fromSecret("region"),
+        role: {
+          arn: fromSecret("consumerRoleArn"),
+          // Present where the role's trust policy asks for one.
+          externalId: fromSecret("externalId", { optional: true }),
+          // The session Flex has always assumed the role as, so UDP's audit trail reads the same.
+          sessionName: "consumer-session",
+        },
+      }),
+    ],
   }),
   // Every operation UDP describes under a path of its own; and then what Flex keeps in UDP's data
   // store, which UDP describes once for any path, "/v1/{resourcePath+}", and any shape. Each of

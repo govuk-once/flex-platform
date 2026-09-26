@@ -53,8 +53,8 @@ definition; see [Authentication](#authentication).
 
 `defineGateway` preserves operation names in the inferred type and supplies policy defaults.
 The [UDP gateway](services/udp/gateway.config.ts) describes the User Data Platform API using
-the [openapi-rest driver](#the-openapi-rest-driver). It sends no credential yet, so its `auth` is
-`[]`; its deployment still names a secret, from which nothing is read.
+the [openapi-rest driver](#the-openapi-rest-driver), and reaches and authenticates to it with
+what UDP's own secret holds; see [Authentication](#authentication).
 
 ```ts
 import { defineGateway } from "@repo/gateway-config";
@@ -65,7 +65,7 @@ export default defineGateway({
   description: "User Data Platform gateway",
   driver: openapiRest({
     spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/7ed6c9a3c57c06a64995eaae00195189f533926b/docs/openapi.yml",
-    auth: [],
+    // …its `target` and `auth`, as under Authentication.
   }),
   operations: {
     createUser: {
@@ -914,7 +914,7 @@ openapiRest({
       role: {
         arn: fromSecret("consumerRoleArn"),
         externalId: fromSecret("externalId", { optional: true }),
-        sessionName: "udp-consumer-session",
+        sessionName: "consumer-session",
       },
     }),
   ],
