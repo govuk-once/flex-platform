@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { compilePaths } from "./field-path.ts";
-import { pickFields } from "./logging.ts";
+import { createStartupLog, pickFields } from "./logging.ts";
 
 const compile = (paths: string[]) => compilePaths(paths);
 
@@ -142,5 +142,35 @@ describe("pickFields", () => {
       "records.*.score": [10, 20],
       "list.*.score": [30],
     });
+  });
+});
+
+describe("createStartupLog", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("writes a driver's line under the gateway's name, its fields under a key of their own", () => {
+    const written: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+      written.push(
+        typeof chunk === "string" ? chunk : (chunk as Buffer).toString(),
+      );
+      return true;
+    });
+
+    createStartupLog("udp").info("Starting without something", {
+      field: "externalId",
+      msg: "not the message",
+    });
+
+    const record = JSON.parse(written.join("")) as Record<string, unknown>;
+    expect(record).toMatchObject({
+      level: 30,
+      name: "udp",
+      msg: "Starting without something",
+      driver: { field: "externalId", msg: "not the message" },
+    });
+    expect(record).not.toHaveProperty("operation");
   });
 });

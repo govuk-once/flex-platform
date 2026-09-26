@@ -1,4 +1,5 @@
 import type {
+  DriverLogger,
   ExecuteFn,
   GatewaySchemas,
   OperationHandler,
@@ -17,6 +18,10 @@ export interface ExecutorOptions {
   // The secret UPSTREAM_SECRET_ARN names, as a provider rather than an ARN or a client. The
   // driver, or the authentication implementation its definition names, validates what it holds.
   readonly secret: SecretProvider;
+  // Where the driver logs while its executor is created, before there is a request: the
+  // runtime's logger, under the gateway's name. What a driver writes here is held to what it
+  // writes through its context. Optional: a driver creates no lines when it is absent.
+  readonly log?: DriverLogger;
 }
 
 export type AnyOperations<TDriver extends DriverDefinition> = Readonly<

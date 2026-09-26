@@ -44,7 +44,7 @@ function driverFields(fields: DriverLogFields | undefined): object {
   return Object.keys(kept).length === 0 ? {} : { driver: kept };
 }
 
-function driverLogger(sink: DriverLogSink): DriverLogger {
+export function driverLogger(sink: DriverLogSink): DriverLogger {
   return {
     info: (message, fields) => {
       sink.info(driverFields(fields), message);
