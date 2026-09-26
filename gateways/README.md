@@ -751,6 +751,87 @@ Only the operations the configuration declares are derived, each found by its `u
 and path; an `operationId` is not used, since a document need not have one and one it has need
 not be a name.
 
+A document may serve paths it does not declare, through a template that takes every segment that
+is left, such as `/v1/{resourcePath+}` for a store that keeps whatever it is given under whatever
+path. An operation never takes such a parameter from a caller, which would let one operation
+reach any other's endpoint past its schemas and its bindings. It names its path in full and says
+which template serves it:
+
+```ts
+getNotificationPreferences: {
+  upstream: "GET /v1/notifications",
+  matches: "/v1/{resourcePath+}",
+  narrow: { outcomes: { ok: { type: "object", properties: { data: NOTIFICATION_PREFERENCES } } } },
+},
+```
+
+`matches` is said, never inferred: a path the document lacks fails deriving unless the operation
+names what serves it, and the failure names the templates that could. Deriving then checks that
+the template exists, that the path fits it, `{name}` taking one segment and `{name+}` one or
+more, all written out, and that no more specific template fits, since that is the one the
+upstream would route to; and it refuses `matches` on a path the document does declare. A path is
+also refused where a router could read it as another: an empty segment, as a trailing or a
+doubled slash writes, which a router may drop or merge, and a slash or a backslash written inside
+a segment, as `%2F`, `%5C` or `\`, which one may decode into a separator. `GET /v1/sar/abc/`
+fits `/v1/{resourcePath+}` as written, and reaches `/v1/sar/{sarId}` through a router that
+ignores the trailing slash.
+
+A path with parameters of its own is held to the same: the upstream routes on the value a caller
+sends, so `GET /v1/app/{id}` reaches `/v1/app/admin` where the document declares one, and would be
+answered by that endpoint while held to schemas derived from the template. Deriving refuses it
+unless the parameter's schema refuses every value a request would write as that text: a list of
+values, a type or a pattern, so `/users/{id}` beside `/users/me` derives where `id` is an integer
+and is refused where it is any text. A schema the check cannot apply, a `format` nothing
+implements say, proves nothing, and the path is refused. Where a path could reach another
+endpoint, its text is compared as it reads: a template writes its segments as they go into a
+URL, so `é` and `%C3%A9` are one segment, and a value of `admin panel` is one that reaches
+`/v1/admin%20panel`. Fitting a path to the template it names compares the text as it is written,
+which can only refuse more. A parameter is where a request puts one, which is the reading the
+runtime uses: `{id}.json` is a parameter and text, and reaches `/v1/admin.json` but not
+`/v1/notifications`. Fitting a path through such a segment is refused, since what of it the path
+fills and what it keeps is neither one thing nor the other.
+
+What the path fills of the template needs no input field: no caller supplies it, and the text it
+writes is held to the document's schema for that parameter by the validators themselves, on the
+same dialect and formats a gateway's are generated with. A segment is text, what it stands for
+may be a number or a flag, and every reading of it is offered, so `/things/42` fills a parameter
+of integers, `/things/a%20b` one whose values include `a b`, and a fixed identifier is written
+out and held to its `format`. A number is only offered where the text is how that number is
+written, since a request writes a value as that: `9007199254740993` is not, being what the number
+written `9007199254740992` parses from, and neither are `007`, `42.0` or four hundred digits. A
+parameter the document describes by its content rather than a schema is refused, as it is when a
+caller supplies it. A schema saying something the check cannot apply, such as a `format` nothing
+implements, refuses the value rather than admitting it on the rest, since what is left unapplied
+is what the upstream will hold it to; one that would be checked asynchronously is refused rather
+than run, since an answer that arrives later is not an answer here. This is the only check the
+text gets: the parameter has left the input before generation or a request's validator could see
+it. An ordinary parameter can be filled the same way, `GET /v1/identity/app/{id}` against
+`/v1/identity/{serviceName}/{identifier}`, and one the path keeps goes by the path's name for it.
+The request is sent to the path in `upstream` either way; only deriving reads `matches`.
+
+A document may say only that a body, or a field in one, is an object of any shape, as such a
+template's usually does. Left so, it stays open, and a caller's contract types it as
+`Record<string, unknown>`. `narrow` states the shape a gateway's own services keep there:
+`payload` for the request body, and `outcomes` by name. Where the document admits an object of
+any shape, or any value at all, what is stated takes its place, at whatever depth it is, where
+the object admits objects and nothing else — one that also admits null would admit what the
+document did not. Where the document describes an object, what is stated of a field is set into
+it, a field may be required or the object closed, and a field the document's object has no room
+for is refused, as is every field of an object the document closes with none; a field the
+document held through `additionalProperties`, as a dictionary does, keeps what held it, since
+declaring a field exempts it from that. Anything else is set beside what the document says as an
+`allOf`, which holds both whatever they say. What a narrowing says of what it narrows, its
+description say, is kept over what the document says. A narrowed body is used as written, so it
+is as strict as it is written to be. A narrowed outcome is held to its shape like any other, open
+to fields and values it does not list and with no bounds, because what one of a gateway's own
+services comes to keep there should fail no other's read of it. A narrowing is read in full before
+any of it is set into a schema: its shape, so a keyword written as something other than what it
+takes is refused rather than filtered out on the way and lost; the names it may not use; and a
+`$ref` or `$dynamicRef`, which has nothing to refer to. Where a schema goes is the same reading
+used wherever one is walked, so a `$ref` inside an `allOf` is found as surely as one at the top, a
+field may be called `$ref` or `properties` and is the field it is, and `true` and `false` are the
+schemas they are.
+
 | From the document | In the gateway's schemas |
 |---|---|
 | A parameter the operation's `parameters` map | An input field under the configuration's name for it, with the parameter's schema and, where the schema has none, its description. Headers are matched without regard to case. |
@@ -766,7 +847,7 @@ The two sides of a call are converted differently, because they fail differently
 
 | | Input: what a caller sends | Outcome: what an upstream sends |
 |---|---|---|
-| An object that says nothing of other fields | Closed, so a field can be allowed later and never has to be disallowed. One inside `allOf`, `anyOf` or `oneOf` is left open, with a note: closing one part would refuse the fields the others declare. | Left open, and one the document closes is opened, so an upstream that adds a field does not fail its responses. What it adds reaches a caller undeclared; [the contract does not offer it](#the-call-contract). |
+| An object that says nothing of other fields | Closed, so a field can be allowed later and never has to be disallowed. One inside `allOf`, `anyOf` or `oneOf` is left open, with a note: closing one part would refuse the fields the others declare. One that names no field at all is an object of any shape, which closed would admit only `{}`: it is left open, with a note, and the contract types it as `Record<string, unknown>` until an operation's [`narrow`](#deriving-schemas) states its shape. | Left open, and one the document closes is opened, so an upstream that adds a field does not fail its responses. What it adds reaches a caller undeclared; [the contract does not offer it](#the-call-contract). |
 | `enum` | Kept exactly. | Becomes the values it knows of beside the type that admits the rest, `anyOf: [{ "enum": [...] }, { "type": "string" }]`, so a value the upstream adds breaks no caller. A single listed value on a field of a union's branch stays as it is, since it is what tells the branches apart; `const` is never opened. |
 | Bounds, `pattern`, `format` | Kept exactly. | Dropped: an outcome is held to its shape, the types, the fields and which are required. `minContains: 0` is kept, with the `maxContains` a validator wants beside it: left out, `minContains` is one, so dropping a zero is a bound arriving rather than one going. |
 | A definition both sides use | Takes a name of its own, `NameInput`, where the two sides hold it differently, and so does whatever refers to it from an input. Renaming reaches the places a schema holds a schema and no others: a `const`, an `enum` or a `default` holding an object of its own keeps every key it was written with, including one called `$ref`, which is a value the caller sends rather than a reference to follow. | Keeps the document's name. |

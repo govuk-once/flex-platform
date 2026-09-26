@@ -14,6 +14,24 @@ export interface ParsedUpstream {
 
 const PARAM = /\{([^{}]*)\}/g;
 const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+
+// The parts a path template is written in: the text of it, and the parameters standing in it.
+// A parameter need not be a whole segment — "/v1/{id}.json" is a parameter and text — and this
+// is the one reading of that, shared by what builds a request and what fits a path to a
+// document's template, so the two cannot disagree about where a parameter is.
+export function pathParts(template: string): PathPart[] {
+  const parts: PathPart[] = [];
+  let last = 0;
+  for (const match of template.matchAll(PARAM)) {
+    const literal = template.slice(last, match.index);
+    if (literal.length > 0) parts.push({ kind: "literal", value: literal });
+    parts.push({ kind: "param", name: match[1] ?? "" });
+    last = match.index + match[0].length;
+  }
+  const tail = template.slice(last);
+  if (tail.length > 0) parts.push({ kind: "literal", value: tail });
+  return parts;
+}
 // A "%" a parameter's value could complete. "/x/%2e%{id}" with id "2e" sends "/x/%2e%2e", a
 // dot segment the reviewed template never showed, so each escape must be whole in its literal.
 const INCOMPLETE_ESCAPE = /%(?![0-9A-Fa-f]{2})/;
@@ -51,15 +69,11 @@ export function parseUpstream(upstream: string): ParsedUpstream {
     );
   }
 
-  const parts: PathPart[] = [];
+  const parts = pathParts(template);
   const params: string[] = [];
-  let last = 0;
-
-  for (const match of template.matchAll(PARAM)) {
-    const literal = template.slice(last, match.index);
-    if (literal.length > 0) parts.push({ kind: "literal", value: literal });
-
-    const name = match[1] ?? "";
+  for (const part of parts) {
+    if (part.kind !== "param") continue;
+    const name = part.name;
     if (!PARAM_NAME.test(name)) {
       throw new TypeError(
         `Upstream "${upstream}" has an invalid path parameter name "{${name}}"`,
@@ -71,12 +85,7 @@ export function parseUpstream(upstream: string): ParsedUpstream {
       );
     }
     params.push(name);
-    parts.push({ kind: "param", name });
-    last = match.index + match[0].length;
   }
-
-  const tail = template.slice(last);
-  if (tail.length > 0) parts.push({ kind: "literal", value: tail });
 
   for (const part of parts) {
     if (part.kind !== "literal") continue;

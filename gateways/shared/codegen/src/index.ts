@@ -1,4 +1,6 @@
 export { checkGateway, GatewayCheckError } from "./check-gateway.ts";
+export type { ValueCheck } from "./check-value.ts";
+export { checkValue } from "./check-value.ts";
 export { main } from "./cli.ts";
 export type { SchemaComparison } from "./compare-schemas.ts";
 export { compareSchemas, SchemaCompatibilityError } from "./compare-schemas.ts";

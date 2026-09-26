@@ -309,14 +309,27 @@ integrations are implemented.
     at all.
 
 14. **Inputs are held to everything, outcomes to their shape.** Deriving closes every object of
-    an input the upstream left open and keeps every constraint and `enum` exactly; for an
-    outcome it opens closed objects, drops bounds, `pattern` and `format`, and turns an `enum`
-    into the values it knows of beside their type. The reason is the direction each can move in
-    without breaking a caller: an input can be loosened later and never tightened, and an
-    upstream adds fields, values and length to what it sends without asking. Making an outcome
-    stricter makes a minor release upstream a failed response in production; making an input
-    looser cannot be undone. The contract's types stay closed either way, so nothing suggests
-    fields a caller's version does not declare.
+    an input that names its fields and says nothing of the rest, and keeps every constraint and
+    `enum` exactly; for an outcome it opens closed objects, drops bounds, `pattern` and `format`,
+    and turns an `enum` into the values it knows of beside their type. The reason is the
+    direction each can move in without breaking a caller: an input can be loosened later and
+    never tightened, and an upstream adds fields, values and length to what it sends without
+    asking. Making an outcome stricter makes a minor release upstream a failed response in
+    production; making an input looser cannot be undone. An object that names no field is an
+    object of any shape, which closed would admit only `{}`: it stays open, and the contract
+    types it as one, until an operation's `narrow` states its shape. The contract's types stay
+    closed otherwise, so nothing suggests fields a caller's version does not declare.
+
+15. **No caller chooses an upstream path.** A path parameter is one segment, and the driver
+    refuses a value that holds a "/". A template that takes the rest of a path, `{name+}`, is
+    reached only by an operation that writes its path out in full and names the template as its
+    `matches`; deriving fails for a path the document lacks otherwise, and refuses a path a more
+    specific template would be routed to, or one a router could read as another: an empty
+    segment, or a slash or a backslash written inside one. A parameter a caller could fill with
+    several segments would let one operation reach every other's endpoint past its input schema,
+    its `secure` bindings and its logging. What such a template leaves unsaid, the operation
+    states as `narrow`: in place of an object of any shape, and set into anything the document
+    does describe, where it can only make a schema admit less.
 
 ## Public documentation and comments
 

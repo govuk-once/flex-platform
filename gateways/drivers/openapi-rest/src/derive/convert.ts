@@ -118,7 +118,10 @@ const APPLIES_TO: Readonly<Record<string, string>> = {
 const CONTAINS_BOUNDS = ["maxContains", "minContains"];
 
 const COMPOSITION = ["allOf", "anyOf", "oneOf"];
+// Where a schema holds other schemas, read the same way wherever a schema is walked: under a
+// name of its own, in a list, or on its own.
 export const SUBSCHEMA_MAPS = [
+  "$defs",
   "dependentSchemas",
   "patternProperties",
   "properties",
@@ -482,11 +485,26 @@ export function convertSchema(
       notes.add(
         `${where} is part of a composition, so it is left open: closing one part would refuse the fields the others declare`,
       );
+    } else if (!namesFields(converted)) {
+      // An object of any shape, which is what a store that keeps whatever it is given says of
+      // what it keeps. Closed, it would admit only `{}`; open, it is what the upstream takes,
+      // and an operation's narrowing is where the shape a gateway sends there is stated.
+      notes.add(
+        `${where} names no field, so it is left open as an object of any shape; an operation's "narrow" can state the shape it takes`,
+      );
     } else {
       converted.additionalProperties = false;
     }
   }
   return converted;
+}
+
+// Whether an object says which names it holds, by name or by pattern: one that says neither is
+// an object of any shape, and closing it would leave it nothing to hold.
+function namesFields(schema: Readonly<Record<string, unknown>>): boolean {
+  return ["properties", "patternProperties"].some(
+    (key) => isRecord(schema[key]) && Object.keys(schema[key]).length > 0,
+  );
 }
 
 // The type a schema's keywords imply, where it declares none, and out with the keywords a
