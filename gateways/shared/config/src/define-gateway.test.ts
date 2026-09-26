@@ -1,4 +1,5 @@
 import type {
+  DriverLogger,
   ExecuteFn,
   GatewaySchemas,
   OperationHandler,
@@ -262,14 +263,19 @@ describe("driver contract types", () => {
     });
   });
 
-  it("keeps the executor options to the target, when set, and the secret provider", () => {
+  it("keeps the executor options to the target, when set, the secret provider and a startup log", () => {
     expectTypeOf<ExecutorOptions["target"]>().toEqualTypeOf<
       string | undefined
     >();
     expectTypeOf<ExecutorOptions>()
       .toHaveProperty("secret")
       .toEqualTypeOf<SecretProvider>();
-    expectTypeOf<keyof ExecutorOptions>().toEqualTypeOf<"target" | "secret">();
+    expectTypeOf<ExecutorOptions["log"]>().toEqualTypeOf<
+      DriverLogger | undefined
+    >();
+    expectTypeOf<keyof ExecutorOptions>().toEqualTypeOf<
+      "target" | "secret" | "log"
+    >();
   });
 
   it("reserves a build-time check of a configuration against its schemas", () => {

@@ -252,6 +252,53 @@ describe("createExecutor", () => {
     expect(headerOf(ff.calls[0]!, "authorization")).toBeNull();
   });
 
+  it("logs each optional field the secret does not hold as it starts, by name only", async () => {
+    const logged: { message: string; fields: unknown }[] = [];
+    const log = {
+      info: (message: string, fields?: unknown) => {
+        logged.push({ message, fields });
+      },
+      warn: () => undefined,
+    };
+    await buildExecutor(
+      gatewayWith(
+        [
+          apiKey({ header: "x-api-key", key: fromSecret("apiKey") }),
+          apiKey({
+            header: "x-partner-key",
+            key: fromSecret("partnerKey", { optional: true }),
+          }),
+          apiKey({
+            header: "x-other-key",
+            key: fromSecret("otherKey", { optional: true }),
+          }),
+        ],
+        { target: fromSecret("apiUrl", { optional: true }) },
+      ),
+      {
+        target: TARGET,
+        secret: fakeSecret({
+          apiKey: "SYNTHETIC-KEY",
+          otherKey: "SYNTHETIC-OTHER",
+        }).provider,
+        log,
+      },
+      { fetch: fakeFetch(() => json(200, {})).fetch },
+    );
+    expect(logged).toEqual([
+      {
+        message:
+          "An optional secret field is absent; what reads it goes without",
+        fields: { field: "apiUrl" },
+      },
+      {
+        message:
+          "An optional secret field is absent; what reads it goes without",
+        fields: { field: "partnerKey" },
+      },
+    ]);
+  });
+
   it("refuses two parts that own the same header", async () => {
     await expect(
       createExecutor(

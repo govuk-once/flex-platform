@@ -1,7 +1,9 @@
+import type { DriverLogger } from "@repo/gateway-types";
 import { isScalar } from "@repo/utils/is-scalar";
 import type { Logger } from "pino";
 import pino from "pino";
 
+import { driverLogger } from "./context.ts";
 import type { CompiledPath } from "./field-path.ts";
 import { resolvePath } from "./field-path.ts";
 
@@ -9,6 +11,12 @@ export type { Logger } from "pino";
 
 export function createLogger(gatewayId: string): Logger {
   return pino({ name: gatewayId });
+}
+
+// Where a driver logs while its executor is created: the lines a request's context would write,
+// under the gateway's name, with no operation, since there is none yet.
+export function createStartupLog(gatewayId: string): DriverLogger {
+  return driverLogger(createLogger(gatewayId));
 }
 
 // Log scalar leaves only, so a newly nested field needs its own allowlist entry. Null is a leaf

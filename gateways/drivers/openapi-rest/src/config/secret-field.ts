@@ -4,8 +4,9 @@
 // configuration says which of its fields mean what.
 export interface SecretField {
   readonly secretField: string;
-  // Present in some secrets and not others, an external ID say. A field not marked optional
-  // must be there, or the secret is refused.
+  // One the secret's owner does not always provide, an external ID say: logged by name as the
+  // gateway starts when it is absent. A field not marked optional must be there, or the secret
+  // is refused.
   readonly optional: boolean;
 }
 

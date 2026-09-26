@@ -208,11 +208,28 @@ export async function buildExecutor(
   // Configuration is checked; now the deployment is. The initial secret is retrieved and every
   // field the configuration names is checked, and the authentication state built on it, before
   // there is an executor: a missing or invalid secret fails here, never on a request.
-  const secret = secretFields(config.id, options.secret, [
+  const fields = [
     ...(targetField === undefined ? [] : [targetField]),
     ...parts.flatMap((part) => part.fields),
-  ]);
+  ];
+  const secret = secretFields(config.id, options.secret, fields);
   const initial = await secret.get();
+
+  // A field marked optional is one the secret's owner does not always provide, and what reads it
+  // goes without: a header left out, UPSTREAM_TARGET used instead. Said once, as the gateway
+  // starts, so a field the owner stopped providing shows here rather than only as the upstream's
+  // refusal. The name is the configuration's; nothing of the secret is logged.
+  const absent = new Set(
+    fields
+      .filter((field) => field.optional && initial.get(field) === undefined)
+      .map((field) => field.secretField),
+  );
+  for (const field of absent) {
+    options.log?.info(
+      "An optional secret field is absent; what reads it goes without",
+      { field },
+    );
+  }
 
   // A target the secret names is used in place of UPSTREAM_TARGET, so the environment variable
   // and the secret can each be set without the other. Read once, here: an address that moves
