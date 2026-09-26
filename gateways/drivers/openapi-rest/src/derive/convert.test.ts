@@ -154,6 +154,41 @@ describe("convertSchema, for an input", () => {
     );
   });
 
+  it("leaves an object that names no field open, as an object of any shape, and says so", () => {
+    const { convert, conversion } = converting("input");
+
+    expect(
+      convert({
+        type: "object",
+        properties: {
+          bag: { type: "object" },
+          empty: { type: "object", properties: {} },
+          patterned: {
+            type: "object",
+            patternProperties: { "^x-": { type: "string" } },
+          },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        bag: { type: "object" },
+        empty: { type: "object", properties: {} },
+        // A pattern says which names it holds, so the rest are refused as any other field is.
+        patterned: {
+          type: "object",
+          patternProperties: { "^x-": { type: "string" } },
+          additionalProperties: false,
+        },
+      },
+      additionalProperties: false,
+    });
+    expect([...conversion.notes]).toEqual([
+      'here.properties.bag names no field, so it is left open as an object of any shape; an operation\'s "narrow" can state the shape it takes',
+      'here.properties.empty names no field, so it is left open as an object of any shape; an operation\'s "narrow" can state the shape it takes',
+    ]);
+  });
+
   it("leaves the parts of a composition open, and says so", () => {
     const { convert, conversion } = converting("input");
 
@@ -324,10 +359,10 @@ describe("convertSchema, for an outcome", () => {
       required: ["note"],
     };
 
+    // The object around it names no field of its own, so it is left open either way.
     expect(asInput({ type: "object", not: subject })).toEqual({
       type: "object",
       not: subject,
-      additionalProperties: false,
     });
     expect(asOutput({ type: "object", not: subject })).toEqual({
       type: "object",
