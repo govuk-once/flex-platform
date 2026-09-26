@@ -1,0 +1,108 @@
+name: Schema History
+
+# Against whatever the pull request targets, main or another in a stack: a version already on the
+# base is the one a later change must follow, and a stacked pull request retargeted to main is
+# checked again when it is.
+on:
+  pull_request:
+    # Labelling runs it again, so adding or removing the override takes effect without a push, and
+    # so does retargeting, which GitHub reports as an edit. An edit to the title or description
+    # runs it too: skipped instead, the check would count as passed, clearing a failure.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Codegen compares each version of a gateway's schemas with the one before it, as the files are
+  # now. A version edited or removed in place rewrites what the comparison starts from, so a break
+  # would pass it; a merged version is history, and only a new one may follow it.
+  #
+  # A version that was never deployed, a placeholder say, can be replaced once, by someone who can
+  # label the pull request with `schema-history-override`. Either way the pull request says so in a
+  # comment listing the versions changed, kept up to date as it changes, so a failure and an
+  # exception are both seen and not only logged.
+  schema-history:
+    name: Schema History
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # To say on the pull request which merged versions changed, and whether the label allows it.
+      pull-requests: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # the merge commit and the base it was made against
+          persist-credentials: false
+
+      - name: Refuse changes to merged schema versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OVERRIDDEN: ${{ contains(github.event.pull_request.labels.*.name, 'schema-history-override') }}
+        run: |
+          set -euo pipefail
+          # Without rename detection a moved version shows as the removal it is.
+          changed=$(git diff --no-renames --name-only --diff-filter=DMT HEAD^1 HEAD \
+            -- ':(glob)gateways/**/schemas/[0-9][0-9][0-9][0-9].json')
+
+          # The one comment this keeps, found by its marker among the bot's own.
+          MARKER="<!-- schema-history -->"
+          COMMENT_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$MARKER\"))) | .id" \
+            | head -n1)
+
+          # Nothing changed and nothing said before: no comment at all.
+          if [ -z "$changed" ] && [ -z "$COMMENT_ID" ]; then exit 0; fi
+
+          {
+            echo "$MARKER"
+            if [ -z "$changed" ]; then
+              echo "### ✅ Schema History"
+              echo
+              echo "No merged schema version is changed or removed."
+            else
+              if [ "$OVERRIDDEN" = "true" ]; then
+                echo "### ⚠️ Schema History overridden"
+                echo
+                echo "The \`schema-history-override\` label lets these merged schema versions change:"
+              else
+                echo "### ❌ Schema History"
+                echo
+                echo "These merged schema versions are changed or removed:"
+              fi
+              echo
+              echo '```txt'
+              echo "$changed"
+              echo '```'
+              echo
+              if [ "$OVERRIDDEN" = "true" ]; then
+                echo "Remove the label to refuse them again."
+              else
+                echo "A merged version is never changed; add the next version instead. Where one was never deployed, a placeholder say, someone who can label this pull request can allow it with \`schema-history-override\`."
+              fi
+            fi
+          } > comment.md
+
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$COMMENT_ID" -F body=@comment.md >/dev/null
+          else
+            gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@comment.md >/dev/null
+          fi
+
+          if [ -z "$changed" ]; then exit 0; fi
+          if [ "$OVERRIDDEN" = "true" ]; then
+            echo "::warning::Merged schema versions changed, allowed by the schema-history-override label"
+            echo "$changed" | sed 's/^/  - /'
+            exit 0
+          fi
+          echo "A merged schema version is never changed or removed; add the next version instead:"
+          echo "$changed" | sed 's/^/  - /'
+          exit 1

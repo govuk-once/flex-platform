@@ -15,12 +15,12 @@ gateways/
   drivers/
     openapi-rest/  HTTP request construction, status mapping, authentication and custom handlers
   services/
-    udp/           Example gateway configuration and schemas
+    udp/           The User Data Platform gateway: configuration and schemas
 ```
 
 The codegen CLI checks a gateway configuration against its schemas and writes the validators,
 the call contract and the entry point to `.gen/`; see [Code generation](#code-generation). For
-the included example, run:
+the UDP gateway, run:
 
 ```bash
 pnpm --filter @govuk-once/flex-gateway-udp codegen
@@ -53,21 +53,19 @@ definition; see [Authentication](#authentication).
 
 `defineGateway` preserves operation names in the inferred type and supplies policy defaults.
 The [UDP gateway](services/udp/gateway.config.ts) describes the User Data Platform API using
-the [openapi-rest driver](#the-openapi-rest-driver). It sends no credential yet, so its `auth` is
-`[]`; its deployment still names a secret, from which nothing is read.
+the [openapi-rest driver](#the-openapi-rest-driver), and reaches and authenticates to it with
+what UDP's own secret holds; see [Authentication](#authentication).
 
 ```ts
 import { defineGateway } from "@repo/gateway-config";
 import { openapiRest } from "@repo/gateway-driver-openapi-rest";
 
-import getIdentityExchange from "./handlers/get-identity-exchange.ts";
-
 export default defineGateway({
   id: "udp",
   description: "User Data Platform gateway",
   driver: openapiRest({
-    spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/refs/heads/main/docs/openapi.yml",
-    auth: [],
+    spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/7ed6c9a3c57c06a64995eaae00195189f533926b/docs/openapi.yml",
+    // …its `target` and `auth`, as under Authentication.
   }),
   operations: {
     createUser: {
@@ -77,9 +75,13 @@ export default defineGateway({
     getIdentityExchange: {
       description: "Look up a linked identity record for a different service",
       upstream: "GET /v1/identity/exchange",
-      parameters: { subjectId: { in: "query" } },
-      handler: getIdentityExchange,
+      parameters: {
+        requiredService: { in: "query" },
+        requestingService: { in: "header", name: "requesting-service" },
+        requestingServiceUserId: { in: "header", name: "requesting-service-user-id" },
+      },
     },
+    // …and each of UDP's other operations, and what Flex keeps in UDP's data store.
   },
 });
 ```
@@ -431,13 +433,11 @@ and an outcome the gateway does not declare is a type error.
 ```ts
 import type { GetIdentityExchangeResponse } from "./.gen/client/rpc.ts";
 
-export function linkedId(response: GetIdentityExchangeResponse): string | null {
+export function serviceId(response: GetIdentityExchangeResponse): string {
   if (!response.ok) throw new Error(response.error.code);
   switch (response.outcome) {
     case "ok":
-      return response.data.linkedId;
-    case "unlinked":
-      return null;
+      return response.data.serviceId;
   }
 }
 ```
@@ -914,7 +914,7 @@ openapiRest({
       role: {
         arn: fromSecret("consumerRoleArn"),
         externalId: fromSecret("externalId", { optional: true }),
-        sessionName: "udp-consumer-session",
+        sessionName: "consumer-session",
       },
     }),
   ],
@@ -1056,13 +1056,19 @@ it, so a plain function or a handler written for another driver is a type error 
 `defineHandler` also lets the author name the input type. Both paths use the same client, so every upstream call still goes
 through `ctx.upstream` once and maps transport errors the same way.
 
-The UDP gateway's [identity exchange handler](services/udp/handlers/get-identity-exchange.ts)
-turns the upstream's 404 into an `unlinked` outcome, which its schema declares alongside `ok`:
+A handler for an identity lookup might turn the upstream's 404 into an `unlinked` outcome, which
+the operation's schemas then declare alongside `ok`:
 
 ```ts
 import { defineHandler } from "@repo/gateway-driver-openapi-rest";
 
-export default defineHandler(async (input: { subjectId: string }, client) => {
+interface IdentityExchangeInput {
+  requiredService: string;
+  requestingService: string;
+  requestingServiceUserId: string;
+}
+
+export default defineHandler(async (input: IdentityExchangeInput, client) => {
   const response = await client.request(client.prepare(input));
   if (response.status === 404) {
     return { outcome: "unlinked", data: null };
