@@ -10,3 +10,4 @@ dist/
 coverage/
 .env
 .turbo/
+.astro/

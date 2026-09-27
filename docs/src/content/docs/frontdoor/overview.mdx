@@ -1,0 +1,52 @@
+---
+title: Frontdoor
+description: The single CloudFront distribution that every request enters through. It checks, authenticates, routes and signs requests.
+sidebar:
+  label: Overview
+---
+
+import { Badge } from "@astrojs/starlight/components";
+
+<Badge text="Planned" variant="caution" size="medium" />
+
+This page describes the intended request flow. The edge functions and their infrastructure are
+not implemented in this repository.
+
+Every request from the GOV.UK app enters Flex through one CloudFront distribution, on one domain
+name, whichever domain the request is for. AWS WAF and AWS Shield protect the distribution.
+
+Two kinds of edge function act on a request before it reaches a domain. A CloudFront Function runs
+first, then Lambda@Edge.
+
+## Structural checks
+
+A **CloudFront Function** runs on each request as it arrives. It checks the request's structure,
+for example that it carries a bearer token of the right shape. A malformed request goes no
+further. The function does not verify any signature. The next step does that.
+
+## Authentication
+
+**Lambda@Edge** verifies the caller's Amazon Cognito access token. If this fails, the edge answers
+the request and it never reaches a domain.
+
+## Routing
+
+Lambda@Edge then uses the first segment of the path to decide which domain the request is for.
+Each domain is its own Amazon API Gateway with its own domain name. Lambda@Edge forwards the
+request to that domain with the rest of the path:
+
+```txt
+https://<platform-domain>/<domain>/<path>   →   https://<domain>.<api-domain>/<path>
+```
+
+So a domain sees requests at its own root. It never sees the path segment used to route to it.
+However many domains there are, the app sees one distribution.
+
+## Signing
+
+Lambda@Edge signs the request it forwards with AWS Signature Version 4.
+
+The two authentication steps serve different purposes: the Cognito check establishes the app
+caller's identity, while SigV4 authenticates the request sent by the platform to the domain's
+Amazon API Gateway. A domain still needs to apply the feature's rules about which records and
+actions that user may access. See [Identity and linked accounts](/flex-platform/domains/designing-a-domain/#identity-and-linked-accounts).
