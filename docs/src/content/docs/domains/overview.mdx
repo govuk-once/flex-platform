@@ -1,0 +1,68 @@
+---
+title: Domains
+description: What a domain is, where its code lives, how it is released, and how it calls gateways.
+sidebar:
+  label: Overview
+---
+
+import { Aside, Badge } from "@astrojs/starlight/components";
+
+<Badge text="Planned" variant="caution" size="medium" />
+
+A **domain** is the logic behind a personalised feature of the GOV.UK app. It sits between the app
+and the upstreams that hold the data it needs.
+
+In the planned hosting model, each domain is an Amazon API Gateway at its own domain name. A
+Lambda proxy integration hands every request to the domain's code. The
+[Frontdoor](/flex-platform/frontdoor/overview/) routes requests to the domain. The app never calls a domain directly.
+
+Developers outside the platform team write domains. A domain defines the behaviour the app needs:
+it can expose data from one upstream, combine several upstream calls, or compute a response without
+an upstream call. See [Designing a domain](/flex-platform/domains/designing-a-domain/) for examples
+and the boundary between domain logic and gateway code.
+
+## Where a domain's code lives
+
+Domain code will live with the team that writes it and use libraries published by the platform.
+This repository does not yet include a domain skeleton, hosting infrastructure or domain libraries.
+
+## Releasing a domain
+
+A domain publishes a new version to its development environment. This development environment
+runs inside the platform's production environment. From there, the domain promotes the version to
+staging, and then to production.
+
+## Network
+
+A domain's Lambda runs in `isolated` subnets, with no route to the internet. It reaches upstreams
+through a gateway. An upstream might be another team's API, an AWS-hosted service or a third
+party.
+
+## Calling gateways
+
+A domain calls a gateway through a gateway client library. This is a typed library, generated from
+the gateway's [call contract](/flex-platform/codegen/call-contract/), that domain developers
+install. The library invokes the gateway's Lambda function directly through the Lambda API, not
+over HTTP.
+
+As a result:
+
+- a gateway's handler takes an [envelope](/flex-platform/gateways/overview/#a-request) that names
+  the operation, not an HTTP event. It answers with an outcome name, not a status code.
+- codegen writes the contract to `.gen/client/`, separate from what the gateway runs in
+  `.gen/runtime/`, because the two are deployed separately.
+- an invocation client must send each call only once, with the SDK's retries turned off
+  (`maxAttempts: 1`). A retried invoke could repeat an upstream write. Deciding whether to retry
+  needs to know the operation and the deadline.
+
+## Domain libraries
+
+<Aside type="note" title="To do">
+The platform will publish libraries, with examples, that domain developers install to build a
+domain. They are not written yet. This section will describe them when they are.
+</Aside>
+
+## API specifications
+
+Publishing each domain's OpenAPI specification is planned. How it will be published is not yet
+decided.
