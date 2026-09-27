@@ -1,364 +1,43 @@
 # CLAUDE.md
 
-Contributor conventions for AI agents and humans working in this repository. Read this file
-before making changes. Work within the requested scope; design constraints are not a work queue.
+Flex is the platform behind the GOV.UK app. This repository holds its egress section: the gateway
+libraries and shared development tooling. The rest of the platform is planned, and
+`docs/src/content/docs/start/platform.mdx` describes it.
 
-## Purpose and structure
+The documentation site in `docs/src/content/docs/` is the source of truth for how the platform
+works and the rules for changing it. The pages below hold the rules every change follows, and are
+imported here so they are always in context:
 
-Flex Platform contains gateway libraries and shared development tooling. A gateway groups
-operations for one upstream, keeping transport details separate from validation and dispatch.
+@docs/src/content/docs/start/working-in-the-repo.md
+@docs/src/content/docs/start/conventions.md
+@docs/src/content/docs/reference/design-constraints.md
 
-- `packages/`: TypeScript, ESLint and Vitest configuration shared across the repository, and
-  `utils`, generic functions that name nothing of a gateway.
-- `gateways/shared/config`: `defineGateway`, the driver definition with its `createExecutor`
-  contract and neutral `ExecutorOptions`, operation types and policy presets.
-- `gateways/shared/types`: envelope shapes and what may be reported beside a result, error
-  codes, the shared `Validator` interface, the driver context and execute types, the operation
-  schema shapes and the secret provider shape.
-- `gateways/shared/runtime`: envelope parsing, dispatch, input and outcome validation, secure
-  value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
-  gateway secret from AWS Secrets Manager through Powertools Parameters.
-- `gateways/shared/codegen`: schema loading, the comparison of each version of a gateway's
-  schemas with every one before it, the build-time check of a configuration against its schemas,
-  standalone JavaScript validator generation, the call contract and the entry point that wires
-  a gateway to the dispatcher; and `gateway-schemas`, the command that derives a gateway's
-  schemas through its driver and writes the next version when the shape changed safely.
-- `gateways/drivers/openapi-rest`: the HTTP driver. Builds `fetch` requests from operation
-  mappings, maps statuses to outcomes and error codes, and dispatches to custom handlers the
-  entrypoint supplies. Nothing in it is called by hand; a generated entrypoint wires it.
-  `src/config/` is what a gateway configuration imports and codegen evaluates; `src/runtime/`
-  is reached only through the definition's `createExecutor`, which loads it, and a lint rule
-  keeps the two apart. `src/derive/` derives a gateway's schemas from its upstream's OpenAPI
-  document; the definition gives it as a URL and nothing imports it, so its parser is never
-  deployed.
-- `gateways/services/udp`: the User Data Platform gateway, its configuration and its versioned
-  schemas.
+## Left to a person
 
-The CLI reads the latest version in a gateway's `schemas/` directory, JSON files numbered from
-`0001.json`, checks the configuration against it, and writes the validators, the entry point and
-its esbuild bundle to `.gen/runtime/` and the call contract to `.gen/client/`. It does not
-produce a client:
-a consumer takes the generated types and invokes the deployed gateway itself. Token and
-signature verification are not implemented; secure bindings check value consistency only. Of
-the policy settings, only `upstreamTimeout` is enforced.
+- Run `pnpm schemas` only when asked. It reaches the network and writes schema versions, and a
+  person reviews what it writes.
+- Never add the `schema-history-override` label to a pull request. It exists so that a person
+  decides to change a merged version.
 
-See [the gateway guide](gateways/README.md) for configuration and runtime behaviour.
+## Reading the site
 
-## Commands
+A link on the site such as `/flex-platform/gateways/overview/#a-request` is the file
+`docs/src/content/docs/gateways/overview.md` (or `.mdx`), at that heading. The home page,
+`/flex-platform/`, is `index.mdx`. Before you change an area, read its page:
 
-Run from the repository root. Turborepo orchestrates per-package tasks.
-
-```bash
-pnpm install          # link the workspace and install dependencies
-pnpm lint             # eslint, all packages
-pnpm typecheck        # tsc --noEmit, all packages with a typecheck script
-pnpm codegen          # generate validators for gateways that configure it
-pnpm schemas          # bring each gateway's schemas up to date with its upstream; by hand, never in CI
-pnpm test             # vitest run, all packages
-```
-
-Per package: `pnpm --filter <name> <script>`.
-
-Use pnpm and the existing scripts. Do not use `npx`, `npm`, `yarn` or `pnpx`; use `pnpm exec`
-when a tool has no package script.
-
-## Toolchain
-
-| Tool | Convention |
+| Area | Page |
 |---|---|
-| Runtime | Node 24 (`.nvmrc`), ESM, async handlers |
-| Packages | Export TypeScript source from `package.json`; nothing compiles or emits `dist/` |
-| Language | TypeScript strict mode, including `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` and `verbatimModuleSyntax` |
-| Package manager | pnpm workspaces; version pinned in the root `packageManager` field |
-| Task runner | Turborepo |
-| Validator bundler | esbuild, ESM output targeting Node 24 |
-| Tests | Vitest with `globals: false`; import test helpers explicitly |
-| Validation | Ajv standalone validators from JSON Schema |
-| OpenAPI | `@scalar/openapi-parser` reads a document and rewrites 3.0 as 3.1; build-time only, in `openapi-rest/src/derive/` |
-| Logging | pino, with payload fields selected through `log.input` and `log.output` |
-
-Check installed dependencies and APIs before using them. Dependency version pins are exact
-(`savePrefix: ""`); keep them exact.
-
-## Repository conventions
-
-- Keep gateway-specific code under `gateways/`. `packages/` holds what the repository shares
-  with no gateway vocabulary in it: its tooling, and `@repo/utils`. Anything that names an
-  envelope, an operation, a driver or a schema belongs in `gateways/shared/`.
-- `@repo/utils` exports one function per module, imported by its own path
-  (`@repo/utils/sorted-entries`), so a consumer takes what it uses and nothing else. A module is
-  exported once something outside the package uses it; what only the package uses lives under
-  `src/internal/`, which its exports refuse. Sort
-  through it: `sortedNames` and `sortedEntries` order by code unit, which is the same on every
-  machine, where `localeCompare` — what a linter suggests for sorting "alphabetically" — depends
-  on the runtime's locale and ICU data. Generated files, the digests taken over them and the
-  canonical payload a secure envelope is built from all have to come out the same twice.
-- Each package owns its configuration and extends the shared tooling. Add a root-level tool
-  configuration only when the tool requires it, with a comment explaining why.
-- Every package extends the one TypeScript base, `base.json`: strict, no emit. Packages export
-  their `.ts` sources directly; Vitest, esbuild and tsx consume them as they are.
-- ESLint provides `base`, `driver` and `service` presets. Drivers own transport access; services
-  must use gateways. The service preset restricts common network globals and builtin imports;
-  it is not a complete enforcement mechanism for network isolation. Review transport access.
-- Generated artifacts are ignored, including `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and
-  `coverage/`. Do not commit them.
-- Publishable packages use the `@govuk-once/` scope. Registry configuration lives in `.npmrc`.
-
-## Design constraints
-
-These are the boundaries whose violation is silent: the build stays green, the tests pass, and
-the behaviour is wrong somewhere else. That is why they are listed rather than left to judgement.
-Preserve them when extending the code. Requirements for integrations do not imply those
-integrations are implemented.
-
-1. **Transport-neutral contracts.** Runtime and codegen share JSON Schema and opaque driver
-   definitions. Upstream methods, paths, status codes and headers belong in transport adapters.
-   Adding a transport should not require transport-specific logic in the dispatcher or generator.
-   `gateways/drivers/openapi-rest` is the only package that names methods, paths, status codes
-   or headers; callers see outcome names such as `ok` and `no_content`, never a status.
-   Every driver derives its gateways' schemas, from the upstream's own description or from what
-   the configuration declares, so no version is written by hand. It gives the module that does
-   as a `file:` URL built from its own, `deriveSchemasModule`, and never imports it: the entry
-   point imports the configuration and the bundler follows every import from there, so an import
-   would put whatever parses an upstream's description into the deployed gateway.
-   `gateway-schemas` loads it to write a version, and codegen loads it with the network refused
-   to check the latest version is still what it derives. Nothing bundles it. What
-   either command prints, a report or the error that stopped it, carries upstream text: it goes
-   out through `printable`, which writes what does not display as its code point.
-   A driver definition carries its own `createExecutor`, so codegen and a generated entrypoint
-   reach any driver the same way, as `config.driver`, and pass it the neutral `ExecutorOptions`;
-   nothing outside a configuration names a driver package. A driver's handler type is a
-   `BrandedHandler` carrying its `type`, produced only by that driver's `defineHandler`; a
-   configuration imports its handlers statically and sets them on operations, so a handler
-   cannot be wired to the wrong driver. Anything an entrypoint would need to know about a
-   specific driver or gateway is a design error.
-
-2. **Upstream calls use the driver context.** Make each upstream call with `ctx.upstream(fn)`,
-   invoked once per call. The runtime invokes `fn` once per attempt, so `fn` must build its request
-   each time and must not retry internally: a driver never expresses retry behaviour and so cannot
-   get it wrong. The one exception is sending a GET once more after the upstream refused the
-   gateway's credentials, with the secret read again (constraint 12), inside the same attempt. Each
-   attempt passes a fresh abort signal, which the driver should wire into its transport; the
-   runtime bounds the whole of `fn` regardless, so a driver that ignores it stays correct but leaks
-   the connection. Distinct calls are separate `upstream` invocations and share no attempt state,
-   so parallel calls cannot spend each other's allowance. Convert transport errors to
-   `GatewayError` with controlled diagnostic messages; library errors can contain payload data.
-
-3. **Validate before dispatch and before returning data.** Preserve the handler's order:
-   envelope parsing, token-verification hook, routing, input validation, secure bindings,
-   deadline derivation, execution, outcome validation, health classification and response.
-   The token hook currently performs no verification. Invalid configuration should fail when
-   creating the handler, not per request. The handler compiles once and takes each
-   invocation's deadline as an argument; nothing per invocation is captured at creation. A
-   driver's `createExecutor` is asynchronous for the same reason: it retrieves the gateway
-   secret through the provider in its options, validates it and instantiates its
-   authentication state before it resolves, so a missing or invalid secret fails at startup and
-   never on the first request. Look
-   up outcome validators through a `Map`, never a plain object: the outcome name arrives from
-   the driver at request time, and an object lookup finds inherited members. A validator reads
-   the fields an object holds and never one it inherits, for the same reason at the other end:
-   every value it sees came from `JSON.parse`, so `Object.prototype` is behind it and a schema
-   naming `constructor`, `toString` or any other member of it would be answered by the
-   prototype. Ajv is asked for that by name, wherever a schema is read; refusing `__proto__`
-   does not reach it, since the names are the prototype's own and no schema has to mention them
-   for a caller to be held to what they hold.
-
-   Each step owns a code: `INVALID_INPUT` for envelope parsing and input validation,
-   `OPERATION_NOT_FOUND` for an unknown operation, `SECURE_VALUE_MISMATCH` for bindings,
-   `UPSTREAM_CONTRACT_VIOLATION` for outcome validation, and `INTERNAL` for anything uncaught.
-   Execution surfaces any `GatewayError` the driver raises; the runtime itself adds only
-   `UPSTREAM_TIMEOUT` at that step. Input validation runs before any upstream call, so an
-   invalid request never reaches one. Nothing throws out of the handler; every failure leaves
-   as an envelope.
-
-4. **Errors carry codes.** Failure responses are `{ ok: false, error: { code } }`. Diagnostic
-   messages stay in logs and must be safe to log. A `GatewayError` is the declaration that a
-   message is safe: the runtime records it as written. Any other error is logged as its source
-   locations and the dispatcher step only, because a library or a custom handler can put a
-   payload in the message, the name, the properties, the cause or the stack text, which is
-   writable. The locations are read from V8's structured frames through a temporary
-   `Error.prepareStackTrace` hook, as file, line and column only, never from the stack string;
-   a stack already formatted or replaced yields none, and summarising an error must never
-   throw. Source filenames are trusted deployment metadata: eval frames are skipped, but that
-   does not cover every way a script can be created under a payload-derived name, so the
-   protection covers what an error says, not where code chose to load itself from. Drivers
-   therefore raise their own request-time failures as `GatewayError`, `INTERNAL` for
-   configuration bugs, so the diagnosis survives.
-   Success responses use `{ ok: true, outcome, data }`, keeping the outcome separate from
-   upstream fields. Either response may carry `meta`, what the gateway declared it reports
-   beside a result, such as an upstream's id for a request. It is not a way round this rule:
-   only names the schemas declare, each a scalar validated against its schema, and never a
-   message. A driver reports through `ctx.meta`, since one that fails throws; the runtime leaves
-   out what fails validation, logs where and never what, and lets nothing reported fail a call,
-   the unhandled path included. Every part of it is optional to a caller. A driver names it
-   neutrally: a caller never sees the header, or whatever else, it came from.
-
-5. **Error codes declare health semantics.** Every code in `ERROR_CODES` has a signal ruling.
-   `NOT_FOUND` and `UPSTREAM_REJECTED` represent an upstream response; contract violations and
-   timeouts represent failures. Gateway-side rate limits and breaker rejections must remain
-   neutral to upstream health to avoid feeding a control's own output back into it. The runtime
-   currently logs these classifications; it does not operate a breaker. An upstream 429 also
-   maps to `RATE_LIMITED` and keeps that neutral ruling: the gateway's own limit should sit
-   below any upstream threshold, so reaching one is a gateway configuration problem.
-
-6. **Payload logging is explicit and leaf-only.** Select fields with `log.input` and
-   `log.output`. Paths resolving to objects or arrays are dropped so newly added nested fields
-   are not logged automatically. Keep tests checking that unselected fields and synthetic
-   secrets are absent from captured payload logs. Review diagnostic messages separately: a
-   validation failure is logged as the schema locations that rejected it, never as an instance
-   path, whose segments a dictionary schema takes from the caller's own keys. The operation name
-   is the caller's too, so it is logged, in a message or as a field, only once it has matched a
-   configured operation; an unknown one is left out rather than repeated. A driver logs through
-   `ctx.log`, a message and scalar fields of its own that the runtime keeps under `driver`,
-   beside the matched operation. Driver code is reviewed like the runtime's, and its lines are
-   held to the same rule: never a credential, a payload value, or text a caller or an upstream
-   wrote.
-
-7. **Preserve contract compatibility.** Changes to an established gateway contract must be
-   additive. An incompatible contract requires a distinct gateway identity. The exception is
-   `meta`: a name may be removed as well as added, since every part of it is optional to a
-   caller, and a name that stays is held to the rules for an outcome's data. Codegen enforces
-   this for the schemas by comparing each version in a gateway's `schemas/` with every one
-   before it, not only its neighbour, since removing a `meta` name and adding it back is safe at
-   each step. CI refuses a change to a merged version, which would change what the others are
-   held to. Keep three things true of the comparison: whatever it cannot place counts as a break,
-   `oneOf` is not read as a union, and a definition is read on each side of the call it is used
-   on. It does not cover the types the generator emits for an unchanged schema, or the error
-   codes, so a change to either still needs this rule applied by hand. The rules are in
-   [the gateway guide](gateways/README.md#compatibility-between-versions).
-
-8. **Avoid duplicate upstream writes.** Any invocation client must disable automatic SDK
-   retries (`maxAttempts: 1`). Retry decisions require operation and deadline awareness;
-   transport retries alone do not provide that, and neither does an attempt count in the
-   policy, which is why there is none. Nothing retries a call today. The single replay after a
-   refused credential is for a GET only: a 401 or a 403 does not show that the upstream refused
-   before acting, since API Gateway passes on whatever status the service behind it chose, so a
-   write that is refused is never sent again.
-
-9. **Emitted validators are self-contained JavaScript.** Bundle Ajv runtime helpers and formats
-   at generation time, resolving them from codegen's dependencies. Do not maintain a manual
-   list of helpers. Validator output has no package imports or declaration files; this rule
-   applies to validators, not every possible generated artifact. The entry point and the call
-   contract do import packages, and the entry point is JavaScript for the same reason the
-   validators have no declarations: a TypeScript module could not import them. Preserve
-   subprocess tests outside workspace dependency resolution and fixtures that exercise runtime
-   helpers. Generated code is not typechecked and nothing outside `.gen/` imports it, so the
-   generated contract is checked by compiling it in a codegen test.
-
-10. **Keep shared types independent of execution.** `@repo/gateway-types` has no package
-    dependencies. Consumers can name envelopes and error codes without installing the runtime
-    or generator. Parsing and `GatewayError` belong in the runtime. Import a shared type from
-    the package that declares it: no package re-exports another's types, and every package that
-    uses one declares the dependency itself. Preserve literal operation names in `defineGateway`
-    types.
-    A driver that needs a check relating one operation field to another registers it by
-    augmenting `OperationRefinements`, keyed by its literal `type`; the config package holds
-    only that slot and no driver vocabulary.
-
-11. **Keep configuration environment-independent.** Do not hard-code deployed addresses,
-    credentials or environment names in gateway code. Deployment-specific configuration belongs
-    at the integration boundary. Every driver takes its secret from the AWS Secrets Manager
-    secret whose ARN is in `UPSTREAM_SECRET_ARN`, required, a gateway that sends no credential
-    included, and its upstream location from `UPSTREAM_TARGET` where that is set; both are named
-    in the runtime. A secret may be the gateway's own or one an upstream provides in a shape of
-    its own, so a driver may also take the location from a field of the secret its configuration
-    names. That field is used in place of `UPSTREAM_TARGET` when both are there, and a driver
-    with neither refuses to start. What the target means, and which fields of the secret are
-    read, are the driver's decisions, declared on its definition; the runtime only retrieves the
-    secret as a JSON object and caches it for a bounded age. Read the variables at the
-    entrypoint through `readUpstreamOptions`, which builds the secret provider, and pass the
-    result in, never inside a request. A gateway configuration never names an ARN or a secret
-    value, and importing one never reaches the environment or AWS.
-
-12. **Secrets are validated before use and authentication is driver-owned.** The runtime reads
-    the secret through Powertools Parameters as a JSON object, served from its cache for a
-    bounded age and read again after that; concurrent reads on an expired cache may each reach
-    the store, and a read a caller has stopped waiting for completes on its own. It knows
-    nothing of the fields. A driver reads only the fields its configuration names, each with
-    `fromSecret` and none by default, checks every one on the initial secret and on every read
-    after it, before any value reaches authentication code, and ignores the rest; an invalid
-    secret is never returned and the affected operation fails. Diagnostics about a secret name
-    the field and the rule it broke, never a value or a field the configuration did not name; a
-    failed read is reported as a fixed message with nothing of the library's error. An optional
-    field the secret does not hold is logged by name as the gateway starts. A gateway's
-    authentication is a list of parts, each shown the headers the ones before it set. A part
-    declares the headers it owns and the fields it reads; the driver reserves the owned headers
-    before compiling operations, so no static header, mapping, handler or other part can set
-    them, and a part may set no other. It is shown a copy of the request it is authenticating,
-    method, address, headers and body, because a scheme such as `sigV4` signs the request rather
-    than attaching a credential; nothing it does to the copy is sent. `sigV4` signs as a role the
-    secret names, assumed through STS with the gateway's own credentials. A part's state is built
-    per executor, its network access goes through the driver's transport facility, and nothing
-    in a configuration module reads a secret or exchanges a token at import. Assuming a role is
-    the one exception to the transport: it goes to STS through the AWS SDK, as the secret itself
-    is read. Token and session expiry belong to the part. When the upstream refuses the
-    gateway's credentials, with a 401 or a 403, the driver reads the secret again from the store
-    and has every part drop what it holds: a rotation replaces credentials faster than the cache
-    expires. A GET is then sent once more, inside the same attempt, and only the second answer is
-    mapped and counted; any other method is not sent again (constraint 8), and its refusal stays
-    the answer even when that read fails. Only for a gateway that sends a credential.
-
-13. **Schema text is data, wherever it is written.** A version's descriptions can come from an
-    upstream's own document, and the call contract writes them into code a caller compiles.
-    `docComment` is the only way text becomes a comment: it keeps `*/` from ending one, writes
-    every `@` as a character reference so no text can open a JSDoc tag wherever it stands, and
-    writes every line inside one block, on lines of its own, since the compiler attaches nothing to
-    a comment that shares a line with the token before it. A tag the contract carries is one the
-    generator wrote from what a schema declares. Escaping an `@` rather than replacing it is not
-    enough: `stripInternal` reads the comment text and would remove a declaration while what refers
-    to it stays. Names and values reach generated code through `JSON.stringify` or
-    `assertIdentifier`, never by interpolation. Characters that do not display are refused when a
-    version is read, in names and values alike and from the parsed value, so a reviewer sees what
-    the file holds. Keep the tests that compile a contract built from hostile text, the ones that
-    emit declarations from it with `stripInternal` on, and the ones that prove both can see a tag
-    at all.
-
-14. **Inputs are held to everything, outcomes to their shape.** Deriving closes every object of
-    an input that names its fields and says nothing of the rest, and keeps every constraint and
-    `enum` exactly; for an outcome it opens closed objects, drops bounds, `pattern` and `format`,
-    and turns an `enum` into the values it knows of beside their type. The reason is the
-    direction each can move in without breaking a caller: an input can be loosened later and
-    never tightened, and an upstream adds fields, values and length to what it sends without
-    asking. Making an outcome stricter makes a minor release upstream a failed response in
-    production; making an input looser cannot be undone. An object that names no field is an
-    object of any shape, which closed would admit only `{}`: it stays open, and the contract
-    types it as one, until an operation's `narrow` states its shape. The contract's types stay
-    closed otherwise, so nothing suggests fields a caller's version does not declare.
-
-15. **No caller chooses an upstream path.** A path parameter is one segment, and the driver
-    refuses a value that holds a "/". A template that takes the rest of a path, `{name+}`, is
-    reached only by an operation that writes its path out in full and names the template as its
-    `matches`; deriving fails for a path the document lacks otherwise, and refuses a path a more
-    specific template would be routed to, or one a router could read as another: an empty
-    segment, or a slash or a backslash written inside one. A parameter a caller could fill with
-    several segments would let one operation reach every other's endpoint past its input schema,
-    its `secure` bindings and its logging. What such a template leaves unsaid, the operation
-    states as `narrow`: in place of an object of any shape, and set into anything the document
-    does describe, where it can only make a schema admit less.
-
-## Public documentation and comments
-
-Describe implemented behaviour and the rationale needed to maintain it. Include proposed changes
-only when they explain an existing design constraint, label them clearly, and review their
-relevance and security implications before publication. Keep implementation schedules and
-sensitive operational details out of public contributor guidance. Preserve limitations needed
-to use the code safely; do not imply that an unimplemented control provides protection.
-
-Keep comments close to the code they explain. Prefer a short explanation of a constraint or
-non-obvious decision over a roadmap, a deployment narrative or a repeat of this guide.
-
-## Build and test notes
-
-- Nothing is compiled, apart from the generated entry point, which codegen bundles with esbuild
-  so a gateway that cannot be bundled fails generation. Only Node's builtins are left external:
-  the AWS SDK is bundled at the version the lockfile pins, although the Lambda runtime ships one
-  of its own. Workspace packages resolve to each other's sources, so typecheck and tests see a
-  dependency change immediately and no task waits on another package.
-- Test the libraries, not each gateway. Generation, bundling and dispatch are covered against
-  the fixture gateway in `gateways/shared/codegen/test/`; a gateway package tests only its own
-  custom handlers, since there will be many gateways and a deployment is what exercises one.
-- The codegen CLI is `src/cli.ts`, started by `bin/gateway-codegen.js`, which registers tsx
-  and imports it. The CLI and the gateway configurations it loads therefore have the whole
-  language available, not the subset Node strips on its own.
-- Test literal operation-key inference at the type level; widening it to `string` loses useful
-  information for codegen and handler authors.
+| The platform's sections | `start/platform.mdx`, `frontdoor/`, `domains/` |
+| What is implemented and what is planned | `start/platform.mdx` |
+| Packages and what each holds | `reference/packages.md` |
+| How a gateway works, dispatch order | `gateways/overview.md` |
+| Configuration, policy, logging, bindings | `gateways/configuration.md` |
+| Schema versions and `gateway-schemas` | `gateways/schemas.md` |
+| Deriving schemas, from a description or the configuration | `drivers/contract.md`, `codegen/checks.md` |
+| Compatibility between versions | `gateways/compatibility.md` |
+| Envelopes, `meta`, error codes, health | `gateways/responses.md` |
+| Codegen output, checks, entry point, bundle, contract | `codegen/` |
+| The driver contract, and writing a driver | `drivers/contract.md`, `drivers/writing-a-driver.md` |
+| The openapi-rest driver | `drivers/openapi-rest/` |
+| Environment variables and the secret | `reference/environment.md` |
+| Terms | `reference/glossary.md` |
