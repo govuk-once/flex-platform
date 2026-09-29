@@ -19,7 +19,7 @@ operations for one upstream, keeping transport details separate from validation 
   value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
   gateway secret from AWS Secrets Manager through Powertools Parameters.
 - `gateways/shared/codegen`: schema loading, the comparison of each version of a gateway's
-  schemas with the one before it, the build-time check of a configuration against its schemas,
+  schemas with every one before it, the build-time check of a configuration against its schemas,
   standalone JavaScript validator generation, the call contract and the entry point that wires
   a gateway to the dispatcher; and `gateway-schemas`, the command that derives a gateway's
   schemas through its driver and writes the next version when the shape changed safely.
@@ -209,9 +209,10 @@ integrations are implemented.
    additive. An incompatible contract requires a distinct gateway identity. The exception is
    `meta`: a name may be removed as well as added, since every part of it is optional to a
    caller, and a name that stays is held to the rules for an outcome's data. Codegen enforces
-   this for the schemas by comparing each version in a gateway's `schemas/` with the one before
-   it, and CI refuses a change to a merged version, which would move where that comparison
-   starts. Keep three things true of the comparison: whatever it cannot place counts as a break,
+   this for the schemas by comparing each version in a gateway's `schemas/` with every one
+   before it, not only its neighbour, since removing a `meta` name and adding it back is safe at
+   each step. CI refuses a change to a merged version, which would change what the others are
+   held to. Keep three things true of the comparison: whatever it cannot place counts as a break,
    `oneOf` is not read as a union, and a definition is read on each side of the call it is used
    on. It does not cover the types the generator emits for an unchanged schema, or the error
    codes, so a change to either still needs this rule applied by hand. The rules are in

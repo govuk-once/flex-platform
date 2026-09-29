@@ -1259,11 +1259,31 @@ describe("checkVersions", () => {
     expect(thrown).toBeInstanceOf(SchemaCompatibilityError);
     expect((thrown as SchemaCompatibilityError).problems).toEqual([
       '0001 -> 0002: operations.op.input.required: "age" is now required',
+      '0001 -> 0003: operations.op.input.required: "age" is now required',
       "0003 -> 0004: operations.op.input.type: changed from object to string",
       "0003 -> 0004: operations.op.input.properties.age: was removed",
       "0003 -> 0004: operations.op.input.properties.name: was removed",
     ]);
     expect((thrown as Error).message).toContain('Gateway "test"');
+  });
+
+  it("holds a version to every one before it, not only the last", () => {
+    // Each step is safe: a name may go, and one that is new may be anything. A caller of 0001
+    // still reads `requestId` as a string.
+    const reporting = (meta: Record<string, JSONSchema>) => ({
+      meta,
+      ...asInput({ type: "object" }),
+    });
+
+    expect(() =>
+      checkVersions("test", [
+        version("0001", reporting({ requestId: { type: "string" } })),
+        version("0002", reporting({})),
+        version("0003", reporting({ requestId: { type: "integer" } })),
+      ]),
+    ).toThrow(
+      "0001 -> 0003: meta.requestId.type: changed from string to integer",
+    );
   });
 
   it("finds a break two versions added together would hide", () => {

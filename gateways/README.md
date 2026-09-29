@@ -176,10 +176,10 @@ dispatch are covered by the libraries' own tests, against a fixture gateway in
 `gateways/shared/codegen/test/`, so a new gateway adds no test of its own beyond its handlers.
 
 Everything that can refuse a gateway runs before anything is written: the schemas compile, each
-version follows the one before it safely and the configuration agrees with the latest. Only then
-is `.gen/` deleted and written again, so a gateway refused for its schemas or configuration keeps
-the output it had. What can still fail is writing and bundling; a run that fails there fails the
-command and leaves an incomplete `.gen/`, which the next run replaces.
+version is safe for a caller of every one before it and the configuration agrees with the latest.
+Only then is `.gen/` deleted and written again, so a gateway refused for its schemas or
+configuration keeps the output it had. What can still fail is writing and bundling; a run that fails
+there fails the command and leaves an incomplete `.gen/`, which the next run replaces.
 
 - **A run reads a directory, not a configuration.** It reads `gateway.config.ts` and the latest
   version in `schemas/` from the bytes on disk rather than from what a process loaded earlier,
@@ -203,13 +203,13 @@ schemas/
 ```
 
 Codegen generates from the highest-numbered version, and a merged version is never changed or
-removed: a change to the contract is the next version. Each version is checked against the one
-before it as the files are now, so one rewritten in place would move what the check starts from;
-CI refuses a pull request that changes or removes one. Versions are four digits, numbered from
-`0001` with none left out, so the names sort into the order they were written in; a directory
+removed: a change to the contract is the next version. Each version is checked against every one
+before it as the files are now, so one rewritten in place would change what the check holds the
+others to; CI refuses a pull request that changes or removes one. Versions are four digits, numbered
+from `0001` with none left out, so the names sort into the order they were written in; a directory
 that holds anything else, or whose numbering has a gap, fails generation rather than being read
-around. A version holds the shared definitions and, for each operation, an input schema and a
-schema for each outcome:
+around. A version holds the shared definitions and, for each operation, an input schema and a schema
+for each outcome:
 
 ```json
 {
@@ -282,10 +282,14 @@ before anything reads its characters, and the diagnostic names the field that ca
 
 #### Compatibility between versions
 
-A caller written against one version has to survive the next, so codegen compares each version
-with the one before it, all the way back, and fails when any step would break a caller. Reading
-only the last step would let two versions added together hide a break in the first. The two
-sides of a call run in opposite directions:
+A caller written against one version has to survive every version after it, so codegen compares
+each version with every one before it and fails when any would break a caller. Comparing only
+neighbours is not enough: a [metadata](#responses-and-errors) name removed in one version and
+added back as another type in the next is safe at each step, and breaks a caller of the version
+before the removal. Comparing only the latest is not enough either, since two versions added
+together could hide a break in the first. A break is reported once, against the latest version it
+breaks. One in a version that is not merged yet is fixed there, or the version is removed and
+those after it renumbered. The two sides of a call run in opposite directions:
 
 | | Breaks a caller | Safe |
 |---|---|---|

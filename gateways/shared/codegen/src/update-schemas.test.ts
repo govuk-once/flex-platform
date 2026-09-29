@@ -176,10 +176,27 @@ describe("updateSchemas", () => {
       status: "breaking",
       latest: "0001",
       problems: [
-        "operations.getThing.outcomes.ok.properties.name: was removed",
+        "0001 -> 0002: operations.getThing.outcomes.ok.properties.name: was removed",
       ],
     });
     expect(await versions()).toEqual(["0001.json"]);
+  });
+
+  it("refuses a change that breaks a caller of a version before the latest", async () => {
+    await upstreamSays({ ...FIRST, meta: { requestId: { type: "string" } } });
+    await updateSchemas(gatewayDir);
+    await upstreamSays(FIRST);
+    await updateSchemas(gatewayDir);
+    await upstreamSays({ ...FIRST, meta: { requestId: { type: "integer" } } });
+
+    expect((await updateSchemas(gatewayDir)).update).toEqual({
+      status: "breaking",
+      latest: "0002",
+      problems: [
+        "0001 -> 0003: meta.requestId.type: changed from string to integer",
+      ],
+    });
+    expect(await versions()).toEqual(["0001.json", "0002.json"]);
   });
 
   it.each([
