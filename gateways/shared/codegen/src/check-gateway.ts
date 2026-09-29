@@ -23,6 +23,8 @@ export class GatewayCheckError extends Error {
   }
 }
 
+const META_TYPES = ["string", "number", "integer", "boolean"];
+
 // What holds whatever the driver is. Relations between an operation's mappings and its schema
 // are the driver's to read, and it reads them through checkSchemas.
 function neutralProblems(
@@ -54,6 +56,17 @@ function neutralProblems(
     if (!Object.hasOwn(config.operations, name)) {
       problems.push(
         `schemas declare operation "${name}", which the configuration does not`,
+      );
+    }
+  }
+
+  // What is reported beside a result is a scalar under a name: a caller reads it without
+  // knowing its shape, and a log takes it whole, so it is never an object or a list.
+  for (const [name, schema] of Object.entries(schemas.meta ?? {})) {
+    const type: unknown = schema.type;
+    if (typeof type !== "string" || !META_TYPES.includes(type)) {
+      problems.push(
+        `metadata "${name}" must declare one type, of ${META_TYPES.join(", ")}`,
       );
     }
   }

@@ -7,6 +7,7 @@ import { sortedNames } from "@repo/utils/sorted-names";
 
 import type { ParameterMapping } from "../config/definition.ts";
 import { normaliseHeaderName } from "../headers.ts";
+import { type MetadataConfig, metadataProblems } from "../metadata.ts";
 import { outcomeForStatus } from "../outcomes.ts";
 import { PAYLOAD_FIELD } from "../types.ts";
 import { parseUpstream } from "../upstream.ts";
@@ -778,6 +779,11 @@ const derive: DeriveSchemas = async (config, sources) => {
     );
   }
 
+  // What the gateway reports beside a result is the configuration's to declare, schema and
+  // all, and nothing of the document's: how an upstream's request ids look is not a contract.
+  const metadata = (config.driver as { readonly metadata?: unknown }).metadata;
+  problems.push(...metadataProblems(metadata));
+
   // A definition converted again as its uses grew says the same thing twice.
   if (problems.length > 0) {
     throw new OpenApiDeriveError(location, [...new Set(problems)]);
@@ -808,9 +814,17 @@ const derive: DeriveSchemas = async (config, sources) => {
     operation.input = renamingRefs(operation.input, renamed) as JSONSchema;
   }
 
+  const meta = Object.fromEntries(
+    Object.entries((metadata ?? {}) as MetadataConfig).map(([name, entry]) => [
+      name,
+      entry.schema,
+    ]),
+  );
+
   return {
     schemas: {
       ...(Object.keys(defs).length > 0 ? { defs } : {}),
+      ...(Object.keys(meta).length > 0 ? { meta } : {}),
       operations,
     },
     notes: [...notes],

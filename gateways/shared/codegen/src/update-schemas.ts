@@ -6,7 +6,7 @@ import type { DeriveSchemas, SchemaSources } from "@repo/gateway-config";
 import type { GatewaySchemas } from "@repo/gateway-types";
 
 import { checkGateway } from "./check-gateway.ts";
-import { checkVersions, compareSchemas } from "./compare-schemas.ts";
+import { breaksOf, checkVersions, compareSchemas } from "./compare-schemas.ts";
 import { compileValidators } from "./emit-validators.ts";
 import { SCHEMAS_DIR } from "./layout.ts";
 import { type AnyGatewayConfig, loadConfig } from "./load-config.ts";
@@ -145,11 +145,13 @@ export async function updateSchemas(
   }
 
   // The history is checked as codegen checks it, so a version is never added to one that is
-  // already broken and the comparison below is with something that was itself safe.
+  // already broken. The candidate is held to every version, as codegen will hold it once written;
+  // what it changes is read against the latest alone, which it would follow.
   const versions = await loadVersions(dir);
   checkVersions(config.id, versions);
+  const breaking = breaksOf(versionAfter(names), candidate, versions);
   const current = versions.at(-1)?.schemas ?? candidate;
-  const { breaking, compatible } = compareSchemas(current, candidate);
+  const { compatible } = compareSchemas(current, candidate);
 
   if (breaking.length > 0) {
     return {
@@ -207,8 +209,8 @@ export function formatReport({
         // Not "upstream": a field the configuration renames breaks a caller as surely.
         `${gatewayId}: BREAKING CHANGE. Nothing was written; ${file(update.latest)} is still what the gateway is generated from, and no longer what its configuration and its upstream come to.`,
         ...listed(update.problems, "!"),
-        "  A caller written against the latest version would not survive these. A contract that has",
-        "  to break takes a gateway of its own, under another id.",
+        "  A caller of the version each names first would not survive it. A contract that has to",
+        "  break takes a gateway of its own, under another id.",
       );
       break;
   }

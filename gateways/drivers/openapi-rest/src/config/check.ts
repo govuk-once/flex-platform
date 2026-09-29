@@ -4,6 +4,7 @@ import { ownValue } from "@repo/utils/own-value";
 import { stringsIn } from "@repo/utils/strings-in";
 
 import { normaliseHeaderName } from "../headers.ts";
+import { metadataProblems } from "../metadata.ts";
 import { METHODS_WITH_BODY, PAYLOAD_FIELD } from "../types.ts";
 import { type ParsedUpstream, parseUpstream } from "../upstream.ts";
 import type {
@@ -339,6 +340,60 @@ function checkOperation(
   return problems;
 }
 
+// The one type a schema names, if it names one. The configuration's schema for a header says
+// what its text is read as, and the stored one what that is held to. Codegen holds every stored
+// one to a single scalar type of its own, so one written any other way is reported there and
+// not twice.
+function typeNamed(schema: unknown): string | undefined {
+  return isRecord(schema) && typeof schema.type === "string"
+    ? schema.type
+    : undefined;
+}
+
+// What the gateway reports beside a result is declared twice: the schemas say what a caller is
+// offered, and the driver says which header each is read from. A name only one of them knows is
+// either offered and never reported, or reported and thrown away.
+function metadataAgreement(
+  config: OpenApiRestGatewayConfig,
+  schemas: GatewaySchemas,
+): readonly string[] {
+  const metadata: unknown = config.driver.metadata;
+  const problems = [...metadataProblems(metadata)];
+  const mapped = isRecord(metadata) ? Object.keys(metadata) : [];
+  const stored = schemas.meta ?? {};
+  const declared = Object.keys(stored);
+  for (const name of declared) {
+    if (!mapped.includes(name)) {
+      problems.push(
+        `metadata "${name}" is in the schemas, and the driver's metadata names no header to read it from`,
+      );
+    }
+  }
+  for (const name of mapped) {
+    if (!declared.includes(name)) {
+      problems.push(
+        `metadata "${name}" is read from a header, and the schemas do not declare it`,
+      );
+      continue;
+    }
+    // A header is text, and the configured schema decides what it is read as: a count, a flag,
+    // or the text itself. The stored schema is what validates the result, so one that does not
+    // admit what the other produces drops every value the upstream sends, silently, since what
+    // fails validation is left out rather than reported.
+    const entry = ownValue(metadata as Record<string, unknown>, name);
+    const reads = typeNamed(isRecord(entry) ? entry.schema : undefined);
+    const holds = typeNamed(ownValue(stored, name));
+    if (reads === undefined || holds === undefined) continue;
+    // Every integer is a number, so one held to numbers is held to what is read.
+    if (holds !== reads && !(reads === "integer" && holds === "number")) {
+      problems.push(
+        `metadata "${name}" is read from its header as ${reads}, and the schemas hold it to ${holds}; what is read would not validate`,
+      );
+    }
+  }
+  return problems;
+}
+
 // Reads each operation's mappings against its input schema. Operations without schemas are
 // left alone: codegen reports those itself, and repeating it here would say it twice.
 export function checkOperationSchemas(
@@ -347,7 +402,7 @@ export function checkOperationSchemas(
 ): readonly string[] {
   const defs = schemas.defs ?? {};
   const reserved = reservedHeaders(config);
-  const problems: string[] = [];
+  const problems: string[] = [...metadataAgreement(config, schemas)];
 
   for (const [name, operation] of Object.entries(config.operations)) {
     if (!Object.hasOwn(schemas.operations, name)) continue;

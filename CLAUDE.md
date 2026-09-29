@@ -12,13 +12,14 @@ operations for one upstream, keeping transport details separate from validation 
   `utils`, generic functions that name nothing of a gateway.
 - `gateways/shared/config`: `defineGateway`, the driver definition with its `createExecutor`
   contract and neutral `ExecutorOptions`, operation types and policy presets.
-- `gateways/shared/types`: envelope shapes, error codes, the shared `Validator` interface, the
-  driver context and execute types, the operation schema shapes and the secret provider shape.
+- `gateways/shared/types`: envelope shapes and what may be reported beside a result, error
+  codes, the shared `Validator` interface, the driver context and execute types, the operation
+  schema shapes and the secret provider shape.
 - `gateways/shared/runtime`: envelope parsing, dispatch, input and outcome validation, secure
   value comparisons, upstream timeouts, payload field selection for logs, and retrieval of the
   gateway secret from AWS Secrets Manager through Powertools Parameters.
 - `gateways/shared/codegen`: schema loading, the comparison of each version of a gateway's
-  schemas with the one before it, the build-time check of a configuration against its schemas,
+  schemas with every one before it, the build-time check of a configuration against its schemas,
   standalone JavaScript validator generation, the call contract and the entry point that wires
   a gateway to the dispatcher; and `gateway-schemas`, the command that derives a gateway's
   schemas through its driver and writes the next version when the shape changed safely.
@@ -179,7 +180,13 @@ integrations are implemented.
    therefore raise their own request-time failures as `GatewayError`, `INTERNAL` for
    configuration bugs, so the diagnosis survives.
    Success responses use `{ ok: true, outcome, data }`, keeping the outcome separate from
-   upstream fields.
+   upstream fields. Either response may carry `meta`, what the gateway declared it reports
+   beside a result, such as an upstream's id for a request. It is not a way round this rule:
+   only names the schemas declare, each a scalar validated against its schema, and never a
+   message. A driver reports through `ctx.meta`, since one that fails throws; the runtime leaves
+   out what fails validation, logs where and never what, and lets nothing reported fail a call,
+   the unhandled path included. Every part of it is optional to a caller. A driver names it
+   neutrally: a caller never sees the header, or whatever else, it came from.
 
 5. **Error codes declare health semantics.** Every code in `ERROR_CODES` has a signal ruling.
    `NOT_FOUND` and `UPSTREAM_REJECTED` represent an upstream response; contract violations and
@@ -199,10 +206,13 @@ integrations are implemented.
    configured operation; an unknown one is left out rather than repeated.
 
 7. **Preserve contract compatibility.** Changes to an established gateway contract must be
-   additive. An incompatible contract requires a distinct gateway identity. Codegen enforces
-   this for the schemas by comparing each version in a gateway's `schemas/` with the one before
-   it, and CI refuses a change to a merged version, which would move where that comparison
-   starts. Keep three things true of the comparison: whatever it cannot place counts as a break,
+   additive. An incompatible contract requires a distinct gateway identity. The exception is
+   `meta`: a name may be removed as well as added, since every part of it is optional to a
+   caller, and a name that stays is held to the rules for an outcome's data. Codegen enforces
+   this for the schemas by comparing each version in a gateway's `schemas/` with every one
+   before it, not only its neighbour, since removing a `meta` name and adding it back is safe at
+   each step. CI refuses a change to a merged version, which would change what the others are
+   held to. Keep three things true of the comparison: whatever it cannot place counts as a break,
    `oneOf` is not read as a union, and a definition is read on each side of the call it is used
    on. It does not cover the types the generator emits for an unchanged schema, or the error
    codes, so a change to either still needs this rule applied by hand. The rules are in

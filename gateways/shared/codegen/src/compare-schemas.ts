@@ -1003,6 +1003,12 @@ function usageOf(schemas: GatewaySchemas): ReadonlyMap<string, Set<Position>> {
       pending.push([outcome, "output"]);
     }
   }
+  // What a gateway reports comes from it, so a definition reached through it is read the way an
+  // outcome's is: one reached only this way would otherwise be read both ways, and a change
+  // safe for what a caller reads would be called a break.
+  for (const schema of Object.values(schemas.meta ?? {})) {
+    pending.push([schema, "output"]);
+  }
   for (let held = pending.pop(); held !== undefined; held = pending.pop()) {
     const [value, position] = held;
     eachReference(value, position, (name, at) => {
@@ -1107,6 +1113,30 @@ export function compareSchemas(
     }
   }
 
+  // What a gateway reports beside a result runs the way an outcome does. Every name in it is
+  // optional, so a caller already handles one that is absent: a name may come or go, and one
+  // that goes leaves a caller compiled against it with a branch that no longer runs, and one
+  // compiled after it with nothing to name. A name that stays is held to what it promised.
+  const previousMeta = previous.meta ?? {};
+  const nextMeta = next.meta ?? {};
+  for (const name of sortedNames(Object.keys(previousMeta))) {
+    const is = ownValue(nextMeta, name);
+    if (is === undefined) comparison.survives(`meta.${name}`, "was removed");
+    else {
+      comparison.schema(
+        ownValue(previousMeta, name),
+        is,
+        "output",
+        `meta.${name}`,
+      );
+    }
+  }
+  for (const name of sortedNames(Object.keys(nextMeta))) {
+    if (!Object.hasOwn(previousMeta, name)) {
+      comparison.survives(`meta.${name}`, "was added");
+    }
+  }
+
   // A definition is a type the call contract exports under its name, whatever refers to it, so
   // every one is read: on each side of the call it is used on, taken from both versions, and on
   // both sides when nothing refers to it and nothing says which way it runs. What the comparison
@@ -1141,7 +1171,7 @@ export function compareSchemas(
   return { breaking: comparison.breaking, compatible: comparison.compatible };
 }
 
-// A version a caller of the one before it would not survive. Every break between every pair is
+// A version a caller of one before it would not survive. Every break between every pair is
 // reported together, since the command prints a message and nothing else.
 export class SchemaCompatibilityError extends Error {
   readonly problems: readonly string[];
@@ -1149,8 +1179,9 @@ export class SchemaCompatibilityError extends Error {
   constructor(gatewayId: string, problems: readonly string[]) {
     super(
       [
-        `Gateway "${gatewayId}" has a version of its schemas that breaks the one before it:`,
+        `Gateway "${gatewayId}" has a version of its schemas that breaks one before it:`,
         ...problems.map((problem) => `  - ${problem}`),
+        "A version not yet merged can be fixed, or removed and the versions after it renumbered.",
         "An incompatible contract needs a gateway of its own, under another id.",
       ].join("\n"),
     );
@@ -1159,24 +1190,38 @@ export class SchemaCompatibilityError extends Error {
   }
 }
 
-// Each version against the one before it, all the way back. Compatibility carries from pair to
-// pair, so a history whose every step is safe is safe from its first version to its last; reading
-// only the last step would let two versions added together hide a break in the first of them.
+// What `schemas` breaks of every version before it, each break named with the pair it lies
+// between. Every one is compared, not only the last: a caller may be on any of them, and a
+// `meta` name removed and added back as another type is safe at each step and breaks a caller
+// of the version before the removal. A break is named once, against the latest version it
+// breaks; that an older one breaks too says nothing more.
+export function breaksOf(
+  version: string,
+  schemas: GatewaySchemas,
+  earlier: readonly SchemaVersion[],
+): string[] {
+  const seen = new Set<string>();
+  const problems: string[] = [];
+  for (const before of earlier.toReversed()) {
+    for (const problem of compareSchemas(before.schemas, schemas).breaking) {
+      if (seen.has(problem)) continue;
+      seen.add(problem);
+      problems.push(`${before.version} -> ${version}: ${problem}`);
+    }
+  }
+  return problems;
+}
+
+// Every version against every version before it, so each is safe for a caller of any that came
+// before, those added together included. Merged versions never change, so their pairs are read
+// again for nothing but certainty, and the history is short.
 export function checkVersions(
   gatewayId: string,
   versions: readonly SchemaVersion[],
 ): void {
-  const problems: string[] = [];
-  versions.forEach((version, index) => {
-    const earlier = versions[index - 1];
-    if (earlier === undefined) return;
-    const { breaking } = compareSchemas(earlier.schemas, version.schemas);
-    problems.push(
-      ...breaking.map(
-        (problem) => `${earlier.version} -> ${version.version}: ${problem}`,
-      ),
-    );
-  });
+  const problems = versions.flatMap((version, index) =>
+    breaksOf(version.version, version.schemas, versions.slice(0, index)),
+  );
   if (problems.length > 0) {
     throw new SchemaCompatibilityError(gatewayId, problems);
   }

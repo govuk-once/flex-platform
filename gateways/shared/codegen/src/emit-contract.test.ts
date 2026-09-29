@@ -545,6 +545,80 @@ export const suggestNamedType: Data["namedType"] = "";
     }
   }, 30_000);
 
+  it("offers what the gateway reports beside a result, on a failure as on a success, and nothing else", async () => {
+    const reporting: GatewaySchemas = {
+      meta: {
+        requestId: {
+          type: "string",
+          description: "The upstream's own id for the request",
+        },
+        remaining: { type: "integer" },
+      },
+      operations: {
+        ping: { input: { type: "object" }, outcomes: { ok: { type: "null" } } },
+      },
+    };
+    const dir = await mkdtemp(path.join(GENERATED_ROOT, "meta-"));
+    try {
+      await emitContract(GATEWAY_ID, reporting, dir);
+      const emitted = await readFile(path.join(dir, CONTRACT_MODULE), "utf-8");
+      expect(emitted).toContain(
+        [
+          "export type ResponseMeta = {",
+          "  readonly remaining?: number;",
+          "  /** The upstream's own id for the request */",
+          "  readonly requestId?: string;",
+          "};",
+        ].join("\n"),
+      );
+
+      const consumer = path.join(dir, "consumer.ts");
+      await writeFile(
+        consumer,
+        `
+import type { PingResponse, OperationResponse } from "./${CONTRACT_MODULE}";
+
+export function requestId(response: PingResponse): string | undefined {
+  // There whether the call succeeded or not, and absent either way.
+  return response.ok ? response.meta?.requestId : response.meta?.requestId;
+}
+
+export const generic = (response: OperationResponse<"ping">): number | undefined =>
+  response.meta?.remaining;
+
+export function undeclared(response: PingResponse): unknown {
+  // @ts-expect-error a contract offers the names its gateway declares and no others
+  return response.meta?.sessionToken;
+}
+
+// @ts-expect-error every part of it may be absent
+export const always = (response: PingResponse): string => response.meta.requestId;
+`,
+      );
+      expect(compile(consumer)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("offers no meta at all from a gateway that reports nothing", async () => {
+    const consumer = path.join(outDir, "no-meta-consumer.ts");
+    await writeFile(
+      consumer,
+      `
+import type { CreateUserResponse } from "./${CONTRACT_MODULE}";
+
+export function meta(response: CreateUserResponse): unknown {
+  // @ts-expect-error this gateway declares nothing to report
+  return response.meta;
+}
+`,
+    );
+
+    expect(source).not.toContain("ResponseMeta");
+    expect(compile(consumer)).toEqual([]);
+  }, 30_000);
+
   it("describes schemas the validators are generated from", async () => {
     // The contract and the validators read the same schemas: a shape one of them accepts and
     // the other refuses would reach a gateway as a type that does not match its validation.

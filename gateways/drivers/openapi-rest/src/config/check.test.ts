@@ -1,6 +1,7 @@
 import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
 import { describe, expect, it } from "vitest";
 
+import type { MetadataConfig } from "../metadata.ts";
 import { bearerToken, noAuth } from "./auth.ts";
 import { checkOperationSchemas } from "./check.ts";
 import type { OpenApiRestGatewayConfig } from "./definition.ts";
@@ -608,5 +609,79 @@ describe("checkOperationSchemas", () => {
         schemas,
       ),
     ).toHaveLength(2);
+  });
+});
+
+describe("checkOperationSchemas, on what the gateway reports beside a result", () => {
+  const OPERATION: Operation = { upstream: "GET /v1/users" };
+  const reporting = (
+    metadata: MetadataConfig,
+    meta?: Record<string, JSONSchema>,
+  ): readonly string[] =>
+    checkOperationSchemas(
+      {
+        id: "test",
+        driver: openapiRest({
+          spec: "openapi.yml",
+          auth: noAuth(),
+          metadata,
+        }),
+        operations: { op: OPERATION },
+      },
+      {
+        ...(meta === undefined ? {} : { meta }),
+        ...withSchemas(stringFields()),
+      },
+    );
+
+  it("accepts names the schemas declare and the driver reads from a header", () => {
+    expect(
+      reporting(
+        { requestId: { header: "X-Request-Id", schema: { type: "string" } } },
+        { requestId: { type: "string" } },
+      ),
+    ).toEqual([]);
+  });
+
+  it("reports a name only one of them knows", () => {
+    expect(
+      reporting(
+        { requestId: { header: "X-Request-Id", schema: { type: "string" } } },
+        { remaining: { type: "integer" } },
+      ),
+    ).toEqual([
+      'metadata "remaining" is in the schemas, and the driver\'s metadata names no header to read it from',
+      'metadata "requestId" is read from a header, and the schemas do not declare it',
+    ]);
+  });
+
+  it("reports a header read as one type and held to another", () => {
+    // The configured schema decides what the header text is read as; the stored one decides
+    // what validates. A count read from "41" reaches a validator that wants a string and is
+    // left out of the response, silently, since what fails validation is dropped.
+    expect(
+      reporting(
+        { remaining: { header: "X-Remaining", schema: { type: "integer" } } },
+        { remaining: { type: "string" } },
+      ),
+    ).toEqual([
+      'metadata "remaining" is read from its header as integer, and the schemas hold it to string; what is read would not validate',
+    ]);
+
+    // An integer is a number, so one held to numbers is held to what is read.
+    expect(
+      reporting(
+        { remaining: { header: "X-Remaining", schema: { type: "integer" } } },
+        { remaining: { type: "number" } },
+      ),
+    ).toEqual([]);
+  });
+
+  it("reports metadata the executor would refuse to start on", () => {
+    // @ts-expect-error a header is required, and the check says so of one the compiler did not see
+    expect(reporting({ requestId: { schema: { type: "string" } } })).toEqual([
+      'Driver metadata "requestId" must name the response header it is read from',
+      'metadata "requestId" is read from a header, and the schemas do not declare it',
+    ]);
   });
 });

@@ -11,5 +11,8 @@ export interface OperationSchemas {
 
 export interface GatewaySchemas<TOperation extends string = string> {
   defs?: Record<string, JSONSchema>;
+  // What the gateway may report about an exchange beside its result, by the name it is
+  // reported under. Each is the schema of a scalar, and every one is optional to a caller.
+  meta?: Record<string, JSONSchema>;
   operations: Record<TOperation, OperationSchemas>;
 }

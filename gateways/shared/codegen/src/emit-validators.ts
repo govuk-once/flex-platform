@@ -44,6 +44,13 @@ export interface CompiledValidators {
   readonly code: string;
 }
 
+// Each validator's name, from what it validates. An operation's and the metadata's are
+// prefixed apart, so no name of one can be spelt by a name of the other.
+const inputId = (operation: string): string => `op_${operation}_input`;
+const outcomeId = (operation: string, outcome: string): string =>
+  `op_${operation}_outcome_${outcome}`;
+const metaId = (name: string): string => `meta_${name}`;
+
 export function compileValidators(schemas: GatewaySchemas): CompiledValidators {
   const ajv = new Ajv2020({
     code: {
@@ -97,22 +104,30 @@ export function compileValidators(schemas: GatewaySchemas): CompiledValidators {
   for (const [opName, opSchemas] of sortedEntries(schemas.operations)) {
     assertIdentifier(opName, "Operation");
 
-    const inputId = `${opName}_input`;
-    register(opSchemas.input, inputId, `input of operation "${opName}"`);
-    exportNames.push(inputId);
+    register(
+      opSchemas.input,
+      inputId(opName),
+      `input of operation "${opName}"`,
+    );
+    exportNames.push(inputId(opName));
 
     for (const [outcomeName, outcomeSchema] of sortedEntries(
       opSchemas.outcomes,
     )) {
       assertIdentifier(outcomeName, "Outcome");
-      const outcomeId = `${opName}_outcome_${outcomeName}`;
       register(
         outcomeSchema,
-        outcomeId,
+        outcomeId(opName, outcomeName),
         `outcome "${outcomeName}" of operation "${opName}"`,
       );
-      exportNames.push(outcomeId);
+      exportNames.push(outcomeId(opName, outcomeName));
     }
+  }
+
+  for (const [name, schema] of sortedEntries(schemas.meta ?? {})) {
+    assertIdentifier(name, "Metadata");
+    register(schema, metaId(name), `metadata "${name}"`);
+    exportNames.push(metaId(name));
   }
 
   for (const { $id, context } of registered) {
@@ -162,11 +177,15 @@ export async function writeValidators(
   const operationEntries = sortedEntries(schemas.operations)
     .map(([opName, opSchemas]) => {
       const outcomes = sortedEntries(opSchemas.outcomes)
-        .map(([name]) => `${name}: ${opName}_outcome_${name},`)
+        .map(([name]) => `${name}: ${outcomeId(opName, name)},`)
         .join("");
 
-      return `${opName}: { input: ${opName}_input, outcomes: { ${outcomes} } },`;
+      return `${opName}: { input: ${inputId(opName)}, outcomes: { ${outcomes} } },`;
     })
+    .join("");
+
+  const metaEntries = sortedEntries(schemas.meta ?? {})
+    .map(([name]) => `${name}: ${metaId(name)},`)
     .join("");
 
   const indexJs = await formatSource(
@@ -174,6 +193,9 @@ export async function writeValidators(
       `import { ${exportNames.join(", ")} } from "./schemas.js";`,
       "",
       `export const validators = { ${operationEntries} };`,
+      "",
+      "// What the gateway may report beside a result; empty for one that reports nothing.",
+      `export const meta = { ${metaEntries} };`,
     ].join("\n"),
     "babel",
   );
