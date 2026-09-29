@@ -721,7 +721,9 @@ caller relies on, so what an OpenAPI document says of a response header is not u
 returned to the caller and written to the log, so which headers to pass along is the gateway
 author's decision, and a `maxLength` on each string keeps an unexpectedly long one out of both. A
 header is text; one whose schema is a number, an integer or a boolean is read as that where the
-text is one, and left as text where it is not, for the gateway's validator to refuse. Headers are
+text is one, and left as text where it is not, for the gateway's validator to refuse. A whole
+number beyond ±(2^53 − 1) is left as text too, since it has no exact double and would round to a
+neighbour that validates; RFC 7493 limits an interoperable JSON integer to that range. Headers are
 read as they arrive, before the body and before the status is mapped, so a response the driver
 turns into an error code reports as a success does, and so does an exchange whose body was too
 large or whose stream broke: what a caller most needs about a request that failed is the upstream's

@@ -73,9 +73,13 @@ const DECIMAL = /^-?\d+(?:\.\d+)?$/;
 
 // A header is text; what it carries may be a count or a flag. Read as its schema's type where
 // the text is one, and left as text where it is not, for the gateway's validator to refuse.
+// A whole number past 2^53 has no exact double, so reading it would round it to a neighbour
+// that still validates. It is left as text too: RFC 7493 bounds an interoperable JSON integer
+// to the same range, so a caller in any language may not read it exactly either.
 function valueOf(text: string, type: Scalar): string | number | boolean {
   if ((type === "number" || type === "integer") && DECIMAL.test(text)) {
-    return Number(text);
+    const value = Number(text);
+    if (!Number.isInteger(value) || Number.isSafeInteger(value)) return value;
   }
   if (type === "boolean" && (text === "true" || text === "false")) {
     return text === "true";

@@ -576,6 +576,22 @@ describe("what the gateway reports beside a result", () => {
     ]);
   });
 
+  it.each([
+    ["9007199254740991", 9007199254740991],
+    ["-9007199254740991", -9007199254740991],
+    ["9007199254740993", "9007199254740993"],
+    ["12345678901234567890.5", "12345678901234567890.5"],
+  ])(
+    "reads %s as %j: a whole number past 2^53 would round, so it stays text",
+    async (text, read) => {
+      const { c, ctx } = answering(200, { "x-ratelimit-remaining": text });
+
+      await c.request(c.prepare({ id: "u1" }));
+
+      expect(ctx.reported.get("remaining")).toBe(read);
+    },
+  );
+
   it("reports before the status is read as an error, so a refusal carries it too", async () => {
     const { c, ctx } = answering(500, { "x-request-id": "req-500" });
 
