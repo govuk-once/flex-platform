@@ -16,6 +16,7 @@
   "meta": {
     "requestId": {
       "type": "string",
+      "maxLength": 64,
       "description": "The upstream's own id for the request"
     }
   },

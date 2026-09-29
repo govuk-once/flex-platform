@@ -443,13 +443,26 @@ describe("the generated gateway", () => {
     });
 
     // The generated validator decides: what it refuses is left out, and the call still answers.
+    // The schema's bounds are kept as written, so a string past its `maxLength` is refused too.
+    for (const refused of [42, "x".repeat(65)]) {
+      stub.execute = (ctx) => {
+        ctx.meta("requestId", refused);
+        return Promise.resolve({ outcome: "created", data: { id: "u-1" } });
+      };
+      await expect(
+        handler(
+          call("createUser", { payload: { email: "a@b.test" } }),
+          context,
+        ),
+      ).resolves.toEqual({ ok: true, outcome: "created", data: { id: "u-1" } });
+    }
     stub.execute = (ctx) => {
-      ctx.meta("requestId", 42);
+      ctx.meta("requestId", "x".repeat(64));
       return Promise.resolve({ outcome: "created", data: { id: "u-1" } });
     };
     await expect(
       handler(call("createUser", { payload: { email: "a@b.test" } }), context),
-    ).resolves.toEqual({ ok: true, outcome: "created", data: { id: "u-1" } });
+    ).resolves.toMatchObject({ meta: { requestId: "x".repeat(64) } });
   });
 
   it("rejects input the generated validators refuse", async () => {
