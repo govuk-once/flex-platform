@@ -148,6 +148,24 @@ describe("createSecretProvider", () => {
       expect(send).toHaveBeenCalledTimes(2);
     });
 
+    it("reads from the store when asked for a fresh copy, and caches what it reads", async () => {
+      let calls = 0;
+      const send = answering(() => {
+        calls += 1;
+        return Promise.resolve(secretString({ token: `t${calls}` }));
+      });
+      const provider = createSecretProvider(ARN);
+      await expect(provider.get()).resolves.toEqual({ token: "t1" });
+
+      // Inside the cache age, as after an upstream refused what the cached copy held.
+      vi.setSystemTime(60_000);
+      await expect(provider.get({ fresh: true })).resolves.toEqual({
+        token: "t2",
+      });
+      await expect(provider.get()).resolves.toEqual({ token: "t2" });
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+
     it("keeps one cache per provider", async () => {
       const send = answering(() => Promise.resolve(secretString({})));
       await createSecretProvider(ARN).get();

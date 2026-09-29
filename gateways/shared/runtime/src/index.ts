@@ -15,7 +15,7 @@ export type {
 } from "./handler.ts";
 export { createHandler } from "./handler.ts";
 export type { Logger } from "./logging.ts";
-export { pickFields } from "./logging.ts";
+export { createStartupLog, pickFields } from "./logging.ts";
 export type { ResolvedPolicy } from "./policy.ts";
 export { resolvePolicy } from "./policy.ts";
 export { asSecretObject, createSecretProvider } from "./secret-provider.ts";

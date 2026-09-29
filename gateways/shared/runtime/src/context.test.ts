@@ -22,6 +22,31 @@ describe("createDriverContext", () => {
     vi.useRealTimers();
   });
 
+  it("logs a driver's line with its scalar fields under a key of their own", () => {
+    const lines: { level: string; fields: object; message: string }[] = [];
+    const ctx = createDriverContext(testPolicy, noDeadline, new Map(), {
+      info: (fields, message) => lines.push({ level: "info", fields, message }),
+      warn: (fields, message) => lines.push({ level: "warn", fields, message }),
+    });
+
+    ctx.log.info("replayed", { status: 401, operation: "not-this-one" });
+    // A JavaScript driver's nested value is dropped, as a payload's would be.
+    ctx.log.warn("odd", {
+      nested: { token: "SYNTHETIC" },
+    } as unknown as Record<string, string>);
+    ctx.log.info("bare");
+
+    expect(lines).toEqual([
+      {
+        level: "info",
+        fields: { driver: { status: 401, operation: "not-this-one" } },
+        message: "replayed",
+      },
+      { level: "warn", fields: {}, message: "odd" },
+      { level: "info", fields: {}, message: "bare" },
+    ]);
+  });
+
   it("upstream invokes the callback with an AbortSignal and returns its result", async () => {
     const ctx = createDriverContext(testPolicy, noDeadline);
     const result = await ctx.upstream((signal) => {

@@ -922,6 +922,32 @@ describe("createHandler", () => {
   });
 });
 
+describe("createHandler, on what a driver logs", () => {
+  it("writes a driver's line beside the operation it was called for", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        execute: (ctx) => {
+          ctx.log.info("the upstream refused the credentials", {
+            status: 401,
+          });
+          return Promise.resolve({ outcome: "success", data: {} });
+        },
+      }),
+    );
+
+    await handler(envelope());
+    const line = capturedRecords().find(
+      (record) => record.msg === "the upstream refused the credentials",
+    );
+    expect(line).toMatchObject({
+      level: 30,
+      operation: "ping",
+      driver: { status: 401 },
+    });
+  });
+});
+
 describe("outcome lookup hardening", () => {
   it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
     "rejects the undeclared outcome %j even though objects inherit it",

@@ -1,4 +1,5 @@
 import type {
+  DriverLogger,
   ExecuteFn,
   GatewaySchemas,
   OperationHandler,
@@ -11,11 +12,16 @@ import type { GatewayConfig, OperationConfig } from "./types.ts";
 // Everything else, handlers included, is in the configuration. Nothing here names a transport
 // or says what the secret holds, so a generated entrypoint is the same for every driver.
 export interface ExecutorOptions {
-  // UPSTREAM_TARGET, as the driver interprets it.
-  readonly target: string;
+  // UPSTREAM_TARGET, as the driver interprets it, when the deployment sets it. A driver may take
+  // the location from elsewhere too, and refuses to start when it has none.
+  readonly target?: string;
   // The secret UPSTREAM_SECRET_ARN names, as a provider rather than an ARN or a client. The
   // driver, or the authentication implementation its definition names, validates what it holds.
   readonly secret: SecretProvider;
+  // Where the driver logs while its executor is created, before there is a request: the
+  // runtime's logger, under the gateway's name. What a driver writes here is held to what it
+  // writes through its context. Optional: a driver creates no lines when it is absent.
+  readonly log?: DriverLogger;
 }
 
 export type AnyOperations<TDriver extends DriverDefinition> = Readonly<

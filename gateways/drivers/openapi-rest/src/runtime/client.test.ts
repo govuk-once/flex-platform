@@ -7,6 +7,7 @@ import {
   json,
   passthroughContext,
 } from "../../test/helpers.ts";
+import type { OpenApiRestAuthRequest } from "../config/auth.ts";
 import { buildUrl, createClient } from "./client.ts";
 import {
   compileOperation,
@@ -56,7 +57,13 @@ describe("buildUrl", () => {
   it("serialises query values with URLSearchParams and repeats arrays", () => {
     expect(
       buildUrl(TARGET, "/users", { q: "a b&c", ids: [1, 2], ok: true }).search,
-    ).toBe("?q=a+b%26c&ids=1&ids=2&ok=true");
+    ).toBe("?q=a%20b%26c&ids=1&ids=2&ok=true");
+  });
+
+  it("writes a space as %20 and a plus as %2B, so neither reads as the other", () => {
+    expect(buildUrl(TARGET, "/users", { q: "a b+c" }).search).toBe(
+      "?q=a%20b%2Bc",
+    );
   });
 
   it("writes nothing at all for an array with nothing in it", () => {
@@ -193,7 +200,81 @@ describe("client.request", () => {
     expect(headerOf(req!, "x-b")).toBe("auth");
     expect(headerOf(req!, "x-c")).toBe("auth");
     expect(headerOf(req!, "x-d")).toBe("call");
-    expect(auth).toHaveBeenCalledWith("getUser", expect.any(AbortSignal));
+    expect(auth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "getUser",
+        signal: expect.any(AbortSignal) as AbortSignal,
+      }),
+    );
+  });
+
+  it("shows authentication the request it is authenticating, as it will be sent", async () => {
+    const seen: OpenApiRestAuthRequest[] = [];
+    const { c, ff } = client(
+      () => json(200, {}),
+      {
+        staticHeaders: new Headers({ "x-api-version": "2" }),
+        auth: (request) => {
+          seen.push(request);
+          return Promise.resolve(new Headers({ authorization: "signed" }));
+        },
+      },
+      { upstream: "POST /users/{id}", parameters: { id: { in: "path" } } },
+    );
+
+    await c.request({
+      method: "POST",
+      path: "/users/u1",
+      query: { dryRun: true },
+      headers: { "x-trace": "t-1" },
+      body: { name: "Ann" },
+    });
+
+    const [request] = seen;
+    expect(request?.method).toBe("POST");
+    expect(request?.url.href).toBe(
+      "https://api.test/prod/users/u1?dryRun=true",
+    );
+    expect(request?.body).toBe('{"name":"Ann"}');
+    // Everything set before authentication, the content type of the body among it.
+    expect(Object.fromEntries(request?.headers ?? [])).toEqual({
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-api-version": "2",
+      "x-trace": "t-1",
+    });
+    expect(ff.calls[0]?.init.body).toBe(request?.body);
+  });
+
+  it("sends nothing of what authentication does to the copy it was shown", async () => {
+    const { c, ff } = client(() => json(200, {}), {
+      auth: (request) => {
+        request.headers.set("x-smuggled", "SYNTHETIC");
+        request.url.searchParams.set("smuggled", "SYNTHETIC");
+        return Promise.resolve(new Headers());
+      },
+    });
+
+    await c.request({ method: "GET", path: "/users/1" });
+
+    const [sent] = ff.calls;
+    expect(headerOf(sent!, "x-smuggled")).toBeNull();
+    expect(String(sent!.url)).toBe("https://api.test/prod/users/1");
+  });
+
+  it("keeps the body's content type whatever authentication returns", async () => {
+    const { c, ff } = client(
+      () => json(200, {}),
+      {
+        auth: () =>
+          Promise.resolve(new Headers({ "content-type": "text/plain" })),
+      },
+      { upstream: "POST /users/{id}", parameters: { id: { in: "path" } } },
+    );
+
+    await c.request({ method: "POST", path: "/users/u1", body: {} });
+
+    expect(headerOf(ff.calls[0]!, "content-type")).toBe("application/json");
   });
 
   it("runs authentication inside the timed attempt", async () => {
@@ -210,6 +291,7 @@ describe("client.request", () => {
         });
       },
       meta: () => undefined,
+      log: passthroughContext().log,
     };
     const op = compileOperation("getUser", GET_USER);
     const c = createClient(ctx, op, {
@@ -421,6 +503,7 @@ describe("client.request", () => {
         return fn(controller.signal);
       },
       meta: () => undefined,
+      log: passthroughContext().log,
     };
     const op = compileOperation("getUser", GET_USER);
     const c = createClient(ctx, op, {

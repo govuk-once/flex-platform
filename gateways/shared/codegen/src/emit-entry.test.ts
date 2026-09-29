@@ -33,14 +33,14 @@ describe("emitted entry point", () => {
 
   it("wires the configuration, the validators and the driver's executor", () => {
     expect(entry).toContain(
-      'import { createHandler, readUpstreamOptions } from "@repo/gateway-runtime";',
+      'import { createHandler, createStartupLog, readUpstreamOptions } from "@repo/gateway-runtime";',
     );
     expect(entry).toContain('import config from "../../gateway.config.ts";');
     expect(entry).toContain(
       `import { meta, validators } from "./${VALIDATORS_DIR}/index.js";`,
     );
-    expect(entry).toContain(
-      "config.driver.createExecutor(config, readUpstreamOptions())",
+    expect(entry).toMatch(
+      /config\.driver\.createExecutor\(config, \{\s*\.\.\.readUpstreamOptions\(\),\s*log: createStartupLog\(config\.id\),\s*\}\)/,
     );
     expect(entry).toContain(
       "createHandler(config, { validators, meta, execute })",

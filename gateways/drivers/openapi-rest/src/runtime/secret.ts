@@ -1,35 +1,45 @@
 import { GatewayError } from "@repo/gateway-runtime";
-import type {
-  SecretObject,
-  SecretProvider,
-  Validator,
-} from "@repo/gateway-types";
+import type { SecretProvider, SecretReadOptions } from "@repo/gateway-types";
+import { isRecord } from "@repo/utils/is-record";
 
-const MAX_FINDINGS = 5;
+import type { SecretField, SecretValues } from "../config/secret-field.ts";
+import { isVerbatimHeaderValue } from "../headers.ts";
 
-// Where the secret failed, as the schema locations that rejected it. Never a value, never a
-// validator's message, which a custom validator may have built from one, and never a path into
-// the secret: under a dictionary schema its segments are the secret's own keys.
-export function describeSecretFindings(errors: Validator["errors"]): string {
-  if (!errors || errors.length === 0) return "did not match the expected shape";
-  const findings = errors.slice(0, MAX_FINDINGS).map((e) => e.schemaPath);
-  return `failed validation at ${findings.join(", ")}`;
+// What a named field fails on. Every value read here may be sent as written, in a header or as
+// an address or a credential, so each is a non-empty string a header can carry unchanged.
+function fieldProblem(
+  secret: Readonly<Record<string, unknown>>,
+  { secretField, optional }: SecretField,
+): string | undefined {
+  if (!Object.hasOwn(secret, secretField)) {
+    return optional ? undefined : `field "${secretField}" is missing`;
+  }
+  const value = secret[secretField];
+  if (typeof value !== "string" || value === "") {
+    return `field "${secretField}" is not a non-empty string`;
+  }
+  if (!isVerbatimHeaderValue(value)) {
+    return `field "${secretField}" holds a character or a surrounding space it cannot be sent with`;
+  }
+  return undefined;
 }
 
-// Runs the driver's validator on every read. A read is cheap, since the runtime serves the
-// secret from its cache, and validating each one means a rotated value is checked the first
-// time it is seen. A value that passes reaches authentication code as its typed value; one that
-// fails is never returned, and the affected operation fails instead.
-export function validatedSecret<T>(
+// The fields a gateway names, read from its secret on every read. A read is cheap, since the
+// runtime serves the secret from its cache, and reading each time means a rotated value is
+// checked the first time it is seen. Fields nobody named are never read, so a secret an upstream
+// provides may hold whatever else it likes. A field that fails is never returned, and the
+// affected operation fails instead. Diagnostics name the field, which is the configuration's,
+// and the rule; never a value, and never a field the configuration did not name.
+export function secretFields(
   gatewayId: string,
   provider: SecretProvider,
-  validate: Validator<T>,
-): SecretProvider<T> {
+  fields: readonly SecretField[],
+): { get(options?: SecretReadOptions): Promise<SecretValues> } {
   return {
-    async get() {
-      let value: SecretObject;
+    async get(options) {
+      let secret: unknown;
       try {
-        value = await provider.get();
+        secret = await provider.get(options);
       } catch (err: unknown) {
         // The runtime's provider raises GatewayErrors; any other provider's error is unknown.
         if (err instanceof GatewayError) throw err;
@@ -38,23 +48,31 @@ export function validatedSecret<T>(
           `Gateway "${gatewayId}" secret retrieval failed`,
         );
       }
-      let valid: boolean;
-      try {
-        valid = validate(value);
-      } catch {
-        // A validator that throws has said nothing safe about the secret either.
+      if (!isRecord(secret)) {
         throw new GatewayError(
           "INTERNAL",
-          `Gateway "${gatewayId}" secret validator threw`,
+          `Gateway "${gatewayId}" secret is not an object`,
         );
       }
-      if (!valid) {
+      const problems = [
+        ...new Set(
+          fields.flatMap((field) => fieldProblem(secret, field) ?? []),
+        ),
+      ];
+      if (problems.length > 0) {
         throw new GatewayError(
           "INTERNAL",
-          `Gateway "${gatewayId}" secret ${describeSecretFindings(validate.errors)}`,
+          `Gateway "${gatewayId}" secret ${problems.join("; ")}`,
         );
       }
-      return value as T;
+      const values = new Map<string, string>();
+      for (const { secretField } of fields) {
+        const value = secret[secretField];
+        if (Object.hasOwn(secret, secretField) && typeof value === "string") {
+          values.set(secretField, value);
+        }
+      }
+      return { get: (field) => values.get(field.secretField) };
     },
   };
 }

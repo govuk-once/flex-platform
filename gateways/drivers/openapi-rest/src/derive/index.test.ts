@@ -6,7 +6,7 @@ import type {
 import { describe, expect, it } from "vitest";
 
 import type { OpenApiRestDriver, ParameterMapping } from "../index.ts";
-import { noAuth, openapiRest } from "../index.ts";
+import { openapiRest } from "../index.ts";
 import { OpenApiDeriveError } from "./document.ts";
 import derive from "./index.ts";
 
@@ -45,7 +45,7 @@ function deriving(
   };
   const config = {
     id: "test",
-    driver: openapiRest({ spec: "openapi.json", auth: noAuth() }),
+    driver: openapiRest({ spec: "openapi.json", auth: [] }),
     operations,
   };
   return derive(config, sources);
@@ -1218,7 +1218,7 @@ paths:
       id: "test",
       driver: openapiRest({
         spec: "openapi.json",
-        auth: noAuth(),
+        auth: [],
         metadata: {
           upstreamRequestId: {
             header: "X-Request-Id",
