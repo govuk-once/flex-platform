@@ -938,7 +938,8 @@ a boolean, never an object or a list. A driver reports a value through its conte
 it learnt before it threw is what a caller most needs. The runtime keeps only the names the
 gateway declared, validates each against its schema, returns what passes on a failure as on a
 success, and writes it to that call's log line. What fails is left out and logged as the schema
-location that refused it, never as its value, and nothing reported can fail a call. Every part
+location that refused it, never as its value. A name the gateway did not declare is logged by
+name, which is the driver's own, and nothing reported can fail a call. Every part
 of `meta` is optional to a caller, and so is the whole: a request refused before it reached the
 upstream, or one whose response never arrived, has nothing to report. One that timed out still
 reports what the driver recorded before it did. It is not a second channel for

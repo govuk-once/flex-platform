@@ -15,8 +15,8 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
   });
 }
 
-// What a driver reported about one exchange, as it reported it. Nothing here is trusted: the
-// handler decides what of it a caller and a log see.
+// What a driver reported about one exchange, as it reported it. No value here is trusted: the
+// handler decides what of it a caller and a log see. The names are the driver's own.
 export type ReportedMeta = Map<string, unknown>;
 
 export function createDriverContext(

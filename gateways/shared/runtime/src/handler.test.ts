@@ -1281,7 +1281,7 @@ describe("createHandler, on what a driver reports beside its result", () => {
     ]);
   });
 
-  it("leaves out what the gateway did not declare, without a word of it", async () => {
+  it("leaves out what the gateway did not declare, naming it and never its value", async () => {
     const handler = createHandler(
       testConfig(),
       testDeps({
@@ -1293,8 +1293,13 @@ describe("createHandler, on what a driver reports beside its result", () => {
     await expect(handler(envelope())).resolves.toMatchObject({
       meta: { remaining: 7 },
     });
+    const warned = capturedRecords().find(
+      (record) => record.metadata === "sessionToken",
+    );
+    expect(warned?.msg).toBe(
+      "Reported metadata left out: the gateway does not declare it",
+    );
     expect(capturedOutput()).not.toContain("SYNTHETIC-SECRET");
-    expect(capturedOutput()).not.toContain("sessionToken");
   });
 
   it.each([

@@ -169,6 +169,11 @@ function acceptedMeta(
       refused(name, "its validator failed");
     }
   }
+  // A name the gateway does not declare is a driver wired to other schemas. The name is the
+  // driver's own vocabulary, not a caller's or an upstream's, so it is safe to say.
+  for (const name of reported.keys()) {
+    if (!declared.has(name)) refused(name, "the gateway does not declare it");
+  }
   return Object.keys(accepted).length > 0 ? accepted : undefined;
 }
 
