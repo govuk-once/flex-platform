@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 
+import { checkValue } from "@repo/gateway-codegen";
 import type { DeriveSchemas } from "@repo/gateway-config";
 import type { JSONSchema, OperationSchemas } from "@repo/gateway-types";
 import { isRecord } from "@repo/utils/is-record";
@@ -25,6 +26,14 @@ import {
   type OpenApiDocument,
   resolved,
 } from "./document.ts";
+import {
+  couldReach,
+  type Fit,
+  fit,
+  isMoreSpecific,
+  segmentsOf,
+} from "./match.ts";
+import { narrowingProblems, narrowInto } from "./narrow.ts";
 
 // A gateway's schemas from its upstream's OpenAPI document, for the operations its configuration
 // declares and no others. The configuration says which request each operation is and which of
@@ -457,25 +466,84 @@ function deriveOperation(
   }
 
   const where = `${upstream.method} ${upstream.template}`;
-  const paths = document.paths;
-  const pathItem =
-    isRecord(paths) && Object.hasOwn(paths, upstream.template)
-      ? resolved(document, paths[upstream.template], where, problems)
-      : undefined;
+  const paths = isRecord(document.paths) ? document.paths : {};
+  const served = servedBy(
+    name,
+    upstream.template,
+    configured.matches,
+    paths,
+    where,
+    problems,
+  );
+  if (served === undefined) return undefined;
+  const pathItem = resolved(document, paths[served.template], where, problems);
   const operation =
     pathItem === undefined
       ? undefined
       : pathItem[upstream.method.toLowerCase()];
   if (pathItem === undefined || !isRecord(operation)) {
     problems.push(
-      `operation "${name}" is ${where}, which the document does not describe`,
+      served.template === upstream.template
+        ? `operation "${name}" is ${where}, which the document does not describe`
+        : `operation "${name}" is ${where}, and "${served.template}" does not take ${upstream.method}`,
     );
     return undefined;
   }
 
+  const narrowing = narrowingOf(name, configured.narrow, problems);
+
   // ---- the input: one field for each parameter the configuration maps, and the body
   const mappings = isRecord(configured.parameters) ? configured.parameters : {};
-  const declared = parametersOf(document, pathItem, operation, where, problems);
+  const everyParameter = parametersOf(
+    document,
+    pathItem,
+    operation,
+    where,
+    problems,
+  );
+  problems.push(
+    ...reachesOthers(
+      name,
+      upstream.template,
+      served,
+      everyParameter,
+      document,
+      isRecord(paths) ? Object.keys(paths) : [],
+    ),
+  );
+
+  const declared = everyParameter
+    .filter((parameter) => {
+      const text =
+        parameter.in === "path"
+          ? served.fit.fixed.get(parameter.name)
+          : undefined;
+      if (text === undefined) return true;
+      // Before it leaves the input: once it has, nothing else reads how it is described.
+      if (parameter.parameter.schema === undefined) {
+        problems.push(
+          `${where} describes path parameter "${parameter.name}" by its content rather than a schema, which is not supported`,
+        );
+        return false;
+      }
+      const refused = refusedValue(document, parameter.parameter.schema, text);
+      if (refused !== undefined) {
+        problems.push(
+          `${where} fills path parameter "${parameter.name}" with "${text}", which the document does not admit there: ${refused}`,
+        );
+      }
+      notes.add(
+        `path parameter "${parameter.name}" of ${served.template} is "${text}" for operation "${name}", from its own path; no caller supplies it`,
+      );
+      return false;
+    })
+    .map((parameter) => ({
+      ...parameter,
+      name:
+        (parameter.in === "path"
+          ? served.fit.carried.get(parameter.name)
+          : undefined) ?? parameter.name,
+    }));
   const properties: Schema = {};
   const required: string[] = [];
   const taken = new Set<Declared>();
@@ -555,12 +623,25 @@ function deriveOperation(
       setKey(
         properties,
         PAYLOAD_FIELD,
-        convertSchema(schema, `${where} request body`, sides.input),
+        narrowInto(
+          convertSchema(schema, `${where} request body`, sides.input),
+          narrowing.payload,
+          `operation "${name}" narrowing of the request body`,
+          problems,
+        ),
       );
       // Whatever the document says: a body an operation declares is one its upstream expects,
       // and a generator that leaves `required` out has not said otherwise.
       required.push(PAYLOAD_FIELD);
     }
+  }
+  if (
+    narrowing.payload !== undefined &&
+    properties[PAYLOAD_FIELD] === undefined
+  ) {
+    problems.push(
+      `operation "${name}" narrows a request body, and ${where} takes none`,
+    );
   }
 
   // ---- the outcomes: each status the upstream answers a request it carried out with
@@ -594,11 +675,27 @@ function deriveOperation(
     } else if (schema === undefined) {
       problems.push(`${where} answers ${status} with a body that is not JSON`);
     } else {
-      outcomes[outcome] = convertSchema(
-        schema,
-        `${where} response ${status}`,
-        sides.output,
+      outcomes[outcome] = narrowInto(
+        convertSchema(schema, `${where} response ${status}`, sides.output),
+        // Ours to state, and an outcome all the same: held to its shape as any other is, so a
+        // field one of our own services comes to keep there fails no one's read of it.
+        narrowing.outcomes[outcome] === undefined
+          ? undefined
+          : convertSchema(
+              narrowing.outcomes[outcome],
+              `operation "${name}" narrowing of outcome "${outcome}"`,
+              sides.output,
+            ),
+        `operation "${name}" narrowing of outcome "${outcome}"`,
+        problems,
       ) as JSONSchema;
+    }
+  }
+  for (const outcome of Object.keys(narrowing.outcomes)) {
+    if (!Object.hasOwn(outcomes, outcome) || isNull(outcomes[outcome])) {
+      problems.push(
+        `operation "${name}" narrows outcome "${outcome}", and ${where} has no such outcome with data to narrow`,
+      );
     }
   }
   if (Object.keys(outcomes).length === 0) {
@@ -624,6 +721,245 @@ function offered(content: unknown): string {
   return types.length === 0
     ? "no media type"
     : types.map((type) => JSON.stringify(type)).join(", ");
+}
+
+interface Served {
+  readonly template: string;
+  readonly fit: Fit;
+}
+
+const AS_WRITTEN: Fit = { fixed: new Map(), carried: new Map() };
+
+// The template of the document that serves an operation's path. The path itself where the
+// document declares it; otherwise the one the operation names, and only that one: a template
+// that takes any path says nothing of this one, so going through it is a decision someone made,
+// and is written down where it can be reviewed.
+function servedBy(
+  name: string,
+  path: string,
+  matches: unknown,
+  paths: Readonly<Record<string, unknown>>,
+  where: string,
+  problems: string[],
+): Served | undefined {
+  const fitting = Object.keys(paths).filter(
+    (template) => typeof fit(path, template) !== "string",
+  );
+
+  if (Object.hasOwn(paths, path)) {
+    if (matches !== undefined) {
+      problems.push(
+        `operation "${name}" names ${JSON.stringify(matches)} as what serves ${where}, and the document declares that path itself; "matches" is for a path it does not`,
+      );
+      return undefined;
+    }
+    return { template: path, fit: AS_WRITTEN };
+  }
+
+  if (matches === undefined) {
+    const candidates = fitting.map((template) => `"${template}"`).join(" or ");
+    problems.push(
+      `operation "${name}" is ${where}, which the document does not describe` +
+        (candidates === ""
+          ? ""
+          : `; if ${candidates} is meant to serve it, say so as the operation's "matches"`),
+    );
+    return undefined;
+  }
+  if (typeof matches !== "string" || !Object.hasOwn(paths, matches)) {
+    problems.push(
+      `operation "${name}" names ${JSON.stringify(matches)} as what serves ${where}, which is not a path of the document`,
+    );
+    return undefined;
+  }
+
+  const fitted = fit(path, matches);
+  if (typeof fitted === "string") {
+    problems.push(
+      `operation "${name}" names "${matches}" as what serves ${where}, which it does not: ${fitted}`,
+    );
+    return undefined;
+  }
+  // What the upstream routes to is the most specific template that fits, whatever is named here:
+  // `reachesOthers` refuses one that is, with every other way the path could reach it.
+  return { template: matches, fit: fitted };
+}
+
+interface Narrowing {
+  readonly payload: unknown;
+  readonly outcomes: Readonly<Record<string, unknown>>;
+}
+
+// What an operation states of its own schemas, read once and in full before any of it is set
+// into what the document says: a field this does not know, which a misspelling would be, and
+// then each schema for its own shape, the names it may not use and the references it cannot
+// resolve. A narrowing that is wrong is refused rather than merged and quietly filtered.
+function narrowingOf(
+  name: string,
+  narrow: unknown,
+  problems: string[],
+): Narrowing {
+  const nothing: Narrowing = { payload: undefined, outcomes: {} };
+  if (narrow === undefined) return nothing;
+  const what = `operation "${name}" narrowing`;
+  if (!isRecord(narrow)) {
+    problems.push(`${what} must be an object`);
+    return nothing;
+  }
+  for (const key of Object.keys(narrow)) {
+    if (key !== "payload" && key !== "outcomes") {
+      problems.push(
+        `${what} has an unknown field "${key}"; expected "payload", "outcomes"`,
+      );
+    }
+  }
+  const outcomes = narrow.outcomes ?? {};
+  if (!isRecord(outcomes)) {
+    problems.push(`${what}.outcomes must be an object of schemas`);
+    return nothing;
+  }
+
+  const found: string[] = [];
+  if (narrow.payload !== undefined) {
+    narrowingProblems(narrow.payload, `${what} of the request body`, found);
+  }
+  for (const [outcome, schema] of Object.entries(outcomes)) {
+    narrowingProblems(schema, `${what} of outcome "${outcome}"`, found);
+  }
+  if (found.length > 0) {
+    problems.push(...found);
+    return nothing;
+  }
+  return { payload: narrow.payload, outcomes };
+}
+
+const isNull = (schema: unknown): boolean =>
+  isRecord(schema) && schema.type === "null";
+
+// The document's shared schemas, so that a `#/components/schemas/Name` a parameter is written
+// with leads somewhere when its schema is checked.
+function componentsOf(
+  document: OpenApiDocument,
+): Readonly<Record<string, JSONSchema>> {
+  const components = document.components;
+  return isRecord(components) && isRecord(components.schemas)
+    ? (components.schemas as Record<string, JSONSchema>)
+    : {};
+}
+
+// Every value a caller could send that a request writes as a segment's text, or undefined where
+// the text cannot be read as a segment. The runtime writes a value into a path as
+// `String(value)`, so these are all of them and nothing else: the text itself, the number whose
+// written form it is, and a flag. "9007199254740993" is no number's written form, since the
+// number it parses as is written "9007199254740992", and neither are "007" or "42.0"; "1e+21"
+// is one, because it is how 1e21 is written.
+function readingsOf(text: string): readonly unknown[] | undefined {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(text);
+  } catch {
+    return undefined;
+  }
+  const readings: unknown[] = [decoded];
+  const asNumber = Number(decoded);
+  if (Number.isFinite(asNumber) && String(asNumber) === decoded) {
+    readings.push(asNumber);
+  }
+  if (decoded === "true" || decoded === "false") {
+    readings.push(decoded === "true");
+  }
+  return readings;
+}
+
+// Whether the text a path writes into one of a template's parameters is one the document admits
+// there: one reading the schema admits is enough, and a schema saying something the check
+// cannot apply admits none of them, since what is left unapplied is what the upstream will hold
+// the text to. What a schema makes of a value is the validators' own answer rather than one
+// worked out again here: a second reading of what a schema means is a second answer, and this
+// one is never the one that counts.
+function refusedValue(
+  document: OpenApiDocument,
+  schema: unknown,
+  text: string,
+): string | undefined {
+  const readings = readingsOf(text);
+  if (readings === undefined) return "it is not a segment that can be read";
+  let refused: readonly string[] = [];
+  for (const value of readings) {
+    const check = checkValue(schema, value, componentsOf(document));
+    if (check.verdict === "admitted") return undefined;
+    // What the schema says of the last reading, which is the one it came closest to taking:
+    // "1" held to integers with a bound is refused for the bound, not for being text.
+    refused = check.problems;
+  }
+  return refused.join("; ");
+}
+
+// A path of the operation's own with parameters in it reaches whatever the upstream routes the
+// values to, which is the most specific template that fits: one written out beats one that is
+// parameterised. A value a caller supplies could therefore land on another endpoint, answered
+// by another operation and described by other schemas, and the request would be held to what
+// was derived here rather than to what answers it. Unless the parameter's schema refuses every
+// value a request would write as that text, the configuration is refused.
+function reachesOthers(
+  name: string,
+  path: string,
+  served: Served,
+  declared: readonly Declared[],
+  document: OpenApiDocument,
+  templates: readonly string[],
+): string[] {
+  const own = segmentsOf(served.template);
+  const components = componentsOf(document);
+  const excludes = (index: number, text: string): boolean => {
+    const segment = own[index];
+    // Only a segment that is a parameter and nothing else is one a schema speaks for.
+    if (
+      segment === undefined ||
+      (segment.kind !== "parameter" && segment.kind !== "greedy")
+    ) {
+      return false;
+    }
+    const schema = declared.find(
+      (other) => other.in === "path" && other.name === segment.name,
+    )?.parameter.schema;
+    // The template writes its segments as they go into a URL, and a value is what a caller
+    // sends: "admin panel" is written "admin%20panel" there, so the text is read before it is
+    // held to anything. It is kept out only where the schema refuses every value a request
+    // would write as it; one the check cannot apply, or a parameter with no schema, proves
+    // nothing, and the parameter is taken to reach it.
+    const readings = readingsOf(text);
+    return (
+      schema !== undefined &&
+      readings !== undefined &&
+      readings.every(
+        (value) => checkValue(schema, value, components).verdict === "refused",
+      )
+    );
+  };
+
+  return templates.flatMap((template) => {
+    if (
+      template === served.template ||
+      !isMoreSpecific(template, served.template) ||
+      !couldReach(path, template, excludes)
+    ) {
+      return [];
+    }
+    // The path reaches it as it is written, or the way the text it is written with reads, and
+    // no value of anyone's comes into it.
+    if (
+      typeof fit(path, template) !== "string" ||
+      segmentsOf(path).every((segment) => segment.kind === "literal")
+    ) {
+      return [
+        `operation "${name}" is ${path}, served by "${served.template}", and the upstream would route it to "${template}", which is more specific`,
+      ];
+    }
+    return [
+      `operation "${name}" is ${path}, served by "${served.template}", and a value of its own parameters would reach "${template}", which the upstream routes to first; nothing in the document says it cannot`,
+    ];
+  });
 }
 
 // A header's name as the driver compares them, or as written where it is not one the driver

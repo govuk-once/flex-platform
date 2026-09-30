@@ -4,6 +4,7 @@ import type {
   ExecutorOptions,
   GatewayConfig,
 } from "@repo/gateway-config";
+import type { JSONSchema } from "@repo/gateway-types";
 
 import type { MetadataConfig } from "../metadata.ts";
 import {
@@ -53,6 +54,17 @@ export interface ParameterMapping {
   readonly name?: string;
 }
 
+// What an operation states of its schemas that the upstream's document leaves open. Where the
+// document admits an object of any shape, or any value at all, what is stated takes its place;
+// anywhere else it is set into what the document says, so it makes a schema admit less and never
+// more or other than the upstream describes.
+export interface OperationNarrowing {
+  // The request body, set in as written: close an object here to refuse fields it does not list.
+  readonly payload?: JSONSchema;
+  // An outcome's data, by the outcome's name, held to its shape as any outcome is.
+  readonly outcomes?: Readonly<Record<string, JSONSchema>>;
+}
+
 // The caller's input is one flat object and does not know how it maps to HTTP. The operation
 // declares that per field: a path parameter, a query parameter or a header. Every path
 // parameter in the template needs an entry. The request body, when there is one, travels under
@@ -60,6 +72,17 @@ export interface ParameterMapping {
 export type OpenApiRestOperationFields = {
   readonly upstream: UpstreamTemplate;
   readonly parameters?: Readonly<Record<string, ParameterMapping>>;
+  // The path template of the upstream's document that serves this operation's path, where the
+  // document does not declare the path itself: "/v1/{resourcePath+}" for "GET /v1/notifications".
+  // Said, never inferred. A template that takes any path serves one the document has not
+  // described, so nothing in the document says what this operation sends or gets back; an
+  // operation that goes through one does so because someone wrote that it should, and deriving
+  // fails for a path the document lacks and no `matches` accounts for. The request is sent to
+  // the path in `upstream` either way; only deriving reads this.
+  readonly matches?: `/${string}`;
+  // What the document leaves unsaid: a body or a field of any shape, as a template that takes
+  // any path usually has. The shape a gateway's own services keep there is theirs to state.
+  readonly narrow?: OperationNarrowing;
 };
 
 export interface OpenApiRestDriver
