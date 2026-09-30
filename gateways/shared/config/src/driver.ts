@@ -67,8 +67,9 @@ export interface DriverDefinition<
   // generated entry point imports the configuration, and the bundler follows every import it can
   // see from there, a dynamic one included, so a module imported here would carry whatever parses
   // that description into the deployed gateway. A URL is data: a driver builds it from its own
-  // module, `new URL("../derive/index.ts", import.meta.url).href`. Only the command that updates
-  // a gateway's schemas loads it, and it must export a DeriveSchemas as its default.
+  // module, `new URL("../derive/index.ts", import.meta.url).href`. The command that updates a
+  // gateway's schemas loads it, and so does codegen, with the network refused, to check the
+  // latest version is still what it derives. It must export a DeriveSchemas as its default.
   readonly deriveSchemasModule: string;
   // Phantom properties - give TypeScript structural anchors to infer TOpFields and THandler
   // from a driver instance via OperationFields<D> and HandlerOf<D>. Never set at runtime.

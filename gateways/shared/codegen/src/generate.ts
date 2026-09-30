@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
+import { checkDerivation } from "./check-derivation.ts";
 import { checkGateway } from "./check-gateway.ts";
 import { checkVersions } from "./compare-schemas.ts";
 import { emitContract } from "./emit-contract.ts";
@@ -39,10 +40,12 @@ export async function generate(gatewayDir: string): Promise<void> {
   // The schemas are generated from before they are read against anything else, so a schema that
   // is not a valid schema is reported as itself rather than as the disagreement it causes. Then
   // against the versions before them, and only then against the configuration: a contract that
-  // breaks its callers is refused whatever the configuration makes of it.
+  // breaks its callers is refused whatever the configuration makes of it. Last, whether the
+  // latest version is still what the driver derives, where it can derive without the network.
   const compiled = compileValidators(schemas);
   checkVersions(config.id, versions);
   checkGateway(config, schemas);
+  await checkDerivation(config, versions, dir);
 
   // Everything that can refuse the gateway has run, so what is left is writing and bundling. The
   // output is deleted and written again: a run that fails from here fails the command and leaves

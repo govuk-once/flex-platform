@@ -20,6 +20,17 @@ export class SchemaSourceError extends Error {
   }
 }
 
+// A read refused because the run has no network: codegen derives only what it can without one.
+export class OfflineSourceError extends SchemaSourceError {
+  constructor(location: string) {
+    super(
+      location,
+      "it is fetched over the network, which this run does not reach",
+    );
+    this.name = "OfflineSourceError";
+  }
+}
+
 async function fetched(location: string, url: URL): Promise<string> {
   let response: Response;
   try {
@@ -98,7 +109,15 @@ async function fromGateway(
   return readFile(file, "utf-8");
 }
 
-export function schemaSources(gatewayDir: string): SchemaSources {
+export interface SourceOptions {
+  // Paths in the gateway's directory only. Codegen runs in CI, which never reaches an upstream.
+  readonly offline?: boolean;
+}
+
+export function schemaSources(
+  gatewayDir: string,
+  { offline = false }: SourceOptions = {},
+): SchemaSources {
   return {
     async load(location) {
       if (/^[a-z][a-z0-9+.-]*:/i.test(location)) {
@@ -114,6 +133,7 @@ export function schemaSources(gatewayDir: string): SchemaSources {
             "it is not an https address; a description is fetched over https or read from the gateway's directory",
           );
         }
+        if (offline) throw new OfflineSourceError(location);
         return fetched(location, url);
       }
       return fromGateway(location, gatewayDir);

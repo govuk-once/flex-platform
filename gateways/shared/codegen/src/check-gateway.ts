@@ -36,8 +36,8 @@ function neutralProblems(
 
   // Every driver derives its gateways' schemas, so no version is written by hand. The type
   // requires the module; an untyped configuration can leave it out, and would otherwise generate
-  // from versions nothing can bring up to date. Named, never loaded: generating needs nothing
-  // from it.
+  // from versions nothing can bring up to date. Only its URL is read here; the module is loaded
+  // later, to check the latest version is still what it derives.
   const derive: unknown = config.driver.deriveSchemasModule;
   if (
     typeof derive !== "string" ||
