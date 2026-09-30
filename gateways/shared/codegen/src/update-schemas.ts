@@ -1,12 +1,11 @@
-import { stat } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-import type { DeriveSchemas, SchemaSources } from "@repo/gateway-config";
+import type { SchemaSources } from "@repo/gateway-config";
 import type { GatewaySchemas } from "@repo/gateway-types";
 
 import { checkGateway } from "./check-gateway.ts";
-import { breaksOf, checkVersions, compareSchemas } from "./compare-schemas.ts";
+import { checkVersions, compareCandidate } from "./compare-schemas.ts";
+import { loadDerive } from "./derive-module.ts";
 import { compileValidators } from "./emit-validators.ts";
 import { SCHEMAS_DIR } from "./layout.ts";
 import { type AnyGatewayConfig, loadConfig } from "./load-config.ts";
@@ -48,35 +47,6 @@ export interface SchemasReport {
   readonly gatewayId: string;
   readonly update: SchemasUpdate;
   readonly notes: readonly string[];
-}
-
-// The module a definition gives as the one that derives its schemas, loaded. A definition gives
-// it as a `file:` URL it builds from its own, `new URL("../derive/index.ts", import.meta.url)`, so
-// nothing has to resolve a name: the module is wherever the driver's own files are. Looked for
-// before it is loaded, so one that is not there is refused as that rather than as whatever a
-// loader makes of a file that is missing.
-async function deriveWith(location: string): Promise<DeriveSchemas> {
-  const url = URL.canParse(location) ? new URL(location) : undefined;
-  if (url?.protocol !== "file:") {
-    throw new Error(
-      `The driver gives "${location}" as the module that derives its schemas, which is not a file: URL`,
-    );
-  }
-  try {
-    await stat(fileURLToPath(url));
-  } catch (cause) {
-    throw new Error(
-      `The driver gives "${location}" as the module that derives its schemas, which is not there`,
-      { cause },
-    );
-  }
-  const module = (await import(url.href)) as { default?: unknown };
-  if (typeof module.default !== "function") {
-    throw new TypeError(
-      `"${location}" must export the function that derives schemas as its default`,
-    );
-  }
-  return module.default as DeriveSchemas;
 }
 
 // What every version this command reports on is held to, derived or written by hand: its shape,
@@ -124,7 +94,7 @@ export async function updateSchemas(
     };
   }
 
-  const derive = await deriveWith(deriveModule);
+  const derive = await loadDerive(deriveModule);
   const { schemas: candidate, notes } = await derive(config, sources);
   checkSchemas(
     config,
@@ -149,9 +119,11 @@ export async function updateSchemas(
   // what it changes is read against the latest alone, which it would follow.
   const versions = await loadVersions(dir);
   checkVersions(config.id, versions);
-  const breaking = breaksOf(versionAfter(names), candidate, versions);
-  const current = versions.at(-1)?.schemas ?? candidate;
-  const { compatible } = compareSchemas(current, candidate);
+  const { breaking, changes: compatible } = compareCandidate(
+    versionAfter(names),
+    candidate,
+    versions,
+  );
 
   if (breaking.length > 0) {
     return {
