@@ -143,7 +143,8 @@ export function createClient(
       // inside the same attempt, so the timeout bounds both and only the second answer is the
       // call's, to be mapped and counted: the refusal the replay answered is not an upstream
       // failure. Once: a second refusal is the upstream's answer. Any other method is not sent
-      // again, since the upstream may have acted on it, and the refusal is its answer.
+      // again, since the upstream may have acted on it, and the refusal is its answer whatever
+      // becomes of the read: one that fails is logged and left for the next request to meet.
       if (deps.reauthenticate === undefined || !REFUSED.has(response.status)) {
         return response;
       }
@@ -154,8 +155,18 @@ export function createClient(
           : "The upstream refused the gateway's credentials; the secret is read again for the next request, and this one is not sent again",
         { status: response.status },
       );
-      await deps.reauthenticate();
-      return replay ? send(signal) : response;
+      if (replay) {
+        await deps.reauthenticate();
+        return send(signal);
+      }
+      try {
+        await deps.reauthenticate();
+      } catch {
+        ctx.log.warn(
+          "The gateway secret could not be read again after the refusal; the refusal is the result",
+        );
+      }
+      return response;
     });
 
     async function send(signal: AbortSignal): Promise<OpenApiRestResponse> {
