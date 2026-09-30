@@ -43,6 +43,7 @@ const stubDriver: DriverDefinition = {
   type: "stub",
   createExecutor: () =>
     Promise.reject(new Error("stub driver has no executor")),
+  deriveSchemasModule: "file:///stub-driver/derive.ts",
 };
 
 function testConfig(

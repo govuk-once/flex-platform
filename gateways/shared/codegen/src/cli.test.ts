@@ -17,10 +17,17 @@ import {
 
 // The command as a gateway package runs it, against a gateway written for the test.
 
+// The test's versions are its own data; this derivation answers with the latest of them.
+const DERIVE_LATEST = new URL("../test/derive-latest.ts", import.meta.url).href;
+
 const CONFIG = `
 export default {
   id: "cli",
-  driver: { type: "stub", createExecutor: () => Promise.reject(new Error("no executor")) },
+  driver: {
+    type: "stub",
+    createExecutor: () => Promise.reject(new Error("no executor")),
+    deriveSchemasModule: ${JSON.stringify(DERIVE_LATEST)},
+  },
   operations: { ping: {} },
 };
 `;

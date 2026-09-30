@@ -116,10 +116,13 @@ integrations are implemented.
    Adding a transport should not require transport-specific logic in the dispatcher or generator.
    `gateways/drivers/openapi-rest` is the only package that names methods, paths, status codes
    or headers; callers see outcome names such as `ok` and `no_content`, never a status.
-   A driver that derives its schemas gives the module that does as a `file:` URL built from its
-   own, `deriveSchemasModule`, and never imports it: the entry point imports the configuration
-   and the bundler follows every import from there, so an import would put whatever parses an
-   upstream's description into the deployed gateway. Only `gateway-schemas` loads it. What
+   Every driver derives its gateways' schemas, from the upstream's own description or from what
+   the configuration declares, so no version is written by hand. It gives the module that does
+   as a `file:` URL built from its own, `deriveSchemasModule`, and never imports it: the entry
+   point imports the configuration and the bundler follows every import from there, so an import
+   would put whatever parses an upstream's description into the deployed gateway.
+   `gateway-schemas` loads it to write a version, and codegen loads it with the network refused
+   to check the latest version is still what it derives. Nothing bundles it. What
    either command prints, a report or the error that stopped it, carries upstream text: it goes
    out through `printable`, which writes what does not display as its code point.
    A driver definition carries its own `createExecutor`, so codegen and a generated entrypoint
