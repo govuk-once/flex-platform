@@ -1,0 +1,206 @@
+---
+// The platform's three sections, top to bottom, and the path a request takes through them.
+// Drawn with Starlight's colour variables so it follows the light and dark themes.
+---
+
+<figure class="platform">
+  <div class="scroll">
+    <svg
+      viewBox="0 0 600 960"
+      role="img"
+      aria-labelledby="platform-title platform-desc"
+    >
+      <title id="platform-title">The Flex platform</title>
+      <desc id="platform-desc">
+        The GOV.UK app reaches CloudFront. A CloudFront Function checks the request's structure.
+        Lambda@Edge authenticates the request with Cognito, routes it and signs it. The request
+        goes to the API Gateway of one domain. The domain's Lambda runs in isolated
+        subnets. It invokes as many gateway Lambdas as it needs, one per upstream. An isolated
+        gateway reaches its upstream through a VPC endpoint. A private gateway reaches the
+        internet through a NAT gateway and AWS Network Firewall.
+      </desc>
+      <defs>
+        <marker
+          id="platform-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+        </marker>
+      </defs>
+
+      <!-- Caller -->
+      <rect class="external" x="200" y="10" width="200" height="40" rx="6"></rect>
+      <text class="label" x="300" y="36">GOV.UK app</text>
+
+      <!-- Frontdoor -->
+      <rect class="section" x="20" y="70" width="560" height="260" rx="10"></rect>
+      <text class="section-title" x="36" y="98">Frontdoor</text>
+
+      <rect class="box" x="180" y="100" width="240" height="52" rx="6"></rect>
+      <text class="label" x="300" y="123">CloudFront</text>
+      <text class="sub" x="300" y="142">one entry point</text>
+
+      <rect class="box" x="180" y="180" width="240" height="52" rx="6"></rect>
+      <text class="label" x="300" y="203">CloudFront Function</text>
+      <text class="sub" x="300" y="222">structural checks</text>
+
+      <rect class="box" x="180" y="260" width="240" height="52" rx="6"></rect>
+      <text class="label" x="300" y="283">Lambda@Edge</text>
+      <text class="sub" x="300" y="302">Cognito · routing · SigV4</text>
+
+      <!-- Domains -->
+      <rect class="section" x="20" y="350" width="560" height="250" rx="10"></rect>
+      <text class="section-title" x="36" y="378">Domains</text>
+      <text class="note" x="36" y="397">by external developers</text>
+
+      <rect class="box" x="180" y="410" width="240" height="52" rx="6"></rect>
+      <text class="label" x="300" y="433">API Gateway</text>
+      <text class="sub" x="300" y="452">at the domain's own name</text>
+
+      <rect class="subnet" x="150" y="478" width="300" height="104" rx="8"></rect>
+      <text class="note" x="162" y="497">isolated subnets</text>
+      <rect class="box" x="180" y="512" width="240" height="52" rx="6"></rect>
+      <text class="label" x="300" y="535">Domain Lambda</text>
+      <text class="sub" x="300" y="554">proxy integration</text>
+
+      <!-- Egress -->
+      <rect class="section" x="20" y="650" width="560" height="220" rx="10"></rect>
+      <text class="section-title" x="36" y="678">Egress</text>
+
+      <rect class="box accent" x="55" y="700" width="150" height="52" rx="6"></rect>
+      <text class="label" x="130" y="723">Gateway</text>
+      <text class="sub" x="130" y="742">isolated</text>
+
+      <rect class="box accent" x="225" y="700" width="150" height="52" rx="6"></rect>
+      <text class="label" x="300" y="723">Gateway</text>
+      <text class="sub" x="300" y="742">isolated</text>
+
+      <rect class="box accent" x="395" y="700" width="150" height="52" rx="6"></rect>
+      <text class="label" x="470" y="723">Gateway</text>
+      <text class="sub" x="470" y="742">private</text>
+
+      <rect class="box" x="55" y="782" width="150" height="46" rx="6"></rect>
+      <text class="label small" x="130" y="811">VPC endpoint</text>
+
+      <rect class="box" x="225" y="782" width="150" height="46" rx="6"></rect>
+      <text class="label small" x="300" y="811">VPC endpoint</text>
+
+      <rect class="box" x="395" y="782" width="150" height="46" rx="6"></rect>
+      <text class="label small" x="470" y="811">NAT + Firewall</text>
+
+      <!-- Upstreams -->
+      <rect class="external" x="55" y="900" width="150" height="40" rx="6"></rect>
+      <text class="label small" x="130" y="926">Private upstream</text>
+      <rect class="external" x="225" y="900" width="150" height="40" rx="6"></rect>
+      <text class="label small" x="300" y="926">Private upstream</text>
+      <rect class="external" x="395" y="900" width="150" height="40" rx="6"></rect>
+      <text class="label small" x="470" y="926">Internet upstream</text>
+
+      <!-- Flow -->
+      <line class="flow" x1="300" y1="50" x2="300" y2="98"></line>
+      <line class="flow" x1="300" y1="152" x2="300" y2="178"></line>
+      <line class="flow" x1="300" y1="232" x2="300" y2="258"></line>
+      <line class="flow" x1="300" y1="312" x2="300" y2="408"></line>
+      <text class="sub start" x="310" y="344">by domain</text>
+      <line class="flow" x1="300" y1="462" x2="300" y2="510"></line>
+
+      <!-- One domain invokes many gateways -->
+      <polyline class="bus" points="300,564 300,625"></polyline>
+      <polyline class="bus" points="130,625 470,625"></polyline>
+      <line class="flow" x1="130" y1="625" x2="130" y2="698"></line>
+      <line class="flow" x1="300" y1="625" x2="300" y2="698"></line>
+      <line class="flow" x1="470" y1="625" x2="470" y2="698"></line>
+
+      <line class="flow" x1="130" y1="752" x2="130" y2="780"></line>
+      <line class="flow" x1="300" y1="752" x2="300" y2="780"></line>
+      <line class="flow" x1="470" y1="752" x2="470" y2="780"></line>
+      <line class="flow" x1="130" y1="828" x2="130" y2="898"></line>
+      <line class="flow" x1="300" y1="828" x2="300" y2="898"></line>
+      <line class="flow" x1="470" y1="828" x2="470" y2="898"></line>
+    </svg>
+  </div>
+</figure>
+
+<style>
+  .platform {
+    margin-block: 1.5rem;
+  }
+  .scroll {
+    overflow-x: auto;
+  }
+  svg {
+    display: block;
+    width: 100%;
+    max-width: 600px;
+    min-width: 420px;
+    height: auto;
+    margin-inline: auto;
+    font-family: var(--sl-font);
+  }
+  .section {
+    fill: var(--sl-color-gray-6);
+    stroke: var(--sl-color-gray-5);
+  }
+  .box {
+    fill: var(--sl-color-bg);
+    stroke: var(--sl-color-gray-4);
+  }
+  .box.accent {
+    stroke: var(--sl-color-accent);
+    stroke-width: 2;
+  }
+  .external {
+    fill: none;
+    stroke: var(--sl-color-gray-4);
+    stroke-dasharray: 4 3;
+  }
+  .subnet {
+    fill: none;
+    stroke: var(--sl-color-gray-4);
+    stroke-dasharray: 6 4;
+  }
+  .flow,
+  .bus {
+    fill: none;
+    stroke: var(--sl-color-gray-3);
+    stroke-width: 1.5;
+  }
+  .flow {
+    marker-end: url(#platform-arrow);
+  }
+  .head {
+    fill: var(--sl-color-gray-3);
+  }
+  text {
+    fill: var(--sl-color-white);
+  }
+  .label {
+    font-size: 16px;
+    font-weight: 600;
+    text-anchor: middle;
+  }
+  .label.small {
+    font-size: 14px;
+  }
+  .sub {
+    font-size: 13px;
+    fill: var(--sl-color-gray-3);
+    text-anchor: middle;
+  }
+  .sub.start {
+    text-anchor: start;
+  }
+  .section-title {
+    font-size: 19px;
+    font-weight: 700;
+  }
+  .note {
+    font-size: 13px;
+    fill: var(--sl-color-gray-3);
+  }
+</style>

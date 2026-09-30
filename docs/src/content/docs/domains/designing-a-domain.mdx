@@ -1,0 +1,83 @@
+---
+title: Designing a domain
+description: How domain logic turns upstream capabilities into a service for the app.
+---
+
+import { Aside, Badge } from "@astrojs/starlight/components";
+
+<Badge text="Planned" variant="caution" size="medium" />
+
+A domain owns a feature's behaviour and the API the app uses to reach it. The platform provides
+the Frontdoor, domain hosting and gateways to upstreams. The Frontdoor, domain hosting and domain
+libraries are planned; the examples here explain how to divide the work, rather than an API you
+can install today.
+
+## Start with the app's request
+
+Describe what the person using the app needs to see or change, then identify the data and upstream
+operations needed to do it. A domain's API can combine these operations into one request.
+
+| Shape | What the domain does | Example |
+|---|---|---|
+| One upstream call | Calls a gateway operation and presents its result through the domain's API. | Reading a user's notification preferences. |
+| Several upstream calls | Resolves dependencies between calls and combines their results. | Looking up a user's notification identifier, then retrieving their notifications. |
+| Local computation | Computes a response from the request and bundled reference data. | Returning a derived value without contacting an upstream. |
+
+These shapes can coexist within one domain. The number of gateway calls follows the feature's
+needs. A gateway remains specific to one upstream.
+
+## Two contracts
+
+The app calls a domain's HTTP API. The domain calls a gateway using its generated
+[call contract](/flex-platform/codegen/call-contract/). The domain translates between them:
+
+- it supplies the operation's input from the authenticated request and its own business logic;
+- it handles the gateway's named outcomes and error codes;
+- it chooses the response the app receives.
+
+For example, a missing linked account may mean the app should offer account linking. The domain
+decides that behaviour. The gateway reports the upstream result through its declared contract.
+
+Upstream addresses, credentials, transport headers and status mapping belong to the gateway's
+driver. Combining information from different upstreams and deciding what it means for a feature
+belong to the domain. A [custom gateway handler](/flex-platform/drivers/openapi-rest/handlers/)
+can adapt one upstream's behaviour to its gateway contract.
+
+## Identity and linked accounts
+
+An authenticated app user and their record in another service may have different identifiers.
+The User Data Platform holds links between service identities. A domain may need to resolve that
+link before it can call the service the person wants to use. Authentication alone does not mean
+the account has been linked or that every requested record belongs to the user.
+
+The domain's design must account for a missing link, a missing upstream record and an upstream
+failure separately. These can require different responses in the app.
+
+<Aside type="caution" title="Gateway bindings do not authenticate a user">
+The current gateway runtime compares configured input fields with `secure.values`, but does not
+verify `secure.signature`. These checks prove consistency within an envelope, not the identity
+or permissions of its sender. See [Secure bindings](/flex-platform/gateways/configuration/#secure-bindings).
+</Aside>
+
+## Data and dependencies
+
+A gateway exposes specific operations with specific input and outcome schemas. The presence of a
+User Data Platform gateway does not give a domain an arbitrary data store. A new stored shape or
+upstream operation needs an explicit gateway contract. See
+[Narrowing what the document leaves open](/flex-platform/drivers/openapi-rest/deriving-schemas/#narrowing-what-the-document-leaves-open).
+
+Check the configured operations before designing a feature around them. The
+[UDP gateway configuration](https://github.com/govuk-once/flex-platform/blob/main/gateways/services/udp/gateway.config.ts)
+is the implemented example. Other upstream integrations need gateway work before a domain can
+use them. Domain-owned storage and background execution are not provided by this repository.
+
+## Failures across several calls
+
+Each gateway call has its own result. A sequence of calls is not a transaction: a successful write
+is not undone if a later call fails. Decide what a partial result means for the feature before
+combining writes behind one app request.
+
+A timeout does not establish whether an upstream completed a write. Invocation clients must
+disable automatic SDK retries, as described under
+[Calling gateways](/flex-platform/domains/overview/#calling-gateways). Handling partial success
+and deciding whether an operation can safely be repeated belong in the feature's design.

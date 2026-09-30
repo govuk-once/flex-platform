@@ -1,0 +1,53 @@
+---
+title: Flex Platform
+description: "Flex is the platform behind the GOV.UK app. It connects what GOV.UK knows about a user with the government services the app is built to work with."
+---
+
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+Flex is the platform behind the GOV.UK app. It runs serverless on AWS, and lets the app personalise
+what it shows by bringing together:
+
+- the GOV.UK app data and settings for a user such as their linked accounts and notification preferences
+- the government services the GOV.UK app is built to work with
+
+This means each of those services can respond to a known person instead of an anonymous request.
+
+Teams outside the platform write **domains**. Domains hold the logic behind personalised
+features. Flex provides everything around the domains:
+
+- a **Frontdoor** that checks, authenticates and routes every request
+- a home for each **domain**, with its own API and its own path from development to production
+- **gateways**, which are a domain's access to other services. They validate everything that passes
+  through them.
+
+See [The platform](/flex-platform/start/platform/) for how the three parts fit together and what
+exists today.
+
+<CardGrid>
+  <LinkCard
+    title="The platform"
+    description="Frontdoor, domains and egress, and what is planned."
+    href="/flex-platform/start/platform/"
+  />
+  <LinkCard
+    title="Designing a domain"
+    description="App-facing behaviour, linked identities and calls to upstreams."
+    href="/flex-platform/domains/designing-a-domain/"
+  />
+  <LinkCard
+    title="How a gateway works"
+    description="The packages, the build and what happens to a request."
+    href="/flex-platform/gateways/overview/"
+  />
+  <LinkCard
+    title="Creating a gateway"
+    description="Add a gateway for a new upstream."
+    href="/flex-platform/gateways/creating-a-gateway/"
+  />
+  <LinkCard
+    title="Writing a driver"
+    description="The driver contract, and how to add a transport."
+    href="/flex-platform/drivers/writing-a-driver/"
+  />
+</CardGrid>

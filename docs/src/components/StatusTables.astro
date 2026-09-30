@@ -1,0 +1,22 @@
+---
+// Tables that span the content column, so several in a row line up as one. The last column holds
+// only a status badge and is as wide as one, the name a short one, and what it is the rest.
+// Starlight shows a table as a block sized to its content. A cell's width mixing a percentage and
+// a length in calc() is read as auto, so the name's width is a plain percentage.
+---
+
+<div class="status-tables"><slot /></div>
+
+<style>
+  .status-tables :global(table) {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+  }
+  .status-tables :global(th:first-child) {
+    width: 20%;
+  }
+  .status-tables :global(th:last-child) {
+    width: 7rem;
+  }
+</style>
