@@ -33,10 +33,9 @@ function typeOf(schema: JSONSchema, ctx: TypeContext, context: string): string {
 
 const preamble = (id: string) => `// The call contract for gateway "${id}".
 //
-// Each operation takes one flat input object: the fields the operation maps to the upstream
-// request at the top level, and the request body, when the operation has one, under "payload".
-// A response is an error envelope or a success carrying one of the operation's declared
-// outcomes, so a switch over \`outcome\` is checked for exhaustiveness.`;
+// Each operation takes one input object, as its schema describes it. A response is an error
+// envelope or a success carrying one of the operation's declared outcomes, so a switch over
+// \`outcome\` is checked for exhaustiveness.`;
 
 // Names TypeScript needs for itself: the utilities the generated declarations use, and the
 // intrinsic types, which cannot be declared as an alias at all. A definition that took one of
