@@ -22,8 +22,15 @@ import type { GatewayConfig } from "./types.ts";
 const neverExecutes = () =>
   Promise.reject(new Error("test driver has no executor"));
 
+// Required of every driver; nothing here derives, so nothing loads it.
+const NEVER_DERIVES = "file:///test-driver/derive.ts";
+
 function stubDriver(): DriverDefinition<{ upstream: string }> {
-  return { type: "stub", createExecutor: neverExecutes };
+  return {
+    type: "stub",
+    createExecutor: neverExecutes,
+    deriveSchemasModule: NEVER_DERIVES,
+  };
 }
 
 // A test-only refinement: an upstream with a "{param}" must declare `parameters`. It shows the
@@ -46,7 +53,11 @@ declare module "./driver.ts" {
 }
 
 function refinedDriver(): RefinedDriver {
-  return { type: "refined-stub", createExecutor: neverExecutes };
+  return {
+    type: "refined-stub",
+    createExecutor: neverExecutes,
+    deriveSchemasModule: NEVER_DERIVES,
+  };
 }
 
 describe("defineGateway", () => {
@@ -199,7 +210,11 @@ describe("defineGateway type inference", () => {
 
   it("works with a driver that requires no extra fields", () => {
     function minimalDriver(): DriverDefinition<Record<string, unknown>> {
-      return { type: "minimal", createExecutor: neverExecutes };
+      return {
+        type: "minimal",
+        createExecutor: neverExecutes,
+        deriveSchemasModule: NEVER_DERIVES,
+      };
     }
 
     const gw = defineGateway({
@@ -229,7 +244,11 @@ describe("driver contract types", () => {
   }
   // A factory rather than a cast: the literal alone would not carry the phantom handler type.
   function typedStubDriver(): StubDriver {
-    return { type: "typed-stub", createExecutor: neverExecutes };
+    return {
+      type: "typed-stub",
+      createExecutor: neverExecutes,
+      deriveSchemasModule: NEVER_DERIVES,
+    };
   }
 
   it("types an operation's handler against the driver", () => {
@@ -284,6 +303,7 @@ describe("driver contract types", () => {
     const driver: DriverDefinition = {
       type: "stub",
       createExecutor: neverExecutes,
+      deriveSchemasModule: NEVER_DERIVES,
       checkSchemas: (config, schemas) =>
         Object.keys(schemas.operations)
           .filter((name) => !Object.hasOwn(config.operations, name))
@@ -335,7 +355,11 @@ describe("driver contract types", () => {
       expectTypeOf(options).toEqualTypeOf<ExecutorOptions>();
       return Promise.resolve(execute);
     };
-    const driver: StubDriver = { type: "typed-stub", createExecutor };
+    const driver: StubDriver = {
+      type: "typed-stub",
+      createExecutor,
+      deriveSchemasModule: NEVER_DERIVES,
+    };
 
     // What an entrypoint does: the driver is reached through the configuration it is part of,
     // so nothing outside the configuration names a driver package.

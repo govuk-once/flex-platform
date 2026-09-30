@@ -60,15 +60,16 @@ export interface DriverDefinition<
     config: GatewayConfig<DriverDefinition, AnyOperations<DriverDefinition>>,
     schemas: GatewaySchemas,
   ): readonly string[];
-  // The module that derives this driver's schemas from its own description of the upstream: an
-  // OpenAPI document, say. Given as a `file:` URL, not imported. A generated entry point imports
-  // the configuration, and the bundler follows every import it can see from there, a dynamic one
-  // included, so a module imported here would carry whatever parses that description into the
-  // deployed gateway. A URL is data: a driver builds it from its own module,
-  // `new URL("../derive/index.ts", import.meta.url).href`, only the command that updates a
-  // gateway's schemas loads it, and it must export a DeriveSchemas as its default. Optional: the
-  // schemas of a driver with nothing to derive them from are written by hand.
-  readonly deriveSchemasModule?: string;
+  // The module that derives a gateway's schemas: from the upstream's own description, an OpenAPI
+  // document say, or, where the upstream publishes none, from what the configuration declares.
+  // Required: no version is written by hand, so every version comes from one command and is held
+  // to every version before it before it is written. Given as a `file:` URL, not imported. A
+  // generated entry point imports the configuration, and the bundler follows every import it can
+  // see from there, a dynamic one included, so a module imported here would carry whatever parses
+  // that description into the deployed gateway. A URL is data: a driver builds it from its own
+  // module, `new URL("../derive/index.ts", import.meta.url).href`. Only the command that updates
+  // a gateway's schemas loads it, and it must export a DeriveSchemas as its default.
+  readonly deriveSchemasModule: string;
   // Phantom properties - give TypeScript structural anchors to infer TOpFields and THandler
   // from a driver instance via OperationFields<D> and HandlerOf<D>. Never set at runtime.
   readonly __opFields?: TOpFields;

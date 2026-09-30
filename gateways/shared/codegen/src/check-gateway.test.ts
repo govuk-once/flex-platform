@@ -14,7 +14,12 @@ function gateway(
 ): AnyGatewayConfig {
   return {
     id: "test",
-    driver: { type: "stub", createExecutor: noExecutor, ...driver },
+    driver: {
+      type: "stub",
+      createExecutor: noExecutor,
+      deriveSchemasModule: "file:///test-driver/derive.ts",
+      ...driver,
+    },
     operations,
   };
 }
@@ -71,6 +76,26 @@ describe("checkGateway", () => {
       'operation "ping" declares no outcomes',
     ]);
   });
+
+  it.each([undefined, "derives", "https://upstream.test/derive.js"])(
+    "reports a driver that gives %j as the module that derives its schemas",
+    (location) => {
+      const driver = {
+        deriveSchemasModule: location,
+      } as unknown as Partial<DriverDefinition>;
+
+      expect(
+        problemsOf(() =>
+          checkGateway(
+            gateway({ ping: {} }, driver),
+            schemas({ ping: opSchemas }),
+          ),
+        ),
+      ).toEqual([
+        'driver "stub" must give deriveSchemasModule, the file: URL of the module that derives its schemas',
+      ]);
+    },
+  );
 
   it("does not mistake an inherited member for a declared operation", () => {
     // A plain lookup of "constructor" finds Object.prototype's, so the missing schemas would

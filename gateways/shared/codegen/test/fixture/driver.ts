@@ -29,5 +29,6 @@ export function stubDriver(): DriverDefinition {
         stub.execute(ctx, operation, input),
       );
     },
+    deriveSchemasModule: new URL("../derive-latest.ts", import.meta.url).href,
   };
 }
