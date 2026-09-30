@@ -295,8 +295,8 @@ integrations are implemented.
     gateway's credentials, with a 401 or a 403, the driver reads the secret again from the store
     and has every part drop what it holds: a rotation replaces credentials faster than the cache
     expires. A GET is then sent once more, inside the same attempt, and only the second answer is
-    mapped and counted; any other method is not sent again (constraint 8). Only for a gateway
-    that sends a credential.
+    mapped and counted; any other method is not sent again (constraint 8), and its refusal stays
+    the answer even when that read fails. Only for a gateway that sends a credential.
 
 13. **Schema text is data, wherever it is written.** A version's descriptions can come from an
     upstream's own document, and the call contract writes them into code a caller compiles.

@@ -693,6 +693,48 @@ describe("a refusal of the gateway's credentials", () => {
     },
   );
 
+  it("keeps the refusal of a POST as its answer when the secret cannot be read again", async () => {
+    const secret = fakeSecret({ token: "tok" });
+    // The store becomes unreadable between the request and the read the refusal prompts.
+    const ff = fakeFetch(() => {
+      secret.fail(new Error("SYNTHETIC store unavailable"));
+      return json(401, {});
+    });
+    let dropped = 0;
+    const holding = defineAuth({
+      headers: ["x-held"],
+      fields: [],
+      create: () => ({
+        headers: () => Promise.resolve({ "x-held": "held" }),
+        refused: () => {
+          dropped += 1;
+        },
+      }),
+    });
+    const execute = await buildExecutor(
+      defineGateway({
+        id: "x",
+        driver: openapiRest({ spec: SPEC, auth: [TOKEN, holding] }),
+        operations: { op: { upstream: "POST /x" } },
+      }),
+      { target: TARGET, secret: secret.provider },
+      { fetch: ff.fetch },
+    );
+
+    const ctx = passthroughContext();
+    await expect(execute(ctx, "op", {})).rejects.toMatchObject({
+      code: "UPSTREAM_REJECTED",
+    });
+    expect(ff.calls).toHaveLength(1);
+    expect(dropped).toBe(1);
+    expect(ctx.logged.at(-1)).toEqual({
+      level: "warn",
+      message:
+        "The gateway secret could not be read again after the refusal; the refusal is the result",
+    });
+    expect(JSON.stringify(ctx.logged)).not.toContain("SYNTHETIC");
+  });
+
   it("takes a second refusal as the upstream's answer", async () => {
     const ff = answering(401, 401, 200);
     const execute = await buildExecutor(
