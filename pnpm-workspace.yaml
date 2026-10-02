@@ -4,6 +4,7 @@ packages:
   - gateways/shared/*
   - gateways/drivers/*
   - gateways/services/*
+  - infra/*
 
 allowBuilds:
   esbuild: true

@@ -40,4 +40,5 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 | The driver contract, and writing a driver | `drivers/contract.md`, `drivers/writing-a-driver.md` |
 | The openapi-rest driver | `drivers/openapi-rest/` |
 | Environment variables and the secret | `reference/environment.md` |
+| The CDK app, stages, config and its rules | `infrastructure/overview.md` |
 | Terms | `reference/glossary.md` |
