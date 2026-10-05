@@ -34,6 +34,21 @@ function neutralProblems(
   const problems: string[] = [];
   const configured = Object.keys(config.operations);
 
+  // Every driver derives its gateways' schemas, so no version is written by hand. The type
+  // requires the module; an untyped configuration can leave it out, and would otherwise generate
+  // from versions nothing can bring up to date. Only its URL is read here; the module is loaded
+  // later, to check the latest version is still what it derives.
+  const derive: unknown = config.driver.deriveSchemasModule;
+  if (
+    typeof derive !== "string" ||
+    !URL.canParse(derive) ||
+    new URL(derive).protocol !== "file:"
+  ) {
+    problems.push(
+      `driver "${config.driver.type}" must give deriveSchemasModule, the file: URL of the module that derives its schemas`,
+    );
+  }
+
   if (configured.length === 0) {
     problems.push("the configuration declares no operations");
   }

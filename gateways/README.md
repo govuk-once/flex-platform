@@ -178,7 +178,8 @@ dispatch are covered by the libraries' own tests, against a fixture gateway in
 `gateways/shared/codegen/test/`, so a new gateway adds no test of its own beyond its handlers.
 
 Everything that can refuse a gateway runs before anything is written: the schemas compile, each
-version is safe for a caller of every one before it and the configuration agrees with the latest.
+version is safe for a caller of every one before it, the configuration agrees with the latest, and
+the latest is what the driver derives where it can derive without the network.
 Only then is `.gen/` deleted and written again, so a gateway refused for its schemas or
 configuration keeps the output it had. What can still fail is writing and bundling; a run that fails
 there fails the command and leaves an incomplete `.gen/`, which the next run replaces.
@@ -205,13 +206,14 @@ schemas/
 ```
 
 Codegen generates from the highest-numbered version, and a merged version is never changed or
-removed: a change to the contract is the next version. Each version is checked against every one
-before it as the files are now, so one rewritten in place would change what the check holds the
-others to; CI refuses a pull request that changes or removes one. Versions are four digits, numbered
-from `0001` with none left out, so the names sort into the order they were written in; a directory
-that holds anything else, or whose numbering has a gap, fails generation rather than being read
-around. A version holds the shared definitions and, for each operation, an input schema and a schema
-for each outcome:
+removed: a change to the contract is the next version. Every version is written by
+[`gateway-schemas`](#bringing-a-gateways-schemas-up-to-date), never by hand. Each version is checked
+against every one before it as the files are now, so one rewritten in place would change what the
+check holds the others to; CI refuses a pull request that changes or removes one. Versions are four
+digits, numbered from `0001` with none left out, so the names sort into the order they were written
+in; a directory that holds anything else, or whose numbering has a gap, fails generation rather than
+being read around. A version holds the shared definitions and, for each operation, an input schema
+and a schema for each outcome:
 
 ```json
 {
@@ -244,10 +246,14 @@ Whether each schema is a valid schema is Ajv's to say when the validators are bu
 `gateway-schemas` runs in a gateway package, as `gateway-codegen` does, and `pnpm schemas` runs
 it for every gateway, carrying on past one that fails. A person runs it, reads what it says and
 commits what it wrote; it reaches the network, so nothing runs it in CI, where codegen's
-comparison of the committed versions is what holds.
+comparison of the committed versions is what holds, along with its check that the latest version
+is still what the driver derives, wherever that needs no network.
 
-A driver that can derive its schemas gives the module that does as `deriveSchemasModule` on its
-definition: a `file:` URL it builds from its own module,
+Every driver gives the module that derives its gateways' schemas as `deriveSchemasModule` on its
+definition. It derives them from the upstream's own description where there is one, an OpenAPI
+document say, and from what the configuration declares where there is none, as for a DynamoDB
+table; a driver may do both, as openapi-rest's `narrow` does for what a document leaves open. The
+module is a `file:` URL the driver builds from its own module,
 `new URL("../derive/index.ts", import.meta.url).href`. It is a URL and not an import because a
 generated entry point imports the configuration and the bundler follows every import it can see
 from there, a dynamic one included: a module imported by the definition would carry whatever
@@ -273,8 +279,8 @@ A version is two-space JSON in the order its source was written in, so the contr
 object's fields as the upstream documents them, and nothing a formatter decides, so the same
 schemas are the same bytes whatever is installed. The file is created exclusively, so a version
 that exists is never written over, and of two runs racing for one version only one writes it. A
-gateway whose driver derives nothing keeps its versions by hand; for it the command writes none
-and reads the latest as the generator reads it, since nothing else has.
+driver that gives no `deriveSchemasModule`, which only a configuration that is not type-checked
+can, is refused.
 
 What the command prints carries an upstream's own words — a field name through the comparison, a
 driver's notes through its derivation — and writes any character that does not display as its
@@ -345,8 +351,9 @@ takes a gateway of its own, under another id.
 
 ### What codegen checks
 
-Each operation must have schemas and each set of schemas an operation, and every operation must
-declare at least one outcome. Whether an operation's mappings and its input schema describe the
+The driver must give `deriveSchemasModule` as a `file:` URL, since every gateway's schemas are
+derived. Each operation must have schemas and each set of schemas an operation, and every operation
+must declare at least one outcome. Whether an operation's mappings and its input schema describe the
 same request is the driver's own reading, through `checkSchemas` on its definition; the generator
 names no method, path, query parameter or header. For the openapi-rest driver, codegen fails
 when:
@@ -380,6 +387,15 @@ constraint that applies to nothing fails generation rather than passing silently
 off: strict mode wants a tuple's length pinned, which would refuse an array that types its first
 elements by position and the rest with `items`. A schema whose validation is asynchronous is
 refused outright, since the dispatcher validates synchronously.
+
+Last, codegen runs the driver's derivation itself, with the network refused, and fails when
+`gateway-schemas` would write a new version: for a gateway whose configuration declares its
+schemas, that means they changed and nobody ran `pnpm schemas` since, and generating would build
+validators from schemas the configuration no longer declares. It reads the difference as that
+command does, so a reworded description or a reordering fails neither. A driver whose derivation
+has to fetch its upstream's description, openapi-rest with an https `spec`, cannot be derived
+without the network and is not checked; its versions change only when someone runs the command,
+and the comparison of its versions holds them.
 
 A field is one the object holds, never one it inherits. Every value a validator sees was parsed
 from JSON, so `Object.prototype` is behind it and a schema naming `constructor`, `toString` or

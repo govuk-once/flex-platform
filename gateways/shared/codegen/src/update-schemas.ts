@@ -1,12 +1,11 @@
-import { stat } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-import type { DeriveSchemas, SchemaSources } from "@repo/gateway-config";
+import type { SchemaSources } from "@repo/gateway-config";
 import type { GatewaySchemas } from "@repo/gateway-types";
 
 import { checkGateway } from "./check-gateway.ts";
-import { breaksOf, checkVersions, compareSchemas } from "./compare-schemas.ts";
+import { checkVersions, compareCandidate } from "./compare-schemas.ts";
+import { loadDerive } from "./derive-module.ts";
 import { compileValidators } from "./emit-validators.ts";
 import { SCHEMAS_DIR } from "./layout.ts";
 import { type AnyGatewayConfig, loadConfig } from "./load-config.ts";
@@ -21,16 +20,15 @@ import {
   writeVersion,
 } from "./schema-store.ts";
 
-// Brings a gateway's schemas up to date with its upstream, by hand: a person runs this, reads
-// what it says and commits what it wrote. A driver that can derive its schemas is asked for
-// them; what comes back is held to everything a version on disk is held to, and then to the
-// latest version. It becomes the next version if and only if its shape changed and no change
-// breaks a caller. A description that was reworded is not a change of shape, so it writes
-// nothing: a version marks a contract a caller could tell from the last.
+// Brings a gateway's schemas up to date with its upstream, by hand: a person runs this, reads what
+// it says and commits what it wrote. The driver is asked for the gateway's schemas, derived from
+// its upstream's description or from what the configuration declares; what comes back is held to
+// everything a version on disk is held to, and then to the latest version. It becomes the next
+// version if and only if its shape changed and no change breaks a caller. A description that was
+// reworded is not a change of shape, so it writes nothing: a version marks a contract a caller
+// could tell from the last.
 
 export type SchemasUpdate =
-  // The driver derives nothing, so the versions are written by hand; they were checked.
-  | { readonly status: "hand-maintained"; readonly versions: number }
   | { readonly status: "unchanged"; readonly latest: string }
   | {
       readonly status: "written";
@@ -50,39 +48,9 @@ export interface SchemasReport {
   readonly notes: readonly string[];
 }
 
-// The module a definition gives as the one that derives its schemas, loaded. A definition gives
-// it as a `file:` URL it builds from its own, `new URL("../derive/index.ts", import.meta.url)`, so
-// nothing has to resolve a name: the module is wherever the driver's own files are. Looked for
-// before it is loaded, so one that is not there is refused as that rather than as whatever a
-// loader makes of a file that is missing.
-async function deriveWith(location: string): Promise<DeriveSchemas> {
-  const url = URL.canParse(location) ? new URL(location) : undefined;
-  if (url?.protocol !== "file:") {
-    throw new Error(
-      `The driver gives "${location}" as the module that derives its schemas, which is not a file: URL`,
-    );
-  }
-  try {
-    await stat(fileURLToPath(url));
-  } catch (cause) {
-    throw new Error(
-      `The driver gives "${location}" as the module that derives its schemas, which is not there`,
-      { cause },
-    );
-  }
-  const module = (await import(url.href)) as { default?: unknown };
-  if (typeof module.default !== "function") {
-    throw new TypeError(
-      `"${location}" must export the function that derives schemas as its default`,
-    );
-  }
-  return module.default as DeriveSchemas;
-}
-
-// What every version this command reports on is held to, derived or written by hand: its shape,
-// each schema compiling as the validators compile it, and the configuration it has to agree
-// with, the driver's own reading of that included. One reading, so a version written by hand is
-// not reported as sound on a check the generator would fail it on.
+// What a derived version is held to before it is written: its shape, each schema compiling as the
+// validators compile it, and the configuration it has to agree with, the driver's own reading of
+// that included. One reading, so a version is not written that the generator would fail.
 function checkSchemas(
   config: AnyGatewayConfig,
   schemas: GatewaySchemas,
@@ -102,29 +70,16 @@ export async function updateSchemas(
   const config = await loadConfig(dir);
   const deriveModule = config.driver.deriveSchemasModule;
 
-  if (deriveModule === undefined) {
-    const versions = await loadVersions(dir);
-    // The latest is what the gateway is generated from, so it is read here the way generation
-    // reads it. Nothing derived it, and a version nobody checked is a version that fails at the
-    // next `codegen` rather than at the command whose job is to say whether the schemas are
-    // sound. The versions before it are history, held only to being safe to follow.
-    const latest = versions.at(-1);
-    if (latest !== undefined) {
-      checkSchemas(
-        config,
-        latest.schemas,
-        `${SCHEMAS_DIR}/${latest.version}.json of gateway "${config.id}"`,
-      );
-    }
-    checkVersions(config.id, versions);
-    return {
-      gatewayId: config.id,
-      update: { status: "hand-maintained", versions: versions.length },
-      notes: [],
-    };
+  // Every driver derives its gateways' schemas, from an upstream's description or from what the
+  // configuration declares, so no version is written by hand. The type requires the module; a
+  // configuration that is not type-checked can still leave it out, and is refused as that.
+  if (typeof deriveModule !== "string") {
+    throw new TypeError(
+      `Driver "${config.driver.type}" gives no deriveSchemasModule, so gateway "${config.id}" has nothing to derive its schemas with`,
+    );
   }
 
-  const derive = await deriveWith(deriveModule);
+  const derive = await loadDerive(deriveModule);
   const { schemas: candidate, notes } = await derive(config, sources);
   checkSchemas(
     config,
@@ -149,9 +104,11 @@ export async function updateSchemas(
   // what it changes is read against the latest alone, which it would follow.
   const versions = await loadVersions(dir);
   checkVersions(config.id, versions);
-  const breaking = breaksOf(versionAfter(names), candidate, versions);
-  const current = versions.at(-1)?.schemas ?? candidate;
-  const { compatible } = compareSchemas(current, candidate);
+  const { breaking, changes: compatible } = compareCandidate(
+    versionAfter(names),
+    candidate,
+    versions,
+  );
 
   if (breaking.length > 0) {
     return {
@@ -188,14 +145,9 @@ export function formatReport({
   const file = (version: string) => `${SCHEMAS_DIR}/${version}.json`;
   const lines: string[] = [];
   switch (update.status) {
-    case "hand-maintained":
-      lines.push(
-        `${gatewayId}: hand-maintained; ${String(update.versions)} version${update.versions === 1 ? "" : "s"}, each safe for a caller of the one before it`,
-      );
-      break;
     case "unchanged":
       lines.push(
-        `${gatewayId}: unchanged; ${file(update.latest)} is still the upstream's shape`,
+        `${gatewayId}: unchanged; ${file(update.latest)} is still what the gateway derives`,
       );
       break;
     case "written":

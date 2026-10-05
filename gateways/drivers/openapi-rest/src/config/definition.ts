@@ -21,7 +21,8 @@ import type { SecretField } from "./secret-field.ts";
 export interface OpenApiRestDriverConfig {
   // Location of the OpenAPI document describing the upstream: an https URL, or a path within
   // the gateway's directory. The gateway's schemas are derived from it when someone runs
-  // `gateway-schemas`; nothing fetches it at runtime or when generating.
+  // `gateway-schemas`. Codegen derives from it too, to check the latest version is still what
+  // it derives, but only from a path: it never fetches a URL. Nothing reads it at runtime.
   readonly spec: string;
   // Static headers sent on every request, such as an API version.
   readonly headers?: Readonly<Record<string, string>>;

@@ -44,7 +44,9 @@ export default async function derive(config, sources) {
 }
 `;
 
-const HAND_MAINTAINED = `
+// A driver with nothing to derive with, which only a configuration that is not type-checked can
+// be.
+const NOT_DERIVING = `
 export default {
   id: "by-hand",
   driver: { type: "stub", createExecutor: () => Promise.reject(new Error("no executor")) },
@@ -248,66 +250,18 @@ describe("updateSchemas", () => {
     expect(await versions()).toEqual(["0001.json", "0002.json"]);
   });
 
-  it("checks the versions of a gateway whose driver derives nothing, and writes none", async () => {
-    await writeFile(
-      path.join(gatewayDir, "gateway.config.ts"),
-      HAND_MAINTAINED,
-    );
+  it("refuses a driver that gives no module to derive with, and writes nothing", async () => {
+    await writeFile(path.join(gatewayDir, "gateway.config.ts"), NOT_DERIVING);
     await mkdir(path.join(gatewayDir, SCHEMAS_DIR));
     await writeFile(
       path.join(gatewayDir, SCHEMAS_DIR, "0001.json"),
       JSON.stringify(FIRST),
     );
 
-    expect(await updateSchemas(gatewayDir)).toEqual({
-      gatewayId: "by-hand",
-      update: { status: "hand-maintained", versions: 1 },
-      notes: [],
-    });
-
-    await writeFile(
-      path.join(gatewayDir, SCHEMAS_DIR, "0002.json"),
-      JSON.stringify(thing({ id: { type: "string" } })),
-    );
     await expect(updateSchemas(gatewayDir)).rejects.toThrow(
-      SchemaCompatibilityError,
+      'Driver "stub" gives no deriveSchemasModule, so gateway "by-hand" has nothing to derive its schemas with',
     );
-  });
-
-  it("holds the latest hand-written version to what generation holds it to", async () => {
-    // Nothing derived it, so nothing else has read it: a command whose job is to say whether a
-    // gateway's schemas are sound must not call one sound that `codegen` refuses.
-    await writeFile(
-      path.join(gatewayDir, "gateway.config.ts"),
-      HAND_MAINTAINED,
-    );
-    await mkdir(path.join(gatewayDir, SCHEMAS_DIR));
-    const write = (schemas: unknown) =>
-      writeFile(
-        path.join(gatewayDir, SCHEMAS_DIR, "0001.json"),
-        JSON.stringify(schemas),
-      );
-
-    await write({
-      operations: {
-        getThing: {
-          input: { type: "not-a-type" },
-          outcomes: { ok: { type: "object" } },
-        },
-      },
-    });
-    await expect(updateSchemas(gatewayDir)).rejects.toThrow(
-      /Invalid schema for input of operation "getThing"/,
-    );
-
-    // An operation the configuration does not declare, which the driver's own reading catches.
-    await write({
-      operations: {
-        ...FIRST.operations,
-        getOther: FIRST.operations.getThing,
-      },
-    });
-    await expect(updateSchemas(gatewayDir)).rejects.toThrow(GatewayCheckError);
+    expect(await versions()).toEqual(["0001.json"]);
   });
 
   it.each(["derives", "./derive.ts", "https://upstream.test/derive.js"])(
@@ -376,15 +330,8 @@ describe("formatReport", () => {
         update: { status: "unchanged", latest: "0003" },
         notes: [],
       }),
-    ).toBe("udp: unchanged; schemas/0003.json is still the upstream's shape");
-    expect(
-      formatReport({
-        gatewayId: "udp",
-        update: { status: "hand-maintained", versions: 2 },
-        notes: [],
-      }),
     ).toBe(
-      "udp: hand-maintained; 2 versions, each safe for a caller of the one before it",
+      "udp: unchanged; schemas/0003.json is still what the gateway derives",
     );
     expect(
       formatReport({
@@ -460,10 +407,7 @@ describe("gateway-schemas", () => {
     // A version refused for its shape is refused before anything reads its characters, and the
     // diagnostic names the field that caused it, which is the upstream's own name. Printed as
     // it stands, the rejection would be the escape sequence the check exists to keep out.
-    await writeFile(
-      path.join(gatewayDir, "gateway.config.ts"),
-      HAND_MAINTAINED,
-    );
+    await upstreamSays(FIRST);
     await mkdir(path.join(gatewayDir, SCHEMAS_DIR));
     await writeFile(
       path.join(gatewayDir, SCHEMAS_DIR, "0001.json"),

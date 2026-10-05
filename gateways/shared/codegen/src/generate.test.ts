@@ -75,9 +75,13 @@ afterEach(() => {
 
 // A gateway of the test's own, written where a configuration module resolves what it imports:
 // generation reads the directory, so a case that needs a configuration writes one.
+// A case's versions are its own data; this derivation answers with the latest of them.
+const DERIVE_LATEST = new URL("../test/derive-latest.ts", import.meta.url).href;
+
 const STUB_DRIVER = `{
   type: "stub",
   createExecutor: () => Promise.reject(new Error("no executor")),
+  deriveSchemasModule: ${JSON.stringify(DERIVE_LATEST)},
 }`;
 
 const gatewayModule = (operations: string, driverExtra = "") => `

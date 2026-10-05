@@ -1212,6 +1212,30 @@ export function breaksOf(
   return problems;
 }
 
+// How schemas derived now stand against the committed versions: what they break of any version,
+// named against the version they would be written as, and what they change of the latest, which
+// they would follow. Neither says anything of what the versioning ignores, a reworded description
+// or a reordering, so a derivation that differs only in those is the latest version still.
+export interface CandidateComparison {
+  readonly breaking: readonly string[];
+  readonly changes: readonly string[];
+}
+
+export function compareCandidate(
+  version: string,
+  candidate: GatewaySchemas,
+  versions: readonly SchemaVersion[],
+): CandidateComparison {
+  const latest = versions.at(-1);
+  return {
+    breaking: breaksOf(version, candidate, versions),
+    changes:
+      latest === undefined
+        ? []
+        : compareSchemas(latest.schemas, candidate).compatible,
+  };
+}
+
 // Every version against every version before it, so each is safe for a caller of any that came
 // before, those added together included. Merged versions never change, so their pairs are read
 // again for nothing but certainty, and the history is short.
