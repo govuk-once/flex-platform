@@ -1055,17 +1055,20 @@ diagnostic that names the operation only.
 
 When the upstream refuses a request's credentials, with a 401 or a 403, the secret may have been
 rotated since it was cached: DVLA's rotation, for one, invalidates the old password and key the
-moment it runs. The driver then reads the secret again from the store, bypassing the cache and
-refreshing it, and calls each part's `refused()`, where a part drops what it holds, a token or an
-assumed role's credentials, so the next request authenticates afresh. A GET is sent once more,
-inside the same attempt, so the policy timeout bounds both requests, and only the second answer is
-mapped to an outcome or an error and counted towards upstream health: the refusal it answered is
-not. A second refusal is the answer, as `UPSTREAM_REJECTED`. Any other method is not sent again,
-and its refusal is the answer: a 401 or a 403 does not show that the upstream refused before it
-acted, since API Gateway passes on whatever status the service behind it chose, and that service
-may have done the work first. A gateway whose `auth` is `[]` does none of this, since a refusal
-there is not about a credential. The driver logs each refusal, with its status and whether the
-request was sent again.
+moment it runs. The driver calls each part's `refused()`, where a part drops what it holds, a token
+or an assumed role's credentials, so the next request authenticates afresh, and then reads the
+secret again from the store, bypassing the cache and refreshing it; the read is inside the attempt,
+so the policy timeout bounds it too. A GET is sent once more, inside the same attempt, so the policy
+timeout bounds both requests, and only the second answer is mapped to an outcome or an error and
+counted towards upstream health: the refusal it answered is not. A second refusal is the answer, as
+`UPSTREAM_REJECTED`, and a secret that cannot be read again leaves the GET unsent and the call
+`INTERNAL`. Any other method is not sent again, and its refusal is the answer even when the secret
+cannot be read again: the failed read is logged and left for the next request to meet, though a read
+that outlasts the timeout still makes the call `UPSTREAM_TIMEOUT`. A 401 or a 403 does not show that
+the upstream refused before it acted, since API Gateway passes on whatever status the service behind
+it chose, and that service may have done the work first. A gateway whose `auth` is `[]` does none of
+this, since a refusal there is not about a credential. The driver logs each refusal, with its status
+and whether the request was sent again.
 
 ### Custom handlers
 

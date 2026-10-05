@@ -268,11 +268,13 @@ export async function buildExecutor(
     ...(steps.length === 0
       ? {}
       : {
+          // Every part drops what it holds before the read, so one that fails leaves no part
+          // authenticating from what the upstream refused.
           reauthenticate: async () => {
-            await secret.get({ fresh: true });
             for (const { instance } of steps) {
               if (typeof instance.refused === "function") instance.refused();
             }
+            await secret.get({ fresh: true });
           },
         }),
     reservedHeaders,
