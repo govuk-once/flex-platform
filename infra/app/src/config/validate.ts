@@ -1,10 +1,8 @@
+import { isPlatformName } from "@repo/utils/is-platform-name";
+
 import type { StageConfig } from "./types.ts";
 
 const ACCOUNT_ID = /^\d{12}$/;
-// A DNS label, narrowed: it starts with a letter, as a CloudFormation stack name must, and is at
-// most 32 characters, so names built from several of these stay within AWS's limits, such as 64
-// characters for an IAM role.
-const NAME = /^[a-z](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 
 interface AccountUse {
   readonly account: string;
@@ -37,7 +35,7 @@ export function validateStages(stages: readonly StageConfig[]): void {
 function checkNames(kind: string, names: readonly string[]): void {
   const seen = new Set<string>();
   for (const name of names) {
-    if (!NAME.test(name)) {
+    if (!isPlatformName(name)) {
       throw new Error(
         `The ${kind} name ${JSON.stringify(name)} must be 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen`,
       );

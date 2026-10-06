@@ -67,7 +67,7 @@ This is the intended flow once the planned sections are in place.
 
 1. The GOV.UK app sends a request to the platform's domain name. CloudFront receives it.
 2. The CloudFront Function checks the request's structure.
-3. Lambda@Edge authenticates the request and chooses the domain from the first path segment. It
+3. Lambda@Edge authenticates the request and chooses the domain from the segment after `/app`. It
    signs the request with SigV4 and forwards it to that domain's API Gateway.
 4. API Gateway passes the request to the domain's Lambda function.
 5. The domain's code calls each upstream it needs through a gateway client library. The library
