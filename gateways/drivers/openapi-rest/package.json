@@ -11,22 +11,22 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aws-sdk/credential-providers": "3.1135.0",
+    "@aws-sdk/credential-providers": "3.1142.0",
     "@repo/gateway-codegen": "workspace:*",
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-runtime": "workspace:*",
     "@repo/gateway-types": "workspace:*",
     "@repo/utils": "workspace:*",
-    "@scalar/openapi-parser": "0.29.2",
+    "@scalar/openapi-parser": "0.29.8",
     "@smithy/hash-node": "4.5.2",
-    "@smithy/signature-v4": "5.7.3"
+    "@smithy/signature-v4": "5.7.4"
   },
   "devDependencies": {
-    "@aws-sdk/client-secrets-manager": "3.1135.0",
+    "@aws-sdk/client-secrets-manager": "3.1142.0",
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.10.0",
-    "vitest": "5.0.1"
+    "eslint": "10.11.0",
+    "vitest": "5.0.2"
   }
 }
