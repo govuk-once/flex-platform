@@ -1,30 +1,12 @@
 # Flex Platform
 
-Gateway libraries and shared development tooling for the Flex Platform.
+Flex is the platform behind the GOV.UK app. It connects what GOV.UK knows about a user with the
+government services the app is built to work with.
 
-## Layout
+This repository holds the Flex gateways: the libraries, drivers and code generation that give
+domains a typed, validated way to reach the upstreams they depend on.
 
-```txt
-gateways/shared/     Configuration, shared types, runtime and validator generation
-gateways/services/   Gateway configurations and their versioned schemas
-packages/           Shared TypeScript, ESLint and Vitest tooling, and generic utilities
-```
-
-Gateway-specific libraries live under `gateways/shared/`. The `packages/` directory contains
-what the repository shares with no gateway vocabulary in it: its tooling, and `@repo/utils`,
-whose functions are exported one per module and imported by their own paths.
-
-## Gateways
-
-A gateway groups operations for one upstream. Configuration describes those operations; shared
-libraries handle schema validation, dispatch, upstream timeouts and payload logging. This keeps
-transport-specific details separate from common runtime behaviour.
-
-The repository includes `defineGateway`, a dispatcher and a generator that emits standalone
-JavaScript validators from a gateway's schemas. It does not yet provide a complete deployable gateway
-or generated client. Caller authentication is not implemented, and only the upstream-timeout
-policy is enforced. Authentication towards an upstream is configured per gateway on its driver
-definition, with the secret read from AWS Secrets Manager when the gateway starts. See [the gateway guide](gateways/README.md) for supported behaviour and limitations.
+**Documentation: <https://govuk-once.github.io/flex-platform/>**, built from [`docs/`](docs/).
 
 ## Working in this repo
 
@@ -34,17 +16,18 @@ Use Node 24 and the pnpm version pinned in `package.json`.
 pnpm install
 pnpm lint
 pnpm typecheck
+pnpm codegen
 pnpm test
+pnpm --filter @repo/docs dev   # the documentation site, with live reload
 ```
 
-Turborepo coordinates package tasks. Use `pnpm --filter <package> <script>` to run a package's
-script directly. Packages export TypeScript source, so there is no build step. Generated files
-are ignored by Git.
+See [Working in the repo](https://govuk-once.github.io/flex-platform/start/working-in-the-repo/)
+for setup, [Conventions](https://govuk-once.github.io/flex-platform/start/conventions/) for the rules
+for changing the code, and
+[Design constraints](https://govuk-once.github.io/flex-platform/reference/design-constraints/) for
+the boundaries every change keeps.
 
-The `.npmrc` maps the `@govuk-once` scope to GitHub Packages. Authentication is needed when
-accessing packages that require it; do not commit registry credentials.
-
-Contributor conventions and design constraints are in [CLAUDE.md](CLAUDE.md).
+The `.npmrc` maps the `@govuk-once` scope to GitHub Packages. Do not commit registry credentials.
 
 ## Licence
 
