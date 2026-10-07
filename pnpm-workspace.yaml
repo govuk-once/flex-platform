@@ -4,6 +4,7 @@ packages:
   - gateways/shared/*
   - gateways/drivers/*
   - gateways/services/*
+  - platform
 
 allowBuilds:
   esbuild: true

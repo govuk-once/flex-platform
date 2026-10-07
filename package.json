@@ -12,7 +12,9 @@
     "schemas": "turbo run schemas --continue",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "synth": "turbo run synth",
+    "checkov": "turbo run checkov"
   },
   "devDependencies": {
     "@types/node": "24.13.5",
