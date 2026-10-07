@@ -86,6 +86,10 @@ export default defineConfig({
           ],
         },
         {
+          label: "Infrastructure",
+          items: ["infrastructure/overview"],
+        },
+        {
           label: "Reference",
           items: [
             "reference/packages",

@@ -33,6 +33,9 @@ change you are making.
   exactly (`savePrefix: ""`).
 - Git ignores generated artifacts, including `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and
   `coverage/`. Do not commit them.
+- Infrastructure follows the rules in [Infrastructure](/flex-platform/infrastructure/overview/):
+  only config differs between stages, construct IDs are a contract, and stacks are wired together
+  by names derived from config.
 - Publishable packages use the `@govuk-once/` scope. Registry configuration is in `.npmrc`.
 
 ## Tests

@@ -28,6 +28,12 @@ package builds the site with Astro.
 |---|---|---|
 | `@govuk-once/flex-gateway-udp` | `gateways/services/udp` | The User Data Platform gateway: its configuration and versioned schemas. |
 
+## Infrastructure
+
+| Package | Directory | Holds |
+|---|---|---|
+| `@repo/infra-app` | `infra/app` | The CDK app: every stage's config and its checks. It builds one stage at a time. See [Infrastructure](/flex-platform/infrastructure/overview/). |
+
 ## Shared tooling
 
 | Package | Directory | Holds |

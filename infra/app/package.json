@@ -1,23 +1,27 @@
 {
-  "name": "@repo/gateway-config",
+  "name": "@repo/infra-app",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
   "scripts": {
-    "lint": "eslint src/",
+    "lint": "eslint bin/ src/ test/",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "synth": "cdk synth",
+    "diff": "cdk diff"
   },
   "dependencies": {
-    "@repo/gateway-types": "workspace:*"
+    "aws-cdk-lib": "2.270.0",
+    "cdk-nag": "3.0.2",
+    "constructs": "10.8.1"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
+    "aws-cdk": "2.1143.0",
     "eslint": "10.11.0",
+    "tsx": "4.23.15",
     "vitest": "5.0.1"
   }
 }
