@@ -4,9 +4,7 @@ Flex is the platform behind the GOV.UK app. It connects what GOV.UK knows about 
 government services the app is built to work with.
 
 This repository holds the Flex gateways: the libraries, drivers and code generation that give
-domains a typed, validated way to reach the upstreams they depend on. It also holds, under
-[`platform/`](platform/), the CDK that deploys the platform's own infrastructure, so far the front
-door: a CloudFront distribution with a web ACL. See [the platform guide](platform/README.md).
+domains a typed, validated way to reach the upstreams they depend on.
 
 **Documentation: <https://govuk-once.github.io/flex-platform/>**, built from [`docs/`](docs/).
 
@@ -20,8 +18,6 @@ pnpm lint
 pnpm typecheck
 pnpm codegen
 pnpm test
-pnpm synth                     # the CDK stacks for the stage in STAGE; needs no AWS access
-pnpm checkov                   # synthesise, then scan the templates; checkov must be installed
 pnpm --filter @repo/docs dev   # the documentation site, with live reload
 ```
 

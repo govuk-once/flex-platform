@@ -1,5 +1,7 @@
 name: Continuous Deployment
 
+# Runs the shared quality checks on the main branch.
+
 on:
   push:
     branches: [main]
@@ -15,37 +17,3 @@ jobs:
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_URL: ${{ secrets.SONAR_URL }}
-
-  # A job's `if` cannot read a secret, so a step does and the deploy is gated on its output.
-  developmentRole:
-    name: Development deployment role
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    outputs:
-      configured: ${{ steps.check.outputs.configured }}
-    steps:
-      - name: Check the deployment role is configured
-        id: check
-        env:
-          ROLE_TO_ASSUME: ${{ secrets.DEV_DEPLOYMENT_ROLE }}
-        run: |
-          if [ -n "$ROLE_TO_ASSUME" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::DEV_DEPLOYMENT_ROLE is not set, so the deploy to development is skipped. Add the secret once the account and its deployment role exist."
-          fi
-
-  deployDevelopment:
-    name: Deploy to Development
-    needs: [qualityChecks, developmentRole]
-    if: needs.developmentRole.outputs.configured == 'true'
-    uses: ./.github/workflows/_build-deploy.yml
-    permissions:
-      id-token: write
-      contents: read
-    with:
-      STAGE: development
-    secrets:
-      ROLE_TO_ASSUME: ${{ secrets.DEV_DEPLOYMENT_ROLE }}

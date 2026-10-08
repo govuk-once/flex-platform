@@ -1,8 +1,7 @@
 # CLAUDE.md
 
-Flex is the platform behind the GOV.UK app. This repository holds its egress section, the gateway
-libraries and shared development tooling, and, under `platform/`, the CDK that deploys the
-platform's own infrastructure, so far the front door. The rest of the platform is planned, and
+Flex is the platform behind the GOV.UK app. This repository holds its egress section: the gateway
+libraries and shared development tooling. The rest of the platform is planned, and
 `docs/src/content/docs/start/platform.mdx` describes it.
 
 The documentation site in `docs/src/content/docs/` is the source of truth for how the platform
@@ -41,9 +40,5 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 | The driver contract, and writing a driver | `drivers/contract.md`, `drivers/writing-a-driver.md` |
 | The openapi-rest driver | `drivers/openapi-rest/` |
 | Environment variables and the secret | `reference/environment.md` |
+| The CDK app, stages, config and its rules | `infrastructure/overview.md` |
 | Terms | `reference/glossary.md` |
-
-The CDK package under `platform/` is described in `platform/README.md`: its stacks, the regions
-they must be in, the parameters they read and write, and what has to exist before a deploy.
-`pnpm synth` synthesises it for the stage in `STAGE` without AWS access; `pnpm checkov` scans
-what it synthesised.

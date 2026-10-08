@@ -23,18 +23,6 @@
     },
     "test": {
       "dependsOn": ["transit"]
-    },
-    // Turborepo passes a task only the variables declared in `env`; without them the app would
-    // fall back to the user's name as the stage.
-    "synth": {
-      "dependsOn": ["transit"],
-      "cache": false,
-      "env": ["STAGE", "USER", "CDK_DEFAULT_ACCOUNT", "CDK_DEFAULT_REGION"]
-    },
-    "checkov": {
-      "dependsOn": ["transit"],
-      "cache": false,
-      "env": ["STAGE", "USER", "CDK_DEFAULT_ACCOUNT", "CDK_DEFAULT_REGION"]
     }
   }
 }
