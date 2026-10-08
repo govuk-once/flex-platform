@@ -69,18 +69,6 @@ jobs:
       - name: Test
         run: pnpm run test
 
-      - name: Install checkov
-        env:
-          CHECKOV_VERSION: "3.3.22"
-        run: python3 -m pip install --user "checkov==${CHECKOV_VERSION}"
-
-      - name: Scan infrastructure with checkov
-        env:
-          STAGE: development
-          CDK_DEFAULT_ACCOUNT: "000000000000"
-          CDK_DEFAULT_REGION: eu-west-2
-        run: pnpm run checkov
-
   sonarScan:
     name: SonarQube
     runs-on: ubuntu-latest

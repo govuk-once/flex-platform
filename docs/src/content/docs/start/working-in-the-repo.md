@@ -21,6 +21,9 @@ Run one package's script with `pnpm --filter <name> <script>`. For example:
 pnpm --filter @govuk-once/flex-gateway-udp codegen
 ```
 
+The CDK app synthesizes one stage at a time. See
+[Infrastructure](/flex-platform/infrastructure/overview/).
+
 Use pnpm and the existing scripts. When a tool has no package script, use `pnpm exec`. Do not use
 `npx`, `npm`, `yarn` or `pnpx`.
 

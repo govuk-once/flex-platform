@@ -1,10 +1,11 @@
 packages:
   - docs
+  - frontdoor/*
   - packages/*
   - gateways/shared/*
   - gateways/drivers/*
   - gateways/services/*
-  - platform
+  - infra/*
 
 allowBuilds:
   esbuild: true

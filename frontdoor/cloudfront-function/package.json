@@ -1,0 +1,26 @@
+{
+  "name": "@repo/frontdoor-cloudfront-function",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src/ test/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/utils": "workspace:*",
+    "acorn": "8.18.0",
+    "esbuild": "0.28.2"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "eslint": "10.11.0",
+    "vitest": "5.0.1"
+  }
+}
