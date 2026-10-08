@@ -1,5 +1,6 @@
 packages:
   - docs
+  - frontdoor/*
   - packages/*
   - gateways/shared/*
   - gateways/drivers/*

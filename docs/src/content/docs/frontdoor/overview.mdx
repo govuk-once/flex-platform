@@ -9,8 +9,9 @@ import { Badge } from "@astrojs/starlight/components";
 
 <Badge text="Planned" variant="caution" size="medium" />
 
-This page describes the intended request flow. The edge functions and their infrastructure are
-not implemented in this repository.
+This page describes the intended request flow. The CloudFront Function is built, in
+`frontdoor/cloudfront-function`, but nothing deploys it yet. Lambda@Edge and the infrastructure
+are planned.
 
 Every request from the GOV.UK app enters Flex through one CloudFront distribution, on one domain
 name, whichever domain the request is for. AWS WAF and AWS Shield protect the distribution.
@@ -21,22 +22,80 @@ first, then Lambda@Edge.
 ## Structural checks
 
 A **CloudFront Function** runs on each request as it arrives. It checks the request's structure,
-for example that it carries a bearer token of the right shape. A malformed request goes no
-further. The function does not verify any signature. The next step does that.
+and a malformed request goes no further. It verifies no signature: Lambda@Edge does that. What it
+turns away here, Lambda@Edge is never paid to look at.
+
+In order, it:
+
+1. **Starts the trace.** It derives an AWS X-Ray trace ID from the time and CloudFront's request
+   ID, such as `1-5759e988-bd862e3fe1be46a994272793`, and sets it as `X-Amzn-Trace-Id: Root=…`
+   and as `x-correlation-id`, the header the app reads. It removes any `traceparent` or
+   `tracestate`, and replaces any `X-Amzn-Trace-Id` or `x-correlation-id`, the caller sent. A
+   caller who chose the trace could tie requests together or force every one to be sampled. It
+   sets no `Parent`: the edge records no span.
+2. **Removes every `x-flex-` header** the caller sent. Only the platform sets those.
+3. **Checks the token's shape.** `Authorization` appears once, and is `Bearer` in any case, one
+   or more spaces, and one token of at most 4 KB in three base64url segments. The header and
+   payload are JSON objects. `alg` is `RS256`, `iss` is one of the trusted user pools,
+   `client_id` is one of that pool's trusted app clients, `token_use` is `access`, and `exp` is a
+   finite time in the future. A failure is a 401, before the path is looked at, so a request
+   without a valid token learns nothing about which paths exist.
+4. **Checks the path.** It is `/app/<domain>/...`, where `<domain>` follows the rule for domain
+   names in config (1 to 32 lowercase letters, digits and hyphens, checked by the same
+   `isPlatformName` the config uses), with no empty or dot segment and no encoded `/`, `\` or
+   `.`. Anything else is a 404. Whether the domain exists is for Lambda@Edge, which holds the
+   list. The name becomes part of an origin hostname, so it can never carry a dot or a port.
+5. **Checks the content type.** A `POST`, `PUT` or `PATCH`, or any request announcing a body by
+   `content-length` or `transfer-encoding`, says `application/json`. The method counts on its own
+   because HTTP/2 and HTTP/3 can send a body without either header. Anything else is a 415, and
+   so is any of those three headers appearing more than once.
+
+CloudFront presents a repeated header with its first value in `value` and every value in
+`multiValue`. The function reads `value`, so every header it reads must appear once: otherwise a
+check could pass on the first value while a later step reads another.
+
+Each rejection has the shape the app handles, `{"message": "...", "type": "..."}`, with
+`x-rejected-by: cloudfront-function` and the trace ID as `x-correlation-id`. The app relies on
+the 401's body exactly, so it never changes. Every request writes one log line naming its outcome, such as
+`cff_token_validated` or `cff_token_invalid`, with a fixed reason code, the trace ID and
+CloudFront's request ID, and never text from the request. It's the one place both IDs appear
+together, so it joins CloudFront's own logs to the rest of the request.
+
+The trusted issuers and their app clients are baked into the function for each environment by
+`buildViewerRequestFunction`. The domain list isn't: a few hundred names would pass CloudFront's
+size limit. It bundles for the `cloudfront-js-2.0` runtime, parses the result to check it declares
+`function handler` at the top level, and refuses a function over CloudFront's 10 KB limit. esbuild rewrites syntax the runtime lacks, but not
+built-ins, so lint refuses what the runtime doesn't have: `Map`, `Set`, `URL`, timers, `process`,
+`for...of`, any `console` method but a one-argument `log`, and imports other than `crypto` and
+`isPlatformName` from `@repo/utils`.
+
+The package's tests run the built bundle in Node. That proves the bundling and the behaviour. The
+lint rules keep to what CloudFront's runtime has, and the first request after a deploy proves the
+runtime accepts the bundle, since every request runs the function.
 
 ## Authentication
 
 **Lambda@Edge** verifies the caller's Amazon Cognito access token. If this fails, the edge answers
 the request and it never reaches a domain.
 
+It runs at origin request, and the `/app/*` behaviour has caching disabled, so it runs on every
+request. Caching is part of authentication here: CloudFront skips origin request triggers on a
+cache hit, so a cached response would reach a caller whose token was never verified. The
+CloudFront Function checks only the token's shape, so it can't stand in. Lambda@Edge can't move to
+viewer request either, since a behaviour can't have both kinds of function on its viewer events.
+
+CloudFront removes `Authorization` from a GET or HEAD unless a policy names it, so the `/app/*`
+origin request policy forwards it. That policy forwards a short allowlist of headers, never all of
+them.
+
 ## Routing
 
-Lambda@Edge then uses the first segment of the path to decide which domain the request is for.
+Lambda@Edge then uses the segment after `/app` to decide which domain the request is for.
 Each domain is its own Amazon API Gateway with its own domain name. Lambda@Edge forwards the
 request to that domain with the rest of the path:
 
 ```txt
-https://<platform-domain>/<domain>/<path>   →   https://<domain>.<api-domain>/<path>
+https://<platform-domain>/app/<domain>/<path>   →   https://<domain>.<api-domain>/<path>
 ```
 
 So a domain sees requests at its own root. It never sees the path segment used to route to it.
@@ -44,7 +103,9 @@ However many domains there are, the app sees one distribution.
 
 ## Signing
 
-Lambda@Edge signs the request it forwards with AWS Signature Version 4.
+Lambda@Edge signs the request it forwards with AWS Signature Version 4. Before signing, it removes
+the caller's `Authorization` header, so a domain never sees the caller's token and can't replay it
+anywhere.
 
 The two authentication steps serve different purposes: the Cognito check establishes the app
 caller's identity, while SigV4 authenticates the request sent by the platform to the domain's

@@ -28,6 +28,12 @@ package builds the site with Astro.
 |---|---|---|
 | `@govuk-once/flex-gateway-udp` | `gateways/services/udp` | The User Data Platform gateway: its configuration and versioned schemas. |
 
+## Frontdoor
+
+| Package | Directory | Holds |
+|---|---|---|
+| `@repo/frontdoor-cloudfront-function` | `frontdoor/cloudfront-function` | The CloudFront Function that checks each request's structure, and `buildViewerRequestFunction`, which bundles it with an environment's config for the runtime. See [structural checks](/flex-platform/frontdoor/overview/#structural-checks). |
+
 ## Infrastructure
 
 | Package | Directory | Holds |

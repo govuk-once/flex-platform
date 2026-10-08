@@ -194,6 +194,34 @@ importers:
         specifier: 0.26.0
         version: 0.26.0(@astrojs/starlight@0.42.4(astro@7.3.5(@types/node@24.13.5)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))(supports-color@7.2.0)(typescript@6.0.3))(astro@7.3.5(@types/node@24.13.5)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))(supports-color@7.2.0)
 
+  frontdoor/cloudfront-function:
+    dependencies:
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      acorn:
+        specifier: 8.18.0
+        version: 8.18.0
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../../packages/vitest-config
+      eslint:
+        specifier: 10.11.0
+        version: 10.11.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.0.1
+        version: 5.0.1(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(vite@8.2.2(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   gateways/drivers/openapi-rest:
     dependencies:
       '@aws-sdk/credential-providers':
@@ -402,6 +430,9 @@ importers:
 
   infra/app:
     dependencies:
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       aws-cdk-lib:
         specifier: 2.270.0
         version: 2.270.0(constructs@10.8.1)
@@ -4311,7 +4342,7 @@ snapshots:
       obug: 2.1.4
       std-env: 4.2.0
       tinyrainbow: 3.1.1
-      vitest: 5.0.1(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(vite@8.2.2(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))
+      vitest: 5.0.1(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(vite@8.2.2(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/istanbul-lib-coverage@1.0.1': {}
 
