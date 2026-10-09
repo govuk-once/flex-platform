@@ -160,37 +160,6 @@ describe("validateStages", () => {
         "platform-dev/sandbox: the issuer https://example names no app client",
       );
     });
-
-    it.each([9, 2_000_000_001, 100.5, Number.NaN])(
-      "refuses the rate limit %s",
-      (rateLimitPerFiveMinutes) => {
-        expect(() =>
-          validateStages([withFrontdoor({ rateLimitPerFiveMinutes })]),
-        ).toThrow(
-          `platform-dev/sandbox: the rate limit ${String(rateLimitPerFiveMinutes)} must be a whole number from 10 to 2000000000`,
-        );
-      },
-    );
-
-    it.each([0, 31, 100])(
-      "refuses the log retention %s",
-      (logRetentionDays) => {
-        expect(() =>
-          validateStages([withFrontdoor({ logRetentionDays })]),
-        ).toThrow(
-          `platform-dev/sandbox: the log retention ${String(logRetentionDays)} must be one of the day counts CloudWatch Logs offers`,
-        );
-      },
-    );
-
-    it.each([1, 30, 90, 365])(
-      "accepts the log retention %s",
-      (logRetentionDays) => {
-        expect(() =>
-          validateStages([withFrontdoor({ logRetentionDays })]),
-        ).not.toThrow();
-      },
-    );
   });
 
   describe("accounts", () => {

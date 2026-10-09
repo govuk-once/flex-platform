@@ -1,28 +1,23 @@
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { describe, expect, it } from "vitest";
 
 import { stackIn } from "../test/helpers.ts";
 import {
-  DEFAULT_MANAGED_RULE_GROUPS,
+  MANAGED_RULE_GROUPS,
+  RATE_LIMIT_PER_FIVE_MINUTES,
   RATE_LIMIT_RULE_NAME,
 } from "./waf-rules.ts";
-import { WebAcl, type WebAclProps } from "./web-acl.ts";
+import { WebAcl } from "./web-acl.ts";
 
-function build(overrides: Partial<WebAclProps> = {}, region = "us-east-1") {
+function build(region = "us-east-1") {
   const stack = stackIn(region);
-  const webAcl = new WebAcl(stack, "WebAcl", {
-    environment: "sandbox",
-    rateLimitPerFiveMinutes: 2000,
-    logRetention: RetentionDays.THREE_MONTHS,
-    ...overrides,
-  });
+  const webAcl = new WebAcl(stack, "WebAcl", { environment: "sandbox" });
   return { webAcl, template: Template.fromStack(stack) };
 }
 
 describe("WebAcl", () => {
   it("refuses any region but us-east-1", () => {
-    expect(() => build({}, "eu-west-2")).toThrow("us-east-1");
+    expect(() => build("eu-west-2")).toThrow("us-east-1");
   });
 
   it("is CloudFront scoped, named from config, and allows by default", () => {
@@ -59,7 +54,7 @@ describe("WebAcl", () => {
     ).Rules;
 
     expect(rules.map((rule) => rule.Name)).toEqual([
-      ...DEFAULT_MANAGED_RULE_GROUPS,
+      ...MANAGED_RULE_GROUPS,
       RATE_LIMIT_RULE_NAME,
     ]);
     expect(webAcl.ruleNames).toEqual(rules.map((rule) => rule.Name));
@@ -75,31 +70,11 @@ describe("WebAcl", () => {
       Action: { Block: { CustomResponse: { ResponseCode: 429 } } },
       Statement: {
         RateBasedStatement: {
-          Limit: 2000,
+          Limit: RATE_LIMIT_PER_FIVE_MINUTES,
           EvaluationWindowSec: 300,
           AggregateKeyType: "IP",
         },
       },
-    });
-  });
-
-  it("takes a different rule set and rate limit from config", () => {
-    const { template } = build({
-      managedRuleGroups: ["AWSManagedRulesKnownBadInputsRuleSet"],
-      rateLimitPerFiveMinutes: 100,
-    });
-
-    template.hasResourceProperties("AWS::WAFv2::WebACL", {
-      Rules: [
-        Match.objectLike({ Name: "AWSManagedRulesKnownBadInputsRuleSet" }),
-        Match.objectLike({
-          Name: RATE_LIMIT_RULE_NAME,
-          Priority: 1,
-          Statement: {
-            RateBasedStatement: Match.objectLike({ Limit: 100 }),
-          },
-        }),
-      ],
     });
   });
 
@@ -110,7 +85,7 @@ describe("WebAcl", () => {
       DeletionPolicy: "Retain",
       Properties: {
         LogGroupName: "aws-waf-logs-frontdoor-sandbox",
-        RetentionInDays: 90,
+        RetentionInDays: 365,
       },
     });
     template.hasResourceProperties("AWS::WAFv2::LoggingConfiguration", {

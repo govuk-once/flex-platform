@@ -1,28 +1,16 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { DOMAIN_NAME, edgeTemplate, stackIn } from "../test/helpers.ts";
-import { Edge, FORWARDED_HEADERS } from "./edge.ts";
+import { DOMAIN_NAME, edgeIn, edgeTemplate, stackIn } from "../test/helpers.ts";
 import { CONTENT_SECURITY_POLICY } from "./response-headers-policy.ts";
 
 describe("Edge", () => {
   it("refuses any region but us-east-1", () => {
-    const stack = stackIn("eu-west-2");
-
-    expect(
-      () =>
-        new Edge(stack, "Edge", {
-          environment: "sandbox",
-          domainName: DOMAIN_NAME,
-          issuers: [],
-          rateLimitPerFiveMinutes: 2000,
-          logRetention: 90,
-        }),
-    ).toThrow("us-east-1");
+    expect(() => edgeIn(stackIn("eu-west-2"))).toThrow("us-east-1");
   });
 
   it("has no unacknowledged cdk-nag finding", () => {
-    const { app } = edgeTemplate({}, true);
+    const { app } = edgeTemplate(true);
 
     expect(() => app.synth()).not.toThrow();
   });
@@ -32,7 +20,6 @@ describe("Edge", () => {
 
     template.resourceCountIs("AWS::Route53::HostedZone", 0);
     template.resourceCountIs("AWS::CertificateManager::Certificate", 0);
-    template.resourceCountIs("AWS::Route53::RecordSet", 0);
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.objectLike({
         Enabled: true,
@@ -54,7 +41,7 @@ describe("Edge", () => {
     expect(edge.url).toMatch(/^https:\/\/\$\{Token/);
   });
 
-  it("forwards to the API name only, over HTTPS, caching nothing, with an allowlist of headers", () => {
+  it("forwards everything the viewer sent to the API name only, over HTTPS, caching nothing", () => {
     const { template } = edgeTemplate();
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
@@ -79,34 +66,10 @@ describe("Edge", () => {
             "POST",
             "DELETE",
           ],
-          CachePolicyId: { Ref: Match.stringLikeRegexp("NoCache") },
-          OriginRequestPolicyId: {
-            Ref: Match.stringLikeRegexp("OriginRequest"),
-          },
+          // CachingDisabled and AllViewerExceptHostHeader, which AWS manages.
+          CachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+          OriginRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac",
         }),
-      },
-    });
-    template.hasResourceProperties("AWS::CloudFront::CachePolicy", {
-      CachePolicyConfig: Match.objectLike({
-        MinTTL: 0,
-        DefaultTTL: 0,
-        MaxTTL: 0,
-        ParametersInCacheKeyAndForwardedToOrigin: Match.objectLike({
-          HeadersConfig: {
-            HeaderBehavior: "whitelist",
-            Headers: ["Authorization"],
-          },
-        }),
-      }),
-    });
-    template.hasResourceProperties("AWS::CloudFront::OriginRequestPolicy", {
-      OriginRequestPolicyConfig: {
-        HeadersConfig: {
-          HeaderBehavior: "whitelist",
-          Headers: FORWARDED_HEADERS,
-        },
-        QueryStringsConfig: { QueryStringBehavior: "all" },
-        CookiesConfig: { CookieBehavior: "none" },
       },
     });
     const [distribution] = Object.values(
@@ -121,14 +84,9 @@ describe("Edge", () => {
     expect(config.CacheBehaviors).toBeUndefined();
   });
 
-  it("runs the CloudFront Function on every viewer request, built with the environment's issuers", () => {
+  it("runs the given CloudFront Function on every viewer request", () => {
     const { template } = edgeTemplate();
 
-    template.hasResourceProperties("AWS::CloudFront::Function", {
-      AutoPublish: true,
-      FunctionConfig: { Runtime: "cloudfront-js-2.0" },
-      FunctionCode: Match.stringLikeRegexp("eu-west-2_example"),
-    });
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: {
         DefaultCacheBehavior: Match.objectLike({
@@ -176,21 +134,55 @@ describe("Edge", () => {
     });
   });
 
-  it("writes access logs to the shared log bucket construct", () => {
-    const { template } = edgeTemplate();
+  it("delivers access logs to a retained log group through standard logging v2", () => {
+    const { edge, template } = edgeTemplate();
 
-    template.hasResourceProperties("AWS::CloudFront::Distribution", {
-      DistributionConfig: {
-        Logging: {
-          Bucket: Match.anyValue(),
-          IncludeCookies: false,
-          Prefix: "cloudfront/",
-        },
+    template.resourceCountIs("AWS::S3::Bucket", 0);
+    template.hasResource("AWS::Logs::LogGroup", {
+      DeletionPolicy: "Retain",
+      Properties: Match.not(
+        Match.objectLike({ LogGroupName: Match.anyValue() }),
+      ),
+    });
+    template.hasResourceProperties("AWS::Logs::DeliverySource", {
+      Name: "frontdoor-sandbox-access-logs",
+      LogType: "ACCESS_LOGS",
+      ResourceArn: {
+        "Fn::Join": [
+          "",
+          Match.arrayWith([
+            Match.stringLikeRegexp(":cloudfront::"),
+            { Ref: Match.stringLikeRegexp("Distribution") },
+          ]),
+        ],
       },
     });
-    template.hasResource("AWS::S3::Bucket", {
-      DeletionPolicy: "Retain",
-      Properties: Match.objectLike({ ObjectLockEnabled: true }),
+    template.hasResourceProperties("AWS::Logs::DeliveryDestination", {
+      Name: "frontdoor-sandbox-access-logs",
+      DeliveryDestinationType: "CWL",
+      DestinationResourceArn: {
+        "Fn::GetAtt": [Match.stringLikeRegexp("AccessLogs"), "Arn"],
+      },
     });
+    template.hasResourceProperties("AWS::Logs::Delivery", {
+      DeliverySourceName: "frontdoor-sandbox-access-logs",
+      DeliveryDestinationArn: {
+        "Fn::GetAtt": [Match.stringLikeRegexp("AccessLogDestination"), "Arn"],
+      },
+    });
+    template.hasResourceProperties("AWS::Logs::ResourcePolicy", {
+      PolicyName: "frontdoor-sandbox-access-logs",
+    });
+    const [policy] = Object.values(
+      template.findResources("AWS::Logs::ResourcePolicy"),
+    );
+    const document = JSON.stringify(
+      (policy?.Properties as { PolicyDocument: unknown }).PolicyDocument,
+    );
+    expect(document).toContain("delivery.logs.amazonaws.com");
+    expect(document).toContain("logs:PutLogEvents");
+    expect(document).toContain("aws:SourceAccount");
+    expect(document).toContain("delivery-source/frontdoor-sandbox-access-logs");
+    expect(edge.accessLogGroup.logGroupName).toBeTruthy();
   });
 });
