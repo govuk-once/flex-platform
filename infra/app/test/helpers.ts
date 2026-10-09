@@ -23,8 +23,6 @@ export const FRONTDOOR: FrontdoorConfig = {
       clientIds: ["example-app-client"],
     },
   ],
-  rateLimitPerFiveMinutes: 2000,
-  logRetentionDays: 90,
 };
 
 // The real stages' shape: two stages with one environment, one with three, and one environment

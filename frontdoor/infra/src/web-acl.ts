@@ -1,12 +1,12 @@
-import { ArnFormat, RemovalPolicy, Stack } from "aws-cdk-lib";
-import { LogGroup, type RetentionDays } from "aws-cdk-lib/aws-logs";
+import { PlatformLogGroup } from "@repo/infra-constructs/log-group";
+import { ArnFormat, Stack } from "aws-cdk-lib";
+import type { LogGroup } from "aws-cdk-lib/aws-logs";
 import { CfnLoggingConfiguration, CfnWebACL } from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 
 import { wafLogGroupName, webAclName } from "./names.ts";
 import {
-  DEFAULT_MANAGED_RULE_GROUPS,
-  type ManagedRuleGroup,
+  MANAGED_RULE_GROUPS,
   managedRuleGroupRule,
   rateLimitRule,
 } from "./waf-rules.ts";
@@ -16,10 +16,6 @@ export const REDACTED_HEADERS: readonly string[] = ["authorization", "cookie"];
 
 export interface WebAclProps {
   readonly environment: string;
-  /** In evaluation order; `DEFAULT_MANAGED_RULE_GROUPS` when left out. */
-  readonly managedRuleGroups?: readonly ManagedRuleGroup[];
-  readonly rateLimitPerFiveMinutes: number;
-  readonly logRetention: RetentionDays;
 }
 
 /**
@@ -42,13 +38,11 @@ export class WebAcl extends Construct {
       );
     }
 
-    const managedRuleGroups =
-      props.managedRuleGroups ?? DEFAULT_MANAGED_RULE_GROUPS;
     const rules = [
-      ...managedRuleGroups.map((group, index) =>
+      ...MANAGED_RULE_GROUPS.map((group, index) =>
         managedRuleGroupRule(group, index),
       ),
-      rateLimitRule(props.rateLimitPerFiveMinutes, managedRuleGroups.length),
+      rateLimitRule(MANAGED_RULE_GROUPS.length),
     ];
     this.ruleNames = rules.map((rule) => rule.name);
 
@@ -73,11 +67,9 @@ export class WebAcl extends Construct {
       rules,
     });
 
-    this.logGroup = new LogGroup(this, "LogGroup", {
+    this.logGroup = new PlatformLogGroup(this, "Logs", {
       logGroupName: wafLogGroupName(props.environment),
-      retention: props.logRetention,
-      removalPolicy: RemovalPolicy.RETAIN,
-    });
+    }).logGroup;
 
     new CfnLoggingConfiguration(this, "Logging", {
       resourceArn: this.webAcl.attrArn,

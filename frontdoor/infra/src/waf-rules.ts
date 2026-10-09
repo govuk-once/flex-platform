@@ -5,13 +5,10 @@ export type ManagedRuleGroup =
   | "AWSManagedRulesCommonRuleSet"
   | "AWSManagedRulesKnownBadInputsRuleSet"
   | "AWSManagedRulesSQLiRuleSet"
-  | "AWSManagedRulesAmazonIpReputationList"
-  | "AWSManagedRulesAnonymousIpList"
-  | "AWSManagedRulesLinuxRuleSet"
-  | "AWSManagedRulesUnixRuleSet";
+  | "AWSManagedRulesAmazonIpReputationList";
 
 /** In evaluation order. */
-export const DEFAULT_MANAGED_RULE_GROUPS: readonly ManagedRuleGroup[] = [
+export const MANAGED_RULE_GROUPS: readonly ManagedRuleGroup[] = [
   "AWSManagedRulesCommonRuleSet",
   "AWSManagedRulesKnownBadInputsRuleSet",
   "AWSManagedRulesSQLiRuleSet",
@@ -19,6 +16,9 @@ export const DEFAULT_MANAGED_RULE_GROUPS: readonly ManagedRuleGroup[] = [
 ];
 
 export const RATE_LIMIT_RULE_NAME = "RateLimitPerIp";
+
+/** Requests one address may make in five minutes before the edge turns it away. */
+export const RATE_LIMIT_PER_FIVE_MINUTES = 2000;
 
 /** The status a rate limited request is answered with, so a client can tell it from a block. */
 export const RATE_LIMIT_RESPONSE_CODE = 429;
@@ -47,10 +47,7 @@ export function managedRuleGroupRule(
   };
 }
 
-export function rateLimitRule(
-  requestsPerFiveMinutes: number,
-  priority: number,
-): CfnWebACL.RuleProperty {
+export function rateLimitRule(priority: number): CfnWebACL.RuleProperty {
   return {
     name: RATE_LIMIT_RULE_NAME,
     priority,
@@ -61,7 +58,7 @@ export function rateLimitRule(
     },
     statement: {
       rateBasedStatement: {
-        limit: requestsPerFiveMinutes,
+        limit: RATE_LIMIT_PER_FIVE_MINUTES,
         evaluationWindowSec: 300,
         aggregateKeyType: "IP",
       },

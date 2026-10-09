@@ -14,3 +14,8 @@ export function webAclName(environment: string): string {
 export function wafLogGroupName(environment: string): string {
   return `aws-waf-logs-${webAclName(environment)}`;
 }
+
+/** The log group CloudFront's access logs are delivered to, and the delivery's own names. */
+export function accessLogsName(environment: string): string {
+  return `frontdoor-${environment}-access-logs`;
+}

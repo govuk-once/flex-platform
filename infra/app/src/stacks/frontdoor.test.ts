@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { cdkApp, FIXTURE_STAGES } from "../../test/helpers.ts";
 import { buildApp } from "../build-app.ts";
+import { selectTarget } from "../config/select-target.ts";
 import { FrontdoorStack, frontdoorStackName } from "./frontdoor.ts";
 
 const PROD = FIXTURE_STAGES[2];
@@ -11,7 +12,7 @@ const [DEV] = PROD.environments;
 describe("FrontdoorStack", () => {
   it("is one per environment, in its frontdoor account, in us-east-1", () => {
     const app = cdkApp();
-    buildApp(app, PROD);
+    buildApp(app, PROD, selectTarget(PROD, undefined));
     const assembly = app.synth();
 
     const frontdoors = assembly.stacks.filter((stack) =>
@@ -43,8 +44,10 @@ describe("FrontdoorStack", () => {
     });
     template.hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: `aws-waf-logs-frontdoor-${DEV.name}`,
-      RetentionInDays: DEV.frontdoor.logRetentionDays,
+      RetentionInDays: 365,
     });
+    template.resourceCountIs("AWS::S3::Bucket", 0);
+    template.resourceCountIs("AWS::Logs::Delivery", 1);
 
     // The one parameter is CDK's bootstrap check, not a value read from an account. The one
     // output is the name CloudFront gives the distribution, which nothing can derive.
@@ -54,6 +57,15 @@ describe("FrontdoorStack", () => {
     };
     expect(Object.keys(Parameters ?? {})).toEqual(["BootstrapVersion"]);
     expect(Object.keys(Outputs ?? {})).toEqual(["DistributionDomainName"]);
+  });
+
+  it("is built for one environment alone when the target names it", () => {
+    const app = cdkApp();
+    buildApp(app, PROD, selectTarget(PROD, "staging"));
+
+    expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
+      "frontdoor-staging",
+    ]);
   });
 
   it("names its stack from the environment alone, so stages compare directly", () => {

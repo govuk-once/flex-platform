@@ -1,67 +1,46 @@
-import {
-  buildViewerRequestFunction,
-  type TrustedIssuer,
-} from "@repo/frontdoor-cloudfront-function";
-import { AccessLogBucket } from "@repo/infra-constructs/access-log-bucket";
+import { PlatformLogGroup } from "@repo/infra-constructs/log-group";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   AllowedMethods,
-  CacheHeaderBehavior,
   CachePolicy,
   Distribution,
-  Function as CloudFrontFunction,
-  FunctionCode,
   FunctionEventType,
-  FunctionRuntime,
   HttpVersion,
+  type IFunction,
   OriginProtocolPolicy,
-  OriginRequestCookieBehavior,
-  OriginRequestHeaderBehavior,
   OriginRequestPolicy,
-  OriginRequestQueryStringBehavior,
   OriginSslPolicy,
   PriceClass,
   ViewerProtocolPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
 import { HttpOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
-import type { RetentionDays } from "aws-cdk-lib/aws-logs";
-import type { IBucket } from "aws-cdk-lib/aws-s3";
+import { Effect, PolicyStatement, ServicePrincipal } from "aws-cdk-lib/aws-iam";
+import {
+  CfnDelivery,
+  CfnDeliveryDestination,
+  CfnDeliverySource,
+  CfnResourcePolicy,
+  type LogGroup,
+} from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
-import { originDomainName } from "./names.ts";
+import { accessLogsName, originDomainName } from "./names.ts";
 import { EdgeResponseHeadersPolicy } from "./response-headers-policy.ts";
-import type { ManagedRuleGroup } from "./waf-rules.ts";
 import { WebAcl } from "./web-acl.ts";
-
-/**
- * The headers forwarded to the origin, and no others: a caller's `Host` and hop-by-hop headers
- * stay at the edge. CloudFront drops `Authorization` unless the cache policy names it, which is
- * why it is not in this list but in the cache policy below, which caches nothing.
- */
-export const FORWARDED_HEADERS: readonly string[] = [
-  "Accept",
-  "Accept-Language",
-  "Content-Type",
-  "X-Correlation-Id",
-];
 
 export interface EdgeProps {
   readonly environment: string;
   /** The environment's domain name; the API layer is `api.` under it. */
   readonly domainName: string;
-  /** The user pools and app clients whose tokens the CloudFront Function lets through. */
-  readonly issuers: readonly TrustedIssuer[];
-  readonly rateLimitPerFiveMinutes: number;
-  /** How long WAF logs are kept. Access logs are kept a year regardless. */
-  readonly logRetention: RetentionDays;
-  readonly managedRuleGroups?: readonly ManagedRuleGroup[];
+  /** Runs on every viewer request, before anything else looks at it. */
+  readonly viewerRequestFunction: IFunction;
 }
 
 /**
- * The CloudFront distribution every request enters through, with its web ACL, its CloudFront
- * Function and its logs. It answers at the name CloudFront gives it, with CloudFront's own
- * certificate, until the platform has hosted zones: a certificate for a name of the platform's
- * own, and the TLS floor that comes with it, wait on that.
+ * The CloudFront distribution every request enters through, with its web ACL and its logs. It
+ * answers at the name CloudFront gives it, with CloudFront's own certificate, until the platform
+ * has hosted zones: a certificate for a name of the platform's own, and the TLS floor that comes
+ * with it, wait on that.
  *
  * CloudFront takes a web ACL from us-east-1 only, so the edge is built there.
  *
@@ -70,8 +49,8 @@ export interface EdgeProps {
  */
 export class Edge extends Construct {
   public readonly webAcl: WebAcl;
-  public readonly accessLogBucket: AccessLogBucket;
-  public readonly viewerRequestFunction: CloudFrontFunction;
+  /** Where CloudFront delivers its standard access logs. */
+  public readonly accessLogGroup: LogGroup;
   public readonly distribution: Distribution;
   /** The URL the app calls. */
   public readonly url: string;
@@ -88,36 +67,6 @@ export class Edge extends Construct {
 
     this.webAcl = new WebAcl(this, "WebAcl", {
       environment: props.environment,
-      rateLimitPerFiveMinutes: props.rateLimitPerFiveMinutes,
-      logRetention: props.logRetention,
-      ...(props.managedRuleGroups && {
-        managedRuleGroups: props.managedRuleGroups,
-      }),
-    });
-
-    this.accessLogBucket = new AccessLogBucket(this, "AccessLogs");
-
-    this.viewerRequestFunction = new CloudFrontFunction(this, "ViewerRequest", {
-      code: FunctionCode.fromInline(
-        buildViewerRequestFunction({ issuers: props.issuers }),
-      ),
-      runtime: FunctionRuntime.JS_2_0,
-    });
-
-    // Caches nothing. A cache policy is the only policy CloudFront lets Authorization through.
-    const cachePolicy = new CachePolicy(this, "NoCache", {
-      minTtl: Duration.seconds(0),
-      defaultTtl: Duration.seconds(0),
-      maxTtl: Duration.seconds(0),
-      headerBehavior: CacheHeaderBehavior.allowList("Authorization"),
-    });
-
-    const originRequestPolicy = new OriginRequestPolicy(this, "OriginRequest", {
-      headerBehavior: OriginRequestHeaderBehavior.allowList(
-        ...FORWARDED_HEADERS,
-      ),
-      queryStringBehavior: OriginRequestQueryStringBehavior.all(),
-      cookieBehavior: OriginRequestCookieBehavior.none(),
     });
 
     this.distribution = new Distribution(this, "Distribution", {
@@ -133,26 +82,28 @@ export class Edge extends Construct {
         }),
         viewerProtocolPolicy: ViewerProtocolPolicy.HTTPS_ONLY,
         allowedMethods: AllowedMethods.ALLOW_ALL,
-        cachePolicy,
-        originRequestPolicy,
+        // Everything the viewer sent goes to the origin; the function has already checked it.
+        // CloudFront still drops Authorization from a GET or HEAD, since no cache policy names it.
+        cachePolicy: CachePolicy.CACHING_DISABLED,
+        originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
         responseHeadersPolicy: new EdgeResponseHeadersPolicy(
           this,
           "ResponseHeaders",
         ).policy,
         functionAssociations: [
           {
-            function: this.viewerRequestFunction,
+            function: props.viewerRequestFunction,
             eventType: FunctionEventType.VIEWER_REQUEST,
           },
         ],
       },
-      enableLogging: true,
-      // Bucket's optional members are declared `| undefined` and IBucket's are not, which
-      // exactOptionalPropertyTypes tells apart.
-      logBucket: this.accessLogBucket.bucket as IBucket,
-      logFilePrefix: "cloudfront/",
-      logIncludesCookies: false,
       publishAdditionalMetrics: true,
+    });
+    this.accessLogGroup = this.deliverAccessLogs(props.environment);
+    Validations.of(this.distribution).acknowledge({
+      id: "AwsSolutions-CFR3",
+      reason:
+        "Access logs are delivered to CloudWatch Logs by standard logging v2, which the rule does not recognise; it looks for the legacy S3 logging block.",
     });
     Validations.of(this.distribution).acknowledge({
       id: "AwsSolutions-CFR1",
@@ -166,5 +117,67 @@ export class Edge extends Construct {
     });
 
     this.url = `https://${this.distribution.distributionDomainName}`;
+  }
+
+  // Standard logging v2: CloudWatch Logs delivers the distribution's access logs to a log group,
+  // which log forwarding will carry on to the shared account. CloudFront's delivery source must
+  // be in us-east-1, as the web ACL must.
+  private deliverAccessLogs(environment: string): LogGroup {
+    const stack = Stack.of(this);
+    const name = accessLogsName(environment);
+    const { logGroup } = new PlatformLogGroup(this, "AccessLogs");
+
+    const source = new CfnDeliverySource(this, "AccessLogSource", {
+      name,
+      logType: "ACCESS_LOGS",
+      resourceArn: this.distribution.distributionArn,
+    });
+
+    // The delivery service writes to the log group under its own principal, which the account
+    // has to allow; the conditions tie the grant to this one source.
+    const policy = new CfnResourcePolicy(this, "AccessLogPolicy", {
+      policyName: name,
+      policyDocument: stack.toJsonString({
+        Version: "2012-10-17",
+        Statement: [
+          new PolicyStatement({
+            sid: "AllowLogDelivery",
+            effect: Effect.ALLOW,
+            principals: [new ServicePrincipal("delivery.logs.amazonaws.com")],
+            actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
+            resources: [logGroup.logGroupArn],
+            conditions: {
+              StringEquals: { "aws:SourceAccount": stack.account },
+              ArnLike: {
+                "aws:SourceArn": stack.formatArn({
+                  service: "logs",
+                  resource: "delivery-source",
+                  resourceName: name,
+                }),
+              },
+            },
+          }).toStatementJson(),
+        ],
+      }),
+    });
+
+    const destination = new CfnDeliveryDestination(
+      this,
+      "AccessLogDestination",
+      {
+        name,
+        deliveryDestinationType: "CWL",
+        destinationResourceArn: logGroup.logGroupArn,
+      },
+    );
+
+    const delivery = new CfnDelivery(this, "AccessLogDelivery", {
+      deliverySourceName: source.name,
+      deliveryDestinationArn: destination.attrArn,
+    });
+    delivery.addResourceDependency(source);
+    delivery.addResourceDependency(policy);
+
+    return logGroup;
   }
 }

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { cdkApp, FIXTURE_STAGES } from "../test/helpers.ts";
 import { buildApp } from "./build-app.ts";
+import { selectTarget } from "./config/select-target.ts";
 import { PLATFORM_TAGS } from "./tags.ts";
 
 const [STAGE] = FIXTURE_STAGES;
@@ -14,7 +15,7 @@ const BUCKET_FINDINGS = ["AwsSolutions-S1", "AwsSolutions-S10"];
 
 function appWithBucket(): { app: App; stack: Stack; bucket: Bucket } {
   const app = cdkApp();
-  buildApp(app, STAGE);
+  buildApp(app, STAGE, selectTarget(STAGE, undefined));
   const stack = new Stack(app, "probe");
   return { app, stack, bucket: new Bucket(stack, "Bucket") };
 }
@@ -43,7 +44,7 @@ describe("buildApp", () => {
 
     it("keeps a value a stack sets itself", () => {
       const app = cdkApp();
-      buildApp(app, STAGE);
+      buildApp(app, STAGE, selectTarget(STAGE, undefined));
       const stack = new Stack(app, "probe", {
         tags: { Owner: "a-domain-team" },
       });
