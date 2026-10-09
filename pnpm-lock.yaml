@@ -222,6 +222,37 @@ importers:
         specifier: 5.0.1
         version: 5.0.1(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(vite@8.2.2(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
+  frontdoor/infra:
+    dependencies:
+      '@repo/frontdoor-cloudfront-function':
+        specifier: workspace:*
+        version: link:../cloudfront-function
+      aws-cdk-lib:
+        specifier: 2.270.0
+        version: 2.270.0(constructs@10.8.1)
+      constructs:
+        specifier: 10.8.1
+        version: 10.8.1
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../../packages/vitest-config
+      cdk-nag:
+        specifier: 3.0.2
+        version: 3.0.2(aws-cdk-lib@2.270.0(constructs@10.8.1))(constructs@10.8.1)
+      eslint:
+        specifier: 10.11.0
+        version: 10.11.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.0.1
+        version: 5.0.1(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(vite@8.2.2(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   gateways/drivers/openapi-rest:
     dependencies:
       '@aws-sdk/credential-providers':
@@ -430,6 +461,12 @@ importers:
 
   infra/app:
     dependencies:
+      '@repo/frontdoor-cloudfront-function':
+        specifier: workspace:*
+        version: link:../../frontdoor/cloudfront-function
+      '@repo/frontdoor-infra':
+        specifier: workspace:*
+        version: link:../../frontdoor/infra
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils
@@ -443,6 +480,12 @@ importers:
         specifier: 10.8.1
         version: 10.8.1
     devDependencies:
+      '@aws-sdk/client-cloudformation':
+        specifier: 3.1140.0
+        version: 3.1140.0
+      '@aws-sdk/client-cloudwatch-logs':
+        specifier: 3.1140.0
+        version: 3.1140.0
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
@@ -689,6 +732,14 @@ packages:
         optional: true
       '@middy/core':
         optional: true
+
+  '@aws-sdk/client-cloudformation@3.1140.0':
+    resolution: {integrity: sha512-q+A5qLfKvstBCm/zsHjg6sKlP17nZ2CVNuxwf4fmUmYbjEyk9QLwf/nX2oHGUtWiKmUDBTAzHr+IaZk91txX5w==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-cloudwatch-logs@3.1140.0':
+    resolution: {integrity: sha512-eZcNPrbKf73kNkUT2LaNRuaiBHX1xxxWSogp5a9LQSqg0sHr/P94aZQHGduCE24BlP0bpNF0WTylhIkXQVHrwQ==}
+    engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-secrets-manager@3.1140.0':
     resolution: {integrity: sha512-YPdexMJJLpch0o2nlDmy82lw7/l2mZH3BcfeN8FcXLJBaLk30RVDaeI+e4JeQ8rD1vzP22e7aiJhFyz9iP+1og==}
@@ -3380,6 +3431,28 @@ snapshots:
       '@aws-lambda-powertools/commons': 2.35.0
     optionalDependencies:
       '@aws-sdk/client-secrets-manager': 3.1140.0
+
+  '@aws-sdk/client-cloudformation@3.1140.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-cloudwatch-logs@3.1140.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.1
+      '@aws-sdk/credential-provider-node': 3.972.84
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
 
   '@aws-sdk/client-secrets-manager@3.1140.0':
     dependencies:

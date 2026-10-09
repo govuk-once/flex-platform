@@ -1,0 +1,27 @@
+{
+  "name": "@repo/frontdoor-infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src/ test/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/frontdoor-cloudfront-function": "workspace:*",
+    "aws-cdk-lib": "2.270.0",
+    "constructs": "10.8.1"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "cdk-nag": "3.0.2",
+    "eslint": "10.11.0",
+    "vitest": "5.0.1"
+  }
+}
