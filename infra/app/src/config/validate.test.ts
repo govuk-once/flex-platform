@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES } from "../../test/helpers.ts";
-import type { EnvironmentConfig, StageConfig } from "./types.ts";
+import { FIXTURE_STAGES, FRONTDOOR } from "../../test/helpers.ts";
+import type {
+  EnvironmentConfig,
+  FrontdoorConfig,
+  StageConfig,
+} from "./types.ts";
 import { validateStages } from "./validate.ts";
 
 const ENVIRONMENT: EnvironmentConfig = {
   name: "sandbox",
   frontdoorAccount: "100000000002",
   domainAccounts: [{ name: "main", account: "100000000003" }],
+  domainName: "sandbox.platform-dev.flex.example",
+  frontdoor: FRONTDOOR,
 };
 
 const STAGE: StageConfig = {
@@ -25,12 +31,18 @@ const OTHER_STAGE: StageConfig = {
       name: "prod",
       frontdoorAccount: "300000000002",
       domainAccounts: [{ name: "main", account: "300000000003" }],
+      domainName: "prod.flex.example",
+      frontdoor: FRONTDOOR,
     },
   ],
 };
 
 function withEnvironment(environment: Partial<EnvironmentConfig>): StageConfig {
   return { ...STAGE, environments: [{ ...ENVIRONMENT, ...environment }] };
+}
+
+function withFrontdoor(frontdoor: Partial<FrontdoorConfig>): StageConfig {
+  return withEnvironment({ frontdoor: { ...FRONTDOOR, ...frontdoor } });
 }
 
 describe("validateStages", () => {
@@ -105,6 +117,51 @@ describe("validateStages", () => {
     });
   });
 
+  describe("the environment's domain name", () => {
+    it.each(["dev.flex.example", "a.b", "x-1.y2.example"])(
+      "accepts %j",
+      (domainName) => {
+        expect(() =>
+          validateStages([withEnvironment({ domainName })]),
+        ).not.toThrow();
+      },
+    );
+
+    it.each([
+      "example",
+      "Dev.flex.example",
+      "dev..flex",
+      "-dev.flex",
+      "dev.flex.",
+    ])("refuses %j", (domainName) => {
+      expect(() => validateStages([withEnvironment({ domainName })])).toThrow(
+        `platform-dev/sandbox: the domain name ${JSON.stringify(domainName)} must be`,
+      );
+    });
+  });
+
+  describe("the frontdoor", () => {
+    it("needs an issuer", () => {
+      expect(() => validateStages([withFrontdoor({ issuers: [] })])).toThrow(
+        "platform-dev/sandbox: the frontdoor needs at least one trusted issuer",
+      );
+    });
+
+    it("refuses an issuer that is not an https URL", () => {
+      const issuers = [{ issuer: "http://example", clientIds: ["c"] }];
+      expect(() => validateStages([withFrontdoor({ issuers })])).toThrow(
+        'platform-dev/sandbox: the issuer "http://example" must be an https URL',
+      );
+    });
+
+    it("refuses an issuer with no app client", () => {
+      const issuers = [{ issuer: "https://example", clientIds: [] }];
+      expect(() => validateStages([withFrontdoor({ issuers })])).toThrow(
+        "platform-dev/sandbox: the issuer https://example names no app client",
+      );
+    });
+  });
+
   describe("accounts", () => {
     it.each(["12345678901", "1234567890123", "12345678901a", " 100000000001"])(
       "refuses the account ID %j",
@@ -154,6 +211,7 @@ describe("validateStages", () => {
 
     it("refuses an account used in two environments", () => {
       const second: EnvironmentConfig = {
+        ...ENVIRONMENT,
         name: "other",
         frontdoorAccount: "100000000004",
         domainAccounts: [{ name: "main", account: "100000000003" }],

@@ -1,8 +1,12 @@
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
-import type { StageConfig } from "./types.ts";
+import type { EnvironmentConfig, StageConfig } from "./types.ts";
 
 const ACCOUNT_ID = /^\d{12}$/;
+
+// A DNS name of lowercase labels, with at least one dot: the edge adds a label in front of it.
+const DOMAIN_NAME =
+  /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 interface AccountUse {
   readonly account: string;
@@ -26,9 +30,32 @@ export function validateStages(stages: readonly StageConfig[]): void {
         `${stage.name}/${environment.name} domain account`,
         environment.domainAccounts.map((domainAccount) => domainAccount.name),
       );
+      checkEnvironment(`${stage.name}/${environment.name}`, environment);
     }
   }
   checkAccounts(accountUses(stages));
+}
+
+function checkEnvironment(at: string, environment: EnvironmentConfig): void {
+  if (!DOMAIN_NAME.test(environment.domainName)) {
+    throw new Error(
+      `${at}: the domain name ${JSON.stringify(environment.domainName)} must be a DNS name of lowercase labels with at least one dot`,
+    );
+  }
+  const { issuers } = environment.frontdoor;
+  if (issuers.length === 0) {
+    throw new Error(`${at}: the frontdoor needs at least one trusted issuer`);
+  }
+  for (const { issuer, clientIds } of issuers) {
+    if (!issuer.startsWith("https://")) {
+      throw new Error(
+        `${at}: the issuer ${JSON.stringify(issuer)} must be an https URL`,
+      );
+    }
+    if (clientIds.length === 0) {
+      throw new Error(`${at}: the issuer ${issuer} names no app client`);
+    }
+  }
 }
 
 // A name becomes part of resource names and DNS labels, and picks out one entry.
