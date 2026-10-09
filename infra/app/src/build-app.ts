@@ -4,6 +4,7 @@ import { AwsSolutionsChecks } from "cdk-nag";
 import type { IConstruct } from "constructs";
 
 import type { StageConfig } from "./config/types.ts";
+import { FrontdoorStack } from "./stacks/frontdoor.ts";
 import { tagStack } from "./tags.ts";
 
 export function buildApp(app: App, stage: StageConfig): void {
@@ -19,4 +20,8 @@ export function buildApp(app: App, stage: StageConfig): void {
   Validations.of(app).addPlugins(
     new AwsSolutionsChecks(app, { verbose: true }),
   );
+
+  for (const environment of stage.environments) {
+    new FrontdoorStack(app, environment);
+  }
 }

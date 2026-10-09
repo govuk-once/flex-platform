@@ -8,15 +8,20 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "synth": "cdk synth",
-    "diff": "cdk diff"
+    "diff": "cdk diff",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "dependencies": {
+    "@repo/frontdoor-cloudfront-function": "workspace:*",
+    "@repo/frontdoor-infra": "workspace:*",
     "@repo/utils": "workspace:*",
     "aws-cdk-lib": "2.270.0",
     "cdk-nag": "3.0.2",
     "constructs": "10.8.1"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudformation": "3.1140.0",
+    "@aws-sdk/client-cloudwatch-logs": "3.1140.0",
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
