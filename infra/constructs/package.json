@@ -1,19 +1,17 @@
 {
-  "name": "@repo/frontdoor-infra",
+  "name": "@repo/infra-constructs",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    "./*": "./src/*.ts"
   },
   "scripts": {
-    "lint": "eslint src/ test/",
+    "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@repo/frontdoor-cloudfront-function": "workspace:*",
-    "@repo/infra-constructs": "workspace:*",
     "aws-cdk-lib": "2.270.0",
     "constructs": "10.8.1"
   },

@@ -15,7 +15,7 @@ export interface FrontdoorConfig {
   readonly issuers: readonly TrustedIssuer[];
   /** Requests one address may make in five minutes before the edge turns it away. */
   readonly rateLimitPerFiveMinutes: number;
-  /** How long WAF and access logs are kept; one of the values CloudWatch Logs offers. */
+  /** How long WAF logs are kept; one of the values CloudWatch Logs offers. */
   readonly logRetentionDays: number;
 }
 
