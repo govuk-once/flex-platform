@@ -1,7 +1,3 @@
-export {
-  AccessLogBucket,
-  type AccessLogBucketProps,
-} from "./access-log-bucket.ts";
 export { Edge, type EdgeProps, FORWARDED_HEADERS } from "./edge.ts";
 export { originDomainName, wafLogGroupName, webAclName } from "./names.ts";
 export {

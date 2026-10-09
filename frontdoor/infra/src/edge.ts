@@ -2,6 +2,7 @@ import {
   buildViewerRequestFunction,
   type TrustedIssuer,
 } from "@repo/frontdoor-cloudfront-function";
+import { AccessLogBucket } from "@repo/infra-constructs/access-log-bucket";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   AllowedMethods,
@@ -27,7 +28,6 @@ import type { RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
-import { AccessLogBucket } from "./access-log-bucket.ts";
 import { originDomainName } from "./names.ts";
 import { EdgeResponseHeadersPolicy } from "./response-headers-policy.ts";
 import type { ManagedRuleGroup } from "./waf-rules.ts";
@@ -52,6 +52,7 @@ export interface EdgeProps {
   /** The user pools and app clients whose tokens the CloudFront Function lets through. */
   readonly issuers: readonly TrustedIssuer[];
   readonly rateLimitPerFiveMinutes: number;
+  /** How long WAF logs are kept. Access logs are kept a year regardless. */
   readonly logRetention: RetentionDays;
   readonly managedRuleGroups?: readonly ManagedRuleGroup[];
 }
@@ -94,9 +95,7 @@ export class Edge extends Construct {
       }),
     });
 
-    this.accessLogBucket = new AccessLogBucket(this, "AccessLogs", {
-      retention: Duration.days(props.logRetention),
-    });
+    this.accessLogBucket = new AccessLogBucket(this, "AccessLogs");
 
     this.viewerRequestFunction = new CloudFrontFunction(this, "ViewerRequest", {
       code: FunctionCode.fromInline(

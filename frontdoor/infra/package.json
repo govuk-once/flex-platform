@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@repo/frontdoor-cloudfront-function": "workspace:*",
+    "@repo/infra-constructs": "workspace:*",
     "aws-cdk-lib": "2.270.0",
     "constructs": "10.8.1"
   },

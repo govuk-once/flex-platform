@@ -176,7 +176,7 @@ describe("Edge", () => {
     });
   });
 
-  it("writes access logs to a retained, locked bucket that expires them", () => {
+  it("writes access logs to the shared log bucket construct", () => {
     const { template } = edgeTemplate();
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
@@ -190,36 +190,7 @@ describe("Edge", () => {
     });
     template.hasResource("AWS::S3::Bucket", {
       DeletionPolicy: "Retain",
-      Properties: {
-        OwnershipControls: { Rules: [{ ObjectOwnership: "ObjectWriter" }] },
-        PublicAccessBlockConfiguration: {
-          BlockPublicAcls: true,
-          BlockPublicPolicy: true,
-          IgnorePublicAcls: true,
-          RestrictPublicBuckets: true,
-        },
-        VersioningConfiguration: { Status: "Enabled" },
-        ObjectLockEnabled: true,
-        LifecycleConfiguration: {
-          Rules: [
-            Match.objectLike({
-              ExpirationInDays: 90,
-              NoncurrentVersionExpiration: { NoncurrentDays: 90 },
-            }),
-          ],
-        },
-      },
-    });
-    template.hasResourceProperties("AWS::S3::BucketPolicy", {
-      PolicyDocument: {
-        Statement: Match.arrayWith([
-          Match.objectLike({
-            Effect: "Deny",
-            Action: "s3:*",
-            Condition: { Bool: { "aws:SecureTransport": "false" } },
-          }),
-        ]),
-      },
+      Properties: Match.objectLike({ ObjectLockEnabled: true }),
     });
   });
 });
