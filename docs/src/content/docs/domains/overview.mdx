@@ -12,10 +12,9 @@ import { Aside, Badge } from "@astrojs/starlight/components";
 A **domain** is the logic behind a personalised feature of the GOV.UK app. It sits between the app
 and the upstreams that hold the data it needs.
 
-In the planned hosting model, each domain is an Amazon API Gateway at its own domain name, under
-its domain account's hosted zone. A
-Lambda proxy integration hands every request to the domain's code. The
-[Frontdoor](/flex-platform/frontdoor/overview/) routes requests to the domain. The app never calls a domain directly.
+Each domain is a regional REST API in Amazon API Gateway, with one Lambda function behind it that
+serves every route. The [Frontdoor](/flex-platform/frontdoor/overview/) routes requests to the
+domain. The app never calls a domain directly. See [Hosting a domain](/flex-platform/domains/hosting/).
 
 Developers outside the platform team write domains. A domain defines the behaviour the app needs:
 it can expose data from one upstream, combine several upstream calls, or compute a response without
@@ -24,20 +23,34 @@ and the boundary between domain logic and gateway code.
 
 ## Where a domain's code lives
 
-Domain code will live with the team that writes it and use libraries published by the platform.
-This repository does not yet include a domain skeleton, hosting infrastructure or domain libraries.
+Domain code will live with the team that writes it and use libraries the platform publishes. This
+repository holds the construct that hosts a domain, but no domain skeleton or domain libraries
+yet.
 
 ## Releasing a domain
 
 A domain publishes a new version to its development environment. This development environment
 runs inside the platform's production environment. From there, the domain promotes the version to
-staging, and then to production.
+staging, and then to production. Each release moves the domain's `live` alias to a new version.
+See [Releases and the alias](/flex-platform/domains/hosting/#releases-and-the-alias).
 
 ## Network
 
-A domain's Lambda runs in `isolated` subnets, with no route to the internet. It reaches upstreams
-through a gateway. An upstream might be another team's API, an AWS-hosted service or a third
-party.
+A domain's access level decides where its Lambda function runs. A domain that sets none is
+`isolated`:
+
+| Access level | Where the function runs | Route out |
+|---|---|---|
+| `isolated` (the default) | Isolated subnets | VPC endpoints only, with no route to the internet |
+| `private` | Private subnets | The internet, through NAT and AWS Network Firewall |
+| `public` | Outside the VPC | Lambda's own, which the platform's network does not control |
+
+The network that enforces these routes is planned. Only the Frontdoor can call a domain at any
+access level. The level decides what the domain's code can reach, not who can reach it. Anything
+above `isolated` is a line in the domain's config, where a reviewer sees it.
+
+An `isolated` domain reaches upstreams through a gateway. An upstream might be another team's
+API, an AWS-hosted service or a third party.
 
 ## Calling gateways
 

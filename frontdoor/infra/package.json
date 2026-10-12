@@ -1,30 +1,34 @@
 {
-  "name": "@repo/frontdoor-infra",
+  "name": "@repo/infra-app",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
   "scripts": {
-    "lint": "eslint src/ test/",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "deploy": "cdk deploy",
+    "diff": "cdk diff",
+    "synth": "cdk synth",
+    "lint": "eslint bin/ src/ test/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@repo/domains-infra": "workspace:*",
     "@repo/frontdoor-origin-request": "workspace:*",
     "@repo/frontdoor-shared": "workspace:*",
     "@repo/frontdoor-viewer-request": "workspace:*",
     "@repo/infra-constructs": "workspace:*",
+    "@repo/utils": "workspace:*",
     "aws-cdk-lib": "2.273.0",
+    "cdk-nag": "3.0.2",
     "constructs": "10.8.1"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "cdk-nag": "3.0.2",
+    "aws-cdk": "2.1145.0",
     "eslint": "10.12.0",
+    "tsx": "4.23.15",
     "vitest": "5.0.4"
   }
 }

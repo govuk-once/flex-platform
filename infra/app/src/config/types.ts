@@ -1,3 +1,4 @@
+import type { DomainConfig, DomainNetwork } from "@repo/domains-infra";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
 
 // Everything that differs between stages and environments is a value here. Constructs receive
@@ -21,6 +22,21 @@ export interface DomainAccountConfig {
   readonly account: string;
   /** Each domain answers at `<domain>.<zone>`, under one wildcard certificate. */
   readonly zone: ZoneConfig;
+  /**
+   * The subnets and security group for each access level that runs in the account's VPC, by ID.
+   * The VPC isn't ours, so config names them. `{}` where no domain in the account needs one.
+   */
+  readonly network: DomainNetwork;
+}
+
+/**
+ * A domain, declared once, in `config/domains/`. An environment hosts it by listing it, so
+ * promoting a domain is adding it to the next environment's list.
+ */
+export interface HostedDomainConfig {
+  /** The name of the domain account that hosts it, the same in every environment that lists it. */
+  readonly domainAccount: string;
+  readonly config: DomainConfig;
 }
 
 export interface SharedConfig {
@@ -37,8 +53,10 @@ export interface FrontdoorConfig {
 
 export interface EnvironmentConfig {
   readonly name: string;
-  readonly domainAccounts: readonly DomainAccountConfig[];
+  /** The domains the environment hosts. A domain deploys only to environments that list it. */
+  readonly domains: readonly HostedDomainConfig[];
   readonly frontdoor: FrontdoorConfig;
+  readonly domainAccounts: readonly DomainAccountConfig[];
 }
 
 export interface StageConfig {

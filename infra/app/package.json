@@ -4,14 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "eslint bin/ src/ test/",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "deploy": "cdk deploy",
+    "diff": "cdk diff",
     "synth": "cdk synth",
-    "diff": "cdk diff"
+    "lint": "eslint bin/ src/ test/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@repo/frontdoor-infra": "workspace:*",
+    "@repo/domains-infra": "workspace:*",
+    "@repo/frontdoor-origin-request": "workspace:*",
     "@repo/frontdoor-shared": "workspace:*",
     "@repo/infra-constructs": "workspace:*",
     "@repo/utils": "workspace:*",

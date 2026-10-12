@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES, FRONTDOOR, zone } from "../../test/helpers.ts";
+import {
+  DOMAIN_ONE,
+  DOMAIN_TWO,
+  FIXTURE_STAGES,
+  FRONTDOOR,
+  NETWORK,
+  zone,
+} from "../../test/helpers.ts";
+import { STAGES } from "./stages.ts";
 import type {
   DomainAccountConfig,
   EnvironmentConfig,
   FrontdoorConfig,
+  HostedDomainConfig,
   StageConfig,
   ZoneConfig,
 } from "./types.ts";
@@ -15,7 +24,7 @@ function domainAccount(
   account: string,
   environment = "sandbox",
 ): DomainAccountConfig {
-  return { name, account, zone: zone(environment, account) };
+  return { name, account, zone: zone(environment, account), network: NETWORK };
 }
 
 const MAIN = domainAccount("main", "100000000003");
@@ -23,6 +32,7 @@ const MAIN = domainAccount("main", "100000000003");
 const ENVIRONMENT: EnvironmentConfig = {
   name: "sandbox",
   domainAccounts: [MAIN],
+  domains: [DOMAIN_ONE],
   frontdoor: FRONTDOOR,
 };
 
@@ -40,6 +50,7 @@ const OTHER_STAGE: StageConfig = {
     {
       name: "prod",
       domainAccounts: [domainAccount("main", "300000000003", "prod")],
+      domains: [DOMAIN_ONE],
       frontdoor: { ...FRONTDOOR, account: "300000000002" },
     },
   ],
@@ -56,6 +67,10 @@ function withFrontdoor(frontdoor: Partial<FrontdoorConfig>): StageConfig {
 describe("validateStages", () => {
   it("accepts the fixture stages", () => {
     expect(() => validateStages(FIXTURE_STAGES)).not.toThrow();
+  });
+
+  it("accepts the committed stages", () => {
+    expect(() => validateStages(STAGES)).not.toThrow();
   });
 
   describe("names", () => {
@@ -282,6 +297,181 @@ describe("validateStages", () => {
       };
       expect(() => validateStages([STAGE, other])).toThrow(
         "platform-prod shared account: account 100000000002 is already the platform-dev/sandbox frontdoor account",
+      );
+    });
+  });
+
+  describe("domain account networks", () => {
+    function withNetwork(network: DomainAccountConfig["network"]): StageConfig {
+      return withEnvironment({ domainAccounts: [{ ...MAIN, network }] });
+    }
+
+    it("accepts an account with no network when it hosts no domain in the VPC", () => {
+      expect(() =>
+        validateStages([
+          withEnvironment({
+            domainAccounts: [{ ...MAIN, network: {} }],
+            domains: [],
+          }),
+        ]),
+      ).not.toThrow();
+    });
+
+    it("refuses a malformed subnet ID, wherever the stage is built", () => {
+      expect(() =>
+        validateStages([
+          withNetwork({
+            isolated: {
+              subnetIds: ["subnet-1"],
+              securityGroupId: "sg-00000000000000001",
+            },
+          }),
+        ]),
+      ).toThrow(
+        'platform-dev/sandbox main domain account network: "subnet-1" is not a subnet ID',
+      );
+    });
+
+    it("refuses a placement with no subnets", () => {
+      expect(() =>
+        validateStages([
+          withNetwork({
+            isolated: {
+              subnetIds: [],
+              securityGroupId: "sg-00000000000000001",
+            },
+          }),
+        ]),
+      ).toThrow(
+        "platform-dev/sandbox main domain account network: the isolated placement has no subnets",
+      );
+    });
+  });
+
+  describe("domains", () => {
+    function withDomains(...domains: HostedDomainConfig[]): StageConfig {
+      return withEnvironment({ domains });
+    }
+
+    it("accepts an environment that hosts no domains", () => {
+      expect(() => validateStages([withDomains()])).not.toThrow();
+    });
+
+    it("refuses a domain whose domain account isn't in the environment", () => {
+      expect(() => validateStages([withDomains(DOMAIN_TWO)])).toThrow(
+        "platform-dev/sandbox: the domain-two domain's domain account, second, isn't in the environment",
+      );
+    });
+
+    it("refuses a domain whose access level its account's network doesn't offer", () => {
+      const privateDomain: HostedDomainConfig = {
+        ...DOMAIN_ONE,
+        config: { ...DOMAIN_ONE.config, access: "private" },
+      };
+
+      expect(() =>
+        validateStages([
+          withEnvironment({
+            domainAccounts: [
+              { ...MAIN, network: { isolated: NETWORK.isolated! } },
+            ],
+            domains: [privateDomain],
+          }),
+        ]),
+      ).toThrow(
+        "platform-dev/sandbox: the domain-one domain is private, and the main domain account's network has no private placement",
+      );
+    });
+
+    it("refuses an isolated domain in an account with no network", () => {
+      expect(() =>
+        validateStages([
+          withEnvironment({ domainAccounts: [{ ...MAIN, network: {} }] }),
+        ]),
+      ).toThrow(
+        "platform-dev/sandbox: the domain-one domain is isolated, and the main domain account's network has no isolated placement",
+      );
+    });
+
+    it("accepts a public domain in an account with no network", () => {
+      const second = {
+        ...domainAccount("second", "100000000004"),
+        network: {},
+      };
+
+      expect(() =>
+        validateStages([
+          withEnvironment({
+            domainAccounts: [MAIN, second],
+            domains: [DOMAIN_ONE, DOMAIN_TWO],
+          }),
+        ]),
+      ).not.toThrow();
+    });
+
+    it("refuses a domain listed twice in an environment", () => {
+      expect(() =>
+        validateStages([withDomains(DOMAIN_ONE, DOMAIN_ONE)]),
+      ).toThrow(
+        "The platform-dev/sandbox domain name domain-one is used more than once",
+      );
+    });
+
+    it("checks each domain's config, wherever the stage is built", () => {
+      const invalid: HostedDomainConfig = {
+        ...DOMAIN_ONE,
+        config: { ...DOMAIN_ONE.config, routes: [] },
+      };
+
+      expect(() =>
+        validateStages([
+          STAGE,
+          {
+            ...OTHER_STAGE,
+            environments: [
+              { ...OTHER_STAGE.environments[0]!, domains: [invalid] },
+            ],
+          },
+        ]),
+      ).toThrow("domain-one domain has no routes");
+    });
+
+    it("refuses a domain whose resource names would be too long in its environment", () => {
+      const name = `d${"x".repeat(31)}`;
+      const environment = "e".repeat(25);
+      const long: HostedDomainConfig = {
+        ...DOMAIN_ONE,
+        config: { ...DOMAIN_ONE.config, name },
+      };
+
+      expect(() =>
+        validateStages([
+          withEnvironment({ name: environment, domains: [long] }),
+        ]),
+      ).toThrow(
+        `${name} domain: its resource name, domain-${environment}-${name}, is longer than the 64 characters Lambda and IAM allow`,
+      );
+    });
+
+    it("accepts one declaration listed in several environments", () => {
+      expect(() => validateStages([STAGE, OTHER_STAGE])).not.toThrow();
+    });
+
+    it("refuses a domain declared twice, even with the same config", () => {
+      const copy: HostedDomainConfig = { ...DOMAIN_ONE };
+
+      expect(() =>
+        validateStages([
+          STAGE,
+          {
+            ...OTHER_STAGE,
+            environments: [
+              { ...OTHER_STAGE.environments[0]!, domains: [copy] },
+            ],
+          },
+        ]),
+      ).toThrow(
+        "platform-prod/prod: the domain-one domain is declared more than once. Declare it once, and list that declaration in each environment that hosts it",
       );
     });
   });

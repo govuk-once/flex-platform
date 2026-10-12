@@ -32,8 +32,11 @@ describe("synthStage", () => {
     const [, , prod] = FIXTURE_STAGES;
     const app = cdkApp({ stage: prod.name, target: "dev" });
     synthStage(app, FIXTURE_STAGES);
+    // In deploy order: each stack after the stacks it depends on.
     expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
+      "domain-dev-main-account",
       "frontdoor-dev-edge-logs-eu-west-2",
+      "domain-dev-domain-one",
       "frontdoor-dev",
     ]);
 
