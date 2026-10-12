@@ -27,6 +27,19 @@ describe("synthStage", () => {
     );
   });
 
+  it("builds one environment when a target names it, and refuses one it doesn't know", () => {
+    const [, , prod] = FIXTURE_STAGES;
+    const app = cdkApp({ stage: prod.name, target: "dev" });
+    synthStage(app, FIXTURE_STAGES);
+    expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
+      "frontdoor-dev",
+    ]);
+
+    expect(() =>
+      synthStage(cdkApp({ stage: prod.name, target: "qa" }), FIXTURE_STAGES),
+    ).toThrow('Unknown target "qa" for platform-prod');
+  });
+
   it("asks for a stage when none is given", () => {
     expect(() => synthStage(cdkApp(), FIXTURE_STAGES)).toThrow(
       "Pass the stage to build with -c stage=<name>",

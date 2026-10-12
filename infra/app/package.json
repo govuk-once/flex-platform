@@ -11,6 +11,8 @@
     "diff": "cdk diff"
   },
   "dependencies": {
+    "@repo/frontdoor-cloudfront-function": "workspace:*",
+    "@repo/frontdoor-infra": "workspace:*",
     "@repo/utils": "workspace:*",
     "aws-cdk-lib": "2.270.0",
     "cdk-nag": "3.0.2",
