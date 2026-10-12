@@ -82,8 +82,6 @@ export class Edge extends Construct {
         }),
         viewerProtocolPolicy: ViewerProtocolPolicy.HTTPS_ONLY,
         allowedMethods: AllowedMethods.ALLOW_ALL,
-        // Everything the viewer sent goes to the origin; the function has already checked it.
-        // CloudFront still drops Authorization from a GET or HEAD, since no cache policy names it.
         cachePolicy: CachePolicy.CACHING_DISABLED,
         originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
         responseHeadersPolicy: new EdgeResponseHeadersPolicy(

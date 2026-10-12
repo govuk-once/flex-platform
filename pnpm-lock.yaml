@@ -483,12 +483,6 @@ importers:
         specifier: 10.8.1
         version: 10.8.1
     devDependencies:
-      '@aws-sdk/client-cloudformation':
-        specifier: 3.1140.0
-        version: 3.1140.0
-      '@aws-sdk/client-cloudwatch-logs':
-        specifier: 3.1140.0
-        version: 3.1140.0
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
@@ -763,14 +757,6 @@ packages:
         optional: true
       '@middy/core':
         optional: true
-
-  '@aws-sdk/client-cloudformation@3.1140.0':
-    resolution: {integrity: sha512-q+A5qLfKvstBCm/zsHjg6sKlP17nZ2CVNuxwf4fmUmYbjEyk9QLwf/nX2oHGUtWiKmUDBTAzHr+IaZk91txX5w==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/client-cloudwatch-logs@3.1140.0':
-    resolution: {integrity: sha512-eZcNPrbKf73kNkUT2LaNRuaiBHX1xxxWSogp5a9LQSqg0sHr/P94aZQHGduCE24BlP0bpNF0WTylhIkXQVHrwQ==}
-    engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-secrets-manager@3.1140.0':
     resolution: {integrity: sha512-YPdexMJJLpch0o2nlDmy82lw7/l2mZH3BcfeN8FcXLJBaLk30RVDaeI+e4JeQ8rD1vzP22e7aiJhFyz9iP+1og==}
@@ -3462,28 +3448,6 @@ snapshots:
       '@aws-lambda-powertools/commons': 2.35.0
     optionalDependencies:
       '@aws-sdk/client-secrets-manager': 3.1140.0
-
-  '@aws-sdk/client-cloudformation@3.1140.0':
-    dependencies:
-      '@aws-sdk/core': 3.978.1
-      '@aws-sdk/credential-provider-node': 3.972.84
-      '@aws-sdk/types': 3.974.6
-      '@smithy/core': 3.35.0
-      '@smithy/fetch-http-handler': 5.8.0
-      '@smithy/node-http-handler': 4.12.1
-      '@smithy/types': 4.19.0
-      tslib: 2.8.1
-
-  '@aws-sdk/client-cloudwatch-logs@3.1140.0':
-    dependencies:
-      '@aws-sdk/core': 3.978.1
-      '@aws-sdk/credential-provider-node': 3.972.84
-      '@aws-sdk/types': 3.974.6
-      '@smithy/core': 3.35.0
-      '@smithy/fetch-http-handler': 5.8.0
-      '@smithy/node-http-handler': 4.12.1
-      '@smithy/types': 4.19.0
-      tslib: 2.8.1
 
   '@aws-sdk/client-secrets-manager@3.1140.0':
     dependencies:
