@@ -28,6 +28,12 @@ package builds the site with Astro.
 |---|---|---|
 | `@govuk-once/flex-gateway-udp` | `gateways/services/udp` | The User Data Platform gateway: its configuration and versioned schemas. |
 
+## Domains
+
+| Package | Directory | Holds |
+|---|---|---|
+| `@repo/domains-infra` | `domains/infra` | `DomainConfig`, what domain developers write, and the `Domain` construct, which builds from it everything that hosts one domain: its REST API, and its Lambda function and `live` alias. Shared resources are given by ARN. See [Hosting a domain](/flex-platform/domains/hosting/). |
+
 ## Frontdoor
 
 | Package | Directory | Holds |
@@ -39,6 +45,7 @@ package builds the site with Astro.
 | Package | Directory | Holds |
 |---|---|---|
 | `@repo/infra-app` | `infra/app` | The CDK app: every stage's config and its checks. It builds one stage at a time. See [Infrastructure](/flex-platform/infrastructure/overview/). |
+| `@repo/infra-constructs` | `infra/constructs` | Constructs the platform's sections share, each imported by its own path, such as `@repo/infra-constructs/log-group`: `PlatformLogGroup`, a log group kept for a year and retained when its stack is deleted. |
 
 ## Shared tooling
 

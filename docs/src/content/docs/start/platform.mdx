@@ -13,8 +13,8 @@ Flex is the platform behind the GOV.UK app. It has three sections:
   request comes in through it. It checks the request, authenticates it and routes it to the right
   domain.
 - **[Domains](/flex-platform/domains/overview/).** Domains hold the logic behind personalised
-  features. Each domain is an API Gateway with a Lambda function backing it, running in
-  isolated subnets.
+  features. Each domain is a regional REST API in API Gateway with a Lambda function behind it, in
+  isolated subnets by default.
 - **[Egress](/flex-platform/gateways/overview/).** The gateways, one Lambda function per upstream,
   generated from config in this repository. A domain uses them to reach other services.
 
@@ -27,10 +27,11 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 | Distribution | CloudFront, the CloudFront Function that checks each request, and their infrastructure | <Badge text="Planned" variant="caution" /> |
 | Lambda@Edge  | Authenticates each request, routes it to its domain and signs it                       | <Badge text="Planned" variant="caution" /> |
 
-| Domains   | What it is                                              | Status                                     |
-| --------- | ------------------------------------------------------- | ------------------------------------------ |
-| Hosting   | One API Gateway per domain, running code written by external developers | <Badge text="Planned" variant="caution" /> |
-| Libraries | Libraries and examples for building a domain            | <Badge text="Planned" variant="caution" /> |
+| Domains    | What it is                                                                   | Status                                     |
+| ---------- | ---------------------------------------------------------------------------- | ------------------------------------------ |
+| Construct  | Builds one domain's REST API and Lambda function from its config             | <Badge text="Built" variant="success" />   |
+| Deployment | A stack per domain, and the release pipeline                                 | <Badge text="Planned" variant="caution" /> |
+| Libraries  | Libraries and examples for building a domain                                 | <Badge text="Planned" variant="caution" /> |
 
 | Egress           | What it is                                                    | Status                                     |
 | ---------------- | ------------------------------------------------------------- | ------------------------------------------ |

@@ -194,6 +194,40 @@ importers:
         specifier: 0.26.0
         version: 0.26.0(@astrojs/starlight@0.42.4(astro@7.3.5(@types/node@24.13.5)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))(supports-color@7.2.0)(typescript@6.0.3))(astro@7.3.5(@types/node@24.13.5)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))(supports-color@7.2.0)
 
+  domains/infra:
+    dependencies:
+      '@repo/infra-constructs':
+        specifier: workspace:*
+        version: link:../../infra/constructs
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      aws-cdk-lib:
+        specifier: 2.270.0
+        version: 2.270.0(constructs@10.8.1)
+      constructs:
+        specifier: 10.8.1
+        version: 10.8.1
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../../packages/vitest-config
+      cdk-nag:
+        specifier: 3.0.2
+        version: 3.0.2(aws-cdk-lib@2.270.0(constructs@10.8.1))(constructs@10.8.1)
+      eslint:
+        specifier: 10.11.0
+        version: 10.11.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.0.1
+        version: 5.0.1(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(vite@8.2.2(@types/node@24.13.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   frontdoor/cloudfront-function:
     dependencies:
       '@repo/utils':
