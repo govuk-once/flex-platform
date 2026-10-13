@@ -1,0 +1,199 @@
+---
+title: Hosting a domain
+description: The Domain construct, which builds everything that hosts one domain from its config.
+---
+
+import { Badge } from "@astrojs/starlight/components";
+
+<Badge text="Planned" variant="caution" size="medium" />
+
+The `Domain` construct is built, in `domains/infra` (`@repo/domains-infra`), but nothing deploys
+it yet. Stacks for each domain and the release pipeline are planned.
+
+One `Domain` builds everything that hosts one domain, from that domain's config. Two domains differ
+only in their config. Domain developers write the config and never write CDK.
+
+## A domain's config
+
+```ts
+import type { DomainConfig } from "@repo/domains-infra";
+
+export const notifications = {
+  name: "notifications",
+  access: "isolated",
+  routes: [
+    { method: "GET", path: "/preferences" },
+    { method: "PUT", path: "/preferences" },
+    { method: "DELETE", path: "/preferences/{channel}" },
+  ],
+  function: { timeoutSeconds: 20 },
+} satisfies DomainConfig;
+```
+
+| Field | Holds |
+|---|---|
+| `name` | 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen. The Frontdoor routes by it, and it is part of the domain's resource names. |
+| `access` | Optional. `isolated`, `private` or `public`, and `isolated` when left out. See [Network](/flex-platform/domains/overview/#network). |
+| `routes` | Every route the domain's API answers: a method (`GET`, `POST`, `PUT`, `PATCH` or `DELETE`) and a path relative to the domain's root. API Gateway refuses any other request before the domain's code runs. |
+| `function` | Optional. The function settings a domain may change. Each one left out takes the default. |
+
+| Function setting | Default | Allowed |
+|---|---|---|
+| `timeoutSeconds` | 15 | 1 to 29. API Gateway stops waiting for an integration after 29 seconds. |
+| `memorySize`, in MB | 1,024 | 128 to 10,240. Lambda gives CPU in proportion to memory. |
+
+The defaults match the current Flex platform.
+
+A domain's code serves all its routes from one Lambda function and routes each request itself. The
+routes in config and the routes in the code are declared separately, and must agree.
+
+### Validation
+
+The construct checks its config before it builds anything, and stops synth on the first problem:
+
+- the name follows the rule above;
+- the domain has at least one route, and declares each method and path once;
+- a path starts with `/` and has no empty, `.` or `..` segment;
+- a literal segment is letters, digits, `-` and `_`, with single dots between them;
+- a parameter segment is `{name}`, where the name is letters, digits and `_`, not starting with a
+  digit. It appears once in a path, and is never greedy (`{name+}`), so a route answers only the
+  paths it names;
+- at any one position in the path tree, every route uses the same parameter name. API Gateway
+  refuses `/a/{id}` beside `/a/{aId}/b`, but only at deploy;
+- each function setting is a whole number within its range.
+
+Whether two domains share a name is checked where the list of domains is built, which is planned.
+
+## What the construct builds
+
+| Resource | What it is |
+|---|---|
+| Lambda function `flex-domain-<name>` | The domain's code with active tracing. Named so the release pipeline can update it. |
+| A version and the alias `live` | API Gateway invokes `live`. See [Releases and the alias](#releases-and-the-alias). |
+| A regional REST API `flex-domain-<name>`, with stage `prod` | One method per route, each a Lambda proxy integration with `live`. See [Protection](#protection). |
+| One Lambda permission per method | Lets API Gateway invoke `live` for that method and path on the API's stage only. |
+| Two log groups | The function's and the API's access logs. See [Logs and traces](#logs-and-traces). |
+
+It creates no IAM roles or identity policies and no network resources. It is given those, and
+changes none of them.
+
+## What the construct is given
+
+```ts
+import { Domain } from "@repo/domains-infra";
+
+new Domain(stack, notifications.name, {
+  config: notifications,
+  executionRoleArn,
+  frontdoorRoleArn,
+  network,
+});
+```
+
+| Prop | What it is |
+|---|---|
+| `config` | The domain's config. |
+| `executionRoleArn` | The role the function runs as, shared by every domain in the account. It must allow the function's network interfaces, X-Ray writes, and log writes to `/aws/lambda/flex-domain-*`. |
+| `frontdoorRoleArn` | The role the Frontdoor signs each request with. The only caller the API admits. |
+| `network` | The environment's network, as a `DomainNetwork`. |
+
+| `DomainNetwork` field | What it is |
+|---|---|
+| `vpcArn` | The VPC. |
+| `availabilityZones` | The zones the VPC spans. CDK needs them to import it. |
+| `isolated`, `private` | A placement each: `subnetArns` and the `securityGroupArn` that goes with them. |
+
+Every domain is given the whole network. The domain's access level picks one placement, or none
+for `public`, and only that one is imported. What each placement can reach is enforced by the
+network, not the construct.
+
+Every value but the zones is an ARN, imported at synth. Nothing is looked up, so synth stays
+offline, and a changed ARN changes the template. For `isolated` and `private`, synth stops if the
+placement has no subnets, the network names no zones, or a VPC, subnet or security group ARN is
+malformed or names the wrong kind of resource.
+
+The network's ARNs exist only once the network has deployed. Where the construct gets its ARNs from
+is planned, along with the stacks that create each `Domain`. See
+[Rules for stacks and constructs](/flex-platform/infrastructure/overview/#rules-for-stacks-and-constructs).
+
+## Protection
+
+A request reaches a domain's code only after two checks:
+
+1. **IAM authorisation.** Every method requires a request signed with SigV4.
+2. **The API's resource policy.** It allows `execute-api:Invoke` from the Frontdoor's account when
+   `aws:PrincipalArn` is the Frontdoor's role, and denies every other principal. The role is
+   matched by condition, so it need not exist when the policy is written, and recreating it does
+   not break the policy. The deny matters within the domain's own account, where an identity
+   policy alone would otherwise be enough to call the API.
+
+A domain has no web ACL of its own. The only caller its API admits is the Frontdoor, and AWS WAF
+inspects requests there, at the distribution. See [Frontdoor](/flex-platform/frontdoor/overview/).
+
+API Gateway's console test calls would skip both checks, so API Gateway has no permission to
+invoke the function for them, and they fail.
+
+API Gateway applies a changed resource policy only from a new deployment, so the policy is part of
+what decides when the API deploys again.
+
+A domain still applies the feature's own rules about which records and actions a user may access.
+See [Identity and linked accounts](/flex-platform/domains/designing-a-domain/#identity-and-linked-accounts).
+
+## Releases and the alias
+
+A Lambda version is a fixed snapshot of a function's code and settings. An alias is a named
+pointer to one version. API Gateway invokes `live`, never the function directly. Releasing a domain
+is publishing a version and moving `live` to it. Rolling back is moving `live` back.
+
+Until a domain's first release, `live` points to a placeholder that answers every request with an
+empty `501 Not Implemented`. The placeholder is written inline and never changes, so a deploy of
+the domain's infrastructure never publishes a version, moves `live` or undoes a release.
+
+Because a version holds the function's settings, a change to a domain's `function` settings or
+`access` level updates the function, but reaches requests only with the domain's next release.
+
+The release pipeline, which publishes versions and moves `live`, is planned. Its deploy role is to
+update only functions named `flex-domain-*`.
+
+## Logs and traces
+
+The API's stage records X-Ray traces and metrics. Its execution log records errors only, and
+never request or response bodies. Its access log records every request. None of this can be
+changed per domain.
+
+Each domain has two log groups. Each keeps its logs for a year, and is kept when the domain's
+stack is deleted.
+
+| Log group | Holds |
+|---|---|
+| `/aws/lambda/flex-domain-<name>` | The function's logs. Lambda's own name for it, so the execution role's log writes can be scoped to the prefix. |
+| `/aws/apigateway/flex-domain-<name>` | The API's access logs. |
+
+Because both log groups are named and kept, a domain whose stack was deleted cannot be deployed
+again under the same name until they are deleted too.
+
+Each access log line is JSON:
+
+| Field | Holds |
+|---|---|
+| `requestId` | API Gateway's request ID. |
+| `xrayTraceId` | The X-Ray trace ID, which joins the line to the trace the Frontdoor starts. |
+| `requestTime` | When the request arrived. |
+| `ip` | The source IP API Gateway received the request from. |
+| `caller`, `user` | The caller's identity, from IAM authorisation. |
+| `httpMethod`, `resourcePath`, `protocol` | What was requested. |
+| `status`, `responseLength` | What was returned. |
+
+Logging needs API Gateway's CloudWatch role to be set, once per account in each region. The CDK app
+does not create one.
+
+## Checks
+
+The construct passes cdk-nag's AWS Solutions rules at every access level. It acknowledges three
+findings on each domain's API:
+
+| Finding | Why it is accepted |
+|---|---|
+| `AwsSolutions-APIG2`, no request validation | Every route is a Lambda proxy integration with no request models. The domain's code validates each request it receives. |
+| `AwsSolutions-COG4`, no Cognito authoriser | The Frontdoor verifies the caller's Cognito token, then signs the request. The API verifies the signature with IAM authorisation. |
+| `AwsSolutions-APIG3`, no web ACL on the stage | The Frontdoor's web ACL inspects every request at the edge. The resource policy and IAM authorisation refuse any request the Frontdoor's role did not sign. |
