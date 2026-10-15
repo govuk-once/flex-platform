@@ -6,12 +6,13 @@
 // Cognito access tokens are about 1 KB. Far larger is not one.
 const MAX_TOKEN_LENGTH = 4096;
 
-const BASE64URL = /^[A-Za-z0-9_-]+$/;
-
-import type { TrustedIssuer } from "./types.ts";
+import type { TrustedIssuer } from "@repo/frontdoor-shared";
+import { bearerToken, isCanonicalBase64url } from "@repo/frontdoor-shared";
 
 export type TokenEvent =
-  "cff_token_missing" | "cff_token_invalid" | "cff_token_expired";
+  | "viewer_request_token_missing"
+  | "viewer_request_token_invalid"
+  | "viewer_request_token_expired";
 
 // The reason is one of the fixed codes below, never text from the token.
 export interface TokenRejection {
@@ -24,16 +25,11 @@ export function checkToken(
   issuers: readonly TrustedIssuer[],
   nowSeconds: number,
 ): TokenRejection | undefined {
-  if (!authorization) return missing("no-header");
-
-  // `Bearer`, in any case (RFC 9110 11.1), then one or more spaces (RFC 6750 2.1), then the token.
-  const space = authorization.indexOf(" ");
-  const scheme = space === -1 ? authorization : authorization.slice(0, space);
-  if (scheme.toLowerCase() !== "bearer") return invalid("scheme");
-  const token =
-    space === -1 ? "" : authorization.slice(space).replace(/^ +/, "");
-  if (!token) return missing("no-token");
-  if (token.indexOf(" ") !== -1) return invalid("parts");
+  const bearer = bearerToken(authorization);
+  if (!("token" in bearer)) {
+    return bearer.missing ? missing(bearer.reason) : invalid(bearer.reason);
+  }
+  const token = bearer.token;
   if (token.length > MAX_TOKEN_LENGTH) return invalid("length");
 
   const segments = token.split(".");
@@ -46,7 +42,7 @@ export function checkToken(
 
   const payload = decodeObject(segments[1]);
   if (!payload) return invalid("payload");
-  if (!segments[2] || !BASE64URL.test(segments[2])) return invalid("signature");
+  if (!isCanonicalBase64url(segments[2]!)) return invalid("signature");
 
   const trusted = trustedIssuer(issuers, payload.iss);
   if (!trusted) return invalid("issuer");
@@ -62,7 +58,7 @@ export function checkToken(
     return invalid("expiry");
   }
   if (payload.exp <= nowSeconds) {
-    return { event: "cff_token_expired", reason: "expired" };
+    return { event: "viewer_request_token_expired", reason: "expired" };
   }
 
   return undefined;
@@ -80,11 +76,11 @@ function trustedIssuer(
 }
 
 function missing(reason: string): TokenRejection {
-  return { event: "cff_token_missing", reason };
+  return { event: "viewer_request_token_missing", reason };
 }
 
 function invalid(reason: string): TokenRejection {
-  return { event: "cff_token_invalid", reason };
+  return { event: "viewer_request_token_invalid", reason };
 }
 
 // A JWT segment is base64url without padding. The runtime's Buffer is given standard base64, so
@@ -92,7 +88,7 @@ function invalid(reason: string): TokenRejection {
 function decodeObject(
   segment: string | undefined,
 ): Record<string, unknown> | undefined {
-  if (!segment || !BASE64URL.test(segment)) return undefined;
+  if (segment === undefined || !isCanonicalBase64url(segment)) return undefined;
   const base64 = segment.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64 + "===".slice(0, (4 - (base64.length % 4)) % 4);
   try {

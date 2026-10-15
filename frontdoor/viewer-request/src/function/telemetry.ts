@@ -2,12 +2,13 @@
 // filter can count each event.
 
 export type ViewerRequestEventName =
-  | "cff_token_validated"
-  | "cff_token_missing"
-  | "cff_token_invalid"
-  | "cff_token_expired"
-  | "cff_path_rejected"
-  | "cff_content_type_rejected";
+  | "viewer_request_token_validated"
+  | "viewer_request_method_rejected"
+  | "viewer_request_token_missing"
+  | "viewer_request_token_invalid"
+  | "viewer_request_token_expired"
+  | "viewer_request_path_rejected"
+  | "viewer_request_content_type_rejected";
 
 // The two IDs that join this line to the rest of the request: the trace ID every later hop logs,
 // and the request ID in CloudFront's own logs. Only this line holds both.
