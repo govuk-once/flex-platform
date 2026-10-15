@@ -1,4 +1,4 @@
-import { PlatformLogGroup } from "@repo/infra-constructs/log-group";
+import { PlatformLogGroup } from "@repo/infra-constructs";
 import { ArnFormat, Stack } from "aws-cdk-lib";
 import type { LogGroup } from "aws-cdk-lib/aws-logs";
 import { CfnLoggingConfiguration, CfnWebACL } from "aws-cdk-lib/aws-wafv2";

@@ -1,4 +1,4 @@
-import { PlatformLogGroup } from "@repo/infra-constructs/log-group";
+import { PlatformLogGroup } from "@repo/infra-constructs";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   AllowedMethods,
