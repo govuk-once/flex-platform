@@ -17,7 +17,8 @@ it. See [The call contract](/flex-platform/codegen/call-contract/).
 ## CloudFront Function
 
 The Frontdoor's first check on a request. It checks the request's structure before anything else
-acts on it. Planned.
+acts on it. See
+[CloudFront Function](/flex-platform/frontdoor/cloudfront-function/).
 
 ## Domain
 
@@ -45,9 +46,15 @@ What a gateway's handler receives and returns. It receives `{ operation, input, 
 returns `{ ok, outcome, data }` or `{ ok, error: { code } }`. See
 [Responses and errors](/flex-platform/gateways/responses/).
 
+## Environment
+
+One Frontdoor and its domain accounts, as the app uses them. Domain teams use the development,
+staging and production environments, all in the platform-prod stage. See
+[Infrastructure](/flex-platform/infrastructure/overview/#stages-and-environments).
+
 ## Frontdoor
 
-The single CloudFront distribution that every request to the platform enters through. Planned. See
+The single CloudFront distribution that every request to the platform enters through. See
 [Frontdoor](/flex-platform/frontdoor/overview/).
 
 ## Gateway
@@ -63,7 +70,7 @@ gateway's Lambda function directly. Planned.
 ## Lambda@Edge
 
 The Frontdoor's function that authenticates a request with Amazon Cognito, routes it to a domain
-and signs it with SigV4. Planned.
+and signs it with SigV4. See [Lambda@Edge](/flex-platform/frontdoor/lambda-edge/).
 
 ## Operation
 
@@ -86,6 +93,12 @@ Where a gateway's Lambda runs. There are two placements:
 
 One numbered JSON file in a gateway's `schemas/` directory. A merged version never changes. Each
 version must be [compatible](/flex-platform/gateways/compatibility/) with every version before it.
+
+## Stage
+
+One of the three copies of the platform the platform team deploys through: platform-dev,
+platform-staging and platform-prod. Each has its own accounts, and one or more environments. See
+[Infrastructure](/flex-platform/infrastructure/overview/#stages-and-environments).
 
 ## Upstream
 

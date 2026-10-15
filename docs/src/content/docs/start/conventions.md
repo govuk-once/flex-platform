@@ -11,7 +11,12 @@ change you are making.
 
 - `packages/` holds the shared TypeScript, ESLint and Vitest configuration, and `@repo/utils`, a
   set of generic functions. Gateway code lives under `gateways/`, and what gateways share lives in
-  `gateways/shared/`.
+  `gateways/shared/`. Frontdoor code lives under `frontdoor/`, and what its functions share lives
+  in `frontdoor/shared/`. A section's CDK constructs live in its own `infra/`, such as
+  `frontdoor/infra`, constructs every section uses in `infra/constructs`, and the CDK app in
+  `infra/app`. A section's `infra/` never imports another section's: only `infra/app` joins them,
+  and lint refuses anything else.
+  See [Infrastructure](/flex-platform/infrastructure/overview/).
 - `@repo/utils` exports one function per module. Each is imported by its own path, such as
   `@repo/utils/sorted-entries`, so a consumer takes only what it uses. Export a module once
   something outside the package uses it. Code only the package uses lives under `src/internal/`,
@@ -26,9 +31,14 @@ change you are making.
 - Every package extends the one TypeScript base, `base.json`: strict, no emit. The documentation
   site is the exception, and extends Astro's strict base. Packages export their `.ts` sources
   directly, and Vitest, esbuild and tsx use them as they are.
-- ESLint provides `base`, `driver` and `service` presets. Drivers own transport access. Services
-  must use gateways. The `service` preset blocks common network globals and builtin imports, but
-  it does not fully enforce network isolation, so review transport access too.
+- ESLint provides `base`, `driver`, `service`, `cloudfrontFunction`, `infraConstructs` and
+  `sectionInfra` presets. Drivers own
+  transport access. Services must use gateways. The `service` preset blocks common network globals
+  and builtin imports, but it does not fully enforce network isolation, so review transport access
+  too. Code that runs in the CloudFront Functions runtime uses `cloudfrontFunction`, which refuses
+  what that runtime lacks, and names the packages the code may import. `infra/constructs` uses
+  `infraConstructs`, and a section's `infra/` uses `sectionInfra("<section>")`, which hold the
+  infrastructure's imports to one direction.
 - Check installed dependencies and their APIs before using them. Keep dependency versions pinned
   exactly (`savePrefix: ""`).
 - Git ignores generated artifacts, including `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and

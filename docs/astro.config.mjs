@@ -30,11 +30,15 @@ export default defineConfig({
             "start/conventions",
           ],
         },
-        // Grouped by the platform's sections. Only egress is built in this repository; the
-        // Frontdoor and domains are planned, and their pages say so.
+        // Grouped by the platform's sections. Egress is built, the Frontdoor partly, and domains are
+        // planned. Each page says which.
         {
           label: "Frontdoor",
-          items: ["frontdoor/overview"],
+          items: [
+            "frontdoor/overview",
+            "frontdoor/cloudfront-function",
+            "frontdoor/lambda-edge",
+          ],
         },
         {
           label: "Domains",
