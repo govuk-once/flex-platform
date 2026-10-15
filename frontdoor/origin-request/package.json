@@ -1,0 +1,27 @@
+{
+  "name": "@repo/frontdoor-origin-request",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src/ test/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/frontdoor-shared": "workspace:*",
+    "@repo/utils": "workspace:*",
+    "aws-jwt-verify": "5.2.1",
+    "esbuild": "0.28.2"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "eslint": "10.11.0",
+    "vitest": "5.0.1"
+  }
+}
