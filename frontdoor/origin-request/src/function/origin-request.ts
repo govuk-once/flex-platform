@@ -1,27 +1,34 @@
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
 import { authorizationToken } from "./authorization.ts";
-import { internalError, unauthorized, verified } from "./responses.ts";
+import { forward } from "./forward.ts";
+import { internalError, notFound, unauthorized } from "./responses.ts";
+import { routeFor, type Routes } from "./route.ts";
+import type { SignRequest } from "./sign.ts";
 import type { RequestIds } from "./telemetry.ts";
 import { logFailure, logOutcome } from "./telemetry.ts";
 import type { VerifyToken } from "./token.ts";
 import { requestTraceId } from "./trace-id.ts";
-import type { CloudFrontResultResponse, OriginRequestEvent } from "./types.ts";
+import type {
+  CloudFrontRequest,
+  CloudFrontResultResponse,
+  OriginRequestEvent,
+} from "./types.ts";
 
 export interface OriginRequestOptions {
   readonly verifyToken: VerifyToken;
-  readonly region: string;
-  readonly functionVersion: string;
+  readonly routes: Routes;
+  readonly sign: SignRequest;
 }
 
-// For now it verifies the token and answers the request itself: it signs nothing and routes
-// nowhere. Every error after reading the IDs is answered with a 500, so the runtime never prints
-// an error, whose text can hold a claim. If reading the IDs failed, CloudFront would answer the
+// Verify the token, route the request to its domain, and sign it. Every error after reading the
+// IDs is answered with a 500, so the runtime never prints an error, whose text can hold a claim,
+// and nothing unsigned is ever forwarded. If reading the IDs failed, CloudFront would answer the
 // request itself and forward nothing.
 export function createOriginRequestHandler(options: OriginRequestOptions) {
   return async (
     event: OriginRequestEvent,
-  ): Promise<CloudFrontResultResponse> => {
+  ): Promise<CloudFrontRequest | CloudFrontResultResponse> => {
     const { config, request } = event.Records[0].cf;
     const ids: RequestIds = {
       traceId: requestTraceId(
@@ -38,7 +45,7 @@ export function createOriginRequestHandler(options: OriginRequestOptions) {
         const event = bearer.missing
           ? "lae_token_missing"
           : "lae_token_invalid";
-        logOutcome(event, ids, bearer.reason);
+        logOutcome(event, ids, { reason: bearer.reason });
         return unauthorized(ids.traceId);
       }
 
@@ -48,12 +55,20 @@ export function createOriginRequestHandler(options: OriginRequestOptions) {
           rejection.reason === "expired"
             ? "lae_token_expired"
             : "lae_token_invalid";
-        logOutcome(event, ids, rejection.reason);
+        logOutcome(event, ids, { reason: rejection.reason });
         return unauthorized(ids.traceId);
       }
 
-      logOutcome("lae_token_verified", ids);
-      return verified(ids.traceId, options);
+      // After the token, so a caller without one learns nothing about which domains exist.
+      const route = routeFor(request.uri, options.routes);
+      if (route === undefined) {
+        logOutcome("lae_route_unknown", ids);
+        return notFound(ids.traceId);
+      }
+
+      const forwarded = await forward(request, route, options.sign);
+      logOutcome("lae_forwarded", ids, { domain: route.domain });
+      return forwarded;
     } catch (error) {
       logFailure(ids, describeUnexpectedError(error));
       return internalError(ids.traceId);

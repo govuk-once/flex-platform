@@ -76,17 +76,19 @@ function withToken(value: string): OriginRequestEvent {
 
 describe("buildOriginRequestFunction", () => {
   it("needs nothing but Node's builtins", () => {
-    const code = buildOriginRequestFunction({ issuers: ISSUERS });
+    const code = buildOriginRequestFunction({ issuers: ISSUERS, routes: {} });
 
     const required = [...code.matchAll(/\brequire\("([^"]+)"\)/g)].map(
       ([, name]) => name,
     );
     expect(required.length).toBeGreaterThan(0);
-    for (const name of required) expect(builtinModules).toContain(name);
+    for (const name of required) {
+      expect(builtinModules).toContain(name?.replace(/^node:/, ""));
+    }
   });
 
   it("runs on its own, answering a request without a token", async () => {
-    const code = buildOriginRequestFunction({ issuers: ISSUERS });
+    const code = buildOriginRequestFunction({ issuers: ISSUERS, routes: {} });
 
     const { responses, logs } = await invoke(code, [
       originRequestEvent({ headers: {} }),
@@ -110,6 +112,7 @@ describe("buildOriginRequestFunction", () => {
   it("bakes in the issuers it was built with, and fails closed without their keys", async () => {
     const config: OriginRequestConfig = {
       issuers: [{ issuer: UNREACHABLE_ISSUER, clientIds: [CLIENT_ID] }],
+      routes: {},
     };
     const code = buildOriginRequestFunction(config);
 
@@ -139,5 +142,29 @@ describe("buildOriginRequestFunction", () => {
         telemetry: expect.objectContaining({ event: "lae_failed" }) as unknown,
       }),
     ]);
+  });
+
+  it("bakes in the routes it was built with", () => {
+    const code = buildOriginRequestFunction({
+      issuers: ISSUERS,
+      routes: { udp: "udp.development.flex-domain00.once.service.gov.uk" },
+    });
+
+    expect(code).toContain(
+      '"udp.development.flex-domain00.once.service.gov.uk"',
+    );
+  });
+
+  it.each([
+    [
+      "a domain the CloudFront Function would refuse",
+      { "Bad.Name": "a.example" },
+    ],
+    ["a host that isn't a DNS name", { udp: "https://a.example" }],
+    ["a host with one label", { udp: "localhost" }],
+  ])("refuses %s", (_, routes) => {
+    expect(() =>
+      buildOriginRequestFunction({ issuers: ISSUERS, routes }),
+    ).toThrow(/route/);
   });
 });

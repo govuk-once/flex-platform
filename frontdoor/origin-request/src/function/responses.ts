@@ -16,24 +16,9 @@ export function internalError(traceId: string): CloudFrontResultResponse {
   );
 }
 
-// The answer to a verified token, until routing forwards the request instead. Fixed
-// fields only: the region also shows what share of traffic runs in London.
-export function verified(
-  traceId: string,
-  runtime: { readonly region: string; readonly functionVersion: string },
-): CloudFrontResultResponse {
-  return {
-    status: "200",
-    statusDescription: "OK",
-    headers: headers(traceId, {}),
-    body: JSON.stringify({
-      outcome: "verified",
-      traceId,
-      region: runtime.region,
-      functionVersion: runtime.functionVersion,
-    }),
-    bodyEncoding: "text",
-  };
+// No domain by that name. The CloudFront Function's own 404, after the token is verified.
+export function notFound(traceId: string): CloudFrontResultResponse {
+  return rejection("404", "Not found", "client_error", traceId);
 }
 
 function rejection(

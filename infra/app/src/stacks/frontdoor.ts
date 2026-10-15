@@ -38,6 +38,10 @@ export class FrontdoorStack extends Stack {
     const originRequest = new OriginRequestFunction(this, "OriginRequest", {
       environment: environment.name,
       issuers: environment.frontdoor.issuers,
+      // Built from config once FLEX-497 adds domains to it. Until then every verified request is
+      // a 404.
+      routes: {},
+      apiAccounts: environment.domainAccounts.map(({ account }) => account),
     });
 
     const edge = new Edge(this, "Edge", {
