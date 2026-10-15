@@ -1,22 +1,17 @@
-import { readFileSync } from "node:fs";
+import { cdkApp } from "@repo/infra-constructs";
+import type { CloudAssembly } from "aws-cdk-lib/cx-api";
 
-import { App } from "aws-cdk-lib";
-
-import type { FrontdoorConfig, StageConfig } from "../src/config/types.ts";
-
-// The committed feature flags, which change what CDK generates. A test on CDK's defaults would
-// check an app that is never deployed.
-const CDK_JSON_CONTEXT = (
-  JSON.parse(readFileSync(new URL("../cdk.json", import.meta.url), "utf8")) as {
-    context: Record<string, unknown>;
-  }
-).context;
-
-export function cdkApp(context: Record<string, unknown> = {}): App {
-  return new App({ context: { ...CDK_JSON_CONTEXT, ...context } });
-}
+import { buildApp } from "../src/build-app.ts";
+import { selectTarget } from "../src/config/select-target.ts";
+import type {
+  FrontdoorConfig,
+  StageConfig,
+  ZoneConfig,
+} from "../src/config/types.ts";
 
 export const FRONTDOOR: FrontdoorConfig = {
+  account: "100000000002",
+  zone: { name: "sandbox.flex-edge.example", id: "Z100000000002" },
   issuers: [
     {
       issuer: "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_example",
@@ -25,63 +20,108 @@ export const FRONTDOOR: FrontdoorConfig = {
   ],
 };
 
+// An account's zone, named after the account as the platform team names them.
+function zone(environment: string, account: string): ZoneConfig {
+  return { name: `${environment}.flex-${account}.example`, id: `Z${account}` };
+}
+
+function frontdoor(environment: string, account: string): FrontdoorConfig {
+  return { ...FRONTDOOR, account, zone: zone(environment, account) };
+}
+
 // The real stages' shape: two stages with one environment, one with three, and one environment
 // with two domain accounts, so every loop is exercised.
 export const FIXTURE_STAGES = [
   {
     name: "platform-dev",
-    sharedAccount: "100000000001",
+    shared: { account: "100000000001" },
     environments: [
       {
         name: "sandbox",
-        frontdoorAccount: "100000000002",
-        domainAccounts: [{ name: "main", account: "100000000003" }],
-        domainName: "sandbox.platform-dev.flex.example",
-        frontdoor: FRONTDOOR,
+        domainAccounts: [
+          {
+            name: "main",
+            account: "100000000003",
+            zone: zone("sandbox", "100000000003"),
+          },
+        ],
+        frontdoor: frontdoor("sandbox", "100000000002"),
       },
     ],
   },
   {
     name: "platform-staging",
-    sharedAccount: "200000000001",
+    shared: { account: "200000000001" },
     environments: [
       {
         name: "sandbox",
-        frontdoorAccount: "200000000002",
-        domainAccounts: [{ name: "main", account: "200000000003" }],
-        domainName: "sandbox.platform-staging.flex.example",
-        frontdoor: FRONTDOOR,
+        domainAccounts: [
+          {
+            name: "main",
+            account: "200000000003",
+            zone: zone("sandbox", "200000000003"),
+          },
+        ],
+        frontdoor: frontdoor("sandbox", "200000000002"),
       },
     ],
   },
   {
     name: "platform-prod",
-    sharedAccount: "300000000001",
+    shared: { account: "300000000001" },
     environments: [
       {
         name: "dev",
-        frontdoorAccount: "300000000002",
-        domainAccounts: [{ name: "main", account: "300000000003" }],
-        domainName: "dev.flex.example",
-        frontdoor: FRONTDOOR,
+        domainAccounts: [
+          {
+            name: "main",
+            account: "300000000003",
+            zone: zone("dev", "300000000003"),
+          },
+        ],
+        frontdoor: frontdoor("dev", "300000000002"),
       },
       {
         name: "staging",
-        frontdoorAccount: "300000000004",
-        domainAccounts: [{ name: "main", account: "300000000005" }],
-        domainName: "staging.flex.example",
-        frontdoor: FRONTDOOR,
+        domainAccounts: [
+          {
+            name: "main",
+            account: "300000000005",
+            zone: zone("staging", "300000000005"),
+          },
+        ],
+        frontdoor: frontdoor("staging", "300000000004"),
       },
       {
         name: "prod",
-        frontdoorAccount: "300000000006",
         domainAccounts: [
-          { name: "main", account: "300000000007" },
-          { name: "second", account: "300000000008" },
+          {
+            name: "main",
+            account: "300000000007",
+            zone: zone("prod", "300000000007"),
+          },
+          {
+            name: "second",
+            account: "300000000008",
+            zone: zone("prod", "300000000008"),
+          },
         ],
-        domainName: "prod.flex.example",
-        frontdoor: FRONTDOOR,
+        frontdoor: frontdoor("prod", "300000000006"),
       },
     ],
   },
 ] as const satisfies readonly StageConfig[];
+
+const assemblies = new Map<StageConfig, CloudAssembly>();
+
+/** The whole of a stage, synthesized once and shared by every test that reads it. */
+export function synthesizedStage(stage: StageConfig): CloudAssembly {
+  let assembly = assemblies.get(stage);
+  if (assembly === undefined) {
+    const app = cdkApp();
+    buildApp(app, stage, selectTarget(stage, undefined));
+    assembly = app.synth();
+    assemblies.set(stage, assembly);
+  }
+  return assembly;
+}
