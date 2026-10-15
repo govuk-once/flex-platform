@@ -19,6 +19,12 @@ export const ZONE = {
   hostedZoneId: "Z100000000002",
 };
 
+export const ROUTES = {
+  udp: "udp.sandbox.flex-domain00.example",
+};
+
+export const API_ACCOUNTS = ["100000000003"];
+
 export function stackIn(region: string, nag = false): Stack {
   const app = cdkApp();
   if (nag) Validations.of(app).addPlugins(new AwsSolutionsChecks(app));
@@ -35,6 +41,8 @@ export function edgeIn(stack: Stack): Edge {
   const originRequest = new OriginRequestFunction(stack, "OriginRequest", {
     environment: "sandbox",
     issuers: ISSUERS,
+    routes: ROUTES,
+    apiAccounts: API_ACCOUNTS,
   });
   return new Edge(stack, "Edge", {
     environment: "sandbox",

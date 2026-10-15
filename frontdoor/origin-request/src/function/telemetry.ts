@@ -5,7 +5,8 @@
 import type { UnexpectedErrorSummary } from "@repo/utils/describe-unexpected-error";
 
 export type OriginRequestEventName =
-  | "origin_request_token_verified"
+  | "origin_request_forwarded"
+  | "origin_request_route_unknown"
   | "origin_request_token_missing"
   | "origin_request_token_invalid"
   | "origin_request_token_expired"
@@ -18,12 +19,18 @@ export interface RequestIds {
   readonly requestId: string;
 }
 
+// A reason is a fixed code. A domain is a name from the config, never the caller's path.
+export interface OutcomeDetails {
+  readonly reason?: string;
+  readonly domain?: string;
+}
+
 export function logOutcome(
   event: Exclude<OriginRequestEventName, "origin_request_failed">,
   ids: RequestIds,
-  reason?: string,
+  details: OutcomeDetails = {},
 ): void {
-  write("INFO", event, { ...ids, ...(reason === undefined ? {} : { reason }) });
+  write("INFO", event, { ...ids, ...details });
 }
 
 export function logFailure(

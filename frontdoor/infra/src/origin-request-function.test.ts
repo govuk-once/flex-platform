@@ -6,14 +6,16 @@ import type { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { ISSUERS, stackIn } from "../test/helpers.ts";
+import { API_ACCOUNTS, ISSUERS, ROUTES, stackIn } from "../test/helpers.ts";
 import { OriginRequestFunction } from "./origin-request-function.ts";
 
-function build(region = "us-east-1") {
+function build(region = "us-east-1", apiAccounts = API_ACCOUNTS) {
   const stack = stackIn(region);
   const originRequest = new OriginRequestFunction(stack, "OriginRequest", {
     environment: "sandbox",
     issuers: ISSUERS,
+    routes: ROUTES,
+    apiAccounts,
   });
   return {
     app: stack.node.root as App,
@@ -87,10 +89,12 @@ describe("OriginRequestFunction", () => {
       "utf8",
     );
 
-    expect(code).toBe(buildOriginRequestFunction({ issuers: ISSUERS }));
+    expect(code).toBe(
+      buildOriginRequestFunction({ issuers: ISSUERS, routes: ROUTES }),
+    );
   });
 
-  it("has a role of its own that Lambda@Edge can assume, with only the log stack's policy", () => {
+  it("has a role of its own that Lambda@Edge can assume, writing logs and calling domain APIs", () => {
     const { template } = build();
 
     template.resourceCountIs("AWS::IAM::Role", 1);
@@ -115,10 +119,34 @@ describe("OriginRequestFunction", () => {
         ),
       ],
     });
-    const [role] = Object.values(template.findResources("AWS::IAM::Role"));
-    expect(role?.Properties).not.toHaveProperty("Policies");
+    template.hasResourceProperties("AWS::IAM::Role", {
+      Policies: [
+        {
+          PolicyName: "InvokeDomainApis",
+          PolicyDocument: {
+            Statement: [
+              {
+                Action: "execute-api:Invoke",
+                Effect: "Allow",
+                Resource: Match.stringLikeRegexp(
+                  "^arn:[a-z-]+:execute-api:eu-west-2:100000000003:\\*$",
+                ),
+              },
+            ],
+          },
+        },
+      ],
+    });
     expect(JSON.stringify(template.toJSON())).not.toContain(
       "logs:CreateLogGroup",
     );
+  });
+
+  it("can call no API when the environment has no domain accounts", () => {
+    const [role] = Object.values(
+      build("us-east-1", []).template.findResources("AWS::IAM::Role"),
+    );
+
+    expect(role?.Properties).not.toHaveProperty("Policies");
   });
 });

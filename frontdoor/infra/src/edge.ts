@@ -146,7 +146,9 @@ export class Edge extends Construct {
             // which `exactOptionalPropertyTypes` won't match.
             functionVersion: props.originRequestFunction as IVersion,
             eventType: LambdaEdgeEventType.ORIGIN_REQUEST,
-            includeBody: false,
+            // The body is hashed into the signature. WAF refuses one over 16 KB, well inside the
+            // 1 MB Lambda@Edge sees at origin request.
+            includeBody: true,
           },
         ],
       },
