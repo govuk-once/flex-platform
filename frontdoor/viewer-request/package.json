@@ -1,5 +1,5 @@
 {
-  "name": "@repo/frontdoor-cloudfront-function",
+  "name": "@repo/frontdoor-viewer-request",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@repo/frontdoor-shared": "workspace:*",
     "@repo/utils": "workspace:*",
     "acorn": "8.18.0",
     "esbuild": "0.28.2"

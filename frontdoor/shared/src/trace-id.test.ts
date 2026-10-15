@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { NOW, REQUEST_ID } from "../../test/helpers.ts";
 import { traceIdFor } from "./trace-id.ts";
+
+const NOW = 1_800_000_000;
+
+const REQUEST_ID = "4TyzHTaYWb1GX1qTfsHhEqV6HUDd_BzoBZnwfnvQc_1oF26ClkoUSEQ==";
 
 describe("traceIdFor", () => {
   it("is an X-Ray trace ID starting at the request's time", () => {

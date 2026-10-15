@@ -1,7 +1,5 @@
-import {
-  buildViewerRequestFunction,
-  type TrustedIssuer,
-} from "@repo/frontdoor-cloudfront-function";
+import type { TrustedIssuer } from "@repo/frontdoor-shared";
+import { buildViewerRequestFunction } from "@repo/frontdoor-viewer-request";
 import {
   Function as CloudFrontFunction,
   FunctionCode,

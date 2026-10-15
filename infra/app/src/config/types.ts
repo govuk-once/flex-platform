@@ -1,4 +1,4 @@
-import type { TrustedIssuer } from "@repo/frontdoor-cloudfront-function";
+import type { TrustedIssuer } from "@repo/frontdoor-shared";
 
 // Everything that differs between stages and environments is a value here. Constructs receive
 // these values, never a stage or environment name to branch on.
