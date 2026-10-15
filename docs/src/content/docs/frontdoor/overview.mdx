@@ -5,109 +5,137 @@ sidebar:
   label: Overview
 ---
 
-import { Badge } from "@astrojs/starlight/components";
-
-<Badge text="Planned" variant="caution" size="medium" />
-
-This page describes the intended request flow. The CloudFront Function is built, in
-`frontdoor/cloudfront-function`, but nothing deploys it yet. Lambda@Edge and the infrastructure
-are planned.
+import FrontdoorDiagram from "../../../components/FrontdoorDiagram.astro";
 
 Every request from the GOV.UK app enters Flex through one CloudFront distribution, on one domain
-name, whichever domain the request is for. AWS WAF and AWS Shield protect the distribution.
+name, whichever domain the request is for. AWS WAF protects the distribution. The code is under
+`frontdoor/`, and each environment's [stacks](/flex-platform/infrastructure/overview/#stacks)
+deploy it. AWS Shield Advanced and alarms are planned.
 
-Two kinds of edge function act on a request before it reaches a domain. A CloudFront Function runs
-first, then Lambda@Edge.
+On its way in, a request passes three layers. Each turns away what it can before the next is paid
+to look at it:
 
-## Structural checks
+1. [WAF](#waf) limits body size and request rates, and applies AWS's managed rules.
+2. The [CloudFront Function](/flex-platform/frontdoor/cloudfront-function/) checks the request's
+   structure: its method, the token's shape, the path and the content type.
+3. [Lambda@Edge](/flex-platform/frontdoor/lambda-edge/) verifies the Cognito access token, routes
+   the request to its domain, and signs it.
 
-A **CloudFront Function** runs on each request as it arrives. It checks the request's structure,
-and a malformed request goes no further. It verifies no signature: Lambda@Edge does that. What it
-turns away here, Lambda@Edge is never paid to look at.
+<FrontdoorDiagram />
 
-In order, it:
+This page covers how the distribution is set up. Each function has its own page.
 
-1. **Starts the trace.** It derives an AWS X-Ray trace ID from the time and CloudFront's request
-   ID, such as `1-5759e988-bd862e3fe1be46a994272793`, and sets it as `X-Amzn-Trace-Id: Root=…`
-   and as `x-correlation-id`, the header the app reads. It removes any `traceparent` or
-   `tracestate`, and replaces any `X-Amzn-Trace-Id` or `x-correlation-id`, the caller sent. A
-   caller who chose the trace could tie requests together or force every one to be sampled. It
-   sets no `Parent`: the edge records no span.
-2. **Removes every `x-flex-` header** the caller sent. Only the platform sets those.
-3. **Checks the token's shape.** `Authorization` appears once, and is `Bearer` in any case, one
-   or more spaces, and one token of at most 4 KB in three base64url segments. The header and
-   payload are JSON objects. `alg` is `RS256`, `iss` is one of the trusted user pools,
-   `client_id` is one of that pool's trusted app clients, `token_use` is `access`, and `exp` is a
-   finite time in the future. A failure is a 401, before the path is looked at, so a request
-   without a valid token learns nothing about which paths exist.
-4. **Checks the path.** It is `/app/<domain>/...`, where `<domain>` follows the rule for domain
-   names in config (1 to 32 lowercase letters, digits and hyphens, checked by the same
-   `isPlatformName` the config uses), with no empty or dot segment and no encoded `/`, `\` or
-   `.`. Anything else is a 404. Whether the domain exists is for Lambda@Edge, which holds the
-   list. The name becomes part of an origin hostname, so it can never carry a dot or a port.
-5. **Checks the content type.** A `POST`, `PUT` or `PATCH`, or any request announcing a body by
-   `content-length` or `transfer-encoding`, says `application/json`. The method counts on its own
-   because HTTP/2 and HTTP/3 can send a body without either header. Anything else is a 415, and
-   so is any of those three headers appearing more than once.
+## The distribution
 
-CloudFront presents a repeated header with its first value in `value` and every value in
-`multiValue`. The function reads `value`, so every header it reads must appear once: otherwise a
-check could pass on the first value while a later step reads another.
+The distribution answers at the apex of the frontdoor account's hosted zone, such as
+`production.flex-domainedge.once.service.gov.uk`. The zone already exists, delegated, in each
+frontdoor account, and [config](/flex-platform/infrastructure/overview/#config) names it. The stack
+creates no zone. It writes three things into it:
 
-Each rejection has the shape the app handles, `{"message": "...", "type": "..."}`, with
-`x-rejected-by: cloudfront-function` and the trace ID as `x-correlation-id`. The app relies on
-the 401's body exactly, so it never changes. Every request writes one log line naming its outcome, such as
-`cff_token_validated` or `cff_token_invalid`, with a fixed reason code, the trace ID and
-CloudFront's request ID, and never text from the request. It's the one place both IDs appear
-together, so it joins CloudFront's own logs to the rest of the request.
+- a CAA record, `0 issue "amazon.com"`, so only Amazon may issue certificates for the zone's
+  names. It is written before the certificate, because ACM checks CAA before it issues;
+- the validation record for an ACM certificate for the apex, in us-east-1;
+- A and AAAA alias records for the apex, pointing at the distribution.
 
-The trusted issuers and their app clients are baked into the function for each environment by
-`buildViewerRequestFunction`. The domain list isn't: a few hundred names would pass CloudFront's
-size limit. It bundles for the `cloudfront-js-2.0` runtime, parses the result to check it declares
-`function handler` at the top level, and refuses a function over CloudFront's 10 KB limit. esbuild rewrites syntax the runtime lacks, but not
-built-ins, so lint refuses what the runtime doesn't have: `Map`, `Set`, `URL`, timers, `process`,
-`for...of`, any `console` method but a one-argument `log`, and imports other than `crypto` and
-`isPlatformName` from `@repo/utils`.
+Viewers connect over HTTPS only, with TLS 1.2 or 1.3 and AES-GCM ciphers (`TLSv1.2_2025`), by
+SNI, over HTTP/2 or HTTP/3. A plain HTTP request gets CloudFront's 403, never a redirect. The
+distribution serves from CloudFront's edges in North America and Europe (`PriceClass_100`), and
+publishes CloudFront's additional metrics, which include the 401 rate and origin latency.
 
-The package's tests run the built bundle in Node. That proves the bundling and the behaviour. The
-lint rules keep to what CloudFront's runtime has, and the first request after a deploy proves the
-runtime accepts the bundle, since every request runs the function.
+It has one behaviour, for every path:
 
-## Authentication
+- **Every method reaches the CloudFront Function,** which refuses the ones the platform doesn't
+  serve.
+- **Nothing is cached** (`CachingDisabled`). See
+  [where Lambda@Edge runs](/flex-platform/frontdoor/lambda-edge/#where-it-runs) for why this
+  matters.
+- **The default origin is an empty, private S3 bucket.** CloudFront resolves the origin's name
+  before Lambda@Edge runs, and answers 502 without running it if that fails, so the origin must be
+  a name that resolves, and ours. Nothing signs requests to the bucket, so a request that reached
+  it would get S3's own refusal, and the caller's token would never be replaced with a signature.
+  Lambda@Edge sends every request it forwards to its domain's origin instead, so nothing reaches it.
+- **Lambda@Edge runs at origin request,** with the request body, which it signs.
 
-**Lambda@Edge** verifies the caller's Amazon Cognito access token. If this fails, the edge answers
-the request and it never reaches a domain.
+### Response headers
 
-It runs at origin request, and the `/app/*` behaviour has caching disabled, so it runs on every
-request. Caching is part of authentication here: CloudFront skips origin request triggers on a
-cache hit, so a cached response would reach a caller whose token was never verified. The
-CloudFront Function checks only the token's shape, so it can't stand in. Lambda@Edge can't move to
-viewer request either, since a behaviour can't have both kinds of function on its viewer events.
+A response headers policy sets these on every response, overriding whatever the origin sent, so a
+domain can't weaken them:
 
-CloudFront removes `Authorization` from a GET or HEAD unless a policy names it, so the `/app/*`
-origin request policy forwards it. That policy forwards a short allowlist of headers, never all of
-them.
+| Header | Value |
+|---|---|
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Referrer-Policy` | `no-referrer` |
+| `X-Permitted-Cross-Domain-Policies` | `none` |
+| `Cross-Origin-Resource-Policy` | `same-origin` |
+| `Cache-Control` | `no-store`, so a personal response stays out of every cache on the way |
 
-## Routing
+It removes the headers Amazon API Gateway adds that name its internals: `x-amz-apigw-id`,
+`x-amzn-trace-id` and API Gateway's `x-amzn-remapped-*` set. CloudFront refuses to remove
+`x-amzn-requestid`, so that one reaches the caller.
 
-Lambda@Edge then uses the segment after `/app` to decide which domain the request is for.
-Each domain is its own Amazon API Gateway with its own domain name. Lambda@Edge forwards the
-request to that domain with the rest of the path:
+## WAF
 
-```txt
-https://<platform-domain>/app/<domain>/<path>   →   https://<domain>.<api-domain>/<path>
-```
+The web ACL, `frontdoor-<environment>-web-acl`, allows a request unless a rule blocks it. Its rules, in the
+order WAF evaluates them:
 
-So a domain sees requests at its own root. It never sees the path segment used to route to it.
-However many domains there are, the app sees one distribution.
+| Rule | Action | What it does |
+|---|---|---|
+| `BodySizeLimit` | 413 | Blocks a body over 16 KB. A body WAF can't inspect in full counts as over. |
+| `AWSManagedRulesCommonRuleSet` | The group's own | AWS's common rules. Its `SizeRestrictions_BODY` rule only counts, because its 8 KB limit would block bodies the platform accepts. |
+| `AWSManagedRulesKnownBadInputsRuleSet` | The group's own | Request patterns known to be malicious. |
+| `AWSManagedRulesSQLiRuleSet` | The group's own | SQL injection. |
+| `AWSManagedRulesAnonymousIpList` | Count only | Matches VPNs, proxies and hosting providers. Its matches show in metrics and logs, and nobody is turned away. |
+| `RateLimitPerToken` | 429 | More than 1,000 requests with one `Authorization` value in five minutes. |
+| `RateLimitPerIp` | 429 | More than 5,000 requests from one address in five minutes. It is higher than the per-token limit, for networks many people share. |
 
-## Signing
+WAF inspects the first 16 KB of a body, the same as the body limit, so the managed rules see the
+whole of every body that gets through. The per-token limit counts the header's exact value, so
+both edge functions accept a token in
+[one form only](/flex-platform/frontdoor/cloudfront-function/#one-form-per-token). A request
+without the header isn't counted per token, and the CloudFront Function refuses it.
 
-Lambda@Edge signs the request it forwards with AWS Signature Version 4. Before signing, it removes
-the caller's `Authorization` header, so a domain never sees the caller's token and can't replay it
-anywhere.
+The 413 and 429 have JSON bodies in the shape the app handles:
+`{"message":"Request body too large","type":"client_error"}` and
+`{"message":"Too many requests","type":"client_error"}`. A managed rule's block is WAF's own 403.
 
-The two authentication steps serve different purposes: the Cognito check establishes the app
-caller's identity, while SigV4 authenticates the request sent by the platform to the domain's
-Amazon API Gateway. A domain still needs to apply the feature's rules about which records and
-actions that user may access. See [Identity and linked accounts](/flex-platform/domains/designing-a-domain/#identity-and-linked-accounts).
+WAF logs every request to `aws-waf-logs-frontdoor-<environment>-web-acl`, in us-east-1. `authorization` and
+`cookie` are redacted from the logs and replaced in sampled requests, so no credential reaches
+either. Each rule publishes metrics under its own name.
+
+AWS's IP reputation list isn't used. It blocks addresses AWS's threat intelligence flags, and
+GitHub's hosted runners are among them, which would block the platform's own end-to-end tests.
+
+## Logs
+
+Every log group the Frontdoor writes to is one its stacks create, before anything writes to it.
+Each keeps its logs for a year, is encrypted with its stack's KMS key, and is kept when its stack
+is deleted.
+
+| Log group | Region | Written by |
+|---|---|---|
+| A name CloudFormation generates | us-east-1 | CloudFront's access logs, through standard logging v2 |
+| `aws-waf-logs-frontdoor-<environment>-web-acl` | us-east-1 | WAF |
+| `/aws/cloudfront/function/frontdoor-<environment>-viewer-request` | us-east-1 | The CloudFront Function, from every edge |
+| `/flex/frontdoor/<environment>/origin-request` | eu-west-2 | Lambda@Edge |
+
+Lambda@Edge writes in the region each copy of the function ran in, to the group the function
+names. That group exists only in eu-west-2, in a stack of its own,
+`frontdoor-<environment>-edge-logs-eu-west-2`, and the role may write only there. So no copy
+creates a log group anywhere else, and **lines from copies that ran outside eu-west-2 are
+dropped.** The access logs and the CloudFront Function's lines still cover every request.
+
+A writer to a log group encrypted with a customer managed key needs that key as well as the log
+group. Lambda@Edge's role is granted its group's key. CloudFront writes the CloudFront Function's
+lines as its service-linked role, `AWSServiceRoleForCloudFrontLogger`, whose policy is AWS's, so
+the key's own policy grants that role, by ARN, for that one log group. It's matched by ARN because
+KMS refuses a policy naming a role that doesn't exist yet, and CloudFront creates this one when it
+first needs it.
+
+CloudFront itself writes to `/aws/cloudfront/LambdaEdge/<distribution ID>`, in the region the
+function ran, when the function returns something CloudFront refuses. The platform can't prevent
+or redirect those writes, and doesn't create, retain or forward that group. Each entry holds the
+request's method, path and query string, but no header, token or body. A domain's paths and query
+strings must never carry personal data: they also reach the access logs and WAF's logs.
