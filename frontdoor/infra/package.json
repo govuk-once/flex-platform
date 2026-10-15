@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@repo/frontdoor-origin-request": "workspace:*",
     "@repo/frontdoor-shared": "workspace:*",
     "@repo/frontdoor-viewer-request": "workspace:*",
     "@repo/infra-constructs": "workspace:*",

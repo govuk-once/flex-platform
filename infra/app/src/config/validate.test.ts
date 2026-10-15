@@ -1,38 +1,46 @@
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES, FRONTDOOR } from "../../test/helpers.ts";
+import { FIXTURE_STAGES, FRONTDOOR, zone } from "../../test/helpers.ts";
 import type {
+  DomainAccountConfig,
   EnvironmentConfig,
   FrontdoorConfig,
   StageConfig,
+  ZoneConfig,
 } from "./types.ts";
 import { validateStages } from "./validate.ts";
 
+function domainAccount(
+  name: string,
+  account: string,
+  environment = "sandbox",
+): DomainAccountConfig {
+  return { name, account, zone: zone(environment, account) };
+}
+
+const MAIN = domainAccount("main", "100000000003");
+
 const ENVIRONMENT: EnvironmentConfig = {
   name: "sandbox",
-  frontdoorAccount: "100000000002",
-  domainAccounts: [{ name: "main", account: "100000000003" }],
-  domainName: "sandbox.platform-dev.flex.example",
+  domainAccounts: [MAIN],
   frontdoor: FRONTDOOR,
 };
 
 const STAGE: StageConfig = {
   name: "platform-dev",
-  sharedAccount: "100000000001",
+  shared: { account: "100000000001" },
   environments: [ENVIRONMENT],
 };
 
 // A second stage with accounts of its own, to put beside STAGE.
 const OTHER_STAGE: StageConfig = {
   name: "platform-prod",
-  sharedAccount: "300000000001",
+  shared: { account: "300000000001" },
   environments: [
     {
       name: "prod",
-      frontdoorAccount: "300000000002",
-      domainAccounts: [{ name: "main", account: "300000000003" }],
-      domainName: "prod.flex.example",
-      frontdoor: FRONTDOOR,
+      domainAccounts: [domainAccount("main", "300000000003", "prod")],
+      frontdoor: { ...FRONTDOOR, account: "300000000002" },
     },
   ],
 };
@@ -85,7 +93,7 @@ describe("validateStages", () => {
     });
 
     it("refuses an invalid domain account name", () => {
-      const domainAccounts = [{ name: "Main", account: "100000000003" }];
+      const domainAccounts = [domainAccount("Main", "100000000003")];
       expect(() =>
         validateStages([withEnvironment({ domainAccounts })]),
       ).toThrow('The platform-dev/sandbox domain account name "Main" must be');
@@ -94,8 +102,8 @@ describe("validateStages", () => {
     it("refuses an environment name used twice in a stage", () => {
       const second = {
         ...ENVIRONMENT,
-        frontdoorAccount: "100000000004",
-        domainAccounts: [{ name: "main", account: "100000000005" }],
+        frontdoor: { ...FRONTDOOR, account: "100000000004" },
+        domainAccounts: [domainAccount("main", "100000000005")],
       };
       expect(() =>
         validateStages([{ ...STAGE, environments: [ENVIRONMENT, second] }]),
@@ -106,8 +114,8 @@ describe("validateStages", () => {
 
     it("refuses a domain account name used twice in an environment", () => {
       const domainAccounts = [
-        { name: "main", account: "100000000003" },
-        { name: "main", account: "100000000004" },
+        domainAccount("main", "100000000003"),
+        domainAccount("main", "100000000004"),
       ];
       expect(() =>
         validateStages([withEnvironment({ domainAccounts })]),
@@ -117,12 +125,22 @@ describe("validateStages", () => {
     });
   });
 
-  describe("the environment's domain name", () => {
+  describe("zones", () => {
+    function withFrontdoorZone(zone: Partial<ZoneConfig>): StageConfig {
+      return withFrontdoor({ zone: { ...FRONTDOOR.zone, ...zone } });
+    }
+
+    function withDomainZone(zone: Partial<ZoneConfig>): StageConfig {
+      return withEnvironment({
+        domainAccounts: [{ ...MAIN, zone: { ...MAIN.zone, ...zone } }],
+      });
+    }
+
     it.each(["dev.flex.example", "a.b", "x-1.y2.example"])(
-      "accepts %j",
-      (domainName) => {
+      "accepts the name %j",
+      (name) => {
         expect(() =>
-          validateStages([withEnvironment({ domainName })]),
+          validateStages([withFrontdoorZone({ name })]),
         ).not.toThrow();
       },
     );
@@ -133,9 +151,41 @@ describe("validateStages", () => {
       "dev..flex",
       "-dev.flex",
       "dev.flex.",
-    ])("refuses %j", (domainName) => {
-      expect(() => validateStages([withEnvironment({ domainName })])).toThrow(
-        `platform-dev/sandbox: the domain name ${JSON.stringify(domainName)} must be`,
+    ])("refuses the name %j", (name) => {
+      expect(() => validateStages([withFrontdoorZone({ name })])).toThrow(
+        `platform-dev/sandbox frontdoor zone: ${JSON.stringify(name)} must be a DNS name`,
+      );
+    });
+
+    it.each(["/hostedzone/Z0411378AOM55J0BQQZI", "z0411378", "Z", ""])(
+      "refuses the ID %j",
+      (id) => {
+        expect(() => validateStages([withDomainZone({ id })])).toThrow(
+          `platform-dev/sandbox main domain account zone: ${JSON.stringify(id)} is not a hosted zone ID`,
+        );
+      },
+    );
+
+    // ACM's 64 characters: the apex itself for the frontdoor, the wildcard for a domain account.
+    it("keeps the frontdoor's apex within a certificate's name", () => {
+      const name = `${"a".repeat(56)}.example`;
+      expect(name).toHaveLength(64);
+      expect(() => validateStages([withFrontdoorZone({ name })])).not.toThrow();
+      expect(() =>
+        validateStages([withFrontdoorZone({ name: `a${name}` })]),
+      ).toThrow(
+        `platform-dev/sandbox frontdoor zone: its certificate's name, a${name}, is longer than ACM's 64 characters`,
+      );
+    });
+
+    it("keeps a domain account's wildcard within a certificate's name", () => {
+      const name = `${"a".repeat(54)}.example`;
+      expect(`*.${name}`).toHaveLength(64);
+      expect(() => validateStages([withDomainZone({ name })])).not.toThrow();
+      expect(() =>
+        validateStages([withDomainZone({ name: `a${name}` })]),
+      ).toThrow(
+        `platform-dev/sandbox main domain account zone: its certificate's name, *.a${name}, is longer than ACM's 64 characters`,
       );
     });
   });
@@ -166,7 +216,9 @@ describe("validateStages", () => {
     it.each(["12345678901", "1234567890123", "12345678901a", " 100000000001"])(
       "refuses the account ID %j",
       (sharedAccount) => {
-        expect(() => validateStages([{ ...STAGE, sharedAccount }])).toThrow(
+        expect(() =>
+          validateStages([{ ...STAGE, shared: { account: sharedAccount } }]),
+        ).toThrow(
           /platform-dev shared account: .* is not a 12-digit account ID/,
         );
       },
@@ -174,14 +226,14 @@ describe("validateStages", () => {
 
     it("refuses a malformed frontdoor account ID", () => {
       expect(() =>
-        validateStages([withEnvironment({ frontdoorAccount: "10000000002" })]),
+        validateStages([withFrontdoor({ account: "10000000002" })]),
       ).toThrow(
         'platform-dev/sandbox frontdoor account: "10000000002" is not a 12-digit account ID',
       );
     });
 
     it("refuses a malformed domain account ID", () => {
-      const domainAccounts = [{ name: "main", account: "10000000003" }];
+      const domainAccounts = [domainAccount("main", "10000000003")];
       expect(() =>
         validateStages([withEnvironment({ domainAccounts })]),
       ).toThrow(
@@ -191,7 +243,7 @@ describe("validateStages", () => {
 
     it("refuses an account used twice in a stage", () => {
       expect(() =>
-        validateStages([withEnvironment({ frontdoorAccount: "100000000001" })]),
+        validateStages([withFrontdoor({ account: "100000000001" })]),
       ).toThrow(
         "platform-dev/sandbox frontdoor account: account 100000000001 is already the platform-dev shared account",
       );
@@ -199,8 +251,8 @@ describe("validateStages", () => {
 
     it("refuses the same account as two domain accounts", () => {
       const domainAccounts = [
-        { name: "main", account: "100000000003" },
-        { name: "second", account: "100000000003" },
+        domainAccount("main", "100000000003"),
+        domainAccount("second", "100000000003"),
       ];
       expect(() =>
         validateStages([withEnvironment({ domainAccounts })]),
@@ -213,8 +265,8 @@ describe("validateStages", () => {
       const second: EnvironmentConfig = {
         ...ENVIRONMENT,
         name: "other",
-        frontdoorAccount: "100000000004",
-        domainAccounts: [{ name: "main", account: "100000000003" }],
+        frontdoor: { ...FRONTDOOR, account: "100000000004" },
+        domainAccounts: [domainAccount("main", "100000000003")],
       };
       expect(() =>
         validateStages([{ ...STAGE, environments: [ENVIRONMENT, second] }]),
@@ -226,7 +278,7 @@ describe("validateStages", () => {
     it("refuses an account shared between stages", () => {
       const other: StageConfig = {
         ...OTHER_STAGE,
-        sharedAccount: STAGE.environments[0]!.frontdoorAccount,
+        shared: { account: ENVIRONMENT.frontdoor.account },
       };
       expect(() => validateStages([STAGE, other])).toThrow(
         "platform-prod shared account: account 100000000002 is already the platform-dev/sandbox frontdoor account",

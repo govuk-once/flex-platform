@@ -1,12 +1,19 @@
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
-import type { EnvironmentConfig, StageConfig } from "./types.ts";
+import type { EnvironmentConfig, StageConfig, ZoneConfig } from "./types.ts";
 
 const ACCOUNT_ID = /^\d{12}$/;
 
-// A DNS name of lowercase labels, with at least one dot: the edge adds a label in front of it.
+// A DNS name of lowercase labels, with at least one dot, and no trailing dot.
 const DOMAIN_NAME =
   /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+// A Route 53 hosted zone ID, as the console shows it, without `/hostedzone/`.
+const ZONE_ID = /^Z[0-9A-Z]{1,31}$/;
+
+// ACM limits a certificate's first domain name to 64 characters. The frontdoor's certificate is
+// for its zone's apex, and a domain account's is the wildcard under its zone.
+const CERTIFICATE_NAME_LENGTH = 64;
 
 interface AccountUse {
   readonly account: string;
@@ -37,9 +44,12 @@ export function validateStages(stages: readonly StageConfig[]): void {
 }
 
 function checkEnvironment(at: string, environment: EnvironmentConfig): void {
-  if (!DOMAIN_NAME.test(environment.domainName)) {
-    throw new Error(
-      `${at}: the domain name ${JSON.stringify(environment.domainName)} must be a DNS name of lowercase labels with at least one dot`,
+  checkZone(`${at} frontdoor zone`, environment.frontdoor.zone, (name) => name);
+  for (const domainAccount of environment.domainAccounts) {
+    checkZone(
+      `${at} ${domainAccount.name} domain account zone`,
+      domainAccount.zone,
+      (name) => `*.${name}`,
     );
   }
   const { issuers } = environment.frontdoor;
@@ -55,6 +65,29 @@ function checkEnvironment(at: string, environment: EnvironmentConfig): void {
     if (clientIds.length === 0) {
       throw new Error(`${at}: the issuer ${issuer} names no app client`);
     }
+  }
+}
+
+function checkZone(
+  at: string,
+  zone: ZoneConfig,
+  certificateName: (zoneName: string) => string,
+): void {
+  if (!DOMAIN_NAME.test(zone.name)) {
+    throw new Error(
+      `${at}: ${JSON.stringify(zone.name)} must be a DNS name of lowercase labels with at least one dot`,
+    );
+  }
+  if (!ZONE_ID.test(zone.id)) {
+    throw new Error(
+      `${at}: ${JSON.stringify(zone.id)} is not a hosted zone ID, such as Z0411378AOM55J0BQQZI`,
+    );
+  }
+  const name = certificateName(zone.name);
+  if (name.length > CERTIFICATE_NAME_LENGTH) {
+    throw new Error(
+      `${at}: its certificate's name, ${name}, is longer than ACM's ${CERTIFICATE_NAME_LENGTH} characters`,
+    );
   }
 }
 
@@ -77,12 +110,12 @@ function checkNames(kind: string, names: readonly string[]): void {
 // Every account in every stage, with where it's used.
 function accountUses(stages: readonly StageConfig[]): AccountUse[] {
   return stages.flatMap((stage) => [
-    { account: stage.sharedAccount, usedBy: `${stage.name} shared account` },
+    { account: stage.shared.account, usedBy: `${stage.name} shared account` },
     ...stage.environments.flatMap((environment) => {
       const at = `${stage.name}/${environment.name}`;
       return [
         {
-          account: environment.frontdoorAccount,
+          account: environment.frontdoor.account,
           usedBy: `${at} frontdoor account`,
         },
         ...environment.domainAccounts.map((domainAccount) => ({

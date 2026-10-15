@@ -1,1 +1,3 @@
-export { base as default } from "@repo/eslint-config";
+import { sectionInfra } from "@repo/eslint-config";
+
+export default sectionInfra("frontdoor");
