@@ -25,7 +25,7 @@ const addFormats = addFormatsModule.default;
 // they leave through the one boundary that makes text safe to print.
 function reader(said: string[]): InstanceType<typeof Ajv2020> {
   const record = (...parts: unknown[]): void => {
-    said.push(parts.map((part) => String(part)).join(" "));
+    said.push(parts.map(String).join(" "));
   };
   const ajv = new Ajv2020({
     strict: false,

@@ -100,13 +100,13 @@ function compileOperations(
       throw new Error(`Missing validators for operation "${opName}"`);
     }
     if (typeof opValidators.input !== "function") {
-      throw new Error(`Missing input validator for operation "${opName}"`);
+      throw new TypeError(`Missing input validator for operation "${opName}"`);
     }
 
     const outcomes = new Map<string, Validator>();
     for (const [outcome, validator] of Object.entries(opValidators.outcomes)) {
       if (typeof validator !== "function") {
-        throw new Error(
+        throw new TypeError(
           `Outcome "${outcome}" of operation "${opName}" has no validator function`,
         );
       }
@@ -138,7 +138,7 @@ function compileMeta(
   const compiled = new Map<string, Validator>();
   for (const [name, validator] of Object.entries(validators ?? {})) {
     if (typeof validator !== "function") {
-      throw new Error(`Metadata "${name}" has no validator function`);
+      throw new TypeError(`Metadata "${name}" has no validator function`);
     }
     compiled.set(name, validator);
   }

@@ -115,7 +115,7 @@ const APPLIES_TO: Readonly<Record<string, string>> = {
 
 // The bounds that count matches rather than measure a value. Every other bound left out is the
 // loosest it could be, so removing one relaxes; `minContains` left out is one.
-const CONTAINS_BOUNDS = ["maxContains", "minContains"];
+const CONTAINS_BOUNDS = new Set(["maxContains", "minContains"]);
 
 const COMPOSITION = ["allOf", "anyOf", "oneOf"];
 // Where a schema holds other schemas, read the same way wherever a schema is walked: under a
@@ -456,7 +456,7 @@ export function convertSchema(
     }
     for (const key of Object.keys(converted)) {
       if (!VALUE_CONSTRAINTS.has(key)) continue;
-      if (counted && CONTAINS_BOUNDS.includes(key)) continue;
+      if (counted && CONTAINS_BOUNDS.has(key)) continue;
       delete converted[key];
     }
     // Closed, an outcome would refuse a response for a field the upstream added.

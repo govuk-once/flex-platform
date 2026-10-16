@@ -46,7 +46,7 @@ export function checkToken(
   if (!trusted) return invalid("issuer");
   if (
     typeof payload.client_id !== "string" ||
-    trusted.clientIds.indexOf(payload.client_id) === -1
+    !trusted.clientIds.includes(payload.client_id)
   ) {
     return invalid("client");
   }
@@ -87,7 +87,7 @@ function decodeObject(
   segment: string | undefined,
 ): Record<string, unknown> | undefined {
   if (segment === undefined || !isCanonicalBase64url(segment)) return undefined;
-  const base64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+  const base64 = segment.replaceAll("-", "+").replaceAll("_", "/");
   const padded = base64 + "===".slice(0, (4 - (base64.length % 4)) % 4);
   try {
     const value: unknown = JSON.parse(

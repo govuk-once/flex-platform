@@ -77,14 +77,13 @@ export function coversResources(
   statement: PolicyStatement,
   resources: readonly unknown[],
 ): boolean {
-  const written = (
-    Array.isArray(statement.Resource)
+  const written = new Set(
+    (Array.isArray(statement.Resource)
       ? statement.Resource
       : [statement.Resource]
-  ).map((resource) => JSON.stringify(resource));
-  return resources.every((resource) =>
-    written.includes(JSON.stringify(resource)),
+    ).map((resource) => JSON.stringify(resource)),
   );
+  return resources.every((resource) => written.has(JSON.stringify(resource)));
 }
 
 /**

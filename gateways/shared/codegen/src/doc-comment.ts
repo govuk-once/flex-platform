@@ -44,7 +44,7 @@ export function documentationOf(schema: unknown): Documented {
 // type it no longer declares. Written as a character reference there is no "@" left to find, and
 // an editor rendering the comment as markdown shows one.
 function escapeLine(line: string): string {
-  return line.replaceAll("*/", "*\\/").replaceAll("@", "&#64;");
+  return line.replaceAll("*/", String.raw`*\/`).replaceAll("@", "&#64;");
 }
 
 // The comment, on lines of its own so it can be written straight in front of a declaration, or
