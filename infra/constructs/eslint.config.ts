@@ -1,1 +1,3 @@
-export { base as default } from "@repo/eslint-config";
+import { infraConstructs } from "@repo/eslint-config";
+
+export default infraConstructs;
