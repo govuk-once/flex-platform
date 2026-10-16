@@ -22,19 +22,9 @@ describe("checkToken", () => {
     expect(check(`Bearer ${token()}`)).toBeUndefined();
   });
 
-  // The scheme is case-insensitive (RFC 9110 11.1), and one or more spaces may follow it
-  // (RFC 6750 2.1).
-  it.each([
-    ["a lowercase scheme", `bearer ${token()}`],
-    ["an uppercase scheme", `BEARER ${token()}`],
-    ["two spaces after the scheme", `Bearer  ${token()}`],
-  ])("accepts %s", (_, authorization) => {
-    expect(check(authorization)).toBeUndefined();
-  });
-
   it("accepts a token of exactly 4,096 characters", () => {
     const [header, payload] = token().split(".");
-    const signature = "a".repeat(4096 - header!.length - payload!.length - 2);
+    const signature = "A".repeat(4096 - header!.length - payload!.length - 2);
     const exact = `${header}.${payload}.${signature}`;
     expect(exact).toHaveLength(4096);
 
@@ -109,6 +99,10 @@ describe("checkToken", () => {
     ["a scheme with a leading space", ` Bearer ${token()}`, "scheme"],
     ["no scheme", token(), "scheme"],
     ["more than one token", `Bearer ${token()} extra`, "parts"],
+    // WAF counts the header's exact value, so each token is accepted in one form only.
+    ["a lowercase scheme", `bearer ${token()}`, "scheme"],
+    ["an uppercase scheme", `BEARER ${token()}`, "scheme"],
+    ["two spaces after the scheme", `Bearer  ${token()}`, "parts"],
     ["an overlong token", `Bearer ${"a".repeat(4097)}`, "length"],
     [
       "two segments",
@@ -141,6 +135,11 @@ describe("checkToken", () => {
     [
       "an empty signature",
       `Bearer ${token().split(".").slice(0, 2).join(".")}.`,
+      "signature",
+    ],
+    [
+      "a signature with its spare bits set",
+      `Bearer ${token().split(".").slice(0, 2).join(".")}.AR`,
       "signature",
     ],
     [

@@ -3,6 +3,7 @@
 
 export type ViewerRequestEventName =
   | "cff_token_validated"
+  | "cff_method_rejected"
   | "cff_token_missing"
   | "cff_token_invalid"
   | "cff_token_expired"

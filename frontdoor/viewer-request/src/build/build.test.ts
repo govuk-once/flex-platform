@@ -49,15 +49,15 @@ describe("buildViewerRequestFunction", () => {
     expect(code).not.toMatch(/\bexport\b/);
   });
 
-  it("runs, passing a valid request on under a trace", async () => {
+  it("runs, passing a valid request on under an ID", async () => {
     const handler = await load(buildViewerRequestFunction(CONFIG));
     const event = viewerRequestEvent({
       headers: { authorization: `Bearer ${liveToken()}` },
     });
 
     expect(handler(event)).toBe(event.request);
-    expect(event.request.headers["x-amzn-trace-id"]?.value).toMatch(
-      /^Root=1-[0-9a-f]{8}-[0-9a-f]{24}$/,
+    expect(event.request.headers["x-correlation-id"]?.value).toMatch(
+      /^1-[0-9a-f]{8}-[0-9a-f]{24}$/,
     );
   });
 

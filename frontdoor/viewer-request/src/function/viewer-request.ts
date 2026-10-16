@@ -1,8 +1,14 @@
+import { traceIdFor } from "@repo/frontdoor-shared";
+
 import { isRoutable } from "./path.ts";
-import { notFound, unauthorized, unsupportedMediaType } from "./responses.ts";
+import {
+  methodNotAllowed,
+  notFound,
+  unauthorized,
+  unsupportedMediaType,
+} from "./responses.ts";
 import { logOutcome } from "./telemetry.ts";
 import { checkToken } from "./token.ts";
-import { traceIdFor } from "./trace-id.ts";
 import type {
   CloudFrontRequest,
   CloudFrontResponse,
@@ -15,18 +21,23 @@ import type {
 const PLATFORM_HEADER_PREFIX = "x-flex-";
 
 // Trace context a caller could send to pick the trace, or force every request to be sampled.
-const CALLER_TRACE_HEADERS = ["traceparent", "tracestate"];
+const CALLER_TRACE_HEADERS = ["traceparent", "tracestate", "x-amzn-trace-id"];
 
 const JSON_CONTENT_TYPE = /^application\/json\s*(;|$)/i;
 
 // The headers that describe a body, each read below.
 const BODY_HEADERS = ["content-length", "content-type", "transfer-encoding"];
 
+// The methods the platform serves. CloudFront itself allows every method, so this is where the rest
+// are refused.
+const ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
 // Methods that carry a body. HTTP/2 and HTTP/3 needn't announce one with content-length or
 // transfer-encoding, so these need JSON whether or not a body is announced.
 const BODY_METHODS = ["PATCH", "POST", "PUT"];
 
-// The token is checked before the path, so a request without a valid token gets a 401 whatever its
+// The method is checked first, since its answer says nothing about the caller or the paths. The
+// token is checked before the path, so a request without a valid token gets a 401 whatever its
 // path, and learns nothing about which paths exist.
 export function viewerRequest(
   event: ViewerRequestEvent,
@@ -49,11 +60,16 @@ export function viewerRequest(
       delete headers[name];
     }
   }
-  // No Parent: the edge records no span, so API Gateway's span starts the tree.
-  headers["x-amzn-trace-id"] = { value: "Root=" + traceId };
-  // The header the app reads. It carries the same ID.
+  // The edge's ID for the request, which the app reads and every later hop logs. The edge sends
+  // no X-Amzn-Trace-Id: API Gateway rewrites that header before it checks a signature, so the
+  // X-Ray trace starts there.
   headers["x-correlation-id"] = { value: traceId };
   const ids = { traceId, requestId };
+
+  if (ALLOWED_METHODS.indexOf(request.method) === -1) {
+    logOutcome("cff_method_rejected", ids);
+    return methodNotAllowed(traceId, ALLOWED_METHODS);
+  }
 
   const rejection = isRepeated(headers.authorization)
     ? ({ event: "cff_token_invalid", reason: "repeated" } as const)
