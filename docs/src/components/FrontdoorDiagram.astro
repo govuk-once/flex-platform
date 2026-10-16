@@ -1,0 +1,148 @@
+---
+// The Frontdoor's layers, top to bottom, in the order a request meets them, and what each answers
+// itself. Drawn with Starlight's colour variables so it follows the light and dark themes.
+---
+
+<figure class="frontdoor">
+  <div class="scroll">
+    <svg
+      viewBox="0 0 640 610"
+      role="img"
+      aria-labelledby="frontdoor-title frontdoor-desc"
+    >
+      <title id="frontdoor-title">The Frontdoor</title>
+      <desc id="frontdoor-desc">
+        The GOV.UK app connects to CloudFront at the apex of the frontdoor account's zone. AWS WAF
+        inspects the request first, and answers 413, 403 or 429 itself. The CloudFront Function
+        then checks its structure, and answers 401, 404, 405 or 415. Lambda@Edge verifies the
+        Cognito token, and answers 401, 404 or 500 itself, or routes the request to its domain's
+        API Gateway, signed with SigV4.
+      </desc>
+      <defs>
+        <marker
+          id="frontdoor-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+        </marker>
+      </defs>
+
+      <!-- Caller -->
+      <rect class="external" x="220" y="10" width="200" height="40" rx="6"></rect>
+      <text class="label" x="320" y="36">GOV.UK app</text>
+
+      <!-- Frontdoor -->
+      <rect class="section" x="20" y="70" width="600" height="420" rx="10"></rect>
+      <text class="section-title" x="36" y="98">Frontdoor</text>
+      <text class="note" x="36" y="117">frontdoor account</text>
+
+      <rect class="box" x="170" y="130" width="300" height="56" rx="6"></rect>
+      <text class="label" x="320" y="154">CloudFront</text>
+      <text class="sub" x="320" y="174">the zone's apex · TLS 1.2 or later</text>
+
+      <rect class="box" x="170" y="220" width="300" height="56" rx="6"></rect>
+      <text class="label" x="320" y="244">AWS WAF</text>
+      <text class="sub" x="320" y="264">body size · managed rules · rate limits</text>
+      <line class="answer" x1="470" y1="248" x2="490" y2="248"></line>
+      <text class="sub start" x="496" y="253">413 · 403 · 429</text>
+
+      <rect class="box accent" x="170" y="310" width="300" height="56" rx="6"></rect>
+      <text class="label" x="320" y="334">CloudFront Function</text>
+      <text class="sub" x="320" y="354">method · token's shape · path · type</text>
+      <line class="answer" x1="470" y1="338" x2="490" y2="338"></line>
+      <text class="sub start" x="496" y="343">401 · 404 · 405 · 415</text>
+
+      <rect class="box accent" x="170" y="400" width="300" height="56" rx="6"></rect>
+      <text class="label" x="320" y="424">Lambda@Edge</text>
+      <text class="sub" x="320" y="444">verifies the token · routes · signs</text>
+      <line class="answer" x1="470" y1="428" x2="490" y2="428"></line>
+      <text class="sub start" x="496" y="433">401 · 404 · 500</text>
+
+      <!-- Domain -->
+      <rect class="external" x="170" y="540" width="300" height="56" rx="6"></rect>
+      <text class="label" x="320" y="564">A domain's API Gateway</text>
+      <text class="sub" x="320" y="584">checks the SigV4 signature</text>
+
+      <!-- Flow -->
+      <line class="flow" x1="320" y1="50" x2="320" y2="128"></line>
+      <line class="flow" x1="320" y1="186" x2="320" y2="218"></line>
+      <line class="flow" x1="320" y1="276" x2="320" y2="308"></line>
+      <line class="flow" x1="320" y1="366" x2="320" y2="398"></line>
+      <line class="flow" x1="320" y1="456" x2="320" y2="538"></line>
+    </svg>
+  </div>
+</figure>
+
+<style>
+  .frontdoor {
+    margin-block: 1.5rem;
+  }
+  .scroll {
+    overflow-x: auto;
+  }
+  svg {
+    display: block;
+    width: 100%;
+    max-width: 640px;
+    min-width: 460px;
+    height: auto;
+    margin-inline: auto;
+    font-family: var(--sl-font);
+  }
+  .section {
+    fill: var(--sl-color-gray-6);
+    stroke: var(--sl-color-gray-5);
+  }
+  .box {
+    fill: var(--sl-color-bg);
+    stroke: var(--sl-color-gray-4);
+  }
+  .box.accent {
+    stroke: var(--sl-color-accent);
+    stroke-width: 2;
+  }
+  .external {
+    fill: none;
+    stroke: var(--sl-color-gray-4);
+    stroke-dasharray: 4 3;
+  }
+  .flow,
+  .answer {
+    fill: none;
+    stroke: var(--sl-color-gray-3);
+    stroke-width: 1.5;
+    marker-end: url(#frontdoor-arrow);
+  }
+  .head {
+    fill: var(--sl-color-gray-3);
+  }
+  text {
+    fill: var(--sl-color-white);
+  }
+  .label {
+    font-size: 16px;
+    font-weight: 600;
+    text-anchor: middle;
+  }
+  .sub {
+    font-size: 13px;
+    fill: var(--sl-color-gray-3);
+    text-anchor: middle;
+  }
+  .sub.start {
+    text-anchor: start;
+  }
+  .section-title {
+    font-size: 19px;
+    font-weight: 700;
+  }
+  .note {
+    font-size: 13px;
+    fill: var(--sl-color-gray-3);
+  }
+</style>

@@ -24,8 +24,9 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 
 | Frontdoor    | What it is                                                                             | Status                                     |
 | ------------ | -------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Distribution | CloudFront, the CloudFront Function that checks each request, and their infrastructure | <Badge text="Planned" variant="caution" /> |
-| Lambda@Edge  | Authenticates each request, routes it to its domain and signs it                       | <Badge text="Planned" variant="caution" /> |
+| Distribution | CloudFront, its name and certificate, AWS WAF, and the CloudFront Function that checks each request | <Badge text="Built" variant="success" /> |
+| Authentication | Lambda@Edge, which verifies each request's Cognito token | <Badge text="Built" variant="success" /> |
+| Routing and signing | Lambda@Edge routing each request to its domain and signing it | <Badge text="Built" variant="success" /> |
 
 | Domains   | What it is                                              | Status                                     |
 | --------- | ------------------------------------------------------- | ------------------------------------------ |
