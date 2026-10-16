@@ -1,3 +1,4 @@
+import { isPlatformName } from "@repo/utils/is-platform-name";
 import { buildSync } from "esbuild";
 
 import type { OriginRequestConfig } from "../function/types.ts";
@@ -12,6 +13,7 @@ export const HANDLER = "index.handler";
 export function buildOriginRequestFunction(
   config: OriginRequestConfig,
 ): string {
+  checkRoutes(config.routes);
   const result = buildSync({
     entryPoints: [ENTRY],
     bundle: true,
@@ -26,4 +28,24 @@ export function buildOriginRequestFunction(
   const output = result.outputFiles[0]?.text;
   if (output === undefined) throw new Error("esbuild produced no output");
   return output;
+}
+
+// Lowercase labels, at least two, the last starting with a letter, so never a URL, a port or an IP
+// address. The config holds hosts to DNS's limits.
+const HOST = /^(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*$/;
+
+// The routing map comes from config, so a bad one fails the build rather than a request.
+function checkRoutes(routes: OriginRequestConfig["routes"]): void {
+  for (const [domain, host] of Object.entries(routes)) {
+    if (!isPlatformName(domain)) {
+      throw new Error(
+        `The route ${JSON.stringify(domain)} is not a domain name the CloudFront Function lets through`,
+      );
+    }
+    if (!HOST.test(host)) {
+      throw new Error(
+        `The route for ${domain} goes to ${JSON.stringify(host)}, which is not a DNS name`,
+      );
+    }
+  }
 }

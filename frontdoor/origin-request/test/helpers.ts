@@ -135,6 +135,20 @@ export function originRequestEvent(
             clientIp: "203.0.113.178",
             headers,
             method: "GET",
+            body: {
+              action: "read-only",
+              data: "",
+              encoding: "base64",
+              inputTruncated: false,
+            },
+            origin: {
+              s3: {
+                authMethod: "none",
+                customHeaders: {},
+                domainName: "default-origin.s3.us-east-1.amazonaws.com",
+                path: "",
+              },
+            },
             querystring: "",
             uri: "/app/udp/v1/identity",
           },
