@@ -32,10 +32,10 @@ export interface CompiledOperation {
 function isQueryValue(value: unknown): value is QueryValue {
   if (isScalar(value)) return true;
   if (!Array.isArray(value)) return false;
-  // Indexed rather than `every`, which skips a sparse array's holes. A hole reads as undefined
+  // A loop rather than `every`, which skips a sparse array's holes. A hole reads as undefined
   // and would reach the upstream as the string "undefined".
-  for (let index = 0; index < value.length; index += 1) {
-    if (!isScalar(value[index])) return false;
+  for (const item of value) {
+    if (!isScalar(item)) return false;
   }
   return true;
 }
@@ -78,7 +78,7 @@ function compileParameters(
         `${context}: "${PAYLOAD_FIELD}" is the request body and cannot be a parameter`,
       );
     }
-    if (mapping.name !== undefined && mapping.name.length === 0) {
+    if (mapping.name?.length === 0) {
       throw new TypeError(
         `${context}: parameter "${field}" has an empty upstream name`,
       );

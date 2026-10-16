@@ -12,7 +12,7 @@ import { SCHEMAS_DIR } from "./layout.ts";
 // that the names sort by code unit into the order they were written in, and the latest is found
 // by comparing names rather than parsing them.
 
-const VERSION_FILE = /^([0-9]{4})\.json$/;
+const VERSION_FILE = /^(\d{4})\.json$/;
 
 const versionName = (index: number): string =>
   String(index + 1).padStart(4, "0");

@@ -13,11 +13,11 @@ export function bearerToken(
 ): { readonly token: string } | BearerTokenRejection {
   if (!authorization) return { missing: true, reason: "no-header" };
   if (authorization === "Bearer") return { missing: true, reason: "no-token" };
-  if (authorization.slice(0, PREFIX.length) !== PREFIX) {
+  if (!authorization.startsWith(PREFIX)) {
     return { missing: false, reason: "scheme" };
   }
   const token = authorization.slice(PREFIX.length);
   if (!token) return { missing: true, reason: "no-token" };
-  if (token.indexOf(" ") !== -1) return { missing: false, reason: "parts" };
+  if (token.includes(" ")) return { missing: false, reason: "parts" };
   return { token };
 }

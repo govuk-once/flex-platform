@@ -74,7 +74,7 @@ async function readBody(
   const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value } = await reader.read(); // NOSONAR: a stream reads in order
     if (done) break;
     total += value.byteLength;
     if (total > limit) {

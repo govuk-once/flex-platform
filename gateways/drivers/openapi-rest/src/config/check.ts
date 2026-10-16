@@ -249,7 +249,7 @@ function checkOperation(
     }
     // An empty upstream name reaches no parameter and no header. Reading further would record
     // it as a name of its own, and report a second field renamed onto the same nothing.
-    if (mapping.name !== undefined && mapping.name.length === 0) {
+    if (mapping.name?.length === 0) {
       problems.push(
         `${context}: parameter "${field}" has an empty upstream name`,
       );
