@@ -196,6 +196,9 @@ importers:
 
   frontdoor/infra:
     dependencies:
+      '@repo/frontdoor-origin-request':
+        specifier: workspace:*
+        version: link:../origin-request
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../shared
@@ -525,6 +528,9 @@ importers:
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../../frontdoor/shared
+      '@repo/infra-constructs':
+        specifier: workspace:*
+        version: link:../constructs
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils

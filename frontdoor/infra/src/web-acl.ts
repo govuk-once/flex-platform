@@ -6,9 +6,9 @@ import { Construct } from "constructs";
 
 import { wafLogGroupName, webAclName } from "./names.ts";
 import {
-  MANAGED_RULE_GROUPS,
-  managedRuleGroupRule,
-  rateLimitRule,
+  BODY_INSPECTION_LIMIT,
+  CUSTOM_RESPONSE_BODIES,
+  wafRules,
 } from "./waf-rules.ts";
 
 /** Substituted in sampled requests and redacted in logs, so a credential reaches neither. */
@@ -38,12 +38,7 @@ export class WebAcl extends Construct {
       );
     }
 
-    const rules = [
-      ...MANAGED_RULE_GROUPS.map((group, index) =>
-        managedRuleGroupRule(group, index),
-      ),
-      rateLimitRule(MANAGED_RULE_GROUPS.length),
-    ];
+    const rules = wafRules();
     this.ruleNames = rules.map((rule) => rule.name);
 
     const name = webAclName(props.environment);
@@ -51,6 +46,12 @@ export class WebAcl extends Construct {
       name,
       scope: "CLOUDFRONT",
       defaultAction: { allow: {} },
+      associationConfig: {
+        requestBody: {
+          CLOUDFRONT: { defaultSizeInspectionLimit: BODY_INSPECTION_LIMIT },
+        },
+      },
+      customResponseBodies: CUSTOM_RESPONSE_BODIES,
       visibilityConfig: {
         cloudWatchMetricsEnabled: true,
         metricName: name,

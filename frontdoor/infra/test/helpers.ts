@@ -1,11 +1,11 @@
-import { App, Stack, Validations } from "aws-cdk-lib";
+import { cdkApp } from "@repo/infra-constructs";
+import { type App, Stack, Validations } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { AwsSolutionsChecks } from "cdk-nag";
 
 import { Edge } from "../src/edge.ts";
+import { OriginRequestFunction } from "../src/origin-request-function.ts";
 import { ViewerRequestFunction } from "../src/viewer-request-function.ts";
-
-export const DOMAIN_NAME = "sandbox.flex.example";
 
 export const ISSUERS = [
   {
@@ -14,8 +14,13 @@ export const ISSUERS = [
   },
 ];
 
+export const ZONE = {
+  zoneName: "sandbox.flex-edge.example",
+  hostedZoneId: "Z100000000002",
+};
+
 export function stackIn(region: string, nag = false): Stack {
-  const app = new App();
+  const app = cdkApp();
   if (nag) Validations.of(app).addPlugins(new AwsSolutionsChecks(app));
   return new Stack(app, "Test", {
     env: { account: "123456789012", region },
@@ -24,12 +29,18 @@ export function stackIn(region: string, nag = false): Stack {
 
 export function edgeIn(stack: Stack): Edge {
   const viewerRequest = new ViewerRequestFunction(stack, "ViewerRequest", {
+    environment: "sandbox",
+    issuers: ISSUERS,
+  });
+  const originRequest = new OriginRequestFunction(stack, "OriginRequest", {
+    environment: "sandbox",
     issuers: ISSUERS,
   });
   return new Edge(stack, "Edge", {
     environment: "sandbox",
-    domainName: DOMAIN_NAME,
+    zone: ZONE,
     viewerRequestFunction: viewerRequest.function,
+    originRequestFunction: originRequest.version,
   });
 }
 
