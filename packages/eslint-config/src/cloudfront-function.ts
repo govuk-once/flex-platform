@@ -43,7 +43,7 @@ export function cloudfrontFunction(
   allowedImports: readonly string[],
 ): Linter.Config {
   const allowed = [
-    "\\.{1,2}/",
+    String.raw`\.{1,2}/`,
     "crypto$",
     ...allowedImports.map((name) => `${escapeRegExp(name)}$`),
   ];
@@ -89,5 +89,5 @@ export function cloudfrontFunction(
 }
 
 function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

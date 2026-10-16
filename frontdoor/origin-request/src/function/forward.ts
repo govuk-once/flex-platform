@@ -66,15 +66,8 @@ export async function forward(
   sign: SignRequest,
 ): Promise<CloudFrontRequest> {
   if (request.body.inputTruncated) throw new TruncatedBody();
-  const body =
-    request.body.data === ""
-      ? new Uint8Array()
-      : new Uint8Array(
-          Buffer.from(
-            request.body.data,
-            request.body.encoding === "base64" ? "base64" : "utf8",
-          ),
-        );
+  const encoding = request.body.encoding === "base64" ? "base64" : "utf8";
+  const body = new Uint8Array(Buffer.from(request.body.data, encoding));
 
   const headers: CloudFrontHeaders = { ...request.headers };
   // Explicitly, rather than trusting the signature to replace it: the domain never sees the

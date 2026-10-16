@@ -103,7 +103,8 @@ function authHeadersFor(steps: readonly AuthStep[]): AuthHeaders {
       for (const [name, value] of added) headers.set(name, value);
       let provided: unknown;
       try {
-        provided = await instance.headers({ ...request, url, headers });
+        // In turn, since each part is shown the headers the parts before it set.
+        provided = await instance.headers({ ...request, url, headers }); // NOSONAR
       } catch (err: unknown) {
         if (err instanceof GatewayError) throw err;
         throw new GatewayError(

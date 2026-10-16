@@ -93,24 +93,33 @@ export function createRequestSigner(
 // repeats keeps every value.
 function parseQuery(querystring: string): Record<string, string | string[]> {
   const query: Record<string, string | string[]> = {};
-  const decode = (text: string) => decodeURIComponent(text.replace(/\+/g, " "));
   for (const pair of querystring.split("&")) {
     if (pair === "") continue;
-    const equals = pair.indexOf("=");
-    const name = decode(equals === -1 ? pair : pair.slice(0, equals));
-    const value = equals === -1 ? "" : decode(pair.slice(equals + 1));
+    const [name, value] = splitPair(pair);
     if (name === UNSIGNABLE_QUERY) {
       throw new TypeError(
         `A query parameter named "${UNSIGNABLE_QUERY}" cannot be signed`,
       );
     }
     const existing = Object.hasOwn(query, name) ? query[name] : undefined;
-    query[name] =
-      existing === undefined
-        ? value
-        : [...(Array.isArray(existing) ? existing : [existing]), value];
+    if (existing === undefined) query[name] = value;
+    else if (Array.isArray(existing)) existing.push(value);
+    else query[name] = [existing, value];
   }
   return query;
+}
+
+function splitPair(pair: string): [name: string, value: string] {
+  const equals = pair.indexOf("=");
+  if (equals === -1) return [decodeQuery(pair), ""];
+  return [
+    decodeQuery(pair.slice(0, equals)),
+    decodeQuery(pair.slice(equals + 1)),
+  ];
+}
+
+function decodeQuery(text: string): string {
+  return decodeURIComponent(text.replaceAll("+", " "));
 }
 
 /** The role's credentials, from the variables Lambda sets for each invocation. */
