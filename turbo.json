@@ -1,5 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // cdkApp in infra/constructs reads CDK's feature flags from the app's cdk.json by path, which no
+  // package's inputs hold. As a global dependency, a flag change reruns every task, which is rare.
+  "globalDependencies": ["infra/app/cdk.json"],
   "tasks": {
     "codegen": {
       "cache": false
