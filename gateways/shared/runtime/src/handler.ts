@@ -12,6 +12,7 @@ import type {
   Validator,
 } from "@repo/gateway-types";
 import { ERROR_CODES } from "@repo/gateway-types";
+import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 import { isScalar } from "@repo/utils/is-scalar";
 
 import {
@@ -20,7 +21,7 @@ import {
   type ReportedMeta,
 } from "./context.ts";
 import { parseEnvelope } from "./envelope.ts";
-import { describeUnexpectedError, GatewayError } from "./errors.ts";
+import { GatewayError } from "./errors.ts";
 import { type CompiledPath, compilePaths } from "./field-path.ts";
 import { createLogger, pickFields } from "./logging.ts";
 import { resolvePolicy } from "./policy.ts";

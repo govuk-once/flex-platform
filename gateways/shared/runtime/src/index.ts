@@ -1,8 +1,7 @@
 export type { DeadlineProvider } from "./context.ts";
 export { parseDuration } from "./duration.ts";
 export { parseEnvelope } from "./envelope.ts";
-export type { UnexpectedErrorSummary } from "./errors.ts";
-export { describeUnexpectedError, GatewayError } from "./errors.ts";
+export { GatewayError } from "./errors.ts";
 export type { CompiledPath } from "./field-path.ts";
 export { compilePaths } from "./field-path.ts";
 export type {
