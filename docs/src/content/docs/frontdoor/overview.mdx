@@ -55,11 +55,11 @@ CloudFront presents a repeated header with its first value in `value` and every 
 check could pass on the first value while a later step reads another.
 
 Each rejection has the shape the app handles, `{"message": "...", "type": "..."}`, with
-`x-rejected-by: cloudfront-function` and the trace ID as `x-correlation-id`. The app relies on
-the 401's body exactly, so it never changes. Every request writes one log line naming its outcome, such as
-`cff_token_validated` or `cff_token_invalid`, with a fixed reason code, the trace ID and
-CloudFront's request ID, and never text from the request. It's the one place both IDs appear
-together, so it joins CloudFront's own logs to the rest of the request.
+`x-rejected-by: cloudfront-function` and the trace ID as `x-correlation-id`. The app relies on the
+401's body exactly, so it never changes. Every request writes one log line naming its outcome, such
+as `viewer_request_token_validated` or `viewer_request_token_invalid`, with a fixed reason code, the
+trace ID and CloudFront's request ID, and never text from the request. It's the one place both IDs
+appear together, so it joins CloudFront's own logs to the rest of the request.
 
 The trusted issuers and their app clients are baked into the function for each environment by
 `buildViewerRequestFunction`. The domain list isn't: a few hundred names would pass CloudFront's

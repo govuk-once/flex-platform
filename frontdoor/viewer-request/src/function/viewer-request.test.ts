@@ -1,3 +1,4 @@
+import { traceIdFor } from "@repo/frontdoor-shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TestHeaders } from "../../test/helpers.ts";
@@ -8,7 +9,6 @@ import {
   token,
   viewerRequestEvent,
 } from "../../test/helpers.ts";
-import { traceIdFor } from "./trace-id.ts";
 import type { CloudFrontResponse } from "./types.ts";
 import { viewerRequest } from "./viewer-request.ts";
 
@@ -55,6 +55,7 @@ function rejection(
   statusCode: number,
   message: string,
   type: string,
+  extraHeaders: CloudFrontResponse["headers"] = {},
 ): CloudFrontResponse {
   return {
     statusCode,
@@ -62,22 +63,25 @@ function rejection(
       "content-type": { value: "application/json" },
       "x-rejected-by": { value: "cloudfront-function" },
       "x-correlation-id": { value: TRACE_ID },
+      ...extraHeaders,
     },
     body: { encoding: "text", data: JSON.stringify({ message, type }) },
   };
 }
 
-const UNAUTHORIZED = rejection(401, "Unauthorized", "auth_error");
-const NOT_FOUND = rejection(404, "Not Found", "not_found");
-const UNSUPPORTED = rejection(
-  415,
-  "Unsupported Media Type",
-  "unsupported_media_type",
+const METHOD_NOT_ALLOWED = rejection(
+  405,
+  "Method not allowed",
+  "client_error",
+  { allow: { value: "GET, POST, PUT, PATCH, DELETE" } },
 );
+const UNAUTHORIZED = rejection(401, "Unauthorized", "auth_error");
+const NOT_FOUND = rejection(404, "Not found", "client_error");
+const UNSUPPORTED = rejection(415, "Unsupported media type", "client_error");
 
 describe("viewerRequest", () => {
   // Everything CloudFront sends survives, apart from the headers the function owns.
-  it("passes a valid request on unchanged, under a trace of its own", () => {
+  it("passes a valid request on unchanged, under an ID of its own", () => {
     const event = viewerRequestEvent({
       headers: {
         authorization: AUTHORIZATION,
@@ -93,11 +97,12 @@ describe("viewerRequest", () => {
       ...before,
       headers: {
         ...before.headers,
-        "x-amzn-trace-id": { value: `Root=${TRACE_ID}` },
         "x-correlation-id": { value: TRACE_ID },
       },
     });
-    expect(loggedEvents()).toEqual([telemetry("cff_token_validated")]);
+    expect(loggedEvents()).toEqual([
+      telemetry("viewer_request_token_validated"),
+    ]);
   });
 
   // A caller who chose the trace could tie requests together, or force every one to be sampled.
@@ -114,7 +119,6 @@ describe("viewerRequest", () => {
 
     expect(result.headers).toEqual({
       authorization: { value: AUTHORIZATION },
-      "x-amzn-trace-id": { value: `Root=${TRACE_ID}` },
       "x-correlation-id": { value: TRACE_ID },
     });
   });
@@ -131,7 +135,6 @@ describe("viewerRequest", () => {
 
     expect(Object.keys(result.headers).sort()).toEqual([
       "authorization",
-      "x-amzn-trace-id",
       "x-correlation-id",
       "x-flexible",
     ]);
@@ -151,28 +154,28 @@ describe("viewerRequest", () => {
       case: "no token",
       headers: {},
       response: UNAUTHORIZED,
-      event: "cff_token_missing",
+      event: "viewer_request_token_missing",
       reason: "no-header",
     },
     {
       case: "a malformed token",
       headers: { authorization: `${AUTHORIZATION}.c2VjcmV0LXNlZ21lbnQ` },
       response: UNAUTHORIZED,
-      event: "cff_token_invalid",
+      event: "viewer_request_token_invalid",
       reason: "segments",
     },
     {
       case: "an expired token",
       headers: { authorization: `Bearer ${token({}, { exp: NOW })}` },
       response: UNAUTHORIZED,
-      event: "cff_token_expired",
+      event: "viewer_request_token_expired",
       reason: "expired",
     },
     {
       case: "a repeated authorization header",
       headers: { authorization: [AUTHORIZATION, "Bearer forged"] },
       response: UNAUTHORIZED,
-      event: "cff_token_invalid",
+      event: "viewer_request_token_invalid",
       reason: "repeated",
     },
     {
@@ -180,15 +183,29 @@ describe("viewerRequest", () => {
       uri: "/nowhere",
       headers: {},
       response: UNAUTHORIZED,
-      event: "cff_token_missing",
+      event: "viewer_request_token_missing",
       reason: "no-header",
+    },
+    {
+      case: "a method the platform doesn't serve",
+      method: "OPTIONS",
+      headers: { authorization: AUTHORIZATION },
+      response: METHOD_NOT_ALLOWED,
+      event: "viewer_request_method_rejected",
+    },
+    {
+      case: "a method the platform doesn't serve, with no token",
+      method: "HEAD",
+      headers: {},
+      response: METHOD_NOT_ALLOWED,
+      event: "viewer_request_method_rejected",
     },
     {
       case: "a path without a valid domain name",
       uri: "/app/udp.evil.example/v1",
       headers: { authorization: AUTHORIZATION },
       response: NOT_FOUND,
-      event: "cff_path_rejected",
+      event: "viewer_request_path_rejected",
     },
     {
       case: "a body that isn't JSON",
@@ -199,7 +216,7 @@ describe("viewerRequest", () => {
         "content-type": "text/plain",
       },
       response: UNSUPPORTED,
-      event: "cff_content_type_rejected",
+      event: "viewer_request_content_type_rejected",
     },
   ])("answers $case", ({ uri, method, headers, response, event, reason }) => {
     const result = run({
@@ -298,8 +315,8 @@ describe("viewerRequest", () => {
     );
   });
 
-  describe("any other method", () => {
-    it.each(["DELETE", "GET", "HEAD"])(
+  describe("a method that carries no body", () => {
+    it.each(["DELETE", "GET"])(
       "passes %s without a body whatever its content type",
       (method) => {
         const result = run({
@@ -323,5 +340,33 @@ describe("viewerRequest", () => {
 
       expect(result).toEqual(UNSUPPORTED);
     });
+  });
+
+  describe("the methods", () => {
+    it.each(["DELETE", "GET", "PATCH", "POST", "PUT"])(
+      "passes %s",
+      (method) => {
+        const result = run({
+          method,
+          headers: {
+            authorization: AUTHORIZATION,
+            "content-type": "application/json",
+          },
+        });
+
+        expect(result).not.toHaveProperty("statusCode");
+      },
+    );
+
+    // CloudFront passes on any method a viewer sends, in any case, and HTTP methods are
+    // case-sensitive.
+    it.each(["HEAD", "OPTIONS", "CONNECT", "TRACE", "get", "PROPFIND"])(
+      "refuses %s with a 405 naming the methods it serves",
+      (method) => {
+        expect(
+          run({ method, headers: { authorization: AUTHORIZATION } }),
+        ).toEqual(METHOD_NOT_ALLOWED);
+      },
+    );
   });
 });

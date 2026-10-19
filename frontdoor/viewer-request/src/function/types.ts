@@ -1,5 +1,7 @@
 // The CloudFront Functions viewer request event, and the response a function can return.
 
+import type { TrustedIssuer } from "@repo/frontdoor-shared";
+
 // A repeated header, query parameter or cookie keeps its first value in `value` and every value,
 // in order, in `multiValue`.
 export interface FieldValue {
@@ -31,14 +33,6 @@ export interface CloudFrontResponse {
   statusCode: number;
   headers: Record<string, { value: string }>;
   body: { encoding: "text"; data: string };
-}
-
-// A Cognito user pool whose access tokens are accepted, as its `iss` claim, and the app clients
-// within it, as their `client_id` claim. A client belongs to one pool, so each is listed with its
-// own.
-export interface TrustedIssuer {
-  readonly issuer: string;
-  readonly clientIds: readonly string[];
 }
 
 // Baked into the function when it is built, once per environment.

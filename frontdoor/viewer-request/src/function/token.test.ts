@@ -22,19 +22,9 @@ describe("checkToken", () => {
     expect(check(`Bearer ${token()}`)).toBeUndefined();
   });
 
-  // The scheme is case-insensitive (RFC 9110 11.1), and one or more spaces may follow it
-  // (RFC 6750 2.1).
-  it.each([
-    ["a lowercase scheme", `bearer ${token()}`],
-    ["an uppercase scheme", `BEARER ${token()}`],
-    ["two spaces after the scheme", `Bearer  ${token()}`],
-  ])("accepts %s", (_, authorization) => {
-    expect(check(authorization)).toBeUndefined();
-  });
-
   it("accepts a token of exactly 4,096 characters", () => {
     const [header, payload] = token().split(".");
-    const signature = "a".repeat(4096 - header!.length - payload!.length - 2);
+    const signature = "A".repeat(4096 - header!.length - payload!.length - 2);
     const exact = `${header}.${payload}.${signature}`;
     expect(exact).toHaveLength(4096);
 
@@ -69,12 +59,12 @@ describe("checkToken", () => {
         issuers,
         NOW,
       ),
-    ).toEqual({ event: "cff_token_invalid", reason: "client" });
+    ).toEqual({ event: "viewer_request_token_invalid", reason: "client" });
   });
 
   it("trusts nothing with no issuers", () => {
     expect(checkToken(`Bearer ${token()}`, [], NOW)).toEqual({
-      event: "cff_token_invalid",
+      event: "viewer_request_token_invalid",
       reason: "issuer",
     });
   });
@@ -87,7 +77,7 @@ describe("checkToken", () => {
     ).toString("base64url");
 
     expect(check(`Bearer ${header}.${payload}.${signature}`)).toEqual({
-      event: "cff_token_invalid",
+      event: "viewer_request_token_invalid",
       reason: "expiry",
     });
   });
@@ -99,7 +89,7 @@ describe("checkToken", () => {
     ["Bearer and a space", "Bearer ", "no-token"],
   ])("reports %s as missing", (_, authorization, reason) => {
     expect(check(authorization)).toEqual({
-      event: "cff_token_missing",
+      event: "viewer_request_token_missing",
       reason,
     });
   });
@@ -109,6 +99,10 @@ describe("checkToken", () => {
     ["a scheme with a leading space", ` Bearer ${token()}`, "scheme"],
     ["no scheme", token(), "scheme"],
     ["more than one token", `Bearer ${token()} extra`, "parts"],
+    // WAF counts the header's exact value, so each token is accepted in one form only.
+    ["a lowercase scheme", `bearer ${token()}`, "scheme"],
+    ["an uppercase scheme", `BEARER ${token()}`, "scheme"],
+    ["two spaces after the scheme", `Bearer  ${token()}`, "parts"],
     ["an overlong token", `Bearer ${"a".repeat(4097)}`, "length"],
     [
       "two segments",
@@ -144,6 +138,11 @@ describe("checkToken", () => {
       "signature",
     ],
     [
+      "a signature with its spare bits set",
+      `Bearer ${token().split(".").slice(0, 2).join(".")}.AR`,
+      "signature",
+    ],
+    [
       "a signature that isn't base64url",
       `Bearer ${token().split(".").slice(0, 2).join(".")}.c2l=`,
       "signature",
@@ -174,7 +173,7 @@ describe("checkToken", () => {
     ],
   ])("reports %s as invalid", (_, authorization, reason) => {
     expect(check(authorization)).toEqual({
-      event: "cff_token_invalid",
+      event: "viewer_request_token_invalid",
       reason,
     });
   });
@@ -184,7 +183,7 @@ describe("checkToken", () => {
     ["expiring now", NOW],
   ])("reports a token %s as expired", (_, exp) => {
     expect(check(`Bearer ${token({}, { exp })}`)).toEqual({
-      event: "cff_token_expired",
+      event: "viewer_request_token_expired",
       reason: "expired",
     });
   });
