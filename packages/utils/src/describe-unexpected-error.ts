@@ -92,7 +92,7 @@ function captureFrames(target: Error): string[] {
     return [];
   }
   try {
-    void target.stack;
+    void target.stack; // NOSONAR: reading it is what runs the hook
   } finally {
     Object.defineProperty(Error, "prepareStackTrace", descriptor);
   }

@@ -650,7 +650,7 @@ function deriveOperation(
   for (const [status, entry] of Object.entries(responses)) {
     const outcome = outcomeForStatus(Number(status));
     if (outcome === undefined) {
-      if (/^2/.test(status)) {
+      if (status.startsWith("2")) {
         notes.add(
           `${where} answers ${status}, which the driver maps to no outcome; a response with it fails`,
         );
@@ -992,7 +992,9 @@ function definitionsFor(
 
   for (let more = true; more;) {
     more = false;
-    for (const [name, use] of [...conversion.refs]) {
+    // A copy: converting adds the references it meets, which the next pass reads.
+    const pending = [...conversion.refs];
+    for (const [name, use] of pending) {
       const at = JSON.stringify(use);
       if (convertedFor.get(name) === at) continue;
       convertedFor.set(name, at);

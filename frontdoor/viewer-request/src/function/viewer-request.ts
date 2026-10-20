@@ -54,8 +54,8 @@ export function viewerRequest(
   for (let i = 0; i < names.length; i++) {
     const name = names[i]!;
     if (
-      name.indexOf(PLATFORM_HEADER_PREFIX) === 0 ||
-      CALLER_TRACE_HEADERS.indexOf(name) !== -1
+      name.startsWith(PLATFORM_HEADER_PREFIX) ||
+      CALLER_TRACE_HEADERS.includes(name)
     ) {
       delete headers[name];
     }
@@ -66,7 +66,7 @@ export function viewerRequest(
   headers["x-correlation-id"] = { value: traceId };
   const ids = { traceId, requestId };
 
-  if (ALLOWED_METHODS.indexOf(request.method) === -1) {
+  if (!ALLOWED_METHODS.includes(request.method)) {
     logOutcome("viewer_request_method_rejected", ids);
     return methodNotAllowed(traceId, ALLOWED_METHODS);
   }
@@ -104,7 +104,7 @@ function isRepeated(header: FieldValue | undefined): boolean {
 
 // The function can't see the body, only the method and the headers that announce one.
 function expectsBody(request: CloudFrontRequest): boolean {
-  if (BODY_METHODS.indexOf(request.method) !== -1) return true;
+  if (BODY_METHODS.includes(request.method)) return true;
   const length = request.headers["content-length"]?.value;
   return (
     (length !== undefined && length !== "0") ||

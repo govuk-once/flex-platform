@@ -61,14 +61,14 @@ const ANNOTATIONS: ReadonlySet<string> = new Set([
 
 // Bounds a value must reach, and bounds it must stay within: raising the first or lowering the
 // second admits less.
-const LOWER_BOUNDS = [
+const LOWER_BOUNDS = new Set([
   "exclusiveMinimum",
   "minContains",
   "minItems",
   "minLength",
   "minProperties",
   "minimum",
-];
+]);
 const UPPER_BOUNDS = [
   "exclusiveMaximum",
   "maxContains",
@@ -102,20 +102,20 @@ const BOUND_DEFAULTS: Readonly<Record<string, number>> = {
 
 // The two bounds that count matches rather than measure a value. With no `contains` to count
 // they constrain nothing, and a `contains` that came or went is a difference in its own right.
-const CONTAINS_BOUNDS = ["maxContains", "minContains"];
+const CONTAINS_BOUNDS = new Set(["maxContains", "minContains"]);
 
-const SUBSCHEMA_MAPS = [
+const SUBSCHEMA_MAPS = new Set([
   "$defs",
   "dependentSchemas",
   "patternProperties",
   "properties",
-];
-const SUBSCHEMA_LISTS = ["allOf", "anyOf", "oneOf", "prefixItems"];
+]);
+const SUBSCHEMA_LISTS = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
 // Lists whose branches are read as a set: every one holds, one at least does, or exactly one
 // does, none of which depends on where a branch is written. `prefixItems` types the element at
 // each place, so its order is what it says.
-const BRANCH_LISTS = ["allOf", "anyOf", "oneOf"];
-const SUBSCHEMAS = [
+const BRANCH_LISTS = new Set(["allOf", "anyOf", "oneOf"]);
+const SUBSCHEMAS = new Set([
   "additionalProperties",
   "contains",
   "else",
@@ -126,7 +126,7 @@ const SUBSCHEMAS = [
   "then",
   "unevaluatedItems",
   "unevaluatedProperties",
-];
+]);
 
 // A reference resolved more deeply than any schema is written is one that comes back on itself
 // through a definition under another name.
@@ -162,18 +162,18 @@ function shapeOf(value: unknown): unknown {
   for (const key of sortedNames(Object.keys(value))) {
     if (ANNOTATIONS.has(key)) continue;
     const held = value[key];
-    if (SUBSCHEMA_MAPS.includes(key) && isRecord(held)) {
+    if (SUBSCHEMA_MAPS.has(key) && isRecord(held)) {
       shape[key] = Object.fromEntries(
         sortedNames(Object.keys(held)).map((name) => [
           name,
           shapeOf(held[name]),
         ]),
       );
-    } else if (BRANCH_LISTS.includes(key) && Array.isArray(held)) {
+    } else if (BRANCH_LISTS.has(key) && Array.isArray(held)) {
       shape[key] = byJson(held.map(shapeOf));
-    } else if (SUBSCHEMA_LISTS.includes(key) && Array.isArray(held)) {
+    } else if (SUBSCHEMA_LISTS.has(key) && Array.isArray(held)) {
       shape[key] = held.map(shapeOf);
-    } else if (SUBSCHEMAS.includes(key)) {
+    } else if (SUBSCHEMAS.has(key)) {
       shape[key] = shapeOf(held);
     } else if (key === "required" || key === "type" || key === "enum") {
       shape[key] = Array.isArray(held) ? byJson(held) : held;
@@ -447,7 +447,7 @@ class Comparison {
       // Nothing counts matches without a `contains` to count; one that came or went is read
       // below, as the difference it is.
       if (
-        CONTAINS_BOUNDS.includes(key) &&
+        CONTAINS_BOUNDS.has(key) &&
         !(
           Object.hasOwn(previous, "contains") && Object.hasOwn(next, "contains")
         )
@@ -458,7 +458,7 @@ class Comparison {
         key,
         previous[key],
         next[key],
-        LOWER_BOUNDS.includes(key),
+        LOWER_BOUNDS.has(key),
         position,
         where,
       );
@@ -978,13 +978,13 @@ function eachReference(
   if (typeof value.$ref === "string") visit(value.$ref, position);
   for (const [key, held] of Object.entries(value)) {
     const at = reversesEffect(key, value) ? "uncertain" : position;
-    if (SUBSCHEMA_MAPS.includes(key) && isRecord(held)) {
+    if (SUBSCHEMA_MAPS.has(key) && isRecord(held)) {
       for (const schema of Object.values(held)) {
         eachReference(schema, at, visit);
       }
-    } else if (SUBSCHEMA_LISTS.includes(key) && Array.isArray(held)) {
+    } else if (SUBSCHEMA_LISTS.has(key) && Array.isArray(held)) {
       for (const schema of held) eachReference(schema, at, visit);
-    } else if (SUBSCHEMAS.includes(key)) {
+    } else if (SUBSCHEMAS.has(key)) {
       eachReference(held, at, visit);
     }
   }
