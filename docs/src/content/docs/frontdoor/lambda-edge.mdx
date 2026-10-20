@@ -1,0 +1,166 @@
+---
+title: Lambda@Edge
+description: The Frontdoor's function that verifies each request's Cognito access token, routes it to its domain and signs it.
+---
+
+import { Badge } from "@astrojs/starlight/components";
+
+import RoutingDiagram from "../../../components/RoutingDiagram.astro";
+
+**Lambda@Edge** verifies the caller's Amazon Cognito access token, then [routes](#routing) the
+request to its domain and [signs](#signing) it. If any of that fails, the edge answers the request
+and it never reaches a domain. The code is in `frontdoor/origin-request`.
+
+## Where it runs
+
+Lambda@Edge runs at origin request, after the
+[CloudFront Function](/flex-platform/frontdoor/cloudfront-function/), with the request body, which
+it signs.
+Caching is disabled, so it runs on every request. Caching is part of authentication here:
+CloudFront skips origin request triggers on a cache hit, so a cached response would reach a caller
+whose token was never verified. The CloudFront Function checks only the token's shape, so it can't
+stand in. Lambda@Edge can't move to viewer request either, since a behaviour can't have both kinds
+of function on its viewer events.
+
+The origin request policy decides what Lambda@Edge, and later the origin, sees of the request:
+the `authorization`, `content-type`, `accept`, `x-correlation-id` and `x-flex-secure` headers,
+every query string, and no cookies. It names `authorization` because CloudFront removes it from a
+GET or HEAD otherwise. Nothing else the viewer sent is forwarded, including CloudFront's viewer
+address and location headers.
+
+The policy also has to name every header Lambda@Edge sets, other than `Host` and AWS's `x-amz-*`
+signing headers. CloudFront forwards a header a function adds only some of the time unless the
+policy names it. A probe on 15 October 2026 saw unnamed headers arrive at the origin about half
+the time, from one version of the function, in one region, through one edge location. This isn't
+documented. `x-flex-secure` is in the policy for that reason alone: the CloudFront Function
+removes a caller's copy before Lambda@Edge runs. A test in `frontdoor/infra` fails if a header the
+function sets is missing from the policy, since otherwise it would fail only some of the time.
+
+## Verifying the token
+
+Lambda@Edge reads the token from `Authorization` by the CloudFront Function's rules, including
+[one form per token](/flex-platform/frontdoor/cloudfront-function/#one-form-per-token), and
+refuses a repeated header. It doesn't trust that the function ran: this is the token its
+verification runs on. It then verifies the token with `aws-jwt-verify`:
+
+- the signature, against the keys its issuer publishes at `<issuer>/.well-known/jwks.json`;
+- `iss` is one of the trusted issuers, matched exactly. Cognito can also name a pool in a global
+  form, `https://issuer-cognito-idp.<region>.amazonaws.com/<pool>`, which is trusted only if the
+  config lists it;
+- `alg` is `RS256`;
+- `exp` is present and in the future, and `nbf`, if present, has passed;
+- `token_use` is `access`, `client_id` is one of that issuer's trusted app clients, and
+  `username`, the pairwise ID, is a string that isn't empty.
+
+Nothing relies on `scope` or `aud`. Each issuer's keys are fetched by the first request that needs
+them, and kept. A key ID it hasn't seen fetches them again, in case the issuer rotated its keys,
+then not again for 10 seconds.
+
+## Responses
+
+Lambda@Edge answers a request itself only to refuse it, in the CloudFront Function's shape with
+`x-rejected-by: lambda-edge`:
+
+- a token at fault is a 401, the CloudFront Function's body exactly;
+- a verified request for a domain it can't route is a 404,
+  `{"message":"Not found","type":"client_error"}`. The domain is looked up after the token, so a
+  caller without one learns nothing about which domains exist;
+- anything else is a 500, `{"message":"Internal server error","type":"server_error"}`: keys that
+  can't be fetched, credentials that aren't there, a body CloudFront truncated, or a result
+  CloudFront would refuse. The request fails closed, and nothing unsigned is forwarded. Every
+  error is caught and answered, so the runtime never prints an error's text, which can quote a
+  claim.
+
+## Logs
+
+Every request writes one log line in the CloudFront Function's shape. It names the outcome, such as
+`origin_request_forwarded`, `origin_request_route_unknown` or `origin_request_token_expired`, with a
+fixed reason code, the trace ID and CloudFront's request ID. `origin_request_forwarded` names the
+domain, as the config names it; no line holds the caller's path. A failure is
+`origin_request_failed`, logged as its source locations only, as [a gateway logs an
+error](/flex-platform/gateways/responses/#what-reaches-a-log). No line holds the token, its claims,
+or a library's error text, and the package's tests check this. The trace ID is the one the
+CloudFront Function set as `x-correlation-id`, accepted only if its last 24 digits match this
+request's ID. Otherwise Lambda@Edge derives it the same way.
+
+Each copy of the function writes in the region it ran in, and only eu-west-2 keeps its lines. See
+[the Frontdoor's logs](/flex-platform/frontdoor/overview/#logs).
+
+## The function
+
+Lambda@Edge has no environment variables, so `buildOriginRequestFunction` bakes an environment's
+trusted issuers and routing map into the bundle, and refuses a route that isn't a domain name and
+a DNS host. The bundle is one CommonJS file, `index.js` with the handler
+`index.handler`, holding every dependency. It isn't minified, so a logged source location points at
+readable code, under a comment naming its source file. The package's tests run the bundle in a
+fresh Node.js process outside the workspace.
+
+| Setting | Value |
+|---|---|
+| Name | `frontdoor-<environment>-origin-request`, in us-east-1, as Lambda@Edge requires |
+| Runtime | Node.js 24, on x86-64: Lambda@Edge has no arm64 |
+| Memory | 1,024 MB. Lambda gives CPU in proportion to memory, which speeds the first request's key fetch and the signature check |
+| Timeout | 10 seconds. The key fetch's worst case is about 6 |
+| Body | Included, so the signature covers it |
+| Role | `frontdoor-<environment>-edge`, trusting `lambda.amazonaws.com` and `edgelambda.amazonaws.com`. It attaches the policy `frontdoor-<environment>-origin-request-logs-eu-west-2` by name, which the log group's stack provides: it may write to `/flex/frontdoor/<environment>/origin-request` in eu-west-2, and use that group's KMS key through CloudWatch Logs, for that group alone. It may also call `execute-api:Invoke` on the APIs in the environment's domain accounts, in eu-west-2. API Gateway generates an API's ID, so the grant is by account, and each domain API's resource policy names the role |
+
+The function and its versions are kept when they're removed from the stack: Lambda refuses to
+delete a version until CloudFront has removed its copies, hours after the version is detached.
+
+## Routing
+
+Lambda@Edge uses the segment after `/app` to decide which domain the request is for, from the
+routing map baked into it. Each domain is its own Amazon API Gateway, at a name under its domain
+account's own hosted zone. Lambda@Edge forwards the request to that domain with the rest of the
+path:
+
+<RoutingDiagram />
+
+So a domain sees requests at its own root. It never sees the path segment used to route to it.
+However many domains there are, the app sees one distribution. The query string is forwarded as it
+came.
+
+The request leaves for the domain's host over HTTPS on port 443, with TLS 1.2, a 30-second read
+timeout (API Gateway's own is 29 seconds) and a 5-second keep-alive, and with `Host` set to the
+domain's host.
+
+Domains in config are planned, and the routing map is built from them. Until then it's empty, and
+every verified request is a 404.
+
+## Signing
+
+Lambda@Edge signs the request it forwards with AWS Signature Version 4, for `execute-api` in
+eu-west-2, as its own role. The credentials are the ones Lambda gives each invocation, so there's
+no secret to keep or rotate. Before signing, it removes the caller's `Authorization` header, so a
+domain never sees the caller's token and can't replay it anywhere.
+
+The signature covers the method, the path and query, the body's SHA-256 hash, `Host`,
+`x-flex-secure`, and `Accept`, `Content-Type` and `x-correlation-id` where each appears once. It
+covers no other header, because CloudFront adds and changes some, such as `Via` and
+`X-Forwarded-For`, after the function returns. No `X-Amzn-Trace-Id` is sent: API Gateway rewrites
+that header before it checks a signature, and refused requests that carried one, signed or not. So
+the X-Ray trace starts at API Gateway, and the signed `x-correlation-id` is what joins it to the
+edge's logs. API Gateway reads a `+` in the query as a space,
+and so does the signature. The body's hash is signed but not repeated in an `x-amz-content-sha256` header,
+which API Gateway doesn't ask for. The body itself is left as it arrived, so CloudFront sends
+exactly what was hashed. A query parameter named `__proto__` can't be signed, and is refused with
+the 500.
+
+Before returning the request, Lambda@Edge checks it: no header it didn't receive or set, and every
+header it set appears once, in characters CloudFront accepts. CloudFront would refuse anything
+else, and log the request's path where the platform can't control the log. A request that fails
+the check is the 500 instead.
+
+The two authentication steps serve different purposes: the Cognito check establishes the app
+caller's identity, while SigV4 authenticates the request sent by the platform to the domain's
+Amazon API Gateway. A domain still needs to apply the feature's rules about which records and
+actions that user may access. See [Identity and linked accounts](/flex-platform/domains/designing-a-domain/#identity-and-linked-accounts).
+
+### The caller token
+
+<Badge text="Planned" variant="caution" />
+
+`x-flex-secure` will carry the platform's signed caller token: the user's values, signed by
+Lambda@Edge, which a domain passes on to the gateways it calls. Until then, Lambda@Edge sets it to
+a fixed `placeholder`, holding nothing about the caller, and signs it, so the header reaches every
+domain already.

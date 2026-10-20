@@ -32,20 +32,24 @@ package builds the site with Astro.
 
 | Package | Directory | Holds |
 |---|---|---|
-| `@repo/frontdoor-cloudfront-function` | `frontdoor/cloudfront-function` | The CloudFront Function that checks each request's structure, and `buildViewerRequestFunction`, which bundles it with an environment's config for the runtime. See [structural checks](/flex-platform/frontdoor/overview/#structural-checks). |
+| `@repo/frontdoor-viewer-request` | `frontdoor/viewer-request` | The CloudFront Function that checks each request's structure, and `buildViewerRequestFunction`, which bundles it with an environment's config for the runtime. See [CloudFront Function](/flex-platform/frontdoor/cloudfront-function/). |
+| `@repo/frontdoor-origin-request` | `frontdoor/origin-request` | Lambda@Edge, which verifies each request's Cognito access token, and `buildOriginRequestFunction`, which bundles it with an environment's config. See [Lambda@Edge](/flex-platform/frontdoor/lambda-edge/). |
+| `@repo/frontdoor-shared` | `frontdoor/shared` | What the two functions share: the trace ID, the reading of `Authorization`, the check that a token is encoded in its one canonical form, and the `TrustedIssuer` config type. The CloudFront Function bundles it, so all of it is written for that runtime. |
+| `@repo/frontdoor-infra` | `frontdoor/infra` | The Frontdoor's CDK constructs: the distribution with its certificate, DNS records, policies and access logs, the web ACL, and a construct for each edge function, which builds it with an environment's config. See [the distribution](/flex-platform/frontdoor/overview/#the-distribution). |
 
 ## Infrastructure
 
 | Package | Directory | Holds |
 |---|---|---|
-| `@repo/infra-app` | `infra/app` | The CDK app: every stage's config and its checks. It builds one stage at a time. See [Infrastructure](/flex-platform/infrastructure/overview/). |
+| `@repo/infra-app` | `infra/app` | The CDK app: every stage's config and its checks, and the stacks. It builds one stage at a time. See [Infrastructure](/flex-platform/infrastructure/overview/). |
+| `@repo/infra-constructs` | `infra/constructs` | What every section's infrastructure uses, exported from one index, since none of it is bundled into a function: `cdkApp`, which builds an app with the committed feature flags, `PlatformLogGroup` and `PlatformBucket`, and the checks that fail synth on a log group or bucket that doesn't meet their rules, built on `ResourceCheck`. See [checks](/flex-platform/infrastructure/overview/#checks). |
 
 ## Shared tooling
 
 | Package | Directory | Holds |
 |---|---|---|
 | `@repo/tsconfig` | `packages/tsconfig` | `base.json`, the shared TypeScript base. It is strict and emits nothing. |
-| `@repo/eslint-config` | `packages/eslint-config` | The `base`, `driver` and `service` presets. |
+| `@repo/eslint-config` | `packages/eslint-config` | The `base`, `driver`, `service`, `cloudfrontFunction`, `infraConstructs` and `sectionInfra` presets. |
 | `@repo/vitest-config` | `packages/vitest-config` | Shared Vitest configuration. |
 | `@repo/utils` | `packages/utils` | Generic functions, one per module, each imported by its own path, such as `@repo/utils/sorted-entries`. |
 | `@repo/docs` | `docs` | This site. |

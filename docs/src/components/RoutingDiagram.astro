@@ -1,0 +1,163 @@
+---
+// How Lambda@Edge maps a path on the Frontdoor to a domain's API, with example domains. Drawn with
+// Starlight's colour variables so it follows the light and dark themes.
+---
+
+<figure class="routing">
+  <div class="scroll">
+    <svg
+      viewBox="0 0 880 384"
+      role="img"
+      aria-labelledby="routing-title routing-desc"
+    >
+      <title id="routing-title">Routing a request to its domain</title>
+      <desc id="routing-desc">
+        Requests to the Frontdoor at production.flex-domainedge.once.service.gov.uk, mapped to each
+        domain's API Gateway under the domain account's zone. /app/udp/v1/identity goes to
+        udp.production.flex-domain00.once.service.gov.uk at /v1/identity.
+        /app/dvla/v1/licence?full=true goes to dvla's host at /v1/licence?full=true, with the query
+        string as it came. /app/travel goes to travel's host at its root, /. /app/unknown/v1 names
+        no domain in the routing map, so Lambda@Edge answers 404.
+      </desc>
+      <defs>
+        <marker
+          id="routing-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+        </marker>
+      </defs>
+
+      <!-- Headers -->
+      <text class="title" x="20" y="28">Frontdoor</text>
+      <text class="host" x="20" y="48">production.flex-domainedge.once.service.gov.uk</text>
+      <text class="title" x="460" y="28">A domain's API Gateway</text>
+      <text class="note" x="460" y="48">at its own name, under its domain account's zone</text>
+
+      <!-- A path under a domain -->
+      <rect class="box" x="20" y="70" width="340" height="60" rx="6"></rect>
+      <text class="path" x="36" y="106"><tspan class="routed">/app/udp</tspan>/v1/identity</text>
+      <line class="flow" x1="360" y1="100" x2="458" y2="100"></line>
+      <rect class="box accent" x="460" y="70" width="400" height="60" rx="6"></rect>
+      <text class="host" x="476" y="94">udp.production.flex-domain00.once.service.gov.uk</text>
+      <text class="path" x="476" y="115">/v1/identity</text>
+
+      <!-- The query string, as it came -->
+      <rect class="box" x="20" y="148" width="340" height="60" rx="6"></rect>
+      <text class="path" x="36" y="184"><tspan class="routed">/app/dvla</tspan>/v1/licence?full=true</text>
+      <line class="flow" x1="360" y1="178" x2="458" y2="178"></line>
+      <rect class="box accent" x="460" y="148" width="400" height="60" rx="6"></rect>
+      <text class="host" x="476" y="172">dvla.production.flex-domain00.once.service.gov.uk</text>
+      <text class="path" x="476" y="193">/v1/licence?full=true</text>
+
+      <!-- The domain alone, at its root -->
+      <rect class="box" x="20" y="226" width="340" height="60" rx="6"></rect>
+      <text class="path" x="36" y="262"><tspan class="routed">/app/travel</tspan></text>
+      <line class="flow" x1="360" y1="256" x2="458" y2="256"></line>
+      <rect class="box accent" x="460" y="226" width="400" height="60" rx="6"></rect>
+      <text class="host" x="476" y="250">travel.production.flex-domain00.once.service.gov.uk</text>
+      <text class="path" x="476" y="271">/</text>
+
+      <!-- No route -->
+      <rect class="box" x="20" y="304" width="340" height="60" rx="6"></rect>
+      <text class="path" x="36" y="340"><tspan class="routed">/app/unknown</tspan>/v1</text>
+      <line class="answer" x1="360" y1="334" x2="458" y2="334"></line>
+      <rect class="external" x="460" y="304" width="400" height="60" rx="6"></rect>
+      <text class="label" x="476" y="329">404</text>
+      <text class="note" x="476" y="350">no domain of that name, so Lambda@Edge answers</text>
+    </svg>
+  </div>
+  <figcaption>
+    The highlighted part of each path chooses the domain. The domains are examples.
+  </figcaption>
+</figure>
+
+<style>
+  .routing {
+    margin-block: 1.5rem;
+  }
+  .scroll {
+    overflow-x: auto;
+  }
+  svg {
+    display: block;
+    width: 100%;
+    max-width: 880px;
+    min-width: 600px;
+    height: auto;
+    margin-inline: auto;
+    font-family: var(--sl-font);
+  }
+  figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+    text-align: center;
+  }
+  .box {
+    fill: var(--sl-color-bg);
+    stroke: var(--sl-color-gray-4);
+  }
+  .box.accent {
+    stroke: var(--sl-color-accent);
+    stroke-width: 2;
+  }
+  .external {
+    fill: none;
+    stroke: var(--sl-color-gray-4);
+    stroke-dasharray: 4 3;
+  }
+  .flow,
+  .answer {
+    fill: none;
+    stroke: var(--sl-color-gray-3);
+    stroke-width: 1.5;
+    marker-end: url(#routing-arrow);
+  }
+  .answer {
+    stroke-dasharray: 4 3;
+  }
+  .head {
+    fill: var(--sl-color-gray-3);
+  }
+  text {
+    fill: var(--sl-color-white);
+  }
+  .title {
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .label {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .note {
+    font-size: 13px;
+    fill: var(--sl-color-gray-3);
+  }
+  /* As Starlight resolves its own: --sl-font-mono is only set to override the system font. */
+  .path,
+  .host {
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+  }
+  .path {
+    font-size: 14px;
+  }
+  .host {
+    font-size: 12px;
+    fill: var(--sl-color-gray-3);
+  }
+  .routed {
+    fill: var(--sl-color-accent-high);
+    font-weight: 600;
+  }
+  /* In the dark theme, accent-high is close to the text's own colour. */
+  :global([data-theme="dark"]) .routed {
+    fill: var(--sl-color-accent);
+  }
+</style>
