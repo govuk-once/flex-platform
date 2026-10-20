@@ -1,0 +1,368 @@
+[
+  {
+    "name": "frontdoor-development",
+    "account": "991575850800",
+    "region": "us-east-1",
+    "dependencies": [
+      "frontdoor-development-edge-logs-eu-west-2"
+    ],
+    "resources": [
+      {
+        "logicalId": "EdgeAccessLogDelivery3D5940B7",
+        "type": "AWS::Logs::Delivery"
+      },
+      {
+        "logicalId": "EdgeAccessLogDestinationE5F9C7E7",
+        "type": "AWS::Logs::DeliveryDestination"
+      },
+      {
+        "logicalId": "EdgeAccessLogPolicyC29106C6",
+        "type": "AWS::Logs::ResourcePolicy"
+      },
+      {
+        "logicalId": "EdgeAccessLogSource9F478627",
+        "type": "AWS::Logs::DeliverySource"
+      },
+      {
+        "logicalId": "EdgeAccessLogsLogGroupC3051F4B",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "EdgeAliasIpv44B7054A7",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeAliasIpv6DD2856F2",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeCaaE2EE557A",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeCertificateE929CC3D",
+        "type": "AWS::CertificateManager::Certificate"
+      },
+      {
+        "logicalId": "EdgeDefaultOriginBucketAF5AD550",
+        "type": "AWS::S3::Bucket"
+      },
+      {
+        "logicalId": "EdgeDefaultOriginBucketPolicyBDAF48F8",
+        "type": "AWS::S3::BucketPolicy"
+      },
+      {
+        "logicalId": "EdgeDistribution0060737B",
+        "type": "AWS::CloudFront::Distribution"
+      },
+      {
+        "logicalId": "EdgeDistributionMonitoringSubscription5F8A9097",
+        "type": "AWS::CloudFront::MonitoringSubscription"
+      },
+      {
+        "logicalId": "EdgeOriginRequest16780D45",
+        "type": "AWS::CloudFront::OriginRequestPolicy"
+      },
+      {
+        "logicalId": "EdgeResponseHeadersPolicyD0EDE4A5",
+        "type": "AWS::CloudFront::ResponseHeadersPolicy"
+      },
+      {
+        "logicalId": "EdgeWebAcl44C47E06",
+        "type": "AWS::WAFv2::WebACL"
+      },
+      {
+        "logicalId": "EdgeWebAclLogging8385F5A7",
+        "type": "AWS::WAFv2::LoggingConfiguration"
+      },
+      {
+        "logicalId": "EdgeWebAclLogsLogGroupCC9BE8DF",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "OriginRequestFunction43C8FF17",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "OriginRequestRole94C1C04E",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "ViewerRequestFunction272348D7",
+        "type": "AWS::CloudFront::Function"
+      },
+      {
+        "logicalId": "ViewerRequestLogsLogGroupD165548C",
+        "type": "AWS::Logs::LogGroup"
+      }
+    ]
+  },
+  {
+    "name": "frontdoor-development-edge-logs-eu-west-2",
+    "account": "991575850800",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "OriginRequestLogsGroupLogGroup2B4754D4",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "OriginRequestLogsWritePolicy70FDC122",
+        "type": "AWS::IAM::ManagedPolicy"
+      }
+    ]
+  },
+  {
+    "name": "frontdoor-production",
+    "account": "367273783987",
+    "region": "us-east-1",
+    "dependencies": [
+      "frontdoor-production-edge-logs-eu-west-2"
+    ],
+    "resources": [
+      {
+        "logicalId": "EdgeAccessLogDelivery3D5940B7",
+        "type": "AWS::Logs::Delivery"
+      },
+      {
+        "logicalId": "EdgeAccessLogDestinationE5F9C7E7",
+        "type": "AWS::Logs::DeliveryDestination"
+      },
+      {
+        "logicalId": "EdgeAccessLogPolicyC29106C6",
+        "type": "AWS::Logs::ResourcePolicy"
+      },
+      {
+        "logicalId": "EdgeAccessLogSource9F478627",
+        "type": "AWS::Logs::DeliverySource"
+      },
+      {
+        "logicalId": "EdgeAccessLogsLogGroupC3051F4B",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "EdgeAliasIpv44B7054A7",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeAliasIpv6DD2856F2",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeCaaE2EE557A",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeCertificateE929CC3D",
+        "type": "AWS::CertificateManager::Certificate"
+      },
+      {
+        "logicalId": "EdgeDefaultOriginBucketAF5AD550",
+        "type": "AWS::S3::Bucket"
+      },
+      {
+        "logicalId": "EdgeDefaultOriginBucketPolicyBDAF48F8",
+        "type": "AWS::S3::BucketPolicy"
+      },
+      {
+        "logicalId": "EdgeDistribution0060737B",
+        "type": "AWS::CloudFront::Distribution"
+      },
+      {
+        "logicalId": "EdgeDistributionMonitoringSubscription5F8A9097",
+        "type": "AWS::CloudFront::MonitoringSubscription"
+      },
+      {
+        "logicalId": "EdgeOriginRequest16780D45",
+        "type": "AWS::CloudFront::OriginRequestPolicy"
+      },
+      {
+        "logicalId": "EdgeResponseHeadersPolicyD0EDE4A5",
+        "type": "AWS::CloudFront::ResponseHeadersPolicy"
+      },
+      {
+        "logicalId": "EdgeWebAcl44C47E06",
+        "type": "AWS::WAFv2::WebACL"
+      },
+      {
+        "logicalId": "EdgeWebAclLogging8385F5A7",
+        "type": "AWS::WAFv2::LoggingConfiguration"
+      },
+      {
+        "logicalId": "EdgeWebAclLogsLogGroupCC9BE8DF",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "OriginRequestFunction43C8FF17",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "OriginRequestRole94C1C04E",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "ViewerRequestFunction272348D7",
+        "type": "AWS::CloudFront::Function"
+      },
+      {
+        "logicalId": "ViewerRequestLogsLogGroupD165548C",
+        "type": "AWS::Logs::LogGroup"
+      }
+    ]
+  },
+  {
+    "name": "frontdoor-production-edge-logs-eu-west-2",
+    "account": "367273783987",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "OriginRequestLogsGroupLogGroup2B4754D4",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "OriginRequestLogsWritePolicy70FDC122",
+        "type": "AWS::IAM::ManagedPolicy"
+      }
+    ]
+  },
+  {
+    "name": "frontdoor-staging",
+    "account": "792037778504",
+    "region": "us-east-1",
+    "dependencies": [
+      "frontdoor-staging-edge-logs-eu-west-2"
+    ],
+    "resources": [
+      {
+        "logicalId": "EdgeAccessLogDelivery3D5940B7",
+        "type": "AWS::Logs::Delivery"
+      },
+      {
+        "logicalId": "EdgeAccessLogDestinationE5F9C7E7",
+        "type": "AWS::Logs::DeliveryDestination"
+      },
+      {
+        "logicalId": "EdgeAccessLogPolicyC29106C6",
+        "type": "AWS::Logs::ResourcePolicy"
+      },
+      {
+        "logicalId": "EdgeAccessLogSource9F478627",
+        "type": "AWS::Logs::DeliverySource"
+      },
+      {
+        "logicalId": "EdgeAccessLogsLogGroupC3051F4B",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "EdgeAliasIpv44B7054A7",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeAliasIpv6DD2856F2",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeCaaE2EE557A",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeCertificateE929CC3D",
+        "type": "AWS::CertificateManager::Certificate"
+      },
+      {
+        "logicalId": "EdgeDefaultOriginBucketAF5AD550",
+        "type": "AWS::S3::Bucket"
+      },
+      {
+        "logicalId": "EdgeDefaultOriginBucketPolicyBDAF48F8",
+        "type": "AWS::S3::BucketPolicy"
+      },
+      {
+        "logicalId": "EdgeDistribution0060737B",
+        "type": "AWS::CloudFront::Distribution"
+      },
+      {
+        "logicalId": "EdgeDistributionMonitoringSubscription5F8A9097",
+        "type": "AWS::CloudFront::MonitoringSubscription"
+      },
+      {
+        "logicalId": "EdgeOriginRequest16780D45",
+        "type": "AWS::CloudFront::OriginRequestPolicy"
+      },
+      {
+        "logicalId": "EdgeResponseHeadersPolicyD0EDE4A5",
+        "type": "AWS::CloudFront::ResponseHeadersPolicy"
+      },
+      {
+        "logicalId": "EdgeWebAcl44C47E06",
+        "type": "AWS::WAFv2::WebACL"
+      },
+      {
+        "logicalId": "EdgeWebAclLogging8385F5A7",
+        "type": "AWS::WAFv2::LoggingConfiguration"
+      },
+      {
+        "logicalId": "EdgeWebAclLogsLogGroupCC9BE8DF",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "OriginRequestFunction43C8FF17",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "OriginRequestRole94C1C04E",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "ViewerRequestFunction272348D7",
+        "type": "AWS::CloudFront::Function"
+      },
+      {
+        "logicalId": "ViewerRequestLogsLogGroupD165548C",
+        "type": "AWS::Logs::LogGroup"
+      }
+    ]
+  },
+  {
+    "name": "frontdoor-staging-edge-logs-eu-west-2",
+    "account": "792037778504",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "OriginRequestLogsGroupLogGroup2B4754D4",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "OriginRequestLogsWritePolicy70FDC122",
+        "type": "AWS::IAM::ManagedPolicy"
+      }
+    ]
+  }
+]

@@ -1,6 +1,7 @@
+import { cdkApp } from "@repo/infra-constructs";
 import { describe, expect, it } from "vitest";
 
-import { cdkApp, FIXTURE_STAGES } from "../test/helpers.ts";
+import { FIXTURE_STAGES } from "../test/helpers.ts";
 import { STAGES } from "./config/stages.ts";
 import { validateStages } from "./config/validate.ts";
 import { synthStage } from "./synth-stage.ts";
@@ -32,6 +33,7 @@ describe("synthStage", () => {
     const app = cdkApp({ stage: prod.name, target: "dev" });
     synthStage(app, FIXTURE_STAGES);
     expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
+      "frontdoor-dev-edge-logs-eu-west-2",
       "frontdoor-dev",
     ]);
 
