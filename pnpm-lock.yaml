@@ -242,6 +242,12 @@ importers:
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      '@smithy/hash-node':
+        specifier: 4.5.2
+        version: 4.5.2
+      '@smithy/signature-v4':
+        specifier: 5.7.3
+        version: 5.7.3
       aws-jwt-verify:
         specifier: 5.2.1
         version: 5.2.1
@@ -4275,7 +4281,7 @@ snapshots:
 
   '@smithy/hash-node@4.5.2':
     dependencies:
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.35.0
       tslib: 2.8.1
 
   '@smithy/node-http-handler@4.12.1':
@@ -4286,8 +4292,8 @@ snapshots:
 
   '@smithy/signature-v4@5.7.3':
     dependencies:
-      '@smithy/core': 3.33.3
-      '@smithy/types': 4.18.0
+      '@smithy/core': 3.35.0
+      '@smithy/types': 4.19.0
       tslib: 2.8.1
 
   '@smithy/types@4.18.0':

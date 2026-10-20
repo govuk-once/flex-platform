@@ -161,7 +161,7 @@ describe("Edge", () => {
     expect(config.CacheBehaviors).toBeUndefined();
   });
 
-  it("forwards four headers and every query string to the origin, and no cookies", () => {
+  it("forwards five headers and every query string to the origin, and no cookies", () => {
     const { template } = edgeTemplate();
 
     template.resourceCountIs("AWS::CloudFront::OriginRequestPolicy", 1);
@@ -175,6 +175,7 @@ describe("Edge", () => {
             "content-type",
             "accept",
             "x-correlation-id",
+            "x-flex-secure",
           ],
         },
         QueryStringsConfig: { QueryStringBehavior: "all" },
@@ -254,7 +255,7 @@ describe("Edge", () => {
           LambdaFunctionAssociations: [
             {
               EventType: "origin-request",
-              IncludeBody: false,
+              IncludeBody: true,
               LambdaFunctionARN: {
                 Ref: Match.stringLikeRegexp(
                   "OriginRequestFunctionCurrentVersion",

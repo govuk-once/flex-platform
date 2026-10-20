@@ -17,11 +17,23 @@ import {
   TRACE_ID,
 } from "../../test/helpers.ts";
 import { createOriginRequestHandler } from "./origin-request.ts";
+import { createRequestSigner, type SignRequest } from "./sign.ts";
 import type { VerifyToken } from "./token.ts";
 import { createTokenVerifier } from "./token.ts";
-import type { OriginRequestEvent } from "./types.ts";
+import type {
+  CloudFrontRequest,
+  CloudFrontResultResponse,
+  OriginRequestEvent,
+} from "./types.ts";
 
-const RUNTIME = { region: "eu-west-2", functionVersion: "7" };
+const HOST = "udp.development.flex-domain00.once.service.gov.uk";
+const ROUTES = new Map([["udp", HOST]]);
+
+const SIGN = createRequestSigner(() => ({
+  accessKeyId: "AKIDEXAMPLE",
+  secretAccessKey: "secret",
+  sessionToken: "session-token",
+}));
 
 const UNAUTHORIZED = {
   status: "401",
@@ -35,15 +47,57 @@ const UNAUTHORIZED = {
   bodyEncoding: "text",
 };
 
-function handlerWith(verifyToken?: VerifyToken) {
+function handlerWith(verifyToken?: VerifyToken, sign: SignRequest = SIGN) {
   const { fetcher } = fakeFetcher({
     [jwksUri(ISSUER)]: jwks([{ kid: KID, key: ISSUER_KEY }]),
   });
   return createOriginRequestHandler({
     verifyToken: verifyToken ?? createTokenVerifier(ISSUERS, fetcher),
-    ...RUNTIME,
+    routes: ROUTES,
+    sign,
   });
 }
+
+function asRequest(
+  result: CloudFrontRequest | CloudFrontResultResponse,
+): CloudFrontRequest {
+  if ("status" in result) throw new Error(`answered ${result.status}`);
+  return result;
+}
+
+function asResponse(
+  result: CloudFrontRequest | CloudFrontResultResponse,
+): CloudFrontResultResponse {
+  if (!("status" in result)) throw new Error("forwarded the request");
+  return result;
+}
+
+function withBody(
+  body: Partial<CloudFrontRequest["body"]>,
+): OriginRequestEvent {
+  const event = originRequestEvent();
+  event.Records[0].cf.request.method = "POST";
+  event.Records[0].cf.request.body = {
+    action: "read-only",
+    data: Buffer.from('{"name":"value"}').toString("base64"),
+    encoding: "base64",
+    inputTruncated: false,
+    ...body,
+  };
+  return event;
+}
+
+const INTERNAL_ERROR = {
+  status: "500",
+  statusDescription: "Internal Server Error",
+  headers: {
+    "content-type": [{ key: "Content-Type", value: "application/json" }],
+    "x-correlation-id": [{ key: "X-Correlation-Id", value: TRACE_ID }],
+    "x-rejected-by": [{ key: "X-Rejected-By", value: "lambda-edge" }],
+  },
+  body: '{"message":"Internal server error","type":"server_error"}',
+  bodyEncoding: "text",
+};
 
 function withToken(value: string): OriginRequestEvent {
   return originRequestEvent({
@@ -77,22 +131,87 @@ describe("createOriginRequestHandler", () => {
     vi.restoreAllMocks();
   });
 
-  it("answers a verified token itself, with fixed diagnostic fields", async () => {
-    const response = await handlerWith()(originRequestEvent());
+  it("forwards a verified request to its domain, signed, without the caller's token", async () => {
+    const event = originRequestEvent();
+    const received = event.Records[0].cf.request;
 
-    expect(response).toEqual({
-      status: "200",
-      statusDescription: "OK",
+    const forwarded = asRequest(await handlerWith()(event));
+
+    expect(forwarded.uri).toBe("/v1/identity");
+    expect(forwarded.querystring).toBe(received.querystring);
+    expect(forwarded.origin).toEqual({
+      custom: {
+        customHeaders: {},
+        domainName: HOST,
+        keepaliveTimeout: 5,
+        path: "",
+        port: 443,
+        protocol: "https",
+        readTimeout: 30,
+        sslProtocols: ["TLSv1.2"],
+      },
+    });
+    expect(forwarded.headers.host).toEqual([{ key: "Host", value: HOST }]);
+    expect(forwarded.headers.authorization?.[0]?.value).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/eu-west-2\/execute-api\/aws4_request, SignedHeaders=host;x-amz-date;x-amz-security-token;x-correlation-id;x-flex-secure, Signature=[0-9a-f]{64}$/,
+    );
+    expect(forwarded.headers["x-amz-security-token"]).toEqual([
+      { key: "X-Amz-Security-Token", value: "session-token" },
+    ]);
+    // Until the signed caller token is built: a fixed value, signed, holding nothing of the caller.
+    expect(forwarded.headers["x-flex-secure"]).toEqual([
+      { key: "X-Flex-Secure", value: "placeholder" },
+    ]);
+    // What CloudFront gave it stays, unsigned.
+    for (const name of [
+      "x-correlation-id",
+      "via",
+      "user-agent",
+      "x-forwarded-for",
+    ]) {
+      expect(forwarded.headers[name]).toEqual(received.headers[name]);
+    }
+    expect(loggedLines()).toEqual([
+      {
+        level: "INFO",
+        message: "telemetry",
+        telemetry: {
+          event: "origin_request_forwarded",
+          details: { traceId: TRACE_ID, requestId: REQUEST_ID, domain: "udp" },
+        },
+      },
+    ]);
+  });
+
+  it("signs the body it forwards, and leaves the body as it was", async () => {
+    const sign = vi.fn<SignRequest>(SIGN);
+    const event = withBody({});
+    const body = event.Records[0].cf.request.body;
+
+    const forwarded = asRequest(await handlerWith(undefined, sign)(event));
+
+    expect(sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        body: new Uint8Array(Buffer.from('{"name":"value"}')),
+      }),
+    );
+    expect(forwarded.body).toEqual(body);
+  });
+
+  it("answers a verified request for a domain it can't route with the app's 404", async () => {
+    const event = originRequestEvent();
+    event.Records[0].cf.request.uri = "/app/unknown/v1";
+
+    expect(asResponse(await handlerWith()(event))).toEqual({
+      status: "404",
+      statusDescription: "Not found",
       headers: {
         "content-type": [{ key: "Content-Type", value: "application/json" }],
         "x-correlation-id": [{ key: "X-Correlation-Id", value: TRACE_ID }],
+        "x-rejected-by": [{ key: "X-Rejected-By", value: "lambda-edge" }],
       },
-      body: JSON.stringify({
-        outcome: "verified",
-        traceId: TRACE_ID,
-        region: "eu-west-2",
-        functionVersion: "7",
-      }),
+      body: '{"message":"Not found","type":"client_error"}',
       bodyEncoding: "text",
     });
     expect(loggedLines()).toEqual([
@@ -100,10 +219,36 @@ describe("createOriginRequestHandler", () => {
         level: "INFO",
         message: "telemetry",
         telemetry: {
-          event: "origin_request_token_verified",
+          event: "origin_request_route_unknown",
           details: { traceId: TRACE_ID, requestId: REQUEST_ID },
         },
       },
+    ]);
+  });
+
+  it.each([
+    ["a truncated body", withBody({ inputTruncated: true }), SIGN],
+    [
+      "a signature that can't be made",
+      originRequestEvent(),
+      () => Promise.reject(new Error("no credentials")),
+    ],
+    [
+      "a signing header CloudFront would refuse",
+      originRequestEvent(),
+      () => Promise.resolve({ authorization: "AWS4\nsplit" }),
+    ],
+  ])("fails closed on %s, forwarding nothing", async (_, event, sign) => {
+    const response = await handlerWith(undefined, sign)(event);
+
+    expect(response).toEqual(INTERNAL_ERROR);
+    expect(loggedLines()).toEqual([
+      expect.objectContaining({
+        level: "ERROR",
+        telemetry: expect.objectContaining({
+          event: "origin_request_failed",
+        }) as unknown,
+      }),
     ]);
   });
 
@@ -165,22 +310,13 @@ describe("createOriginRequestHandler", () => {
     const { fetcher } = fakeFetcher({});
     const handler = createOriginRequestHandler({
       verifyToken: createTokenVerifier(ISSUERS, fetcher),
-      ...RUNTIME,
+      routes: ROUTES,
+      sign: SIGN,
     });
 
     const response = await handler(originRequestEvent());
 
-    expect(response).toEqual({
-      status: "500",
-      statusDescription: "Internal Server Error",
-      headers: {
-        "content-type": [{ key: "Content-Type", value: "application/json" }],
-        "x-correlation-id": [{ key: "X-Correlation-Id", value: TRACE_ID }],
-        "x-rejected-by": [{ key: "X-Rejected-By", value: "lambda-edge" }],
-      },
-      body: '{"message":"Internal server error","type":"server_error"}',
-      bodyEncoding: "text",
-    });
+    expect(response).toEqual(INTERNAL_ERROR);
     expect(loggedLines()).toEqual([
       {
         level: "ERROR",
@@ -204,7 +340,7 @@ describe("createOriginRequestHandler", () => {
 
     const response = await handler(originRequestEvent());
 
-    expect(response.status).toBe("500");
+    expect(asResponse(response).status).toBe("500");
     const line = log.mock.calls.map(String).join("\n");
     expect(line).not.toContain("SYNTHETIC");
     expect(line).toMatch(/origin-request\.test\.ts:\d+:\d+/);
@@ -231,7 +367,10 @@ describe("createOriginRequestHandler", () => {
     it.each([verifiedToken, ...refused])("for %#", async (value) => {
       const response = await handlerWith()(withToken(value));
 
-      const output = [response.body, ...log.mock.calls.map(String)].join("\n");
+      const output = [
+        JSON.stringify(response),
+        ...log.mock.calls.map(String),
+      ].join("\n");
       expect(output).not.toContain("SYNTHETIC");
       expect(sharedRun(output, value)).toBeUndefined();
     });
@@ -243,7 +382,10 @@ describe("createOriginRequestHandler", () => {
 
       const response = await handler(withToken(verifiedToken));
 
-      const output = [response.body, ...log.mock.calls.map(String)].join("\n");
+      const output = [
+        JSON.stringify(response),
+        ...log.mock.calls.map(String),
+      ].join("\n");
       expect(output).not.toContain("SYNTHETIC");
       expect(sharedRun(output, verifiedToken)).toBeUndefined();
     });

@@ -5,12 +5,17 @@ import path from "node:path";
 import {
   buildOriginRequestFunction,
   HANDLER,
+  type OriginRequestConfig,
+  SIGNING_REGION,
 } from "@repo/frontdoor-origin-request";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
-import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { Duration, RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
 import {
   CompositePrincipal,
+  Effect,
   ManagedPolicy,
+  PolicyDocument,
+  PolicyStatement,
   Role,
   ServicePrincipal,
 } from "aws-cdk-lib/aws-iam";
@@ -45,6 +50,10 @@ export interface OriginRequestFunctionProps {
   readonly environment: string;
   /** The user pools and app clients whose tokens the function verifies. */
   readonly issuers: readonly TrustedIssuer[];
+  /** Each domain's API host, by domain name. A domain with no entry is a 404. */
+  readonly routes: OriginRequestConfig["routes"];
+  /** The accounts whose APIs the function may call: the environment's domain accounts. */
+  readonly apiAccounts: readonly string[];
 }
 
 /**
@@ -75,7 +84,16 @@ export class OriginRequestFunction extends Construct {
     }
 
     const logGroupName = originRequestLogGroupName(props.environment);
-    // Its only permissions: the policy the log group's stack provides, attached by name.
+    // Its permissions: the policy the log group's stack provides, attached by name, and calling
+    // the domain APIs, whose IDs are generated, so the grant is by account.
+    const apis = props.apiAccounts.map((account) =>
+      stack.formatArn({
+        service: "execute-api",
+        region: SIGNING_REGION,
+        account,
+        resource: "*",
+      }),
+    );
     this.role = new Role(this, "Role", {
       roleName: edgeRoleName(props.environment),
       assumedBy: new CompositePrincipal(
@@ -92,14 +110,38 @@ export class OriginRequestFunction extends Construct {
           ),
         ),
       ],
+      ...(apis.length === 0
+        ? {}
+        : {
+            inlinePolicies: {
+              InvokeDomainApis: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ["execute-api:Invoke"],
+                    resources: apis,
+                  }),
+                ],
+              }),
+            },
+          }),
     });
+    for (const api of apis) {
+      Validations.of(this.role).acknowledge({
+        id: `AwsSolutions-IAM5[Resource::${api}]`,
+        reason:
+          "API Gateway generates each domain API's ID, so config can name the account but not the API. Each API's resource policy names this role.",
+      });
+    }
 
     this.function = new LambdaFunction(this, "Function", {
       functionName: originRequestFunctionName(props.environment),
       runtime: Runtime.NODEJS_24_X,
       architecture: Architecture.X86_64,
       handler: HANDLER,
-      code: Code.fromAsset(bundleDirectory(props.issuers)),
+      code: Code.fromAsset(
+        bundleDirectory({ issuers: props.issuers, routes: props.routes }),
+      ),
       memorySize: ORIGIN_REQUEST_MEMORY_MB,
       timeout: ORIGIN_REQUEST_TIMEOUT,
       role: this.role,
@@ -114,11 +156,11 @@ export class OriginRequestFunction extends Construct {
 
 // The bundle is per environment, so it's built at synth, into a directory of its own for CDK to
 // stage. 45 KB is too large for inline code.
-function bundleDirectory(issuers: readonly TrustedIssuer[]): string {
+function bundleDirectory(config: OriginRequestConfig): string {
   const directory = mkdtempSync(path.join(tmpdir(), "origin-request-"));
   writeFileSync(
     path.join(directory, "index.js"),
-    buildOriginRequestFunction({ issuers }),
+    buildOriginRequestFunction(config),
   );
   return directory;
 }
