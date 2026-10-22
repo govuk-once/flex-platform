@@ -4,6 +4,7 @@ import path from "node:path";
 import { checkDerivation } from "./check-derivation.ts";
 import { checkGateway } from "./check-gateway.ts";
 import { checkVersions } from "./compare-schemas.ts";
+import { bundleClient, emitClient } from "./emit-client.ts";
 import { emitContract } from "./emit-contract.ts";
 import { bundleEntry, emitEntry } from "./emit-entry.ts";
 import { compileValidators, writeValidators } from "./emit-validators.ts";
@@ -56,7 +57,8 @@ export async function generate(gatewayDir: string): Promise<void> {
   await writeValidators(compiled, path.join(runtimeDir, VALIDATORS_DIR));
   await emitEntry(config.id, runtimeDir);
   await bundleEntry(runtimeDir);
-  await emitContract(config.id, schemas, path.join(outDir, CLIENT_DIR), {
+  const clientDir = path.join(outDir, CLIENT_DIR);
+  await emitContract(config.id, schemas, clientDir, {
     descriptions: Object.fromEntries(
       Object.entries(config.operations).map(([name, operation]) => [
         name,
@@ -64,4 +66,6 @@ export async function generate(gatewayDir: string): Promise<void> {
       ]),
     ),
   });
+  await emitClient(config.id, Object.keys(schemas.operations), clientDir);
+  await bundleClient(config.id, latest.version, clientDir);
 }

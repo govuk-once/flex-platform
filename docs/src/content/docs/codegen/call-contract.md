@@ -6,11 +6,14 @@ description: The generated TypeScript types a caller compiles against.
 `.gen/client/rpc.ts` describes what a caller sends and receives. It contains types only. Its one
 import is a type import of `@repo/gateway-core` for the envelope shapes, which is removed when it
 compiles. That package depends only on `@repo/utils`, which depends on no other workspace
-package, so a consumer needs neither the runtime nor the generator.
+package, so a consumer needs neither the runtime nor the generator. The
+[client package](/flex-platform/codegen/overview/#the-client-package) bundles the contract's
+declarations with the ones it imports, so a domain installs the package, and the gateway client it
+names as a peer, and nothing from this workspace.
 
-Each gateway will have its own [client library](/flex-platform/domains/overview/#calling-gateways),
-built from this file. It wraps the contract and invokes the gateway, so a domain calls typed
-operations instead of building envelopes. The client libraries are planned.
+The [gateway client](/flex-platform/domains/overview/#calling-gateways) is typed by the contract's
+`Operations`, so a domain calls typed operations instead of building envelopes. The client package
+exports the contract's types beside the function that creates the client.
 
 The operation's input shape comes from its JSON Schema. The driver decides how its fields reach
 the upstream. For openapi-rest, see
@@ -22,7 +25,7 @@ explicit return type makes a missing case a type error under the workspace's str
 TypeScript does not require every switch statement to be exhaustive by default.
 
 ```ts
-import type { GetIdentityExchangeResponse } from "@govuk-once/flex-gateway-udp/client";
+import type { GetIdentityExchangeResponse } from "@govuk-once/flex-gateway-udp-client";
 
 export function serviceId(response: GetIdentityExchangeResponse): string {
   if (!response.ok) throw new Error(response.error.code);
@@ -39,7 +42,7 @@ export function serviceId(response: GetIdentityExchangeResponse): string {
 |---|---|
 | One type per shared definition | Each key of the schemas' `defs`, under that name. |
 | `<Operation>Input`, `<Operation>Result`, `<Operation>Response` | Per operation, in PascalCase: its input, the union of its outcomes, and its response. |
-| `Operations` | Each operation name mapped to its input and result. |
+| `Operations` | Each operation name mapped to its input, result and response. The gateway client is typed by it. |
 | `OperationName`, `OperationInput`, `OperationResult`, `OperationResponse` | Generic names over `Operations`. |
 | `GatewayRequest` | One call as the handler receives it: the operation, its input and the envelope's `secure` values. |
 | `ResponseMeta` | What the gateway reports alongside a result: every declared name, each optional. |

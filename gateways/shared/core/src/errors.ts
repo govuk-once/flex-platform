@@ -5,6 +5,8 @@ export interface ErrorRuling {
   readonly signal: SignalRuling;
 }
 
+// Written without `satisfies`, so its declaration can be written from this module alone, as the
+// published gateway client's bundled declarations are. errors.test.ts checks every ruling.
 export const ERROR_CODES = {
   INVALID_INPUT: { signal: "none" },
   OPERATION_NOT_FOUND: { signal: "none" },
@@ -19,6 +21,6 @@ export const ERROR_CODES = {
   UPSTREAM_UNAVAILABLE: { signal: "none" },
   RATE_LIMITED: { signal: "none" },
   INTERNAL: { signal: "unhandled" },
-} as const satisfies Record<string, ErrorRuling>;
+} as const;
 
 export type ErrorCode = keyof typeof ERROR_CODES;

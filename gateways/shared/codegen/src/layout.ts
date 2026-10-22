@@ -13,6 +13,8 @@
 //     bundle.mjs        entry.js and everything it imports, bundled for deployment
 //   client/
 //     rpc.ts            the call contract, as types
+//     index.ts          the contract and a client typed by it, which the package is built from
+//     package/          the package a domain installs: package.json, index.js and index.d.ts
 
 export const CONFIG_FILE = "gateway.config.ts";
 
@@ -32,6 +34,8 @@ export const VALIDATORS_MODULE = "index.js";
 export const ENTRY_MODULE = "entry.js";
 export const BUNDLE_MODULE = "bundle.mjs";
 export const CONTRACT_MODULE = "rpc.ts";
+export const CLIENT_ENTRY_MODULE = "index.ts";
+export const PACKAGE_DIR = "package";
 
 // The gateway configuration, as the entry point reaches it from inside the runtime directory:
 // up through it and the generated directory.
