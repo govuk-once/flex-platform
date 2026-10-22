@@ -29,7 +29,8 @@ change you are making.
 - Each package owns its configuration and extends the shared tooling. Only add a root-level tool
   configuration when the tool requires one, with a comment saying why.
 - Every package extends the one TypeScript base, `base.json`: strict, no emit. The documentation
-  site is the exception, and extends Astro's strict base. Packages export their `.ts` sources
+  site is the exception: it extends Astro's strict base, and turns on `noUncheckedIndexedAccess`
+  and `exactOptionalPropertyTypes` as `base.json` does. Packages export their `.ts` sources
   directly, and Vitest, esbuild and tsx use them as they are.
 - ESLint provides `base`, `driver`, `service`, `cloudfrontFunction`, `infraConstructs` and
   `sectionInfra` presets. Drivers own
