@@ -41,6 +41,10 @@ Library packages have no separate compilation step. Codegen emits validators and
 then bundles the generated entry point with esbuild, so a gateway that cannot be bundled fails
 generation. The documentation site has its own Astro build.
 
+The gateway client is the exception, because domains install it: its `build` script bundles it
+into `dist/`, which is what pnpm publishes. In the workspace it resolves to its sources, like every
+other package, and no task waits on the build.
+
 Workspace packages export their `.ts` sources and resolve to each other's sources. This means
 typecheck and tests see a dependency change immediately, and no task waits on another package.
 Vitest, esbuild and tsx use the sources as they are.

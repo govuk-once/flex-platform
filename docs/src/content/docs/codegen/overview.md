@@ -28,14 +28,16 @@ the gateway runs. `client/` is what a service that calls the gateway imports.
 | `.gen/runtime/validators/` | Standalone Ajv validators: one for each operation's input and one for each declared outcome. Self-contained JavaScript with no package imports. |
 | `.gen/runtime/bundle.mjs` | `entry.js` and everything it imports, bundled by esbuild as ESM for Node 24. Only Node's builtins are left for the platform to resolve. This is the deployed artifact, and its handler is `bundle.handler`. |
 | `.gen/client/rpc.ts` | The call contract as types: each operation's input and the union of its outcomes. See [The call contract](/flex-platform/codegen/call-contract/). |
+| `.gen/client/index.ts` | The contract, and a function named for the gateway, such as `createUdpClient`, that creates a [gateway client](/flex-platform/domains/overview/#calling-gateways) typed by it. The client package is built from it. |
+| `.gen/client/package/` | The [client package](#the-client-package) a domain installs: `package.json`, `index.js` and `index.d.ts`. |
 
 No package includes `.gen/` in its TypeScript project, so neither half is typechecked where it is
 written. Nothing outside `.gen/` imports the runtime half. The validators are read by the
 generated entry point, which is also in `.gen/`.
 
-`client/rpc.ts` is different. It exists so that the service calling the gateway can import it and
-typecheck it with its own sources. A codegen test also compiles a generated contract, so the
-generated output is checked in at least one place.
+`client/` is different. A domain installs its package and typechecks against it with its own
+sources. Codegen tests compile a generated contract, and typecheck a domain against the fixture
+gateway's package, so the generated output is checked in at least one place.
 
 ## Order of a run
 
@@ -49,8 +51,8 @@ Codegen checks a gateway before it writes anything:
    driver's `checkSchemas`. See [What codegen checks](/flex-platform/codegen/checks/).
 5. Where the driver can derive without the network, the latest version is checked to be what it
    derives. See [What the driver derives](/flex-platform/codegen/checks/#what-the-driver-derives).
-6. Then `.gen/` is deleted and written again with the validators, entry point, bundle and
-   contract.
+6. Then `.gen/` is deleted and written again with the validators, entry point, bundle, contract
+   and client package.
 
 A gateway these checks reject keeps its existing output. After that point, writing and bundling
 can still fail, and so can the contract, which refuses a schema it cannot express as types, such
@@ -70,6 +72,47 @@ as two names that would collide. A failure there fails the command and leaves an
 - **The bundle is built during generation, not at deployment.** A gateway that cannot be bundled
   fails at a point where the cause is easy to find. The same gateway always bundles to the same
   bytes.
+
+## The client package
+
+`.gen/client/package/` is the gateway's client as a package a domain installs, named
+`@govuk-once/flex-gateway-<id>-client`. It exports the contract's types and one function, named
+for the gateway, such as `createUdpClient` for `udp`, so a domain that imports several gateways'
+packages has no two exports of the same name. The function takes nothing. It creates a
+[gateway client](/flex-platform/domains/overview/#calling-gateways) for the gateway's function,
+which the gateway client names from the id and the domain's environment, with a function for each
+operation the latest schema version holds. The package lists their names, because the contract's
+types are gone at runtime.
+
+An id that cannot name the function fails generation, checked by `assertGatewayId` in
+`@repo/gateway-core`: one that is not 1 to 32 lowercase letters, digits and hyphens, starting
+with a letter and not ending with a hyphen. So does an operation named `then`. A client with a
+`then` function would be taken for a promise, and returning it from an async function would call
+that operation.
+
+rolldown builds `index.js` and `index.d.ts` in one pass from `client/index.ts`, so the two agree
+on what is external:
+
+- the gateway client, `@govuk-once/flex-gateway-client`, is left external, and the package names
+  it as its one peer dependency. So a domain calling several gateways has one copy of the client,
+  and one `GatewayInvocationError`.
+- the shared types the contract names are bundled in from `@repo/gateway-core`, which is not
+  published.
+
+Codegen resolves both from its own dependencies, so a gateway declares neither.
+
+The declarations are written from each module on its own, as TypeScript's `isolatedDeclarations`
+does, because the compiler emits none for a file it reaches through `node_modules`, which is how
+the workspace links its packages. So every export of `@repo/gateway-core` states its type. A
+module that does not fails generation, naming the file and the line.
+
+The package's version is the gateway client's major, then the number of the gateway's latest
+schema version, then `0`: `0.1.0` for a gateway at `0001.json` and client `0.1.0`, and `0.10.0`
+at `0010.json`. Writing a schema version raises it with nothing else to change, and a client at
+`1.x` takes every gateway's package to `1.<n>.0` on its next generation. Its peer range is the
+client it was generated with and every later release of that major, such as `>=0.1.0 <1.0.0`,
+spelled out because under `1.0.0` a caret admits only the same minor. Publishing either package
+is not set up yet.
 
 ## Validators
 

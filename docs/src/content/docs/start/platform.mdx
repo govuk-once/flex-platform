@@ -36,7 +36,7 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 | Egress           | What it is                                                    | Status                                     |
 | ---------------- | ------------------------------------------------------------- | ------------------------------------------ |
 | Gateways         | Configuration, schemas, runtime, driver and code generation   | <Badge text="Built" variant="success" />   |
-| Client libraries | Typed libraries a domain uses to call gateways                | <Badge text="Planned" variant="caution" /> |
+| Gateway client   | The typed client a domain uses to call gateways               | <Badge text="Built" variant="success" />   |
 | Network          | The VPC, subnet placement, VPC endpoints and NAT              | <Badge text="Built" variant="success" />   |
 | DNS filtering    | Route 53 Resolver DNS Firewall: only allowlisted names resolve | <Badge text="Built" variant="success" />   |
 | Egress filtering | AWS Network Firewall on the private placement                 | <Badge text="Planned" variant="caution" /> |
@@ -73,8 +73,8 @@ This is the intended flow once the planned sections are in place.
 3. Lambda@Edge authenticates the request and chooses the domain from the segment after `/app`. It
    signs the request with SigV4 and forwards it to that domain's API Gateway.
 4. API Gateway passes the request to the domain's Lambda function.
-5. The domain's code calls each upstream it needs through a gateway client library. The library
-   invokes that upstream's gateway Lambda with an envelope.
+5. The domain's code calls each upstream it needs through the gateway client, which invokes that
+   upstream's gateway Lambda with an envelope.
 6. The gateway validates the input. It calls the upstream through a VPC endpoint, or through NAT
    and the firewall. It then validates the outcome and returns it.
 7. The domain's code responds. The response goes back through API Gateway and CloudFront.

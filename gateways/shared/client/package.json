@@ -1,0 +1,36 @@
+{
+  "name": "@govuk-once/flex-gateway-client",
+  "version": "0.1.0",
+  "description": "Calls Flex gateways, typed by each gateway's call contract.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./caller": "./src/caller.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "directory": "dist",
+    "linkDirectory": false
+  },
+  "scripts": {
+    "build": "rolldown -c",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@aws-sdk/client-lambda": "^3.1150.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-lambda": "3.1150.0",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/gateway-core": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/utils": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "eslint": "10.12.0",
+    "rolldown": "1.2.13",
+    "rolldown-plugin-dts": "0.28.8",
+    "vitest": "5.0.4"
+  }
+}

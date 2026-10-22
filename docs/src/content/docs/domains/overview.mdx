@@ -42,20 +42,105 @@ party.
 
 ## Calling gateways
 
-A domain calls a gateway through a gateway client library. This is a typed library, generated from
-the gateway's [call contract](/flex-platform/codegen/call-contract/), that domain developers
-install. The library invokes the gateway's Lambda function directly through the Lambda API, not
-over HTTP.
+A domain calls a gateway through the gateway client, `@govuk-once/flex-gateway-client`. It
+invokes the gateway's Lambda function directly through the Lambda API, not over HTTP. Codegen
+builds each gateway a [client package](/flex-platform/codegen/overview/#the-client-package) holding
+the gateway's [call contract](/flex-platform/codegen/call-contract/) and one function, named for
+the gateway, that creates a client typed by it. A domain installs the gateway client, the package
+of each gateway it calls, and `@aws-sdk/client-lambda`, the gateway client's one peer dependency.
 
-As a result:
+```ts
+import { GatewayInvocationError } from "@govuk-once/flex-gateway-client";
+import { createUdpClient } from "@govuk-once/flex-gateway-udp-client";
 
-- a gateway's handler takes an [envelope](/flex-platform/gateways/overview/#a-request) that names
-  the operation, not an HTTP event. It answers with an outcome name, not a status code.
-- codegen writes the contract to `.gen/client/`, separate from what the gateway runs in
-  `.gen/runtime/`, because the two are deployed separately.
-- an invocation client must send each call only once, with the SDK's retries turned off
-  (`maxAttempts: 1`). A retried invoke could repeat an upstream write. Deciding whether to retry
-  needs to know the operation and the deadline.
+const udp = createUdpClient();
+
+const response = await udp.getIdentity({ serviceName, identifier });
+```
+
+The client takes no settings, so a domain is never given a function name or an ARN. It invokes the
+function `gateway-<environment>-<id>`, through its one alias, `live`, in the domain's own account
+and region. It takes the environment from the `FLEX_ENVIRONMENT` variable, which the platform sets
+on every domain's function, and refuses to be created without it. The name follows the
+[template every resource name follows](/flex-platform/infrastructure/overview/#rules-for-stacks-and-constructs),
+so a domain's permissions can name its own environment's gateways and no other's. The Lambda
+client takes the region and credentials from the function it runs in. Gateways and domains share
+an account in the planned hosting model, and the planned gateway stack deploys each function under
+this name. In a test, set `FLEX_ENVIRONMENT`, and the SDK's own `AWS_ENDPOINT_URL_LAMBDA` variable
+points the client at a stand-in for Lambda's API.
+
+The client has a function for each of the gateway's operations, named for it and taking its input,
+and nothing else. An editor shows each with the description the configuration gives its
+operation. A call sends one [envelope](/flex-platform/gateways/overview/#a-request) and returns the
+gateway's response, typed by the operation: an error envelope or one of its outcomes. As a result:
+
+- a gateway's handler takes an envelope that names the operation, not an HTTP event. It answers
+  with an outcome name, not a status code.
+- codegen writes the contract and the client package to `.gen/client/`, separate from what the
+  gateway runs in `.gen/runtime/`, because the two are deployed separately.
+- the client sends each call only once, with the SDK's retries turned off (`maxAttempts: 1`). A
+  retried invoke could repeat an upstream write. Deciding whether to retry needs to know the
+  operation and the deadline.
+
+A call's second argument, its options, can carry a `signal` that stops the client waiting.
+
+### The caller context
+
+What a call sends on its caller's behalf comes from the caller context, not from the call. It is
+set once for the whole of a domain's invocation, by running the handler inside `withCallerContext`
+from `@govuk-once/flex-gateway-client/caller`. Every call made from the handler, however many
+`await`s deep, then carries it. The planned domain SDK will do this for every handler, so a domain
+developer does not. The entry is kept apart from the client's main one so that an editor does not
+offer it, and nothing exports a way to read the context back.
+
+```ts
+import { withCallerContext } from "@govuk-once/flex-gateway-client/caller";
+
+withCallerContext({ deadline, secure }, () => handler(event));
+```
+
+- `deadline` is when the caller stops waiting, in epoch milliseconds. The client abandons a call
+  still waiting then, and does not send one made after it. The caller keeps its own margin for
+  answering after a call. The deadline is not yet sent to the gateway, which works out its own
+  from its invocation.
+- `secure` holds the values the gateway compares with an operation's secure bindings. Without it
+  the client sends no values, which only an operation with no secure bindings accepts. The gateway
+  does not verify the signature yet.
+
+A call made outside a caller context has no deadline, and the gateway's own timeout bounds it.
+
+The SDK takes the gateway client as a peer dependency, as each gateway's package does, so a domain
+has one copy of it, and one caller context.
+
+### When the gateway does not answer
+
+The client throws a `GatewayInvocationError` instead of returning a response. Its `reason` is one
+of:
+
+| Reason | When |
+|---|---|
+| `invoke_failed` | Lambda did not take the call: it was throttled, not permitted, or named no function, or Lambda was unreachable. |
+| `function_error` | The function failed instead of answering, as it does when it times out or fails to start. |
+| `invalid_response` | The answer is not a response envelope. |
+| `aborted` | The call's `signal` stopped the wait. The call may still have completed, and it is not sent again. |
+| `timed_out` | The caller's deadline passed, before the gateway answered or before the call was sent. One that was sent may still have completed, and it is not sent again. |
+
+The message is fixed text, with the SDK error's name for `invoke_failed` and Lambda's
+`FunctionError` value for `function_error`, so it is safe to log. It never includes the service's
+message or the function's error payload, which can hold request data.
+
+### What the client checks
+
+The client checks the response envelope's shape. It reads only the fields an envelope has, and
+only those the answer holds itself, never inherited ones. It refuses an error code the platform
+does not define. It leaves out a `meta` value that is not a scalar, because every part of `meta`
+is optional to a caller.
+
+The client does not check the outcome's data, or that the outcome is one the operation declares.
+That is the gateway's job, done against its schemas before it answers. A gateway's contract only
+changes [compatibly](/flex-platform/gateways/compatibility/), so a domain compiled against an
+earlier version still understands every answer. What an upstream changes without warning, the
+gateway refuses as `UPSTREAM_CONTRACT_VIOLATION`.
 
 ## Domain libraries
 
