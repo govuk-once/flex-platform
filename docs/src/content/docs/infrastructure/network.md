@@ -85,9 +85,10 @@ outside the account, and any action but its own:
 | `secretsmanager` | `secretsmanager:GetSecretValue` |
 | `sts` | `sts:AssumeRole` |
 
-The `lambda` endpoint's pattern comes from `gatewayFunctionPattern` in `gateways/infra`, which
-names gateways' functions. Any function in the account with that prefix can be invoked by every
-domain in the environment, so the gateways section gives it to gateways alone.
+The `lambda` endpoint's pattern comes from `gatewayFunctionPattern` in `gateways/infra`. It is
+built from `gatewayFunctionPrefix` in `@repo/gateway-core`, which also names each gateway's
+function and the function its client invokes. Any function in the account with that prefix can be
+invoked by every domain in the environment, so the gateways section gives it to gateways alone.
 
 An endpoint costs the same whether it's used or not, so one is added when something calls its API.
 Tracing needs none: Lambda's X-Ray daemon sends from outside the VPC, so neither the X-Ray SDK nor

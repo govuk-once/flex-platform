@@ -426,6 +426,10 @@ importers:
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))
 
   gateways/infra:
+    dependencies:
+      '@repo/gateway-core':
+        specifier: workspace:*
+        version: link:../shared/core
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -546,6 +550,10 @@ importers:
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))
 
   gateways/shared/core:
+    dependencies:
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../../../packages/utils
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -611,6 +619,9 @@ importers:
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../../frontdoor/shared
+      '@repo/gateway-core':
+        specifier: workspace:*
+        version: link:../../gateways/shared/core
       '@repo/gateway-infra':
         specifier: workspace:*
         version: link:../../gateways/infra

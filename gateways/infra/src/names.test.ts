@@ -1,15 +1,19 @@
+import { gatewayFunctionName } from "@repo/gateway-core";
 import { describe, expect, it } from "vitest";
 
-import { gatewayFunctionName, gatewayFunctionPattern } from "./names.ts";
+import { gatewayFunctionPattern } from "./names.ts";
 
 describe("gateway names", () => {
-  it("names a gateway's function from its environment and id", () => {
-    expect(gatewayFunctionName("production", "udp")).toBe(
-      "gateway-production-udp",
+  it("matches every gateway's function in the environment", () => {
+    expect(gatewayFunctionPattern("production")).toBe("gateway-production-*");
+    expect(gatewayFunctionName("production", "udp")).toMatch(
+      /^gateway-production-/,
     );
   });
 
-  it("matches every gateway's function in the environment", () => {
-    expect(gatewayFunctionPattern("production")).toBe("gateway-production-*");
+  it("refuses an environment that cannot name a function", () => {
+    expect(() => gatewayFunctionPattern("Production")).toThrow(
+      /The environment .* must be/,
+    );
   });
 });

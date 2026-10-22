@@ -1,5 +1,5 @@
 import { domainFunctionName, FUNCTION_NAME_LENGTH } from "@repo/domain-infra";
-import { gatewayFunctionName } from "@repo/gateway-infra";
+import { gatewayFunctionName } from "@repo/gateway-core";
 import { dnsAllowlist, networkZones } from "@repo/infra-constructs";
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
@@ -132,11 +132,12 @@ function checkGateways(
     gateways.map(({ id }) => id),
   );
   for (const { id, hostnames } of gateways) {
-    const functionName = gatewayFunctionName(environment.name, id);
-    if (functionName.length > FUNCTION_NAME_LENGTH) {
-      throw new Error(
-        `${at} ${id} gateway: its function name ${functionName} is longer than Lambda's ${FUNCTION_NAME_LENGTH} characters`,
-      );
+    try {
+      gatewayFunctionName(environment.name, id);
+    } catch (error) {
+      throw new Error(`${at} ${id} gateway: ${(error as Error).message}`, {
+        cause: error,
+      });
     }
     if (hostnames.length === 0) {
       throw new Error(

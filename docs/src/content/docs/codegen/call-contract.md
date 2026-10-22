@@ -5,8 +5,8 @@ description: The generated TypeScript types a caller compiles against.
 
 `.gen/client/rpc.ts` describes what a caller sends and receives. It contains types only. Its one
 import is a type import of `@repo/gateway-core` for the envelope shapes, which is removed when it
-compiles. That package declares no dependencies of its own, so a consumer needs neither the
-runtime nor the generator.
+compiles. That package depends only on `@repo/utils`, which depends on no other workspace
+package, so a consumer needs neither the runtime nor the generator.
 
 Each gateway will have its own [client library](/flex-platform/domains/overview/#calling-gateways),
 built from this file. It wraps the contract and invokes the gateway, so a domain calls typed
