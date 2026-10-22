@@ -246,7 +246,7 @@ describe("Edge", () => {
     });
   });
 
-  it("runs the given Lambda@Edge version at origin request, without the body", () => {
+  it("runs the given Lambda@Edge version at origin request, with the body", () => {
     const { template } = edgeTemplate();
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
