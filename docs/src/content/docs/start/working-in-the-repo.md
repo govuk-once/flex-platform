@@ -18,7 +18,7 @@ pnpm test             # vitest run, all packages
 Run one package's script with `pnpm --filter <name> <script>`. For example:
 
 ```bash
-pnpm --filter @govuk-once/flex-gateway-udp codegen
+pnpm --filter @repo/gateway-service-udp codegen
 ```
 
 The CDK app synthesizes one stage at a time. See

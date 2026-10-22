@@ -26,7 +26,7 @@ package builds the site with Astro.
 
 | Package | Directory | Holds |
 |---|---|---|
-| `@govuk-once/flex-gateway-udp` | `gateways/services/udp` | The User Data Platform gateway: its configuration and versioned schemas. |
+| `@repo/gateway-service-udp` | `gateways/services/udp` | The User Data Platform gateway: its configuration and versioned schemas. |
 
 ## Frontdoor
 
