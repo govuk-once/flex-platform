@@ -77,7 +77,7 @@ Each gateway call has its own result. A sequence of calls is not a transaction: 
 is not undone if a later call fails. Decide what a partial result means for the feature before
 combining writes behind one app request.
 
-A timeout does not establish whether an upstream completed a write. Invocation clients must
-disable automatic SDK retries, as described under
+A timeout does not establish whether an upstream completed a write. The gateway client sends each
+call once, as described under
 [Calling gateways](/flex-platform/domains/overview/#calling-gateways). Handling partial success
 and deciding whether an operation can safely be repeated belong in the feature's design.
