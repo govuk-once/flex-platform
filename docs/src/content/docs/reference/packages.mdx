@@ -1,0 +1,74 @@
+---
+title: Packages
+description: Every workspace package, where it lives, where its docs are and how the packages depend on each other.
+---
+
+import DependencyDiagram from "../../../components/DependencyDiagram.astro";
+import PackageTables from "../../../components/PackageTables.astro";
+
+Workspace libraries export their TypeScript sources directly and resolve to each other's sources.
+They need no separate library build. Codegen emits and bundles gateway artifacts, and the docs
+package builds the site with Astro.
+
+## How they depend on each other
+
+The site draws this diagram from the packages' manifests each time it builds.
+
+<DependencyDiagram />
+
+<PackageTables>
+
+## Gateway libraries
+
+| Package | Directory | Docs |
+|---|---|---|
+| `@repo/gateway-types` | `gateways/shared/types` | [Responses and errors](/flex-platform/gateways/responses/) |
+| `@repo/gateway-config` | `gateways/shared/config` | [Configuration](/flex-platform/gateways/configuration/) |
+| `@repo/gateway-runtime` | `gateways/shared/runtime` | [A request](/flex-platform/gateways/overview/#a-request) |
+| `@repo/gateway-codegen` | `gateways/shared/codegen` | [Code generation](/flex-platform/codegen/overview/) |
+
+## Drivers
+
+| Package | Directory | Docs |
+|---|---|---|
+| `@repo/gateway-driver-<name>` | `gateways/drivers/<name>` | [The driver contract](/flex-platform/drivers/contract/) |
+
+## Gateways
+
+| Package | Directory | Docs |
+|---|---|---|
+| `@repo/gateway-service-<id>` | `gateways/services/<id>` | [Creating a gateway](/flex-platform/gateways/creating-a-gateway/) |
+
+## Frontdoor
+
+| Package | Directory | Docs |
+|---|---|---|
+| `@repo/frontdoor-viewer-request` | `frontdoor/viewer-request` | [CloudFront Function](/flex-platform/frontdoor/cloudfront-function/) |
+| `@repo/frontdoor-origin-request` | `frontdoor/origin-request` | [Lambda@Edge](/flex-platform/frontdoor/lambda-edge/) |
+| `@repo/frontdoor-shared` | `frontdoor/shared` | [CloudFront Function](/flex-platform/frontdoor/cloudfront-function/) |
+| `@repo/frontdoor-infra` | `frontdoor/infra` | [The distribution](/flex-platform/frontdoor/overview/#the-distribution) |
+
+## Infrastructure
+
+| Package | Directory | Docs |
+|---|---|---|
+| `@repo/infra-app` | `infra/app` | [Infrastructure](/flex-platform/infrastructure/overview/) |
+| `@repo/infra-constructs` | `infra/constructs` | [Checks](/flex-platform/infrastructure/overview/#checks) |
+
+## Shared tooling
+
+| Package | Directory | Docs |
+|---|---|---|
+| `@repo/tsconfig` | `packages/tsconfig` | [Conventions](/flex-platform/start/conventions/#code) |
+| `@repo/eslint-config` | `packages/eslint-config` | [Conventions](/flex-platform/start/conventions/#code) |
+| `@repo/vitest-config` | `packages/vitest-config` | [Tests](/flex-platform/start/conventions/#tests) |
+| `@repo/utils` | `packages/utils` | [Conventions](/flex-platform/start/conventions/#code) |
+| `@repo/docs` | `docs` | [The documentation site](/flex-platform/start/working-in-the-repo/#the-documentation-site) |
+
+</PackageTables>
+
+## Conventions
+
+Where code belongs, and how `@repo/utils` is exported and used for sorting, are in
+[Conventions](/flex-platform/start/conventions/). Which package may depend on which is
+[design constraint 10](/flex-platform/reference/design-constraints/).

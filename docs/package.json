@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.6",
+    "@dagrejs/dagre": "3.1.1",
+    "@repo/utils": "workspace:*",
     "astro": "7.4.0",
     "sharp": "0.35.5",
     "starlight-links-validator": "0.27.0"
