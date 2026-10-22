@@ -23,8 +23,8 @@ function typeOf(schema: JSONSchema, ctx: TypeContext, context: string): string {
 // The call contract, as types only. A caller names an operation, builds its input and reads the
 // response. The emitted module carries one import, a type import of "@repo/gateway-core" for the
 // envelope and secure-value shapes, erased when the file compiles, so nothing here is imported at
-// run time at all. That package declares no dependencies of its own, so naming an envelope costs
-// a consumer neither the runtime nor the generator.
+// run time at all. That package depends only on @repo/utils, so naming an envelope costs a
+// consumer neither the runtime nor the generator.
 //
 // It is a workspace package, so the import resolves for a consumer in this repository and nowhere
 // else, which every consumer is. Carrying the contract outside would mean publishing that package

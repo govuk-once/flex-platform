@@ -423,7 +423,9 @@ describe("validateStages", () => {
             ],
           },
         ]),
-      ).toThrow("is longer than Lambda's 64 characters");
+      ).toThrow(
+        `platform-dev/${environment} main domain account ${id} gateway: The function name gateway-${environment}-${id} is longer than Lambda's 64 characters.`,
+      );
     });
 
     it("refuses a gateway that names no hostname", () => {
