@@ -1,1 +1,1 @@
-export { gatewayFunctionName, gatewayFunctionPattern } from "./names.ts";
+export { gatewayFunctionPattern } from "./names.ts";
