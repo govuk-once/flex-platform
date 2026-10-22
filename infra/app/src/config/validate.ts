@@ -1,6 +1,12 @@
+import { accessOf, validateDomain, validateNetwork } from "@repo/domains-infra";
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
-import type { EnvironmentConfig, StageConfig, ZoneConfig } from "./types.ts";
+import type {
+  EnvironmentConfig,
+  HostedDomainConfig,
+  StageConfig,
+  ZoneConfig,
+} from "./types.ts";
 
 const ACCOUNT_ID = /^\d{12}$/;
 
@@ -27,11 +33,13 @@ export function validateStages(stages: readonly StageConfig[]): void {
     "stage",
     stages.map((stage) => stage.name),
   );
+
   for (const stage of stages) {
     checkNames(
       `${stage.name} environment`,
       stage.environments.map((environment) => environment.name),
     );
+
     for (const environment of stage.environments) {
       checkNames(
         `${stage.name}/${environment.name} domain account`,
@@ -40,11 +48,14 @@ export function validateStages(stages: readonly StageConfig[]): void {
       checkEnvironment(`${stage.name}/${environment.name}`, environment);
     }
   }
+
   checkAccounts(accountUses(stages));
+  checkDomainsDeclaredOnce(stages);
 }
 
 function checkEnvironment(at: string, environment: EnvironmentConfig): void {
   checkZone(`${at} frontdoor zone`, environment.frontdoor.zone, (name) => name);
+
   for (const domainAccount of environment.domainAccounts) {
     checkZone(
       `${at} ${domainAccount.name} domain account zone`,
@@ -52,18 +63,84 @@ function checkEnvironment(at: string, environment: EnvironmentConfig): void {
       (name) => `*.${name}`,
     );
   }
+
   const { issuers } = environment.frontdoor;
+
   if (issuers.length === 0) {
     throw new Error(`${at}: the frontdoor needs at least one trusted issuer`);
   }
+
   for (const { issuer, clientIds } of issuers) {
     if (!issuer.startsWith("https://")) {
       throw new Error(
         `${at}: the issuer ${JSON.stringify(issuer)} must be an https URL`,
       );
     }
+
     if (clientIds.length === 0) {
       throw new Error(`${at}: the issuer ${issuer} names no app client`);
+    }
+  }
+
+  for (const domainAccount of environment.domainAccounts) {
+    validateNetwork(domainAccount.network, {
+      at: `${at} ${domainAccount.name} domain account network`,
+    });
+  }
+
+  checkDomains(at, environment);
+}
+
+// Each domain the environment hosts: its config, the account that hosts it, and the placement its
+// access level needs there. The construct checks these too, but only for the stage being built.
+function checkDomains(at: string, environment: EnvironmentConfig): void {
+  checkNames(
+    `${at} domain`,
+    environment.domains.map(({ config }) => config.name),
+  );
+
+  for (const { domainAccount: accountName, config } of environment.domains) {
+    validateDomain(config, { environment: environment.name });
+
+    const domainAccount = environment.domainAccounts.find(
+      ({ name }) => name === accountName,
+    );
+
+    if (domainAccount === undefined) {
+      throw new Error(
+        `${at}: the ${config.name} domain's domain account, ${accountName}, isn't in the environment`,
+      );
+    }
+
+    const access = accessOf(config);
+
+    if (access !== "public" && domainAccount.network[access] === undefined) {
+      throw new Error(
+        `${at}: the ${config.name} domain is ${access}, and the ${accountName} domain account's network has no ${access} placement`,
+      );
+    }
+  }
+}
+
+// A domain is declared once and listed in each environment that hosts it, so every environment
+// builds it from the same config. Two declarations of one name could drift apart.
+function checkDomainsDeclaredOnce(stages: readonly StageConfig[]): void {
+  const declarations = new Map<string, HostedDomainConfig>();
+
+  for (const stage of stages) {
+    for (const environment of stage.environments) {
+      for (const domain of environment.domains) {
+        const { name } = domain.config;
+        const existing = declarations.get(name);
+
+        if (existing !== undefined && existing !== domain) {
+          throw new Error(
+            `${stage.name}/${environment.name}: the ${name} domain is declared more than once. Declare it once, and list that declaration in each environment that hosts it`,
+          );
+        }
+
+        declarations.set(name, domain);
+      }
     }
   }
 }
@@ -78,12 +155,15 @@ function checkZone(
       `${at}: ${JSON.stringify(zone.name)} must be a DNS name of lowercase labels with at least one dot`,
     );
   }
+
   if (!ZONE_ID.test(zone.id)) {
     throw new Error(
       `${at}: ${JSON.stringify(zone.id)} is not a hosted zone ID, such as Z0411378AOM55J0BQQZI`,
     );
   }
+
   const name = certificateName(zone.name);
+
   if (name.length > CERTIFICATE_NAME_LENGTH) {
     throw new Error(
       `${at}: its certificate's name, ${name}, is longer than ACM's ${CERTIFICATE_NAME_LENGTH} characters`,
@@ -94,15 +174,18 @@ function checkZone(
 // A name becomes part of resource names and DNS labels, and picks out one entry.
 function checkNames(kind: string, names: readonly string[]): void {
   const seen = new Set<string>();
+
   for (const name of names) {
     if (!isPlatformName(name)) {
       throw new Error(
         `The ${kind} name ${JSON.stringify(name)} must be 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen`,
       );
     }
+
     if (seen.has(name)) {
       throw new Error(`The ${kind} name ${name} is used more than once`);
     }
+
     seen.add(name);
   }
 }
@@ -113,6 +196,7 @@ function accountUses(stages: readonly StageConfig[]): AccountUse[] {
     { account: stage.shared.account, usedBy: `${stage.name} shared account` },
     ...stage.environments.flatMap((environment) => {
       const at = `${stage.name}/${environment.name}`;
+
       return [
         {
           account: environment.frontdoor.account,
@@ -131,18 +215,22 @@ function accountUses(stages: readonly StageConfig[]): AccountUse[] {
 // accounts, so an account used twice would let a change to one place reach the other.
 function checkAccounts(uses: readonly AccountUse[]): void {
   const firstUse = new Map<string, string>();
+
   for (const { account, usedBy } of uses) {
     if (!ACCOUNT_ID.test(account)) {
       throw new Error(
         `${usedBy}: ${JSON.stringify(account)} is not a 12-digit account ID`,
       );
     }
+
     const existing = firstUse.get(account);
+
     if (existing !== undefined) {
       throw new Error(
         `${usedBy}: account ${account} is already the ${existing}`,
       );
     }
+
     firstUse.set(account, usedBy);
   }
 }

@@ -1,5 +1,6 @@
 export { Edge } from "./edge.ts";
 export {
+  edgeRoleName,
   ORIGIN_REQUEST_LOG_REGION,
   originRequestLogGroupName,
 } from "./names.ts";

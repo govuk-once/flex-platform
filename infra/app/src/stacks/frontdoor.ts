@@ -6,6 +6,7 @@ import {
 import { CfnOutput, Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 
+import { domainRoutesFor } from "../config/hosting.ts";
 import type { EnvironmentConfig } from "../config/types.ts";
 
 /** Where CloudFront takes a web ACL from. */
@@ -38,9 +39,7 @@ export class FrontdoorStack extends Stack {
     const originRequest = new OriginRequestFunction(this, "OriginRequest", {
       environment: environment.name,
       issuers: environment.frontdoor.issuers,
-      // Built from config once FLEX-497 adds domains to it. Until then every verified request is
-      // a 404.
-      routes: {},
+      routes: domainRoutesFor(environment),
       apiAccounts: environment.domainAccounts.map(({ account }) => account),
     });
 

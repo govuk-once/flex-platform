@@ -1,5 +1,6 @@
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
 
+import { example } from "./domains/example.ts";
 import type { StageConfig } from "./types.ts";
 
 const STAGING_POOL: TrustedIssuer = {
@@ -20,16 +21,7 @@ export const STAGES: readonly StageConfig[] = [
     environments: [
       {
         name: "development",
-        domainAccounts: [
-          {
-            name: "domain00",
-            account: "098640806149",
-            zone: {
-              name: "development.flex-platform.once.service.gov.uk",
-              id: "Z0835542Q6J8ILWJ1RGR",
-            },
-          },
-        ],
+        domains: [example],
         frontdoor: {
           account: "553915472156",
           zone: {
@@ -38,6 +30,27 @@ export const STAGES: readonly StageConfig[] = [
           },
           issuers: [STAGING_POOL],
         },
+        domainAccounts: [
+          {
+            name: "domain00",
+            account: "098640806149",
+            zone: {
+              name: "development.flex-platform.once.service.gov.uk",
+              id: "Z0835542Q6J8ILWJ1RGR",
+            },
+            network: {
+              isolated: {
+                subnetIds: [
+                  "subnet-09131014f73267f2c",
+                  "subnet-04f2d2758b5632297",
+                  "subnet-0005b9565e5ef0f93",
+                ],
+                // Placeholder: Replace with the ID of the security group for domains in the VPC.
+                securityGroupId: "sg-00000000000000000",
+              },
+            },
+          },
+        ],
       },
     ],
   },
@@ -47,16 +60,7 @@ export const STAGES: readonly StageConfig[] = [
     environments: [
       {
         name: "staging",
-        domainAccounts: [
-          {
-            name: "domain00",
-            account: "179512357753",
-            zone: {
-              name: "staging.flex-platform.once.service.gov.uk",
-              id: "Z0085548AFKTJHKTHK3P",
-            },
-          },
-        ],
+        domains: [],
         frontdoor: {
           account: "224399154937",
           zone: {
@@ -65,6 +69,17 @@ export const STAGES: readonly StageConfig[] = [
           },
           issuers: [STAGING_POOL],
         },
+        domainAccounts: [
+          {
+            name: "domain00",
+            account: "179512357753",
+            zone: {
+              name: "staging.flex-platform.once.service.gov.uk",
+              id: "Z0085548AFKTJHKTHK3P",
+            },
+            network: {},
+          },
+        ],
       },
     ],
   },
@@ -74,16 +89,7 @@ export const STAGES: readonly StageConfig[] = [
     environments: [
       {
         name: "development",
-        domainAccounts: [
-          {
-            name: "domain00",
-            account: "168789041282",
-            zone: {
-              name: "development.flex-domain00.once.service.gov.uk",
-              id: "Z05812543BRVPCL728ND0",
-            },
-          },
-        ],
+        domains: [],
         frontdoor: {
           account: "991575850800",
           zone: {
@@ -92,19 +98,21 @@ export const STAGES: readonly StageConfig[] = [
           },
           issuers: [STAGING_POOL],
         },
-      },
-      {
-        name: "staging",
         domainAccounts: [
           {
             name: "domain00",
-            account: "187157282680",
+            account: "168789041282",
             zone: {
-              name: "staging.flex-domain00.once.service.gov.uk",
-              id: "Z02914492HOQJQ6UXSZ9B",
+              name: "development.flex-domain00.once.service.gov.uk",
+              id: "Z05812543BRVPCL728ND0",
             },
+            network: {},
           },
         ],
+      },
+      {
+        name: "staging",
+        domains: [],
         frontdoor: {
           account: "792037778504",
           zone: {
@@ -113,19 +121,21 @@ export const STAGES: readonly StageConfig[] = [
           },
           issuers: [STAGING_POOL],
         },
-      },
-      {
-        name: "production",
         domainAccounts: [
           {
             name: "domain00",
-            account: "105322542531",
+            account: "187157282680",
             zone: {
-              name: "production.flex-domain00.once.service.gov.uk",
-              id: "Z0411378AOM55J0BQQZI",
+              name: "staging.flex-domain00.once.service.gov.uk",
+              id: "Z02914492HOQJQ6UXSZ9B",
             },
+            network: {},
           },
         ],
+      },
+      {
+        name: "production",
+        domains: [],
         frontdoor: {
           account: "367273783987",
           zone: {
@@ -134,6 +144,17 @@ export const STAGES: readonly StageConfig[] = [
           },
           issuers: [PRODUCTION_POOL],
         },
+        domainAccounts: [
+          {
+            name: "domain00",
+            account: "105322542531",
+            zone: {
+              name: "production.flex-domain00.once.service.gov.uk",
+              id: "Z0411378AOM55J0BQQZI",
+            },
+            network: {},
+          },
+        ],
       },
     ],
   },

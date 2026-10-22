@@ -28,6 +28,12 @@ package builds the site with Astro.
 |---|---|---|
 | `@govuk-once/flex-gateway-udp` | `gateways/services/udp` | The User Data Platform gateway: its configuration and versioned schemas. |
 
+## Domains
+
+| Package | Directory | Holds |
+|---|---|---|
+| `@repo/domains-infra` | `domains/infra` | `DomainConfig`, what domain developers write, and the `Domain` construct, which builds from it everything that hosts one domain: its REST API, and its Lambda function and `live` alias. Shared resources are given by ARN. See [Hosting a domain](/flex-platform/domains/hosting/). |
+
 ## Frontdoor
 
 | Package | Directory | Holds |

@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+import { buildOriginRequestFunction } from "@repo/frontdoor-origin-request";
 import { cdkApp } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
@@ -8,7 +12,8 @@ import { selectTarget } from "../config/select-target.ts";
 import { FrontdoorStack, frontdoorStackName } from "./frontdoor.ts";
 
 const PROD = FIXTURE_STAGES[2];
-const [DEV] = PROD.environments;
+const [DEV, , PROD_ENVIRONMENT] = PROD.environments;
+const [MAIN, SECOND] = PROD_ENVIRONMENT.domainAccounts;
 
 describe("FrontdoorStack", () => {
   it("is one per environment, in its frontdoor account, in us-east-1", () => {
@@ -71,12 +76,45 @@ describe("FrontdoorStack", () => {
     expect(Object.keys(Outputs ?? {})).toEqual(["DistributionDomainName"]);
   });
 
-  it("is built for one environment alone when the target names it", () => {
+  // Lambda@Edge has no environment variables, so the routing map is baked into its bundle.
+  it("routes each domain the environment hosts to its host under its account's zone", () => {
+    const app = cdkApp();
+    const template = Template.fromStack(
+      new FrontdoorStack(app, PROD_ENVIRONMENT),
+    );
+    const [resource] = Object.values(
+      template.findResources("AWS::Lambda::Function", {
+        Properties: { FunctionName: "frontdoor-prod-origin-request" },
+      }),
+    );
+    // CDK stages the asset in the app's output directory, named by the hash its key carries.
+    const key = (resource?.Properties as { Code: { S3Key: string } }).Code
+      .S3Key;
+    const code = readFileSync(
+      path.join(app.outdir, `asset.${key.replace(/\.zip$/, "")}`, "index.js"),
+      "utf8",
+    );
+
+    expect(code).toBe(
+      buildOriginRequestFunction({
+        issuers: PROD_ENVIRONMENT.frontdoor.issuers,
+        routes: {
+          "domain-one": `domain-one.${MAIN.zone.name}`,
+          "domain-two": `domain-two.${SECOND.zone.name}`,
+        },
+      }),
+    );
+  });
+
+  it("is built for one environment alone when the target names it, with its domains", () => {
     const app = cdkApp();
     buildApp(app, PROD, selectTarget(PROD, "staging"));
 
+    // In deploy order: each stack after the stacks it depends on.
     expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
+      "domain-staging-main-account",
       "frontdoor-staging-edge-logs-eu-west-2",
+      "domain-staging-domain-one",
       "frontdoor-staging",
     ]);
   });

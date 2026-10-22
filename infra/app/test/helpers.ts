@@ -1,9 +1,11 @@
+// import type { DomainConfig } from "@repo/domains-infra";
 import { cdkApp } from "@repo/infra-constructs";
 import type { CloudAssembly } from "aws-cdk-lib/cx-api";
 
 import { buildApp } from "../src/build-app.ts";
 import { selectTarget } from "../src/config/select-target.ts";
 import type {
+  // DomainAccountConfig,
   FrontdoorConfig,
   StageConfig,
   ZoneConfig,
@@ -28,6 +30,40 @@ export function zone(environment: string, account: string): ZoneConfig {
 function frontdoor(environment: string, account: string): FrontdoorConfig {
   return { ...FRONTDOOR, account, zone: zone(environment, account) };
 }
+
+// export const DOMAIN: DomainConfig = {
+//   name: "domain-one",
+//   routes: [
+//     { method: "GET", path: "/a" },
+//     { method: "PUT", path: "/a/{id}" },
+//   ],
+// };
+
+// export function domainAccount(
+//   name: string,
+//   accountId: string,
+//   domains: readonly DomainConfig[] = [],
+// ): DomainAccountConfig {
+//   return {
+//     name,
+//     accountId,
+//     network: {
+//       vpcId: "vpc-00000000000000001",
+//       availabilityZones: ["eu-west-2a", "eu-west-2b"],
+//       placements: {
+//         isolated: {
+//           subnetIds: ["subnet-0000000000000000a"],
+//           securityGroupId: "sg-00000000000000001",
+//         },
+//         private: {
+//           subnetIds: ["subnet-0000000000000000b"],
+//           securityGroupId: "sg-00000000000000002",
+//         },
+//       },
+//     },
+//     domains,
+//   };
+// };
 
 // The real stages' shape: two stages with one environment, one with three, and one environment
 // with two domain accounts, so every loop is exercised.

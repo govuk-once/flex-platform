@@ -30,8 +30,6 @@ export default defineConfig({
             "start/conventions",
           ],
         },
-        // Grouped by the platform's sections. Egress is built, the Frontdoor partly, and domains are
-        // planned. Each page says which.
         {
           label: "Frontdoor",
           items: [
@@ -42,7 +40,11 @@ export default defineConfig({
         },
         {
           label: "Domains",
-          items: ["domains/overview", "domains/designing-a-domain"],
+          items: [
+            "domains/overview",
+            "domains/designing-a-domain",
+            "domains/hosting",
+          ],
         },
         {
           label: "Egress",
