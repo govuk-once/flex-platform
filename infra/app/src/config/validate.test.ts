@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES, FRONTDOOR, zone } from "../../test/helpers.ts";
+import {
+  domainAccount,
+  FIXTURE_STAGES,
+  FRONTDOOR,
+} from "../../test/helpers.ts";
 import type {
   DomainAccountConfig,
   EnvironmentConfig,
@@ -10,19 +14,14 @@ import type {
 } from "./types.ts";
 import { validateStages } from "./validate.ts";
 
-function domainAccount(
-  name: string,
-  account: string,
-  environment = "sandbox",
-): DomainAccountConfig {
-  return { name, account, zone: zone(environment, account) };
-}
-
-const MAIN = domainAccount("main", "100000000003");
+const MAIN_DOMAIN_ACCOUNT: DomainAccountConfig = {
+  ...domainAccount("sandbox", "main", "100000000003"),
+  domains: ["domain-a"],
+};
 
 const ENVIRONMENT: EnvironmentConfig = {
   name: "sandbox",
-  domainAccounts: [MAIN],
+  domainAccounts: [MAIN_DOMAIN_ACCOUNT],
   frontdoor: FRONTDOOR,
 };
 
@@ -39,7 +38,7 @@ const OTHER_STAGE: StageConfig = {
   environments: [
     {
       name: "prod",
-      domainAccounts: [domainAccount("main", "300000000003", "prod")],
+      domainAccounts: [domainAccount("prod", "main", "300000000003")],
       frontdoor: { ...FRONTDOOR, account: "300000000002" },
     },
   ],
@@ -93,7 +92,7 @@ describe("validateStages", () => {
     });
 
     it("refuses an invalid domain account name", () => {
-      const domainAccounts = [domainAccount("Main", "100000000003")];
+      const domainAccounts = [domainAccount("sandbox", "Main", "100000000003")];
       expect(() =>
         validateStages([withEnvironment({ domainAccounts })]),
       ).toThrow('The platform-dev/sandbox domain account name "Main" must be');
@@ -103,7 +102,7 @@ describe("validateStages", () => {
       const second = {
         ...ENVIRONMENT,
         frontdoor: { ...FRONTDOOR, account: "100000000004" },
-        domainAccounts: [domainAccount("main", "100000000005")],
+        domainAccounts: [domainAccount("sandbox", "main", "100000000005")],
       };
       expect(() =>
         validateStages([{ ...STAGE, environments: [ENVIRONMENT, second] }]),
@@ -114,8 +113,8 @@ describe("validateStages", () => {
 
     it("refuses a domain account name used twice in an environment", () => {
       const domainAccounts = [
-        domainAccount("main", "100000000003"),
-        domainAccount("main", "100000000004"),
+        domainAccount("sandbox", "main", "100000000003"),
+        domainAccount("sandbox", "main", "100000000004"),
       ];
       expect(() =>
         validateStages([withEnvironment({ domainAccounts })]),
@@ -132,7 +131,12 @@ describe("validateStages", () => {
 
     function withDomainZone(zone: Partial<ZoneConfig>): StageConfig {
       return withEnvironment({
-        domainAccounts: [{ ...MAIN, zone: { ...MAIN.zone, ...zone } }],
+        domainAccounts: [
+          {
+            ...MAIN_DOMAIN_ACCOUNT,
+            zone: { ...MAIN_DOMAIN_ACCOUNT.zone, ...zone },
+          },
+        ],
       });
     }
 
@@ -212,6 +216,62 @@ describe("validateStages", () => {
     });
   });
 
+  describe("domains", () => {
+    function withDomains(
+      domains: readonly string[],
+      second: readonly string[] = [],
+    ): StageConfig {
+      return withEnvironment({
+        domainAccounts: [
+          { ...MAIN_DOMAIN_ACCOUNT, domains },
+          {
+            ...domainAccount("sandbox", "second", "100000000004"),
+            domains: second,
+          },
+        ],
+      });
+    }
+
+    it("accepts accounts with no domains", () => {
+      expect(() => validateStages([withDomains([])])).not.toThrow();
+    });
+
+    it("refuses an invalid domain name", () => {
+      expect(() => validateStages([withDomains(["Domain-A"])])).toThrow(
+        'The platform-dev/sandbox domain name "Domain-A" must be',
+      );
+    });
+
+    it("refuses a domain name used twice in an environment, even in two accounts", () => {
+      expect(() =>
+        validateStages([withDomains(["domain-a"], ["domain-a"])]),
+      ).toThrow(
+        "The platform-dev/sandbox domain name domain-a is used more than once",
+      );
+    });
+
+    it("keeps the domain's function name within Lambda's limit", () => {
+      const environment = "e".repeat(32);
+      const fits = "d".repeat(64 - 32 - "domain--".length);
+
+      const stage = (name: string): StageConfig => ({
+        ...STAGE,
+        environments: [
+          {
+            ...ENVIRONMENT,
+            name: environment,
+            domainAccounts: [{ ...MAIN_DOMAIN_ACCOUNT, domains: [name] }],
+          },
+        ],
+      });
+
+      expect(() => validateStages([stage(fits)])).not.toThrow();
+      expect(() => validateStages([stage(`${fits}d`)])).toThrow(
+        `platform-dev/${environment} ${fits}d domain: its function name domain-${environment}-${fits}d is longer than Lambda's 64 characters`,
+      );
+    });
+  });
+
   describe("accounts", () => {
     it.each(["12345678901", "1234567890123", "12345678901a", " 100000000001"])(
       "refuses the account ID %j",
@@ -233,7 +293,7 @@ describe("validateStages", () => {
     });
 
     it("refuses a malformed domain account ID", () => {
-      const domainAccounts = [domainAccount("main", "10000000003")];
+      const domainAccounts = [domainAccount("sandbox", "main", "10000000003")];
       expect(() =>
         validateStages([withEnvironment({ domainAccounts })]),
       ).toThrow(
@@ -251,8 +311,8 @@ describe("validateStages", () => {
 
     it("refuses the same account as two domain accounts", () => {
       const domainAccounts = [
-        domainAccount("main", "100000000003"),
-        domainAccount("second", "100000000003"),
+        domainAccount("sandbox", "main", "100000000003"),
+        domainAccount("sandbox", "second", "100000000003"),
       ];
       expect(() =>
         validateStages([withEnvironment({ domainAccounts })]),
@@ -266,7 +326,7 @@ describe("validateStages", () => {
         ...ENVIRONMENT,
         name: "other",
         frontdoor: { ...FRONTDOOR, account: "100000000004" },
-        domainAccounts: [domainAccount("main", "100000000003")],
+        domainAccounts: [domainAccount("sandbox", "main", "100000000003")],
       };
       expect(() =>
         validateStages([{ ...STAGE, environments: [ENVIRONMENT, second] }]),

@@ -19,6 +19,8 @@ export interface ZoneConfig {
 export interface DomainAccountConfig {
   readonly name: string;
   readonly account: string;
+  /** The domains the account hosts in this environment. */
+  readonly domains: readonly string[];
   /** Each domain answers at `<domain>.<zone>`, under one wildcard certificate. */
   readonly zone: ZoneConfig;
 }
