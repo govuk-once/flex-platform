@@ -12,6 +12,7 @@ pnpm lint             # eslint, all packages
 pnpm typecheck        # tsc --noEmit (astro check for the site), all packages with a typecheck script
 pnpm codegen          # generate gateway validators, Lambda bundles and call contracts
 pnpm schemas          # bring each gateway's schemas up to date with its upstream; by hand, never in CI
+pnpm release          # prepare a release of the published packages; by hand
 pnpm test             # vitest run, all packages
 ```
 
@@ -42,7 +43,7 @@ then bundles the generated entry point with esbuild, so a gateway that cannot be
 generation. The documentation site has its own Astro build.
 
 The gateway client is the exception, because domains install it: its `build` script bundles it
-into `dist/`, which is what pnpm publishes. In the workspace it resolves to its sources, like every
+into `dist/`, which is what a [release](/flex-platform/start/releasing/) publishes. In the workspace it resolves to its sources, like every
 other package, and no task waits on the build.
 
 Workspace packages export their `.ts` sources and resolve to each other's sources. This means

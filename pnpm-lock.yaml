@@ -166,6 +166,9 @@ importers:
 
   .:
     devDependencies:
+      '@repo/release':
+        specifier: workspace:*
+        version: link:packages/release
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2
@@ -771,6 +774,37 @@ importers:
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))
+
+  packages/release:
+    dependencies:
+      '@clack/core':
+        specifier: 1.5.1
+        version: 1.5.1
+      '@clack/prompts':
+        specifier: 1.8.1
+        version: 1.8.1
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../utils
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../vitest-config
+      eslint:
+        specifier: 10.12.0
+        version: 10.12.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.0.4
+        version: 5.0.4(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/tsconfig: {}
 
