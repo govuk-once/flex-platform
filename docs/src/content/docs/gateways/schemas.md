@@ -99,7 +99,7 @@ without the network, codegen also checks that the latest version is still what i
 [What codegen checks](/flex-platform/codegen/checks/#what-the-driver-derives).
 
 ```bash
-pnpm --filter @govuk-once/flex-gateway-udp schemas
+pnpm --filter @repo/gateway-service-udp schemas
 ```
 
 The command asks the gateway's driver to derive schemas, from the upstream's own description or

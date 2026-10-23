@@ -9,7 +9,7 @@ sidebar:
 `schemas/`, and writes everything it generates to `.gen/`:
 
 ```bash
-pnpm --filter @govuk-once/flex-gateway-udp codegen   # one gateway
+pnpm --filter @repo/gateway-service-udp codegen   # one gateway
 pnpm codegen                                         # every gateway with a codegen script
 ```
 

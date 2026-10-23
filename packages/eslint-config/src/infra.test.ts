@@ -30,7 +30,7 @@ describe("infraConstructs", () => {
     ["@repo/infra-app"],
     ["@repo/frontdoor-infra"],
     ["@repo/gateway-runtime"],
-    ["@govuk-once/flex-gateway-udp"],
+    ["@repo/gateway-service-udp"],
   ])("refuses %s", (source) => {
     expect(restrictedImports(infraConstructs, source)).toEqual([
       "no-restricted-imports",
@@ -56,7 +56,7 @@ describe("sectionInfra", () => {
     ["@repo/infra-constructs-extra"],
     ["@repo/domain-infra"],
     ["@repo/gateway-runtime"],
-    ["@govuk-once/flex-gateway-udp"],
+    ["@repo/gateway-service-udp"],
   ])("refuses %s", (source) => {
     expect(restrictedImports(frontdoor, source)).toEqual([
       "no-restricted-imports",

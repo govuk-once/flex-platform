@@ -9,7 +9,7 @@ package tasks.
 ```bash
 pnpm install          # link the workspace and install dependencies
 pnpm lint             # eslint, all packages
-pnpm typecheck        # tsc --noEmit, all packages with a typecheck script
+pnpm typecheck        # tsc --noEmit (astro check for the site), all packages with a typecheck script
 pnpm codegen          # generate gateway validators, Lambda bundles and call contracts
 pnpm schemas          # bring each gateway's schemas up to date with its upstream; by hand, never in CI
 pnpm test             # vitest run, all packages
@@ -18,7 +18,7 @@ pnpm test             # vitest run, all packages
 Run one package's script with `pnpm --filter <name> <script>`. For example:
 
 ```bash
-pnpm --filter @govuk-once/flex-gateway-udp codegen
+pnpm --filter @repo/gateway-service-udp codegen
 ```
 
 The CDK app synthesizes one stage at a time. See
