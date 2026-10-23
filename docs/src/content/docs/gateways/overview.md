@@ -28,7 +28,7 @@ packages/          Shared TypeScript, ESLint and Vitest tooling, and generic uti
 ```
 
 `packages/` holds the shared tooling configuration and generic utilities. See
-[Packages](/flex-platform/reference/packages/) for what each package does and what it depends on.
+[Packages](/flex-platform/reference/packages/) for every package and what it depends on.
 
 ## Build time and run time
 

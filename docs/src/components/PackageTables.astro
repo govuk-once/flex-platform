@@ -1,0 +1,21 @@
+---
+// The packages page's tables, spanning the content column with the same column widths, so the
+// tables line up as one. Starlight shows a table as a block sized to its content.
+---
+
+<div class="package-tables"><slot /></div>
+
+<style>
+  .package-tables :global(table) {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+  }
+  /* Wide enough for the longest name and directory, so neither breaks. */
+  .package-tables :global(th:nth-child(1)) {
+    width: 41%;
+  }
+  .package-tables :global(th:nth-child(2)) {
+    width: 35%;
+  }
+</style>

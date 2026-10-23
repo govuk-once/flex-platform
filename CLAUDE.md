@@ -29,7 +29,7 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 |---|---|
 | The platform's sections | `start/platform.mdx`, `frontdoor/`, `domains/` |
 | What is implemented and what is planned | `start/platform.mdx` |
-| Packages and what each holds | `reference/packages.md` |
+| Packages, where each lives and what it depends on | `reference/packages.mdx` |
 | How a gateway works, dispatch order | `gateways/overview.md` |
 | Configuration, policy, logging, bindings | `gateways/configuration.md` |
 | Schema versions and `gateway-schemas` | `gateways/schemas.md` |
