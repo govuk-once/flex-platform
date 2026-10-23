@@ -37,6 +37,12 @@ package builds the site with Astro.
 | `@repo/frontdoor-shared` | `frontdoor/shared` | What the two functions share: the trace ID, the reading of `Authorization`, the check that a token is encoded in its one canonical form, and the `TrustedIssuer` config type. The CloudFront Function bundles it, so all of it is written for that runtime. |
 | `@repo/frontdoor-infra` | `frontdoor/infra` | The Frontdoor's CDK constructs: the distribution with its certificate, DNS records, policies and access logs, the web ACL, and a construct for each edge function, which builds it with an environment's config. See [the distribution](/flex-platform/frontdoor/overview/#the-distribution). |
 
+## Domains
+
+| Package | Directory | Holds |
+|---|---|---|
+| `@repo/domain-infra` | `domains/infra` | The domains' infrastructure: the access levels and the domain function's name. See [Hosting a domain](/flex-platform/domains/hosting/). |
+
 ## Infrastructure
 
 | Package | Directory | Holds |
