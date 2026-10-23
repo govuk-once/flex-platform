@@ -194,6 +194,37 @@ importers:
         specifier: 0.27.0
         version: 0.27.0(@astrojs/starlight@0.42.6(astro@7.3.8(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))(supports-color@7.2.0)(typescript@6.0.3))(astro@7.3.8(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))(supports-color@7.2.0)
 
+  domains/infra:
+    dependencies:
+      '@repo/infra-constructs':
+        specifier: workspace:*
+        version: link:../../infra/constructs
+      aws-cdk-lib:
+        specifier: 2.273.0
+        version: 2.273.0(constructs@10.8.1)
+      constructs:
+        specifier: 10.8.1
+        version: 10.8.1
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../../packages/vitest-config
+      cdk-nag:
+        specifier: 3.0.2
+        version: 3.0.2(aws-cdk-lib@2.273.0(constructs@10.8.1))(constructs@10.8.1)
+      eslint:
+        specifier: 10.12.0
+        version: 10.12.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.0.4
+        version: 5.0.4(@types/node@24.19.2)(@vitest/coverage-v8@5.0.4)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   frontdoor/infra:
     dependencies:
       '@repo/frontdoor-origin-request':
@@ -528,6 +559,9 @@ importers:
 
   infra/app:
     dependencies:
+      '@repo/domain-infra':
+        specifier: workspace:*
+        version: link:../../domains/infra
       '@repo/frontdoor-infra':
         specifier: workspace:*
         version: link:../../frontdoor/infra

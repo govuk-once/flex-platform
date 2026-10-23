@@ -1,3 +1,4 @@
+import type { AccessLevel } from "@repo/domain-infra";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
 
 // Everything that differs between stages and environments is a value here. Constructs receive
@@ -16,9 +17,18 @@ export interface ZoneConfig {
   readonly id: string;
 }
 
+/** A domain's routes are its own code's, so config holds only where its function runs. */
+export interface DomainConfig {
+  readonly name: string;
+  /** `isolated` when left out. */
+  readonly access?: AccessLevel;
+}
+
 export interface DomainAccountConfig {
   readonly name: string;
   readonly account: string;
+  /** The domains the account hosts in this environment. */
+  readonly domains: readonly DomainConfig[];
   /** Each domain answers at `<domain>.<zone>`, under one wildcard certificate. */
   readonly zone: ZoneConfig;
 }

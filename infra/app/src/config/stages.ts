@@ -24,6 +24,7 @@ export const STAGES: readonly StageConfig[] = [
           {
             name: "domain00",
             account: "098640806149",
+            domains: [{ name: "example" }],
             zone: {
               name: "development.flex-platform.once.service.gov.uk",
               id: "Z0835542Q6J8ILWJ1RGR",
@@ -51,6 +52,7 @@ export const STAGES: readonly StageConfig[] = [
           {
             name: "domain00",
             account: "179512357753",
+            domains: [],
             zone: {
               name: "staging.flex-platform.once.service.gov.uk",
               id: "Z0085548AFKTJHKTHK3P",
@@ -78,6 +80,7 @@ export const STAGES: readonly StageConfig[] = [
           {
             name: "domain00",
             account: "168789041282",
+            domains: [],
             zone: {
               name: "development.flex-domain00.once.service.gov.uk",
               id: "Z05812543BRVPCL728ND0",
@@ -99,6 +102,7 @@ export const STAGES: readonly StageConfig[] = [
           {
             name: "domain00",
             account: "187157282680",
+            domains: [],
             zone: {
               name: "staging.flex-domain00.once.service.gov.uk",
               id: "Z02914492HOQJQ6UXSZ9B",
@@ -120,6 +124,7 @@ export const STAGES: readonly StageConfig[] = [
           {
             name: "domain00",
             account: "105322542531",
+            domains: [],
             zone: {
               name: "production.flex-domain00.once.service.gov.uk",
               id: "Z0411378AOM55J0BQQZI",

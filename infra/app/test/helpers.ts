@@ -4,6 +4,8 @@ import type { CloudAssembly } from "aws-cdk-lib/cx-api";
 import { buildApp } from "../src/build-app.ts";
 import { selectTarget } from "../src/config/select-target.ts";
 import type {
+  DomainAccountConfig,
+  DomainConfig,
   FrontdoorConfig,
   StageConfig,
   ZoneConfig,
@@ -29,8 +31,24 @@ function frontdoor(environment: string, account: string): FrontdoorConfig {
   return { ...FRONTDOOR, account, zone: zone(environment, account) };
 }
 
+export function domainAccount(
+  environment: string,
+  name: string,
+  account: string,
+  domains: readonly DomainConfig[] = [],
+): DomainAccountConfig {
+  return { name, account, domains, zone: zone(environment, account) };
+}
+
+// One domain at each access level, the same in every environment, so environments stay alike.
+export const FIXTURE_DOMAINS = [
+  { name: "domain-a" },
+  { name: "domain-b", access: "private" },
+  { name: "domain-c", access: "public" },
+] as const satisfies readonly DomainConfig[];
+
 // The real stages' shape: two stages with one environment, one with three, and one environment
-// with two domain accounts, so every loop is exercised.
+// with two domain accounts, the second hosting no domains, so every loop is exercised.
 export const FIXTURE_STAGES = [
   {
     name: "platform-dev",
@@ -39,11 +57,7 @@ export const FIXTURE_STAGES = [
       {
         name: "sandbox",
         domainAccounts: [
-          {
-            name: "main",
-            account: "100000000003",
-            zone: zone("sandbox", "100000000003"),
-          },
+          domainAccount("sandbox", "main", "100000000003", FIXTURE_DOMAINS),
         ],
         frontdoor: frontdoor("sandbox", "100000000002"),
       },
@@ -56,11 +70,7 @@ export const FIXTURE_STAGES = [
       {
         name: "sandbox",
         domainAccounts: [
-          {
-            name: "main",
-            account: "200000000003",
-            zone: zone("sandbox", "200000000003"),
-          },
+          domainAccount("sandbox", "main", "200000000003", FIXTURE_DOMAINS),
         ],
         frontdoor: frontdoor("sandbox", "200000000002"),
       },
@@ -73,38 +83,22 @@ export const FIXTURE_STAGES = [
       {
         name: "dev",
         domainAccounts: [
-          {
-            name: "main",
-            account: "300000000003",
-            zone: zone("dev", "300000000003"),
-          },
+          domainAccount("dev", "main", "300000000003", FIXTURE_DOMAINS),
         ],
         frontdoor: frontdoor("dev", "300000000002"),
       },
       {
         name: "staging",
         domainAccounts: [
-          {
-            name: "main",
-            account: "300000000005",
-            zone: zone("staging", "300000000005"),
-          },
+          domainAccount("staging", "main", "300000000005", FIXTURE_DOMAINS),
         ],
         frontdoor: frontdoor("staging", "300000000004"),
       },
       {
         name: "prod",
         domainAccounts: [
-          {
-            name: "main",
-            account: "300000000007",
-            zone: zone("prod", "300000000007"),
-          },
-          {
-            name: "second",
-            account: "300000000008",
-            zone: zone("prod", "300000000008"),
-          },
+          domainAccount("prod", "main", "300000000007", FIXTURE_DOMAINS),
+          domainAccount("prod", "second", "300000000008"),
         ],
         frontdoor: frontdoor("prod", "300000000006"),
       },

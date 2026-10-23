@@ -74,8 +74,12 @@ never is: config names a secret, never holds one.
 ```ts
 StageConfig       { name, shared: { account }, environments }
 EnvironmentConfig { name, frontdoor: { account, zone, issuers }, domainAccounts }
-DomainAccount     { name, account, zone }
+DomainAccount     { name, account, domains, zone }
+Domain            { name, access? }
 ```
+
+- `domains` lists the domains a domain account hosts in the environment. A domain's `access`
+  decides where its function runs. See [Hosting a domain](/flex-platform/domains/hosting/).
 
 - `zone` is the account's public hosted zone, as `{ name, id }`. The zones aren't the platform's:
   another team creates one in each account, already delegated, named
@@ -101,7 +105,10 @@ Before building any stage, the app checks every stage's config:
   characters, ACM's limit, so the Frontdoor's zone name, and `*.` and each domain account's zone
   name, must fit within it;
 - every environment trusts at least one issuer, each an `https` URL naming at least one app
-  client.
+  client;
+- every domain's name follows the same rule as the names above and is used once in its
+  environment, across all its domain accounts, and its function's name is within Lambda's 64
+  characters. See [checks](/flex-platform/domains/hosting/#checks).
 
 ## Rules for stacks and constructs
 

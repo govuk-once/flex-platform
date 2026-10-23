@@ -11,6 +11,7 @@
     "diff": "cdk diff"
   },
   "dependencies": {
+    "@repo/domain-infra": "workspace:*",
     "@repo/frontdoor-infra": "workspace:*",
     "@repo/frontdoor-shared": "workspace:*",
     "@repo/infra-constructs": "workspace:*",

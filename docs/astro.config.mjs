@@ -42,7 +42,11 @@ export default defineConfig({
         },
         {
           label: "Domains",
-          items: ["domains/overview", "domains/designing-a-domain"],
+          items: [
+            "domains/overview",
+            "domains/hosting",
+            "domains/designing-a-domain",
+          ],
         },
         {
           label: "Egress",
