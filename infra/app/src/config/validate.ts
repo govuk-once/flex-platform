@@ -1,12 +1,7 @@
 import { domainFunctionName, FUNCTION_NAME_LENGTH } from "@repo/domain-infra";
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
-import type {
-  DomainConfig,
-  EnvironmentConfig,
-  StageConfig,
-  ZoneConfig,
-} from "./types.ts";
+import type { EnvironmentConfig, StageConfig, ZoneConfig } from "./types.ts";
 
 const ACCOUNT_ID = /^\d{12}$/;
 
@@ -47,7 +42,7 @@ export function validateStages(stages: readonly StageConfig[]): void {
       // Unique across the environment, not just the account: the Frontdoor routes by name.
       checkNames(
         `${stage.name}/${environment.name} domain`,
-        domainsOf(environment).map((domain) => domain.name),
+        domainsOf(environment),
       );
 
       checkEnvironment(`${stage.name}/${environment.name}`, environment);
@@ -82,7 +77,7 @@ function checkEnvironment(at: string, environment: EnvironmentConfig): void {
   }
 }
 
-function domainsOf(environment: EnvironmentConfig): DomainConfig[] {
+function domainsOf(environment: EnvironmentConfig): string[] {
   return environment.domainAccounts.flatMap(({ domains }) => domains);
 }
 
@@ -90,11 +85,11 @@ function domainsOf(environment: EnvironmentConfig): DomainConfig[] {
 // limit on the function's name.
 function checkDomains(at: string, environment: EnvironmentConfig): void {
   for (const domain of domainsOf(environment)) {
-    const functionName = domainFunctionName(environment.name, domain.name);
+    const functionName = domainFunctionName(environment.name, domain);
 
     if (functionName.length > FUNCTION_NAME_LENGTH) {
       throw new Error(
-        `${at} ${domain.name} domain: its function name ${functionName} is longer than Lambda's ${FUNCTION_NAME_LENGTH} characters`,
+        `${at} ${domain} domain: its function name ${functionName} is longer than Lambda's ${FUNCTION_NAME_LENGTH} characters`,
       );
     }
   }

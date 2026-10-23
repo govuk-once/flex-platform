@@ -75,12 +75,10 @@ never is: config names a secret, never holds one.
 StageConfig       { name, shared: { account }, environments }
 EnvironmentConfig { name, frontdoor: { account, zone, issuers }, domainAccounts }
 DomainAccount     { name, account, domains, zone }
-Domain            { name, access? }
 ```
 
-- `domains` lists the domains a domain account hosts in the environment. A domain's `access`
-  decides where its function runs. See [Hosting a domain](/flex-platform/domains/hosting/).
-
+- `domains` lists the names of the domains a domain account hosts in the environment. See
+  [Hosting a domain](/flex-platform/domains/hosting/).
 - `zone` is the account's public hosted zone, as `{ name, id }`. The zones aren't the platform's:
   another team creates one in each account, already delegated, named
   `<environment>.flex-<account role>.once.service.gov.uk`. An account writes records only into

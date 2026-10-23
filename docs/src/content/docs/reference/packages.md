@@ -41,7 +41,7 @@ package builds the site with Astro.
 
 | Package | Directory | Holds |
 |---|---|---|
-| `@repo/domain-infra` | `domains/infra` | The domains' infrastructure: the access levels and the domain function's name. See [Hosting a domain](/flex-platform/domains/hosting/). |
+| `@repo/domain-infra` | `domains/infra` | The domains' CDK constructs: `DomainAccount`, what every domain in a domain account shares, and the domain function's name. See [Hosting a domain](/flex-platform/domains/hosting/). |
 
 ## Infrastructure
 

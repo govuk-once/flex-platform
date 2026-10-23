@@ -7,7 +7,6 @@ import {
 } from "../../test/helpers.ts";
 import type {
   DomainAccountConfig,
-  DomainConfig,
   EnvironmentConfig,
   FrontdoorConfig,
   StageConfig,
@@ -17,7 +16,7 @@ import { validateStages } from "./validate.ts";
 
 const MAIN_DOMAIN_ACCOUNT: DomainAccountConfig = {
   ...domainAccount("sandbox", "main", "100000000003"),
-  domains: [{ name: "domain-a" }],
+  domains: ["domain-a"],
 };
 
 const ENVIRONMENT: EnvironmentConfig = {
@@ -219,8 +218,8 @@ describe("validateStages", () => {
 
   describe("domains", () => {
     function withDomains(
-      domains: readonly DomainConfig[],
-      second: readonly DomainConfig[] = [],
+      domains: readonly string[],
+      second: readonly string[] = [],
     ): StageConfig {
       return withEnvironment({
         domainAccounts: [
@@ -237,27 +236,15 @@ describe("validateStages", () => {
       expect(() => validateStages([withDomains([])])).not.toThrow();
     });
 
-    it("accepts every access level", () => {
-      const domains = [
-        { name: "a", access: "isolated" },
-        { name: "b", access: "private" },
-        { name: "c", access: "public" },
-      ] as const;
-
-      expect(() => validateStages([withDomains(domains)])).not.toThrow();
-    });
-
     it("refuses an invalid domain name", () => {
-      expect(() =>
-        validateStages([withDomains([{ name: "Domain-A" }])]),
-      ).toThrow('The platform-dev/sandbox domain name "Domain-A" must be');
+      expect(() => validateStages([withDomains(["Domain-A"])])).toThrow(
+        'The platform-dev/sandbox domain name "Domain-A" must be',
+      );
     });
 
     it("refuses a domain name used twice in an environment, even in two accounts", () => {
       expect(() =>
-        validateStages([
-          withDomains([{ name: "domain-a" }], [{ name: "domain-a" }]),
-        ]),
+        validateStages([withDomains(["domain-a"], ["domain-a"])]),
       ).toThrow(
         "The platform-dev/sandbox domain name domain-a is used more than once",
       );
@@ -273,7 +260,7 @@ describe("validateStages", () => {
           {
             ...ENVIRONMENT,
             name: environment,
-            domainAccounts: [{ ...MAIN_DOMAIN_ACCOUNT, domains: [{ name }] }],
+            domainAccounts: [{ ...MAIN_DOMAIN_ACCOUNT, domains: [name] }],
           },
         ],
       });

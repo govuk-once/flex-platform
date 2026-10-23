@@ -1,24 +1,26 @@
 ---
 title: Hosting a domain
-description: How a domain is declared in config, where its function runs, and what the platform provides around it.
+description: How a domain is declared in config, what each domain account provides, and what the platform provides around a domain's function.
 ---
 
-A domain is hosted from a few lines of the platform's config. Domain teams write the domain's code
-and never write CDK. The platform provides everything the code runs with and behind.
+A domain is hosted from a line of the platform's config. Domain teams write the domain's code and
+never write CDK. The platform provides everything the code runs with and behind.
 
-The config and its checks are in `infra/app`, and the names they use are in `domains/infra`
-(`@repo/domain-infra`). Nothing deploys a domain. Each part of this page that is planned says so.
+The config and its checks are in `infra/app`. The constructs and the names they use are in
+`domains/infra` (`@repo/domain-infra`). No stack in the app creates them, so nothing deploys a
+domain. Each part of this page that is planned says so.
 
 ## Declaring a domain
 
-Each domain account in an environment lists the domains it hosts in that environment:
+Each domain account in an environment lists the names of the domains it hosts in that
+environment:
 
 ```ts
 domainAccounts: [
   {
     name: "domain00",
     account: "098640806149",
-    domains: [{ name: "domain-a" }, { name: "domain-b", access: "private" }],
+    domains: ["domain-a", "domain-b"],
     zone: {
       name: "development.flex-platform.once.service.gov.uk",
       id: "Z0835542Q6J8ILWJ1RGR",
@@ -27,16 +29,12 @@ domainAccounts: [
 ],
 ```
 
-| Field    | Required | Holds                                                                                                 |
-| -------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `name`   | Yes      | The domain's name. The Frontdoor routes `/app/<name>/...` to it, and its resources are named from it. |
-| `access` | No       | Where the domain's function runs: see [access levels](#access-levels).                                |
-
+The Frontdoor routes `/app/<name>/...` to a domain, and its resources are named from its name.
 Config holds no routes, and nothing else about what the domain does. See
 [routing a request](#routing-a-request).
 
 A domain is hosted only in the environments that list it. Moving it to another domain account is
-moving its entry to that account's list.
+moving its name to that account's list.
 
 ### Checks
 
@@ -49,18 +47,63 @@ Before building any stage, the app checks every domain:
 - its function's name, `domain-<environment>-<name>`, is within Lambda's 64 characters. Each name
   is within 32 alone, but the two together can pass it.
 
-## Access levels
+## What a domain account provides
 
-A domain's access level decides where its function runs, and so what it can reach:
+`DomainAccount` builds what every domain in a domain account shares in one environment. Nothing in
+it names a domain: the roles reach the domains' resources by name pattern, so adding or removing a
+domain never changes it. It is built in eu-west-2, the region the edge signs requests for.
 
-| Level      | Function runs in           | Can reach                                                                        |
-| ---------- | -------------------------- | -------------------------------------------------------------------------------- |
-| `isolated` | The VPC's isolated subnets | Gateways and AWS services through the VPC's endpoints. No route to the internet. |
-| `private`  | The VPC's private subnets  | The internet, through NAT                                                        |
-| `public`   | Outside the VPC            | The internet, directly                                                           |
+| Resource | Does |
+|---|---|
+| CAA record | At the zone's apex, `0 issue "amazon.com"`: only Amazon may issue certificates for the zone |
+| Wildcard certificate | `*.<zone>`, validated through DNS in the account's own zone, after the CAA record. Each domain's custom domain uses it. |
+| `/flex/domain/<environment>/certificate-arn` | An SSM parameter holding the certificate's ARN, which ACM generates. Each domain's stack reads it. |
+| Domain security group | The security group every domain's function is placed in. See [network](#network). |
+| `/flex/domain/<environment>/security-group-id` | An SSM parameter holding the security group's ID, for whatever creates the domains' functions |
+| `/flex/domain/<environment>/function` | The log group every domain's function logs to |
+| `domain-<environment>-execution` | The role every domain's function runs as. See [permissions](#permissions). |
+| `domain-<environment>-integration` | The role every domain's API invokes its function through |
+| API Gateway's logging role | Set on the account, so every API in it can write its access and execution logs |
 
-The default is `isolated`, so a domain reaches gateways and nothing else unless its config says
-otherwise.
+One wildcard certificate serves every domain because ACM limits a certificate's first name to 64
+characters. A certificate for `<domain>.<zone>` would leave a domain's name as few as 18.
+
+### Network
+
+Every domain runs in the VPC's isolated subnets, with no route to the internet. There is no
+setting to change this: a domain reaches an upstream through a gateway, and a gateway that needs
+the internet has its own [placement](/flex-platform/reference/glossary/#placement).
+
+The VPC isn't the platform's, so the domain security group is created in it from IDs written to
+SSM by hand, once, and read when the stack deploys:
+
+| Parameter | Holds |
+|---|---|
+| `/flex/network/<environment>/vpc-id` | The VPC's ID |
+| `/flex/network/<environment>/lambda-endpoint-security-group-id` | The security group of the VPC's Lambda interface endpoint |
+
+The group lets nothing in. It lets a domain's function out only over HTTPS to the Lambda endpoint,
+which is how a domain invokes gateways. The endpoint's own security group, which isn't the
+platform's, must let the domain security group in.
+
+### Permissions
+
+Every domain has the same permissions, so they are in one role, with a permission boundary that
+holds the same limits in case the role is ever widened by mistake. A domain's function may:
+
+- invoke any function named `gateway-<environment>-*`, with any qualifier, such as `:live`. Any
+  domain may call any gateway in its environment, and only gateways have that name;
+- write to the domain log group, and use its key for that through CloudWatch Logs;
+- create and remove the network interfaces Lambda needs to run it in the VPC.
+
+The integration role may invoke only `function:domain-<environment>-*:live`, the alias each
+release moves, and only API Gateway in the same account may assume it. So no domain's function
+needs a resource policy of its own, and a function created again under the same name needs nothing
+added.
+
+API Gateway's logging role may write only to the domains' API access log groups,
+`/flex/domain/<environment>/<domain>/api-access`, and to API Gateway's execution log groups. It
+creates none: each domain's stack creates them first, encrypted.
 
 ## Routing a request
 
@@ -82,13 +125,13 @@ These are planned:
 
 - **The function is created outside CloudFormation**, when the domain's code is first released.
   No platform deploy holds it, so none can replace the code, versions or alias a team released.
-- **The platform provides everything around it:** its execution role, its log group, its
-  placement for its access level, and its environment variables, among them `FLEX_ENVIRONMENT`.
-  `FLEX_ENVIRONMENT` names the environment, so that names built from it, such as a gateway's
-  function name, match the environment the domain runs in. Code never branches on its value.
+- **The platform sets what the external domain team can't set:** the execution role, the domain
+  log group, the VPC's isolated subnets and the domain security group, and the environment
+  variables, among them `FLEX_ENVIRONMENT`. `FLEX_ENVIRONMENT` names the environment, so that names built from it, such
+  as a gateway's function name, match the environment the domain runs in. Code never branches on
+  its value.
 - **The domain's API invokes the function through its `live` alias,** by an ARN built from the
   name. Each release publishes a version and moves `live` to it, so the API reaches only code that
   was deliberately released, and moving the alias back rolls a release back. Until the first
   release there is no `live`, and the API answers 500.
-- **The VPC's subnet and security group IDs come from SSM parameters,** read when a stack
-  deploys. The VPC isn't the platform's, so its IDs are not in config.
+- **The VPC's isolated subnet IDs come from SSM parameters,** written by hand like the VPC's ID.

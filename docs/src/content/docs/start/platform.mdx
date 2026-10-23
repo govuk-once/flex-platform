@@ -13,7 +13,8 @@ Flex is the platform behind the GOV.UK app. It has three sections:
   request comes in through it. It checks the request, authenticates it and routes it to the right
   domain.
 - **[Domains](/flex-platform/domains/overview/).** Domains hold the logic behind personalised
-  features. Each domain is an API Gateway with a Lambda function backing it, running where its access level places it.
+  features. Each domain is an API Gateway with a Lambda function backing it, running in
+  isolated subnets.
 - **[Egress](/flex-platform/gateways/overview/).** The gateways, one Lambda function per upstream,
   generated from config in this repository. A domain uses them to reach other services.
 

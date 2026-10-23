@@ -24,7 +24,7 @@ export const STAGES: readonly StageConfig[] = [
           {
             name: "domain00",
             account: "098640806149",
-            domains: [{ name: "example" }],
+            domains: ["example"],
             zone: {
               name: "development.flex-platform.once.service.gov.uk",
               id: "Z0835542Q6J8ILWJ1RGR",

@@ -3,16 +3,6 @@ title: Glossary
 description: The terms these docs use, and what each means on the platform.
 ---
 
-## Access level
-
-Where a domain's Lambda runs. There are three access levels:
-
-- `isolated`: no route to the internet.
-- `private`: the internet, through NAT.
-- `public`: outside the VPC.
-
-The default is `isolated`. See [access levels](/flex-platform/domains/hosting/#access-levels).
-
 ## API Gateway
 
 Amazon API Gateway. These docs always name it in full to keep it separate from a _gateway_. Each
@@ -34,7 +24,7 @@ acts on it. See
 
 The logic behind a personalised feature of the GOV.UK app. Developers outside the platform team
 write domains, and the Frontdoor routes requests to them. Each domain is an API Gateway with a
-Lambda proxy integration, placed by its [access level](#access-level). Planned. See [Domains](/flex-platform/domains/overview/).
+Lambda proxy integration, in isolated subnets. Planned. See [Domains](/flex-platform/domains/overview/).
 
 ## Domain library
 

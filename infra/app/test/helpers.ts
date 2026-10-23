@@ -5,7 +5,6 @@ import { buildApp } from "../src/build-app.ts";
 import { selectTarget } from "../src/config/select-target.ts";
 import type {
   DomainAccountConfig,
-  DomainConfig,
   FrontdoorConfig,
   StageConfig,
   ZoneConfig,
@@ -35,17 +34,13 @@ export function domainAccount(
   environment: string,
   name: string,
   account: string,
-  domains: readonly DomainConfig[] = [],
+  domains: readonly string[] = [],
 ): DomainAccountConfig {
   return { name, account, domains, zone: zone(environment, account) };
 }
 
-// One domain at each access level, the same in every environment, so environments stay alike.
-export const FIXTURE_DOMAINS = [
-  { name: "domain-a" },
-  { name: "domain-b", access: "private" },
-  { name: "domain-c", access: "public" },
-] as const satisfies readonly DomainConfig[];
+// The same in every environment, so environments stay alike.
+const FIXTURE_DOMAINS = ["domain-a", "domain-b"];
 
 // The real stages' shape: two stages with one environment, one with three, and one environment
 // with two domain accounts, the second hosting no domains, so every loop is exercised.

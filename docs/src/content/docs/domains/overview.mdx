@@ -36,12 +36,9 @@ staging, and then to production.
 
 ## Network
 
-A domain's Lambda runs where its [access level](/flex-platform/domains/hosting/#access-levels)
-places it: `isolated`, `private` or `public`. An `isolated` domain has no route to the internet,
-and reaches upstreams through a gateway. An upstream might be another team's API, an AWS-hosted
-service or a third party.
-
-The default access level is `isolated`.
+A domain's Lambda runs in `isolated` subnets, with no route to the internet. It reaches upstreams
+through a gateway. An upstream might be another team's API, an AWS-hosted service or a third
+party.
 
 ## Calling gateways
 
