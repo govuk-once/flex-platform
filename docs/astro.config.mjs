@@ -28,6 +28,7 @@ export default defineConfig({
             "start/platform",
             "start/working-in-the-repo",
             "start/conventions",
+            "start/releasing",
           ],
         },
         // Grouped by the platform's sections. Egress is built, the Frontdoor partly, and domains are

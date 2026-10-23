@@ -9,11 +9,12 @@ change you are making.
 
 ## Code
 
-- `packages/` holds the shared TypeScript, ESLint and Vitest configuration, and `@repo/utils`, a set
-  of generic functions. `@repo/utils` depends on no other workspace package, which a test holds it
-  to, so any package can use it. Gateway code lives under `gateways/`, and what gateways share
-  lives in `gateways/shared/`. Frontdoor code lives under `frontdoor/`, and what its functions
-  share lives in `frontdoor/shared/`. A section's CDK constructs live in its own `infra/`, such as
+- `packages/` holds the shared TypeScript, ESLint and Vitest configuration, `@repo/release`, which
+  releases the published packages, and `@repo/utils`, a set of generic functions. `@repo/utils`
+  depends on no other workspace package, which a test holds it to, so any package can use it.
+  Gateway code lives under `gateways/`, and what gateways share lives in `gateways/shared/`.
+  Frontdoor code lives under `frontdoor/`, and what its functions share lives in
+  `frontdoor/shared/`. A section's CDK constructs live in its own `infra/`, such as
   `frontdoor/infra`, constructs every section uses in `infra/constructs`, and the CDK app in
   `infra/app`. A section's `infra/` never imports another section's: only `infra/app` joins them,
   and lint refuses anything else. See [Infrastructure](/flex-platform/infrastructure/overview/).
@@ -47,7 +48,9 @@ change you are making.
 - Infrastructure follows the rules in [Infrastructure](/flex-platform/infrastructure/overview/):
   only config differs between stages, construct IDs are a contract, and stacks are wired together
   by names derived from config.
-- Publishable packages use the `@govuk-once/` scope. Registry configuration is in `.npmrc`.
+- Publishable packages use the `@govuk-once/` scope. Registry configuration is in `.npmrc`. A
+  package is published only by a release, which `packages/release/src/sources.ts` lists it for.
+  See [Releasing packages](/flex-platform/start/releasing/).
 
 ## Tests
 

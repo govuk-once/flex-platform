@@ -1,6 +1,7 @@
 name: Continuous Deployment
 
-# Runs the shared quality checks on the main branch.
+# Runs the shared quality checks on the main branch, then publishes what releases.json records
+# that the registry does not have yet.
 
 on:
   push:
@@ -17,3 +18,73 @@ jobs:
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_URL: ${{ secrets.SONAR_URL }}
+
+  publish:
+    name: Publish
+    if: github.ref == 'refs/heads/main'
+    needs: qualityChecks
+    # One run publishes at a time, and the others wait their turn, oldest first. None is dropped:
+    # by default a run joining the group would cancel the one waiting, whatever its commit, so a
+    # late older run could cancel the newest and then publish nothing.
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # a candidate is numbered by the commits main has
+          persist-credentials: false
+
+      # Only the newest main publishes, so nothing older is published after it, including when an
+      # old run is run again.
+      - name: Check this is main's newest commit
+        id: head
+        run: |
+          git fetch --quiet origin main
+          if [ "$(git rev-parse origin/main)" = "$GITHUB_SHA" ]; then
+            echo "newest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::main has moved past this commit, so its own run publishes."
+            echo "newest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup pnpm
+        if: steps.head.outputs.newest == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup node
+        if: steps.head.outputs.newest == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ".nvmrc"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        if: steps.head.outputs.newest == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # .npmrc names the registry for the scope. Its token is read from the environment when the
+      # registry is used, so the file never holds it. Packing reads the registry, to find what is
+      # missing, and publishing writes to it.
+      - name: Authenticate to the registry
+        if: steps.head.outputs.newest == 'true'
+        run: echo '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' >> ~/.npmrc
+
+      - name: Pack what the registry is missing
+        if: steps.head.outputs.newest == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec release pack --out release-out
+
+      - name: Publish at merge
+        if: steps.head.outputs.newest == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec release publish release-out --stage merge
