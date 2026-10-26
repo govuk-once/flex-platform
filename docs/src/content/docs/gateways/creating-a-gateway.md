@@ -25,7 +25,8 @@ gateways/services/example/
 
 ```json title="package.json"
 {
-  "name": "@govuk-once/flex-gateway-example",
+  "name": "@repo/gateway-service-example",
+  "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
@@ -100,7 +101,7 @@ every field, and [the openapi-rest overview](/flex-platform/drivers/openapi-rest
 ## 3. Derive the schemas
 
 ```bash
-pnpm --filter @govuk-once/flex-gateway-example schemas
+pnpm --filter @repo/gateway-service-example schemas
 ```
 
 When there are no versions yet, this writes `schemas/0001.json` from the OpenAPI document. It also
@@ -115,7 +116,7 @@ Read the file before you commit it. It is the contract that callers will compile
 ## 4. Generate
 
 ```bash
-pnpm --filter @govuk-once/flex-gateway-example codegen
+pnpm --filter @repo/gateway-service-example codegen
 ```
 
 This checks the configuration against the schemas and writes `.gen/`. It lists every problem in

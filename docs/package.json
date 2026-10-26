@@ -6,12 +6,22 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "lint": "astro sync && eslint .",
+    "typecheck": "astro check"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.6",
     "astro": "7.4.0",
     "sharp": "0.35.5",
     "starlight-links-validator": "0.27.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@repo/eslint-config": "workspace:*",
+    "eslint": "10.12.0",
+    "eslint-plugin-astro": "3.2.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2"
   }
 }

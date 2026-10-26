@@ -1,5 +1,6 @@
 {
-  "name": "@govuk-once/flex-gateway-udp",
+  "name": "@repo/gateway-service-udp",
+  "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
