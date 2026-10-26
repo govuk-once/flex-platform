@@ -42,8 +42,10 @@ jobs:
           node-version-file: ".nvmrc"
           cache: "pnpm"
 
+      # With the workspace packages the site imports, and their own dependencies: building reads
+      # their sources, and the tsconfig each extends.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter @repo/docs
+        run: pnpm install --frozen-lockfile --filter "@repo/docs..."
 
       - name: Build site
         run: pnpm --filter @repo/docs build

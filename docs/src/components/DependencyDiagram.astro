@@ -1,0 +1,129 @@
+---
+// The workspace's packages and their dependencies, drawn from the manifests as the site builds,
+// so the diagram is never out of date. Drawn with Starlight's colour variables so it follows the
+// light and dark themes.
+import { BOX_HEIGHT, BOX_WIDTH, dependencyGraph } from "./dependency-graph.ts";
+
+const graph = dependencyGraph();
+---
+
+<figure class="dependencies">
+  <div class="scroll">
+    <svg
+      viewBox={`0 0 ${graph.width.toFixed(0)} ${graph.height.toFixed(0)}`}
+      style={`max-width: ${graph.width.toFixed(0)}px`}
+      role="img"
+      aria-labelledby="dependencies-title dependencies-desc"
+    >
+      <title id="dependencies-title">Workspace package dependencies</title>
+      <desc id="dependencies-desc">{graph.description}</desc>
+      <defs>
+        <marker
+          id="dependencies-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+        </marker>
+      </defs>
+
+      {
+        graph.lines.map((line) => (
+          <path class:list={["line", { dev: line.dev }]} d={line.path}>
+            <title>{`${line.from} → ${line.to}`}</title>
+          </path>
+        ))
+      }
+      {
+        graph.boxes.map((box) => (
+          <g>
+            <rect
+              class:list={["box", { published: box.published }]}
+              x={box.x.toFixed(1)}
+              y={box.y.toFixed(1)}
+              width={BOX_WIDTH}
+              height={BOX_HEIGHT}
+              rx="6"
+            />
+            <text class="name" x={(box.x + 12).toFixed(1)} y={(box.y + 20).toFixed(1)}>
+              {box.name}
+            </text>
+            <text class="directory" x={(box.x + 12).toFixed(1)} y={(box.y + 36).toFixed(1)}>
+              {box.directory}
+            </text>
+          </g>
+        ))
+      }
+    </svg>
+  </div>
+  <figcaption>
+    Each package sits above what it depends on. Every gateway is drawn as one box, and every
+    driver as another, since each has the same shape. An arrow is left out where another
+    dependency already reaches the package. A dashed arrow is a dev dependency only. A highlighted package is
+    in the <code>@govuk-once/</code> scope. The shared ESLint, TypeScript and Vitest configuration,
+    which every package uses, is left out, and so is this site.
+  </figcaption>
+</figure>
+
+<style>
+  .dependencies {
+    margin-block: 1.5rem;
+  }
+  .scroll {
+    overflow-x: auto;
+  }
+  svg {
+    display: block;
+    width: 100%;
+    min-width: 900px;
+    height: auto;
+    margin-inline: auto;
+    font-family: var(--sl-font);
+  }
+  figcaption {
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+    text-align: center;
+  }
+  .box {
+    fill: var(--sl-color-bg);
+    stroke: var(--sl-color-gray-4);
+  }
+  .box.published {
+    stroke: var(--sl-color-accent);
+    stroke-width: 2;
+  }
+  .line {
+    fill: none;
+    stroke: var(--sl-color-gray-3);
+    stroke-width: 1.5;
+    marker-end: url(#dependencies-arrow);
+  }
+  .line.dev {
+    stroke-dasharray: 4 3;
+  }
+  .head {
+    fill: var(--sl-color-gray-3);
+  }
+  text {
+    fill: var(--sl-color-white);
+  }
+  /* As Starlight resolves its own: --sl-font-mono is only set to override the system font. */
+  .name,
+  .directory {
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+  }
+  .name {
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .directory {
+    font-size: 11px;
+    fill: var(--sl-color-gray-3);
+  }
+</style>
