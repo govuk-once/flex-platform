@@ -155,7 +155,7 @@ construct creates for itself, and each rule has a construct that meets it:
 
 | Check | Rule | Construct | A resource must |
 |---|---|---|---|
-| `LogGroupCheck` | `Flex-LogGroup` | `PlatformLogGroup` | Keep its logs for a year, be encrypted with a KMS key, and be retained when its stack is deleted |
+| `LogGroupCheck` | `Flex-LogGroup` | `PlatformLogGroup` | Keep its logs for a year, be encrypted with a KMS key, be protected from deletion, and be retained when its stack is deleted |
 | `BucketHttpsCheck` | `Flex-BucketHttps` | `PlatformBucket` | Have a policy that denies, to anyone, every request to the bucket and its objects over plain HTTP, and over TLS older than 1.2, each in a statement with no other condition |
 
 A new rule is a `ResourceCheck`: the type it applies to, and the locations at fault in a resource
@@ -166,7 +166,9 @@ which rotates yearly, is retained as the log groups are, and lets CloudWatch Log
 log groups in its own account and region. The check can't see a log group an AWS service creates
 when it first writes, so a log group a service would create is created ahead of it, by name.
 `PlatformBucket` also blocks public access and encrypts with S3's own keys, which cdk-nag checks,
-and keeps every version of an object, so an overwrite or a delete can be undone.
+and keeps every version of an object, so an overwrite or a delete can be undone. Given `lockedFor`,
+it locks each version for that long with S3 Object Lock in compliance mode, which nobody, the
+account's root user included, can delete or shorten. A locked bucket is always retained.
 
 A check rejects; it never fixes. So a resource built without its construct fails synth where it's
 defined, rather than being changed out of sight. For a resource inside a construct that isn't ours,

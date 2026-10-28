@@ -15,8 +15,8 @@ export interface PlatformLogGroupProps {
 const LOG_GROUP_KEY_ID = "LogGroupKey";
 
 /**
- * A log group of the platform's: kept for a year, encrypted with its stack's own KMS key, and
- * retained when its stack is deleted. Log forwarding will carry every account's log groups to the
+ * A log group of the platform's: kept for a year, encrypted with its stack's own KMS key,
+ * protected from deletion, and retained when its stack is deleted. Log forwarding will carry every account's log groups to the
  * shared account, which is where any longer term copy is made, so retention here is the same
  * everywhere.
  */
@@ -32,6 +32,7 @@ export class PlatformLogGroup extends Construct {
     this.logGroup = new LogGroup(this, "LogGroup", {
       retention: LOG_RETENTION,
       removalPolicy: RemovalPolicy.RETAIN,
+      deletionProtectionEnabled: true,
       encryptionKey: this.key,
       ...(props.logGroupName !== undefined && {
         logGroupName: props.logGroupName,

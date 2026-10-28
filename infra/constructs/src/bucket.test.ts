@@ -1,21 +1,17 @@
-import { RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
+import { Duration, RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { describe, expect, it } from "vitest";
 
-import { PlatformBucket } from "./bucket.ts";
+import { PlatformBucket, type PlatformBucketProps } from "./bucket.ts";
 import { cdkApp } from "./cdk-app.ts";
 
-function build(removalPolicy?: RemovalPolicy) {
+function build(props: PlatformBucketProps = {}) {
   const app = cdkApp();
   const stack = new Stack(app, "Test", {
     env: { account: "123456789012", region: "eu-west-2" },
   });
-  const { bucket } = new PlatformBucket(
-    stack,
-    "Store",
-    removalPolicy === undefined ? {} : { removalPolicy },
-  );
+  const { bucket } = new PlatformBucket(stack, "Store", props);
   return { app, bucket, template: Template.fromStack(stack) };
 }
 
@@ -73,9 +69,39 @@ describe("PlatformBucket", () => {
     build().template.hasResource("AWS::S3::Bucket", {
       DeletionPolicy: "Retain",
     });
-    build(RemovalPolicy.DESTROY).template.hasResource("AWS::S3::Bucket", {
-      DeletionPolicy: "Delete",
+    build({ removalPolicy: RemovalPolicy.DESTROY }).template.hasResource(
+      "AWS::S3::Bucket",
+      { DeletionPolicy: "Delete" },
+    );
+  });
+
+  it("locks nothing unless told to", () => {
+    build().template.hasResourceProperties("AWS::S3::Bucket", {
+      ObjectLockEnabled: Match.absent(),
+      ObjectLockConfiguration: Match.absent(),
     });
+  });
+
+  it("locks every version in compliance mode for as long as it's told", () => {
+    build({ lockedFor: Duration.days(365) }).template.hasResourceProperties(
+      "AWS::S3::Bucket",
+      {
+        ObjectLockEnabled: true,
+        ObjectLockConfiguration: {
+          ObjectLockEnabled: "Enabled",
+          Rule: { DefaultRetention: { Mode: "COMPLIANCE", Days: 365 } },
+        },
+      },
+    );
+  });
+
+  it("refuses to lock a bucket it would destroy", () => {
+    expect(() =>
+      build({
+        lockedFor: Duration.days(365),
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
+    ).toThrow("Test/Store: a locked bucket must be retained");
   });
 
   // Access logging depends on what the bucket holds, so its user decides.
