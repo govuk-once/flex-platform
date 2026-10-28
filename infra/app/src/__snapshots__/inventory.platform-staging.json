@@ -136,6 +136,42 @@
         "type": "AWS::IAM::Role"
       },
       {
+        "logicalId": "DomainWorkloadIntoLambda304A1BB5",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
+        "logicalId": "DomainWorkloadSecurityGroup625327B6",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "DomainWorkloadToLambdaA7AB53C2",
+        "type": "AWS::EC2::SecurityGroupEgress"
+      },
+      {
+        "logicalId": "EndpointsLambda776D48EF",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsLambdaSecurityGroup1313ED30",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "EndpointsSecretsManager54961936",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsSecretsManagerSecurityGroupF246BBC7",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "EndpointsSts285B1D8B",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsStsSecurityGroup66AA818B",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "FlowLogsFlowLogF7AE7EFB",
         "type": "AWS::EC2::FlowLog"
       },
@@ -162,6 +198,26 @@
       {
         "logicalId": "FlowLogsStoreBucketPolicy882EA412",
         "type": "AWS::S3::BucketPolicy"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadIntoSecretsManager1AE43854",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadIntoSts14BAA133",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToSecretsManagerC7457DFC",
+        "type": "AWS::EC2::SecurityGroupEgress"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToStsCB870196",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "LogGroupKeyD49CF390",
@@ -416,12 +472,44 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "ParametersdomainSecurityGroupId74503CBC",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
         "logicalId": "ParametersisolatedSubnetIds600B4446",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersisolatedgatewaySecurityGroupId8E393A1D",
         "type": "AWS::SSM::Parameter"
       },
       {
         "logicalId": "ParametersprivateSubnetIdsC61CB220",
         "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersprivategatewaySecurityGroupId489911C0",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadIntoSecretsManager42512261",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadIntoSts532275C0",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadSecurityGroup94165728",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadToSecretsManagerB865B384",
+        "type": "AWS::EC2::SecurityGroupEgress"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadToStsDD8CA04A",
+        "type": "AWS::EC2::SecurityGroupEgress"
       }
     ]
   }

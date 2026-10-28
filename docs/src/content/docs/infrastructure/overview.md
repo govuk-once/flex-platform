@@ -52,7 +52,7 @@ Each environment has these stacks:
 |---|---|---|---|---|
 | `frontdoor-<environment>-edge-logs-eu-west-2` | Frontdoor | eu-west-2 | Environment | Lambda@Edge's log group, and the policy that lets its role write to it |
 | `frontdoor-<environment>` | Frontdoor | us-east-1 | Environment | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
-| `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, network ACLs, and its flow logs: see [Network](/flex-platform/infrastructure/network/) |
+| `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, interface endpoints, security groups, network ACLs, and its flow logs: see [Network](/flex-platform/infrastructure/network/) |
 
 The Frontdoor's stacks are in us-east-1 because CloudFront takes its web ACL, its certificate and
 its Lambda@Edge functions from there. Lambda@Edge's log group is in a stack of its own, in the one

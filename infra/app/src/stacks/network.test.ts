@@ -54,6 +54,28 @@ describe("NetworkStack", () => {
     );
   });
 
+  it("lets its domains invoke only the environment's gateways", () => {
+    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.lambda",
+      PolicyDocument: {
+        Statement: [
+          {
+            Action: "lambda:InvokeFunction",
+            Resource: `arn:aws:lambda:eu-west-2:${PROD_ENVIRONMENT.domainAccounts[0].account}:function:gateway-prod-*`,
+          },
+        ],
+      },
+    });
+  });
+
+  it("writes a security group for each workload", () => {
+    for (const workload of ["domain", "isolated-gateway", "private-gateway"]) {
+      template().hasResourceProperties("AWS::SSM::Parameter", {
+        Name: `/flex/network/prod/security-group/${workload}`,
+      });
+    }
+  });
+
   it("outputs each zone's NAT address, for upstreams to allowlist", () => {
     const outputs = template().findOutputs("*");
 

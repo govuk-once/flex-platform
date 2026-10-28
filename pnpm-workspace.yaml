@@ -6,6 +6,7 @@ packages:
   - gateways/shared/*
   - gateways/drivers/*
   - gateways/services/*
+  - gateways/infra
   - infra/*
 
 allowBuilds:

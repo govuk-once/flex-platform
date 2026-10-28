@@ -1,6 +1,6 @@
 ---
 title: Network
-description: The VPC in each domain account that domains and gateways run in, its tiers and logs, and how other stacks find its IDs.
+description: The VPC in each domain account that domains and gateways run in, its tiers, endpoints and logs, and how other stacks find its IDs.
 ---
 
 Each domain account has one network in each environment, in its own stack,
@@ -9,7 +9,8 @@ and deploying either is planned. Its constructs are in `infra/constructs/src/net
 `infra/app/src/stacks/network.ts` puts them together.
 
 The network decides where a workload may send traffic. It doesn't create any workload. Each will
-find the subnets it runs in through [the IDs the network writes to SSM](#ids-other-stacks-read).
+find the subnets and security group it runs in through
+[the IDs the network writes to SSM](#ids-other-stacks-read).
 
 ## Tiers
 
@@ -17,7 +18,7 @@ Each availability zone has three subnets, one per tier:
 
 | Tier | For | Route out |
 |---|---|---|
-| `isolated` | Domains, and gateways whose upstream is reached privately | None. Only the VPC itself |
+| `isolated` | Domains, and gateways whose upstream is reached privately | None. Only the VPC itself, including its [interface endpoints](#endpoints) |
 | `private` | Gateways whose upstream is reached over the internet | Its zone's NAT gateway |
 | `public` | Only the NAT gateways | The internet gateway |
 
@@ -50,9 +51,48 @@ CDK's `Vpc` checks its zones against its stack's, and a stack that doesn't name 
 up in the account at synth. So the network's stack names its zones by overriding
 `availabilityZones`, and `NetworkVpc` refuses a stack that doesn't.
 
-## Routes out
+## What a workload may reach
 
-Only the private tier has a route out of the VPC, through its zone's NAT gateway.
+Every workload runs in a security group of its kind, which lets nothing in, and lets traffic out
+only on TCP port 443:
+
+| Workload | Tier | May reach |
+|---|---|---|
+| `domain` | `isolated` | The `lambda` endpoint |
+| `isolated-gateway` | `isolated` | The `secretsmanager` and `sts` endpoints |
+| `private-gateway` | `private` | The `secretsmanager` and `sts` endpoints, and its zone's NAT gateway |
+
+A domain uses the `lambda` endpoint to invoke gateways. A gateway uses `secretsmanager` to read its
+secret, and `sts` to assume an upstream's role for
+[`sigV4`](/flex-platform/drivers/openapi-rest/authentication/). Each endpoint's own security group
+lets in only the workloads that may reach it, and lets nothing out. What a workload may call is its
+role's to decide: an endpoint's policy applies to the requests sent through that endpoint.
+
+The rules between a workload's group and an endpoint's are written out by `WorkloadSecurityGroup`,
+rather than with CDK's `connections`, which would name each rule after the other group's construct
+path, stack name included, and would drop the rule CDK uses to keep EC2's default allow-all egress
+off a group with no other.
+
+### Endpoints
+
+The isolated subnets reach AWS through interface endpoints, each with private DNS, so the SDK's
+usual hostname resolves to the endpoint. Each endpoint's policy refuses any principal or resource
+outside the account, and any action but its own:
+
+| Endpoint | Allows |
+|---|---|
+| `lambda` | `lambda:InvokeFunction` on `gateway-<environment>-*`, any qualifier included |
+| `secretsmanager` | `secretsmanager:GetSecretValue` |
+| `sts` | `sts:AssumeRole` |
+
+The `lambda` endpoint's pattern comes from `gatewayFunctionPattern` in `gateways/infra`, which
+names gateways' functions. Any function in the account with that prefix can be invoked by every
+domain in the environment, so the gateways section gives it to gateways alone.
+
+An endpoint costs the same whether it's used or not, so one is added when something calls its API.
+Tracing needs none: Lambda's X-Ray daemon sends from outside the VPC, so neither the X-Ray SDK nor
+an OpenTelemetry exporter sending to it over UDP does. An exporter sending to X-Ray over HTTPS
+would need an `xray` endpoint.
 
 ### NAT addresses
 
@@ -126,6 +166,7 @@ names derived from config:
 | `/flex/network/<environment>/vpc-id` | The VPC's ID |
 | `/flex/network/<environment>/isolated-subnet-ids` | The isolated subnets' IDs, as a list |
 | `/flex/network/<environment>/private-subnet-ids` | The private subnets' IDs, as a list |
+| `/flex/network/<environment>/security-group/<workload>` | A workload's security group |
 
 Each account has its own parameters, so the names need no account. A stack reads one with
 `StringParameter.valueForStringParameter` or `StringListParameter.valueForTypedListParameter`.

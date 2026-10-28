@@ -1,13 +1,18 @@
+import { gatewayFunctionPattern } from "@repo/gateway-infra";
 import {
   FlowLogs,
+  InterfaceEndpoints,
   NatAddresses,
   NETWORK_REGION,
   NetworkAcls,
   NetworkParameters,
   NetworkVpc,
   networkZones,
+  type Placement,
+  WorkloadSecurityGroup,
 } from "@repo/infra-constructs";
 import { CfnOutput, Stack } from "aws-cdk-lib";
+import type { InterfaceVpcEndpoint, ISecurityGroup } from "aws-cdk-lib/aws-ec2";
 import type { Construct } from "constructs";
 
 import type {
@@ -21,6 +26,37 @@ export function networkStackName(
 ): string {
   return `network-${environment.name}-${domainAccount.name}`;
 }
+
+interface Workload {
+  readonly id: string;
+  readonly workload: string;
+  readonly placement: Placement;
+  /** The endpoints it may reach. */
+  readonly reaches: (endpoints: InterfaceEndpoints) => InterfaceVpcEndpoint[];
+}
+
+// What runs in the network, and the endpoints each may reach: a domain's to invoke gateways, a
+// gateway's to read its secret and assume an upstream's role.
+const WORKLOADS: readonly Workload[] = [
+  {
+    id: "DomainWorkload",
+    workload: "domain",
+    placement: "isolated",
+    reaches: ({ lambda }) => [lambda],
+  },
+  {
+    id: "IsolatedGatewayWorkload",
+    workload: "isolated-gateway",
+    placement: "isolated",
+    reaches: ({ secretsManager, sts }) => [secretsManager, sts],
+  },
+  {
+    id: "PrivateGatewayWorkload",
+    workload: "private-gateway",
+    placement: "private",
+    reaches: ({ secretsManager, sts }) => [secretsManager, sts],
+  },
+];
 
 interface NetworkStackProps {
   readonly environment: EnvironmentConfig;
@@ -60,10 +96,29 @@ export class NetworkStack extends Stack {
     new NetworkAcls(this, "NetworkAcls", { vpc, subnets });
     new FlowLogs(this, "FlowLogs", { environment: environment.name, vpc });
 
+    const endpoints = new InterfaceEndpoints(this, "Endpoints", {
+      vpc,
+      subnets: subnets.isolated,
+      // Any domain may invoke any of its environment's gateways.
+      invokableFunctions: gatewayFunctionPattern(environment.name),
+    });
+
+    const securityGroups: Record<string, ISecurityGroup> = {};
+    for (const { id, workload, placement, reaches } of WORKLOADS) {
+      const { securityGroup } = new WorkloadSecurityGroup(this, id, {
+        vpc,
+        workload,
+        placement,
+        endpoints: reaches(endpoints),
+      });
+      securityGroups[workload] = securityGroup;
+    }
+
     new NetworkParameters(this, "Parameters", {
       environment: environment.name,
       vpc,
       subnets: { isolated: subnets.isolated, private: subnets.private },
+      securityGroups,
     });
 
     // The one value nothing can derive, and the one upstreams need: the address a private

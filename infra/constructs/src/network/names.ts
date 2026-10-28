@@ -37,6 +37,14 @@ export function subnetIdsParameterName(
   return `/flex/network/${environment}/${placement}-subnet-ids`;
 }
 
+/** A workload's security group, such as `domain`. */
+export function securityGroupIdParameterName(
+  environment: string,
+  workload: string,
+): string {
+  return `/flex/network/${environment}/security-group/${workload}`;
+}
+
 /** Where CDK's function that empties the VPC's default security group logs. */
 export function restrictDefaultSecurityGroupLogGroupName(
   environment: string,

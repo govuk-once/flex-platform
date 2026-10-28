@@ -30,7 +30,19 @@ describe("NetworkParameters", () => {
         },
       });
     }
-    template.resourceCountIs("AWS::SSM::Parameter", 3);
+    for (const [workload, group] of [
+      ["domain", "DomainSecurityGroup"],
+      ["private-gateway", "PrivateGatewaySecurityGroup"],
+    ]) {
+      template.hasResourceProperties("AWS::SSM::Parameter", {
+        Name: `/flex/network/sandbox/security-group/${workload}`,
+        Type: "String",
+        Value: {
+          "Fn::GetAtt": [Match.stringLikeRegexp(`^${group}`), "GroupId"],
+        },
+      });
+    }
+    template.resourceCountIs("AWS::SSM::Parameter", 5);
   });
 });
 
