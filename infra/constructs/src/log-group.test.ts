@@ -27,13 +27,13 @@ describe("PlatformLogGroup", () => {
     expect(() => app.synth()).not.toThrow();
   });
 
-  it("keeps logs for a year and outlives its stack", () => {
+  it("keeps logs for a year, refuses to be deleted and outlives its stack", () => {
     const { template } = build();
 
     template.hasResource("AWS::Logs::LogGroup", {
       DeletionPolicy: "Retain",
       UpdateReplacePolicy: "Retain",
-      Properties: { RetentionInDays: 365 },
+      Properties: { RetentionInDays: 365, DeletionProtectionEnabled: true },
     });
   });
 
