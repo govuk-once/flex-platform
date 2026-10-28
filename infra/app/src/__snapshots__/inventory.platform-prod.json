@@ -364,5 +364,1133 @@
         "type": "AWS::IAM::ManagedPolicy"
       }
     ]
+  },
+  {
+    "name": "network-development-domain00",
+    "account": "168789041282",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "CustomVpcRestrictDefaultSGCustomResourceProviderHandlerDC833E5E",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "FlowLogsFlowLogF7AE7EFB",
+        "type": "AWS::EC2::FlowLog"
+      },
+      {
+        "logicalId": "FlowLogsRejectedDelivery510D1D23",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "FlowLogsRejectedDeliveryDefaultPolicy54092B12",
+        "type": "AWS::IAM::Policy"
+      },
+      {
+        "logicalId": "FlowLogsRejectedFlowLog496277F9",
+        "type": "AWS::EC2::FlowLog"
+      },
+      {
+        "logicalId": "FlowLogsRejectedLogGroupDF36CDD6",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "FlowLogsStoreBucket91AA7EB1",
+        "type": "AWS::S3::Bucket"
+      },
+      {
+        "logicalId": "FlowLogsStoreBucketPolicy882EA412",
+        "type": "AWS::S3::BucketPolicy"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2a079A1F16",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2bD8C2BB59",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2c5E395775",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedCD1EDE52",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn1001AE98A1A",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn1104115F700",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn11101F8BD6F",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedOut1009A1F2CD9",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2aC999F66C",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2bBC30B9C3",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2c976AB3F0",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivate881D3E7B",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn1004B1E42C5",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn110555FAD4F",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn11189C4C2FE",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn200FB9B26F1",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateOut1002DF1E516",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateOut20092B86666",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2aA1DB6935",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2b344E6B69",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2c37FDADA3",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspublic9AACDB90",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn1008E503C93",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn11077C8B8BE",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn111F67A0820",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn200EE3B4D87",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicOut10062C5A413",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicOut200E47CB58D",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2a7976E6B1",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2b4D980C18",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2c6F5DF404",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkInternetGatewayAttachment4FEFFDBC",
+        "type": "AWS::EC2::VPCGatewayAttachment"
+      },
+      {
+        "logicalId": "NetworkInternetGatewayD8FF3F66",
+        "type": "AWS::EC2::InternetGateway"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aRouteTable7B2631ED",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aRouteTableAssociation332A1D77",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aSubnet8B51FBC5",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bRouteTable49992352",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bRouteTableAssociation9D29ACE8",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bSubnetD51CD523",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cRouteTable2DE39E8B",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cRouteTableAssociation377F8282",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cSubnet8DDC71FB",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2a5573CB07",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2bC908F533",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2c8FE37E0D",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2aB530BB46",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2b600B956A",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2cE9727B40",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aDefaultRoute82E6C8A2",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aRouteTableAssociation7044F65B",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aRouteTableB54D953B",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aSubnet41CB927E",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bDefaultRoute9234A6F0",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bRouteTable95A763B7",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bRouteTableAssociationF31BAB5A",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bSubnetFABC457F",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cDefaultRoute0D06EFC0",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cRouteTable8376A177",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cRouteTableAssociation9EFBF143",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cSubnet9FE9638C",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aDefaultRoute14DF693F",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aNATGateway8DFA4022",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aRouteTable82118951",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aRouteTableAssociation4C014282",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aSubnet4300A6D2",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bDefaultRoute2466D847",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bNATGateway4EBD6C1D",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bRouteTableAssociationB46E976C",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bRouteTableBE081433",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bSubnetD0CFB8BD",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cDefaultRouteBF1A7C65",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cNATGatewayD38D4F13",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cRouteTable7F5801F9",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cRouteTableAssociationEF70CB32",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cSubnet166B0E28",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkRestrictDefaultSecurityGroupLogsLogGroup7F3D44F1",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "NetworkRestrictDefaultSecurityGroupLogsPolicyDC480D34",
+        "type": "AWS::IAM::Policy"
+      },
+      {
+        "logicalId": "NetworkVpc7FB7348F",
+        "type": "AWS::EC2::VPC"
+      },
+      {
+        "logicalId": "NetworkVpcRestrictDefaultSecurityGroupCustomResource491E144D",
+        "type": "Custom::VpcRestrictDefaultSG"
+      },
+      {
+        "logicalId": "ParametersVpcIdAB3091CC",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersisolatedSubnetIds600B4446",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersprivateSubnetIdsC61CB220",
+        "type": "AWS::SSM::Parameter"
+      }
+    ]
+  },
+  {
+    "name": "network-production-domain00",
+    "account": "105322542531",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "CustomVpcRestrictDefaultSGCustomResourceProviderHandlerDC833E5E",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "FlowLogsFlowLogF7AE7EFB",
+        "type": "AWS::EC2::FlowLog"
+      },
+      {
+        "logicalId": "FlowLogsRejectedDelivery510D1D23",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "FlowLogsRejectedDeliveryDefaultPolicy54092B12",
+        "type": "AWS::IAM::Policy"
+      },
+      {
+        "logicalId": "FlowLogsRejectedFlowLog496277F9",
+        "type": "AWS::EC2::FlowLog"
+      },
+      {
+        "logicalId": "FlowLogsRejectedLogGroupDF36CDD6",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "FlowLogsStoreBucket91AA7EB1",
+        "type": "AWS::S3::Bucket"
+      },
+      {
+        "logicalId": "FlowLogsStoreBucketPolicy882EA412",
+        "type": "AWS::S3::BucketPolicy"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2a079A1F16",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2bD8C2BB59",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2c5E395775",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedCD1EDE52",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn1001AE98A1A",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn1104115F700",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn11101F8BD6F",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedOut1009A1F2CD9",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2aC999F66C",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2bBC30B9C3",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2c976AB3F0",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivate881D3E7B",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn1004B1E42C5",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn110555FAD4F",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn11189C4C2FE",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn200FB9B26F1",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateOut1002DF1E516",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateOut20092B86666",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2aA1DB6935",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2b344E6B69",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2c37FDADA3",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspublic9AACDB90",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn1008E503C93",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn11077C8B8BE",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn111F67A0820",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn200EE3B4D87",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicOut10062C5A413",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicOut200E47CB58D",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2a7976E6B1",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2b4D980C18",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2c6F5DF404",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkInternetGatewayAttachment4FEFFDBC",
+        "type": "AWS::EC2::VPCGatewayAttachment"
+      },
+      {
+        "logicalId": "NetworkInternetGatewayD8FF3F66",
+        "type": "AWS::EC2::InternetGateway"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aRouteTable7B2631ED",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aRouteTableAssociation332A1D77",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aSubnet8B51FBC5",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bRouteTable49992352",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bRouteTableAssociation9D29ACE8",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bSubnetD51CD523",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cRouteTable2DE39E8B",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cRouteTableAssociation377F8282",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cSubnet8DDC71FB",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2a5573CB07",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2bC908F533",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2c8FE37E0D",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2aB530BB46",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2b600B956A",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2cE9727B40",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aDefaultRoute82E6C8A2",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aRouteTableAssociation7044F65B",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aRouteTableB54D953B",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aSubnet41CB927E",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bDefaultRoute9234A6F0",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bRouteTable95A763B7",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bRouteTableAssociationF31BAB5A",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bSubnetFABC457F",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cDefaultRoute0D06EFC0",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cRouteTable8376A177",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cRouteTableAssociation9EFBF143",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cSubnet9FE9638C",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aDefaultRoute14DF693F",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aNATGateway8DFA4022",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aRouteTable82118951",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aRouteTableAssociation4C014282",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aSubnet4300A6D2",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bDefaultRoute2466D847",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bNATGateway4EBD6C1D",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bRouteTableAssociationB46E976C",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bRouteTableBE081433",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bSubnetD0CFB8BD",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cDefaultRouteBF1A7C65",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cNATGatewayD38D4F13",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cRouteTable7F5801F9",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cRouteTableAssociationEF70CB32",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cSubnet166B0E28",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkRestrictDefaultSecurityGroupLogsLogGroup7F3D44F1",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "NetworkRestrictDefaultSecurityGroupLogsPolicyDC480D34",
+        "type": "AWS::IAM::Policy"
+      },
+      {
+        "logicalId": "NetworkVpc7FB7348F",
+        "type": "AWS::EC2::VPC"
+      },
+      {
+        "logicalId": "NetworkVpcRestrictDefaultSecurityGroupCustomResource491E144D",
+        "type": "Custom::VpcRestrictDefaultSG"
+      },
+      {
+        "logicalId": "ParametersVpcIdAB3091CC",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersisolatedSubnetIds600B4446",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersprivateSubnetIdsC61CB220",
+        "type": "AWS::SSM::Parameter"
+      }
+    ]
+  },
+  {
+    "name": "network-staging-domain00",
+    "account": "187157282680",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "CustomVpcRestrictDefaultSGCustomResourceProviderHandlerDC833E5E",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "FlowLogsFlowLogF7AE7EFB",
+        "type": "AWS::EC2::FlowLog"
+      },
+      {
+        "logicalId": "FlowLogsRejectedDelivery510D1D23",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "FlowLogsRejectedDeliveryDefaultPolicy54092B12",
+        "type": "AWS::IAM::Policy"
+      },
+      {
+        "logicalId": "FlowLogsRejectedFlowLog496277F9",
+        "type": "AWS::EC2::FlowLog"
+      },
+      {
+        "logicalId": "FlowLogsRejectedLogGroupDF36CDD6",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "FlowLogsStoreBucket91AA7EB1",
+        "type": "AWS::S3::Bucket"
+      },
+      {
+        "logicalId": "FlowLogsStoreBucketPolicy882EA412",
+        "type": "AWS::S3::BucketPolicy"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2a079A1F16",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2bD8C2BB59",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NatAddresseseuwest2c5E395775",
+        "type": "AWS::EC2::EIP"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedCD1EDE52",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn1001AE98A1A",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn1104115F700",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedIn11101F8BD6F",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedOut1009A1F2CD9",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2aC999F66C",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2bBC30B9C3",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsisolatedeuwest2c976AB3F0",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivate881D3E7B",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn1004B1E42C5",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn110555FAD4F",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn11189C4C2FE",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateIn200FB9B26F1",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateOut1002DF1E516",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateOut20092B86666",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2aA1DB6935",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2b344E6B69",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclsprivateeuwest2c37FDADA3",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspublic9AACDB90",
+        "type": "AWS::EC2::NetworkAcl"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn1008E503C93",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn11077C8B8BE",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn111F67A0820",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicIn200EE3B4D87",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicOut10062C5A413",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspublicOut200E47CB58D",
+        "type": "AWS::EC2::NetworkAclEntry"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2a7976E6B1",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2b4D980C18",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkAclspubliceuwest2c6F5DF404",
+        "type": "AWS::EC2::SubnetNetworkAclAssociation"
+      },
+      {
+        "logicalId": "NetworkInternetGatewayAttachment4FEFFDBC",
+        "type": "AWS::EC2::VPCGatewayAttachment"
+      },
+      {
+        "logicalId": "NetworkInternetGatewayD8FF3F66",
+        "type": "AWS::EC2::InternetGateway"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aRouteTable7B2631ED",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aRouteTableAssociation332A1D77",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2aSubnet8B51FBC5",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bRouteTable49992352",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bRouteTableAssociation9D29ACE8",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2bSubnetD51CD523",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cRouteTable2DE39E8B",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cRouteTableAssociation377F8282",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkIsolatedeuwest2cSubnet8DDC71FB",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2a5573CB07",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2bC908F533",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatDroppedPacketseuwest2c8FE37E0D",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2aB530BB46",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2b600B956A",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkNatPortAllocationeuwest2cE9727B40",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aDefaultRoute82E6C8A2",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aRouteTableAssociation7044F65B",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aRouteTableB54D953B",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2aSubnet41CB927E",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bDefaultRoute9234A6F0",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bRouteTable95A763B7",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bRouteTableAssociationF31BAB5A",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2bSubnetFABC457F",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cDefaultRoute0D06EFC0",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cRouteTable8376A177",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cRouteTableAssociation9EFBF143",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPrivateeuwest2cSubnet9FE9638C",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aDefaultRoute14DF693F",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aNATGateway8DFA4022",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aRouteTable82118951",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aRouteTableAssociation4C014282",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2aSubnet4300A6D2",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bDefaultRoute2466D847",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bNATGateway4EBD6C1D",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bRouteTableAssociationB46E976C",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bRouteTableBE081433",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2bSubnetD0CFB8BD",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cDefaultRouteBF1A7C65",
+        "type": "AWS::EC2::Route"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cNATGatewayD38D4F13",
+        "type": "AWS::EC2::NatGateway"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cRouteTable7F5801F9",
+        "type": "AWS::EC2::RouteTable"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cRouteTableAssociationEF70CB32",
+        "type": "AWS::EC2::SubnetRouteTableAssociation"
+      },
+      {
+        "logicalId": "NetworkPubliceuwest2cSubnet166B0E28",
+        "type": "AWS::EC2::Subnet"
+      },
+      {
+        "logicalId": "NetworkRestrictDefaultSecurityGroupLogsLogGroup7F3D44F1",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "NetworkRestrictDefaultSecurityGroupLogsPolicyDC480D34",
+        "type": "AWS::IAM::Policy"
+      },
+      {
+        "logicalId": "NetworkVpc7FB7348F",
+        "type": "AWS::EC2::VPC"
+      },
+      {
+        "logicalId": "NetworkVpcRestrictDefaultSecurityGroupCustomResource491E144D",
+        "type": "Custom::VpcRestrictDefaultSG"
+      },
+      {
+        "logicalId": "ParametersVpcIdAB3091CC",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersisolatedSubnetIds600B4446",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersprivateSubnetIdsC61CB220",
+        "type": "AWS::SSM::Parameter"
+      }
+    ]
   }
 ]

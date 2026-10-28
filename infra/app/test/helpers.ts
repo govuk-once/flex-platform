@@ -6,6 +6,7 @@ import { selectTarget } from "../src/config/select-target.ts";
 import type {
   DomainAccountConfig,
   FrontdoorConfig,
+  NetworkConfig,
   StageConfig,
   ZoneConfig,
 } from "../src/config/types.ts";
@@ -26,6 +27,15 @@ export function zone(environment: string, account: string): ZoneConfig {
   return { name: `${environment}.flex-${account}.example`, id: `Z${account}` };
 }
 
+// Two zones in the stages only the platform team uses, three in the rest, as committed.
+export const TWO_ZONES: NetworkConfig = {
+  availabilityZones: ["eu-west-2a", "eu-west-2b"],
+};
+
+const THREE_ZONES: NetworkConfig = {
+  availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
+};
+
 function frontdoor(environment: string, account: string): FrontdoorConfig {
   return { ...FRONTDOOR, account, zone: zone(environment, account) };
 }
@@ -35,8 +45,15 @@ export function domainAccount(
   name: string,
   account: string,
   domains: readonly string[] = [],
+  network: NetworkConfig = TWO_ZONES,
 ): DomainAccountConfig {
-  return { name, account, domains, zone: zone(environment, account) };
+  return {
+    name,
+    account,
+    domains,
+    zone: zone(environment, account),
+    network,
+  };
 }
 
 // The same in every environment, so environments stay alike.
@@ -78,22 +95,40 @@ export const FIXTURE_STAGES = [
       {
         name: "dev",
         domainAccounts: [
-          domainAccount("dev", "main", "300000000003", FIXTURE_DOMAINS),
+          domainAccount(
+            "dev",
+            "main",
+            "300000000003",
+            FIXTURE_DOMAINS,
+            THREE_ZONES,
+          ),
         ],
         frontdoor: frontdoor("dev", "300000000002"),
       },
       {
         name: "staging",
         domainAccounts: [
-          domainAccount("staging", "main", "300000000005", FIXTURE_DOMAINS),
+          domainAccount(
+            "staging",
+            "main",
+            "300000000005",
+            FIXTURE_DOMAINS,
+            THREE_ZONES,
+          ),
         ],
         frontdoor: frontdoor("staging", "300000000004"),
       },
       {
         name: "prod",
         domainAccounts: [
-          domainAccount("prod", "main", "300000000007", FIXTURE_DOMAINS),
-          domainAccount("prod", "second", "300000000008"),
+          domainAccount(
+            "prod",
+            "main",
+            "300000000007",
+            FIXTURE_DOMAINS,
+            THREE_ZONES,
+          ),
+          domainAccount("prod", "second", "300000000008", [], THREE_ZONES),
         ],
         frontdoor: frontdoor("prod", "300000000006"),
       },

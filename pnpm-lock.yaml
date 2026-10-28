@@ -633,6 +633,9 @@ importers:
 
   infra/constructs:
     dependencies:
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       aws-cdk-lib:
         specifier: 2.273.0
         version: 2.273.0(constructs@10.8.1)

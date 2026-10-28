@@ -37,14 +37,15 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 | ---------------- | ------------------------------------------------------------- | ------------------------------------------ |
 | Gateways         | Configuration, schemas, runtime, driver and code generation   | <Badge text="Built" variant="success" />   |
 | Client libraries | Typed libraries a domain uses to call gateways                | <Badge text="Planned" variant="caution" /> |
-| Network          | Subnet placement, VPC endpoints, NAT and AWS Network Firewall | <Badge text="Planned" variant="caution" /> |
+| Network          | The VPC, subnet placement and NAT                             | <Badge text="Built" variant="success" />   |
+| Egress filtering | AWS Network Firewall on the private placement                 | <Badge text="Planned" variant="caution" /> |
 
 </StatusTables>
 
 ## Egress
 
-The gateway libraries are implemented. Deployment infrastructure and the network placements
-described below are planned.
+The gateway libraries, and the [network](/flex-platform/infrastructure/network/) gateways will run
+in, are implemented. Deploying gateways is planned, and so is AWS Network Firewall.
 
 A gateway is a Lambda function that sits in front of one upstream. It exposes that upstream's
 operations to domains. Each gateway is generated from a configuration and versioned schemas in
@@ -56,7 +57,7 @@ A gateway runs in one of two placements. The placement depends on how its upstre
 | Placement  | Upstream                                             | Route out                              |
 | ---------- | ---------------------------------------------------- | -------------------------------------- |
 | `isolated` | Reached privately, such as another AWS account's API | A VPC endpoint                         |
-| `private`  | Reached over the internet                            | A NAT gateway and AWS Network Firewall |
+| `private`  | Reached over the internet                            | A NAT gateway, and AWS Network Firewall once it is built |
 
 The gateway's code is the same in both placements. Placement is part of its deployment, not its
 configuration. The upstream's address and the secret the gateway uses to authenticate to it are

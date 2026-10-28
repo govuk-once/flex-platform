@@ -16,6 +16,15 @@ export interface ZoneConfig {
   readonly id: string;
 }
 
+/** The domain account's network, which its domains and gateways run in. */
+export interface NetworkConfig {
+  /**
+   * Such as `["eu-west-2a", "eu-west-2b"]`, in any order. Each has its own NAT gateway, and each
+   * keeps its subnets' ranges whatever else is listed.
+   */
+  readonly availabilityZones: readonly string[];
+}
+
 export interface DomainAccountConfig {
   readonly name: string;
   readonly account: string;
@@ -23,6 +32,7 @@ export interface DomainAccountConfig {
   readonly domains: readonly string[];
   /** Each domain answers at `<domain>.<zone>`, under one wildcard certificate. */
   readonly zone: ZoneConfig;
+  readonly network: NetworkConfig;
 }
 
 export interface SharedConfig {

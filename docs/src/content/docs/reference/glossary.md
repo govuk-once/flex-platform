@@ -87,7 +87,11 @@ status code.
 Where a gateway's Lambda runs. There are two placements:
 
 - `isolated`: no route to the internet. The gateway reaches its upstream through a VPC endpoint.
-- `private`: the gateway reaches the internet through a NAT gateway and AWS Network Firewall.
+- `private`: the gateway reaches the internet through a NAT gateway. AWS Network Firewall is
+  planned between them.
+
+Each is a tier of subnets in the domain account's
+[network](/flex-platform/infrastructure/network/#tiers).
 
 ## Schema version
 

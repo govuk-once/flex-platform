@@ -345,4 +345,35 @@ describe("validateStages", () => {
       );
     });
   });
+
+  describe("networks", () => {
+    function withZones(availabilityZones: readonly string[]): StageConfig {
+      return withEnvironment({
+        domainAccounts: [
+          { ...MAIN_DOMAIN_ACCOUNT, network: { availabilityZones } },
+        ],
+      });
+    }
+
+    it.each([
+      [["eu-west-2a", "eu-west-2b"]],
+      [["eu-west-2c", "eu-west-2a", "eu-west-2b"]],
+    ])("accepts the zones %j", (zones) => {
+      expect(() => validateStages([withZones(zones)])).not.toThrow();
+    });
+
+    it.each([
+      [["eu-west-2a"], "at least 2 availability zones"],
+      [["eu-west-2a", "eu-west-2a"], "listed twice"],
+      [
+        ["eu-west-2a", "eu-west-1a"],
+        '"eu-west-1a" is not an availability zone',
+      ],
+    ])("refuses the zones %j", (zones, message) => {
+      expect(() => validateStages([withZones(zones)])).toThrow(
+        `platform-dev/sandbox main domain account network: `,
+      );
+      expect(() => validateStages([withZones(zones)])).toThrow(message);
+    });
+  });
 });

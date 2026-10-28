@@ -95,7 +95,7 @@ export default defineConfig({
         },
         {
           label: "Infrastructure",
-          items: ["infrastructure/overview"],
+          items: ["infrastructure/overview", "infrastructure/network"],
         },
         {
           label: "Reference",

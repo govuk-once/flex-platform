@@ -1,7 +1,13 @@
 import { domainFunctionName, FUNCTION_NAME_LENGTH } from "@repo/domain-infra";
+import { networkZones } from "@repo/infra-constructs";
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
-import type { EnvironmentConfig, StageConfig, ZoneConfig } from "./types.ts";
+import type {
+  DomainAccountConfig,
+  EnvironmentConfig,
+  StageConfig,
+  ZoneConfig,
+} from "./types.ts";
 
 const ACCOUNT_ID = /^\d{12}$/;
 
@@ -60,6 +66,10 @@ function checkEnvironment(at: string, environment: EnvironmentConfig): void {
       domainAccount.zone,
       (name) => `*.${name}`,
     );
+    checkNetwork(
+      `${at} ${domainAccount.name} domain account network`,
+      domainAccount,
+    );
   }
   const { issuers } = environment.frontdoor;
   if (issuers.length === 0) {
@@ -92,6 +102,15 @@ function checkDomains(at: string, environment: EnvironmentConfig): void {
         `${at} ${domain} domain: its function name ${functionName} is longer than Lambda's ${FUNCTION_NAME_LENGTH} characters`,
       );
     }
+  }
+}
+
+// The network construct refuses what it can't lay out; checked here so every stage's config is.
+function checkNetwork(at: string, { network }: DomainAccountConfig): void {
+  try {
+    networkZones(network.availabilityZones);
+  } catch (error) {
+    throw new Error(`${at}: ${(error as Error).message}`, { cause: error });
   }
 }
 
