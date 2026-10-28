@@ -875,7 +875,7 @@ describe("secret rotation and refresh", () => {
       const ff = fakeFetch(() => json(200, {}));
       const execute = await buildExecutor(
         gatewayWith([TOKEN]),
-        { target: TARGET, secret: createSecretProvider(ARN) },
+        { target: TARGET, secret: createSecretProvider(ARN, "eu-west-2") },
         { fetch: ff.fetch },
       );
       await execute(passthroughContext(), "op", {});
