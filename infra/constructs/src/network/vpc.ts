@@ -119,7 +119,7 @@ export class NetworkVpc extends Construct {
     // CloudFormation's own validation warns on a zone named outright. Here each subnet's zone, and
     // with it its range, is fixed by ZONE_LAYOUT, so adding or removing a zone moves no other.
     Validations.of(this).acknowledge({
-      id: "W3010",
+      id: "CloudFormation-Validate::W3010",
       reason:
         "Each subnet's zone, and with it its range, is fixed by ZONE_LAYOUT. Config lists the zones, and the stack names them.",
     });

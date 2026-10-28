@@ -1,6 +1,6 @@
 import { createVitestConfig } from "@repo/vitest-config";
 
-// The first synth in each test file, and each run of bin/app.ts, loads most of aws-cdk-lib and
-// cdk-nag. That takes about a second on a laptop and several on a CI runner under coverage, close
-// to Vitest's default of 5 seconds. Later synths take milliseconds.
-export default createVitestConfig({ testTimeout: 30_000 });
+// Each test file synthesizes whole stages, and its first synth, and each run of bin/app.ts, loads
+// most of aws-cdk-lib and cdk-nag. Under coverage, on a CI runner busy with every package's tests,
+// a file's first test has taken over 30 seconds.
+export default createVitestConfig({ testTimeout: 120_000 });
