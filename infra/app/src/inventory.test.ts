@@ -8,6 +8,7 @@ import { selectTarget } from "./config/select-target.ts";
 import { STAGES } from "./config/stages.ts";
 import type { EnvironmentConfig, StageConfig } from "./config/types.ts";
 import { inventory, type StackInventory } from "./inventory.ts";
+import { networkStackName } from "./stacks/network.ts";
 
 // A version's logical ID carries its code's hash, and Lambda@Edge's code bakes in each
 // environment's issuers, so it changes with any change to either. A new version replacing the
@@ -27,37 +28,67 @@ function synthesized(stage: StageConfig): StackInventory[] {
   return withoutVersions(inventory(app.synth()));
 }
 
-// An environment's stacks, with its name and accounts replaced by what they stand for.
-function environmentShape(
+// An environment's stacks by kind, with the names and accounts config gave them replaced by what
+// they stand for: the frontdoor's stacks, and each domain account's network. Environments have
+// different numbers of domain accounts, so each kind is compared with its own kind.
+function environmentShapes(
   stacks: readonly StackInventory[],
   environment: EnvironmentConfig,
 ) {
-  const accounts = new Map([
-    [environment.frontdoor.account, "{frontdoor}"],
-    ...environment.domainAccounts.map(
-      (domain) => [domain.account, `{domain:${domain.name}}`] as const,
-    ),
-  ]);
   // Stack names are {section}-{environment}, then any -{thing} and -{region}. Environment names
   // are platform names, so they hold nothing a regular expression reads specially.
   const environmentName = new RegExp(`^([a-z0-9]+)-${environment.name}(?=-|$)`);
   const named = (name: string) =>
     name.replace(environmentName, "$1-{environment}");
-  const shapes = new Map(
+  const frontdoor = new Map(
     stacks
-      .filter((stack) => accounts.has(stack.account))
+      .filter((stack) => stack.account === environment.frontdoor.account)
       .map((stack) => [
         named(stack.name),
         {
           ...stack,
           name: named(stack.name),
-          account: accounts.get(stack.account),
+          account: "{frontdoor}",
           dependencies: stack.dependencies.map(named),
         },
       ]),
   );
-  // Re-sorted: replacing the name can change where a stack sorts.
-  return sortedNames(shapes.keys()).map((name) => shapes.get(name));
+
+  const byName = new Map(stacks.map((stack) => [stack.name, stack]));
+  const networks = environment.domainAccounts.map((domainAccount) => {
+    const name = networkStackName(environment, domainAccount);
+    const stack = byName.get(name);
+    if (stack === undefined) throw new Error(`No stack named ${name}`);
+    return networkShape(stack, domainAccount.network.availabilityZones);
+  });
+
+  return {
+    // Re-sorted: replacing the name can change where a stack sorts.
+    frontdoor: sortedNames(frontdoor.keys()).map((name) => frontdoor.get(name)),
+    networks,
+  };
+}
+
+// A network with its availability zones set aside, since config lists different numbers of them:
+// each zone's resources become one, named {zone}. CDK ends a logical ID with a hash of its
+// construct path, which holds the zone, so the hash is set aside too.
+function networkShape(stack: StackInventory, zones: readonly string[]) {
+  const zone = new RegExp(
+    zones.map((name) => name.replaceAll("-", "")).join("|"),
+    "g",
+  );
+  const resources = new Map(
+    stack.resources.map(({ logicalId, type }) => {
+      const id = logicalId.replace(/[0-9A-F]{8}$/, "").replace(zone, "{zone}");
+      return [`${id} ${type}`, { logicalId: id, type }];
+    }),
+  );
+  return {
+    ...stack,
+    name: "network-{environment}-{account}",
+    account: "{domain account}",
+    resources: sortedNames(resources.keys()).map((key) => resources.get(key)),
+  };
 }
 
 describe("inventory", () => {
@@ -67,17 +98,22 @@ describe("inventory", () => {
     ["the fixture stages", FIXTURE_STAGES],
     ["the committed stages", STAGES],
   ] as const)(
-    "is the same for every environment in %s, names and accounts aside",
+    "builds each kind of stack the same in every environment in %s, names, accounts and zones aside",
     (_, stages) => {
       const shapes = stages.flatMap((stage) => {
         const stacks = withoutVersions(inventory(synthesizedStage(stage)));
         return stage.environments.map((environment) =>
-          environmentShape(stacks, environment),
+          environmentShapes(stacks, environment),
         );
       });
+      const frontdoors = shapes.map(({ frontdoor }) => frontdoor);
+      const networks = shapes.flatMap(({ networks }) => networks);
 
-      expect(shapes[0]).not.toHaveLength(0);
-      for (const shape of shapes) expect(shape).toEqual(shapes[0]);
+      expect(frontdoors[0]).not.toHaveLength(0);
+      expect(networks).not.toHaveLength(0);
+      for (const kind of [frontdoors, networks]) {
+        for (const shape of kind) expect(shape).toEqual(kind[0]);
+      }
     },
   );
 
@@ -118,7 +154,15 @@ describe("inventory", () => {
       ...stage,
       environments: stage.environments.toReversed().map((environment) => ({
         ...environment,
-        domainAccounts: environment.domainAccounts.toReversed(),
+        domainAccounts: environment.domainAccounts
+          .toReversed()
+          .map((domainAccount) => ({
+            ...domainAccount,
+            network: {
+              availabilityZones:
+                domainAccount.network.availabilityZones.toReversed(),
+            },
+          })),
         frontdoor: {
           ...environment.frontdoor,
           issuers: issuers.toReversed().map((issuer) => ({

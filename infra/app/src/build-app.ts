@@ -8,6 +8,7 @@ import type { Target } from "./config/select-target.ts";
 import type { StageConfig } from "./config/types.ts";
 import { FrontdoorStack } from "./stacks/frontdoor.ts";
 import { FrontdoorEdgeLogsStack } from "./stacks/frontdoor-edge-logs.ts";
+import { NetworkStack } from "./stacks/network.ts";
 import { StackTags } from "./tags.ts";
 
 export function buildApp(app: App, stage: StageConfig, target: Target): void {
@@ -30,5 +31,9 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
       edgeLogs,
       "The edge's Lambda@Edge role attaches the policy the edge logs stack creates, to write to its log group.",
     );
+
+    for (const domainAccount of environment.domainAccounts) {
+      new NetworkStack(app, { environment, domainAccount });
+    }
   }
 }

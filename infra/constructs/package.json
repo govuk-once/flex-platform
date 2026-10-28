@@ -7,11 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "eslint src/",
+    "lint": "eslint src/ test/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@repo/utils": "workspace:*",
     "aws-cdk-lib": "2.273.0",
     "constructs": "10.8.1"
   },

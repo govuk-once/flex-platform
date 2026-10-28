@@ -1,7 +1,7 @@
 import { cdkApp } from "@repo/infra-constructs";
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES } from "../test/helpers.ts";
+import { FIXTURE_STAGES, synthesizedStage } from "../test/helpers.ts";
 import { STAGES } from "./config/stages.ts";
 import { validateStages } from "./config/validate.ts";
 import { synthStage } from "./synth-stage.ts";
@@ -16,6 +16,14 @@ describe("synthStage", () => {
       expect(() => app.synth()).not.toThrow();
     },
   );
+
+  // A lookup would need credentials for the account, and answers with placeholders until it has
+  // them. Synth adds an error for it, but a test that only synthesizes doesn't see that.
+  it.each(
+    [...FIXTURE_STAGES, ...STAGES].map((stage) => [stage.name, stage] as const),
+  )("looks nothing up in an account to synthesize %s", (_, stage) => {
+    expect(synthesizedStage(stage).manifest.missing ?? []).toEqual([]);
+  });
 
   it("checks every stage, not only the one it builds", () => {
     const broken = [
@@ -34,6 +42,7 @@ describe("synthStage", () => {
     synthStage(app, FIXTURE_STAGES);
     expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
       "frontdoor-dev-edge-logs-eu-west-2",
+      "network-dev-main",
       "frontdoor-dev",
     ]);
 

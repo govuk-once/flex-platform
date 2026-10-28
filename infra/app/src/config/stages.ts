@@ -1,6 +1,6 @@
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
 
-import type { StageConfig } from "./types.ts";
+import type { NetworkConfig, StageConfig } from "./types.ts";
 
 const STAGING_POOL: TrustedIssuer = {
   issuer: "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_2d00uk68K",
@@ -10,6 +10,16 @@ const STAGING_POOL: TrustedIssuer = {
 const PRODUCTION_POOL: TrustedIssuer = {
   issuer: "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_vn7u4bWbc",
   clientIds: ["40grlhknon5palderi2j1a1bte"],
+};
+
+// A NAT gateway is per availability zone, so the stages that only the platform team uses run in
+// two. The environments domain teams use run in all three.
+const TWO_ZONES: NetworkConfig = {
+  availabilityZones: ["eu-west-2a", "eu-west-2b"],
+};
+
+const THREE_ZONES: NetworkConfig = {
+  availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
 };
 
 // The development environments trust the staging pool until they have a test pool of their own.
@@ -29,6 +39,7 @@ export const STAGES: readonly StageConfig[] = [
               name: "development.flex-platform.once.service.gov.uk",
               id: "Z0835542Q6J8ILWJ1RGR",
             },
+            network: TWO_ZONES,
           },
         ],
         frontdoor: {
@@ -57,6 +68,7 @@ export const STAGES: readonly StageConfig[] = [
               name: "staging.flex-platform.once.service.gov.uk",
               id: "Z0085548AFKTJHKTHK3P",
             },
+            network: TWO_ZONES,
           },
         ],
         frontdoor: {
@@ -85,6 +97,7 @@ export const STAGES: readonly StageConfig[] = [
               name: "development.flex-domain00.once.service.gov.uk",
               id: "Z05812543BRVPCL728ND0",
             },
+            network: THREE_ZONES,
           },
         ],
         frontdoor: {
@@ -107,6 +120,7 @@ export const STAGES: readonly StageConfig[] = [
               name: "staging.flex-domain00.once.service.gov.uk",
               id: "Z02914492HOQJQ6UXSZ9B",
             },
+            network: THREE_ZONES,
           },
         ],
         frontdoor: {
@@ -129,6 +143,7 @@ export const STAGES: readonly StageConfig[] = [
               name: "production.flex-domain00.once.service.gov.uk",
               id: "Z0411378AOM55J0BQQZI",
             },
+            network: THREE_ZONES,
           },
         ],
         frontdoor: {

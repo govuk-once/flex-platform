@@ -4,12 +4,14 @@ description: The CDK app that deploys the platform, its stages and config, and t
 ---
 
 The platform deploys with AWS CDK, from one app in `infra/app`. So far it builds the
-[Frontdoor](/flex-platform/frontdoor/overview/)'s stacks. This page describes the app and the
-rules every stack added to it follows.
+[Frontdoor](/flex-platform/frontdoor/overview/)'s stacks and each domain account's
+[network](/flex-platform/infrastructure/network/). This page describes the app and the rules every
+stack added to it follows.
 
 Infrastructure lives with the section it belongs to. A section's constructs are in its own
-`infra/` package, such as `frontdoor/infra`. Constructs and checks every section uses are in
-`infra/constructs`. The app, its config and its stacks are in `infra/app`.
+`infra/` package, such as `frontdoor/infra`. Constructs and checks more than one section uses are in
+`infra/constructs`, the network's among them, since domains and gateways both run in it. The app,
+its config and its stacks are in `infra/app`.
 
 Imports run one way, so there are no cycles: `infra/constructs`, then a section's `infra/`, then
 `infra/app`. A section's `infra/` package imports `@repo/infra-constructs`, `@repo/utils` and its
@@ -44,12 +46,13 @@ shared account's. A target selects what to build, never how it's built.
 
 ## Stacks
 
-Each environment has two stacks, both in its frontdoor account:
+Each environment has these stacks:
 
-| Stack | Region | Holds |
-|---|---|---|
-| `frontdoor-<environment>-edge-logs-eu-west-2` | eu-west-2 | Lambda@Edge's log group, and the policy that lets its role write to it |
-| `frontdoor-<environment>` | us-east-1 | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
+| Stack | Account | Region | One per | Holds |
+|---|---|---|---|---|
+| `frontdoor-<environment>-edge-logs-eu-west-2` | Frontdoor | eu-west-2 | Environment | Lambda@Edge's log group, and the policy that lets its role write to it |
+| `frontdoor-<environment>` | Frontdoor | us-east-1 | Environment | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
+| `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, network ACLs, and its flow logs: see [Network](/flex-platform/infrastructure/network/) |
 
 The Frontdoor's stacks are in us-east-1 because CloudFront takes its web ACL, its certificate and
 its Lambda@Edge functions from there. Lambda@Edge's log group is in a stack of its own, in the one
@@ -57,12 +60,16 @@ region its logs are kept: see [the Frontdoor's logs](/flex-platform/frontdoor/ov
 region is in the stack's name, so keeping logs in another region later is another stack beside it.
 `frontdoor-<environment>` depends on it, so it deploys first.
 
-Both stacks have termination protection. Deleting `frontdoor-<environment>` would take the app's
-entry point and its domain name with it, and deleting the log stack would leave Lambda@Edge's logs
-nowhere to go. So deleting either takes a deliberate step first: turning the protection off.
+A network's stack depends on no other, and nothing depends on it yet.
+
+Every stack has termination protection. Deleting `frontdoor-<environment>` would take the app's
+entry point and its domain name with it, deleting the log stack would leave Lambda@Edge's logs
+nowhere to go, and deleting a network would take every workload's network with it, and the NAT
+addresses upstreams allowlist. So deleting any of them takes a deliberate step first: turning the
+protection off.
 
 Each account is bootstrapped for CDK in each region it deploys to, so a frontdoor account is
-bootstrapped in us-east-1 and eu-west-2.
+bootstrapped in us-east-1 and eu-west-2, and a domain account in eu-west-2.
 
 ## Config
 
@@ -74,7 +81,7 @@ never is: config names a secret, never holds one.
 ```ts
 StageConfig       { name, shared: { account }, environments }
 EnvironmentConfig { name, frontdoor: { account, zone, issuers }, domainAccounts }
-DomainAccount     { name, account, domains, zone }
+DomainAccount     { name, account, domains, zone, network: { availabilityZones } }
 ```
 
 - `domains` lists the names of the domains a domain account hosts in the environment. See
@@ -84,6 +91,8 @@ DomainAccount     { name, account, domains, zone }
   `<environment>.flex-<account role>.once.service.gov.uk`. An account writes records only into
   its own zone. The Frontdoor answers at its zone's apex, and each domain will answer at
   `<domain>.<its domain account's zone>`.
+- `network.availabilityZones` lists the zones the account's network uses, in any order. Each has
+  its own NAT gateway. See [availability zones](/flex-platform/infrastructure/network/#availability-zones).
 - `issuers` lists the Cognito user pools whose access tokens the Frontdoor accepts, each as its
   issuer URL, `https://cognito-idp.<region>.amazonaws.com/<pool ID>`, and the app client IDs it
   accepts from that pool.
@@ -106,7 +115,9 @@ Before building any stage, the app checks every stage's config:
   client;
 - every domain's name follows the same rule as the names above and is used once in its
   environment, across all its domain accounts, and its function's name is within Lambda's 64
-  characters. See [checks](/flex-platform/domains/hosting/#checks).
+  characters. See [checks](/flex-platform/domains/hosting/#checks);
+- every domain account's network lists at least two availability zones, each once, and each one
+  the network has a layout for.
 
 ## Rules for stacks and constructs
 
@@ -128,7 +139,9 @@ Before building any stage, the app checks every stage's config:
   positions in a list.
 - **Every stack has an explicit `env`,** and synth never looks anything up in an account
   (`fromLookup`). Synth stays offline and gives the same result every time. A resource the
-  platform doesn't own, such as a hosted zone, is named from config.
+  platform doesn't own, such as a hosted zone, is named from config. A stack with an explicit
+  `env` looks its availability zones up when something asks for them, as CDK's `Vpc` does, so a
+  stack with a VPC names its zones by overriding `availabilityZones`.
 - **Wire stacks together by names derived from config, and declare each dependency.** A stack that
   uses another stack's resource builds its name or ARN from config, with the same function the
   producer names it with, and declares `stack.addStackDependency(producer, reason)` where it needs
@@ -219,10 +232,12 @@ change reruns every task, rather than leaving a cached result that used the old 
 `infra/app` builds its fixture stages, in `test/helpers.ts`, and the committed stages, and checks
 that:
 
-- every environment in every stage has the same stacks and resources once names and accounts are
-  set aside, so nothing in a stack depends on which environment it is. This runs on both sets of
-  stages;
-- reversing every list in the fixtures' config changes no logical ID;
+- each kind of stack, the Frontdoor's and the networks, has the same resources in every
+  environment of every stage once names, accounts and availability zones are set aside, so nothing
+  in a stack depends on which environment it is. This runs on both sets of stages;
+- synthesizing any stage asks for no lookup in an account;
+- reversing every list in the fixtures' config, availability zones included, changes no logical
+  ID;
 - each committed stage's inventory matches its snapshot, in
   `src/__snapshots__/inventory.<stage>.json`: every stack's name, account, region and
   dependencies, and every resource's logical ID and type. A changed logical ID replaces the
