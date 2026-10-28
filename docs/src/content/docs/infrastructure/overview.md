@@ -52,7 +52,7 @@ Each environment has these stacks:
 |---|---|---|---|---|
 | `frontdoor-<environment>-edge-logs-eu-west-2` | Frontdoor | eu-west-2 | Environment | Lambda@Edge's log group, and the policy that lets its role write to it |
 | `frontdoor-<environment>` | Frontdoor | us-east-1 | Environment | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
-| `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, interface endpoints, security groups, network ACLs, and its flow logs: see [Network](/flex-platform/infrastructure/network/) |
+| `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, interface endpoints, security groups, network ACLs, DNS Firewall, and its flow and query logs: see [Network](/flex-platform/infrastructure/network/) |
 
 The Frontdoor's stacks are in us-east-1 because CloudFront takes its web ACL, its certificate and
 its Lambda@Edge functions from there. Lambda@Edge's log group is in a stack of its own, in the one
@@ -81,7 +81,7 @@ never is: config names a secret, never holds one.
 ```ts
 StageConfig       { name, shared: { account }, environments }
 EnvironmentConfig { name, frontdoor: { account, zone, issuers }, domainAccounts }
-DomainAccount     { name, account, domains, zone, network: { availabilityZones } }
+DomainAccount     { name, account, domains, zone, network: { availabilityZones }, gateways }
 ```
 
 - `domains` lists the names of the domains a domain account hosts in the environment. See
@@ -93,6 +93,9 @@ DomainAccount     { name, account, domains, zone, network: { availabilityZones }
   `<domain>.<its domain account's zone>`.
 - `network.availabilityZones` lists the zones the account's network uses, in any order. Each has
   its own NAT gateway. See [availability zones](/flex-platform/infrastructure/network/#availability-zones).
+- `gateways` lists the gateways deployed in the account, each with its id and the names it
+  connects to, `hostnames`. They make up the network's DNS allowlist. See
+  [the allowlist](/flex-platform/infrastructure/network/#the-allowlist).
 - `issuers` lists the Cognito user pools whose access tokens the Frontdoor accepts, each as its
   issuer URL, `https://cognito-idp.<region>.amazonaws.com/<pool ID>`, and the app client IDs it
   accepts from that pool.
@@ -117,7 +120,10 @@ Before building any stage, the app checks every stage's config:
   environment, across all its domain accounts, and its function's name is within Lambda's 64
   characters. See [checks](/flex-platform/domains/hosting/#checks);
 - every domain account's network lists at least two availability zones, each once, and each one
-  the network has a layout for.
+  the network has a layout for;
+- every gateway's id is a name as above, used once in its account, and short enough for its
+  function's name to fit Lambda's 64 characters. It names at least one hostname, and each passes
+  [the allowlist's rules](/flex-platform/infrastructure/network/#the-allowlist).
 
 ## Rules for stacks and constructs
 

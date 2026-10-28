@@ -1,5 +1,6 @@
 import { gatewayFunctionPattern } from "@repo/gateway-infra";
 import {
+  DnsFirewall,
   FlowLogs,
   InterfaceEndpoints,
   NatAddresses,
@@ -101,6 +102,16 @@ export class NetworkStack extends Stack {
       subnets: subnets.isolated,
       // Any domain may invoke any of its environment's gateways.
       invokableFunctions: gatewayFunctionPattern(environment.name),
+    });
+    // The names the SDK calls the endpoints at, and every name the account's gateways resolve.
+    const { gateways } = domainAccount;
+    new DnsFirewall(this, "DnsFirewall", {
+      environment: environment.name,
+      vpc,
+      hostnames: [
+        ...endpoints.hostnames,
+        ...gateways.flatMap(({ hostnames }) => hostnames),
+      ],
     });
 
     const securityGroups: Record<string, ISecurityGroup> = {};

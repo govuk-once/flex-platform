@@ -2,6 +2,7 @@ import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { ACCOUNT, buildNetwork } from "../../test/network.ts";
+import type { InterfaceEndpoints } from "./interface-endpoints.ts";
 
 function endpoint(service: string, Action: string, Resource: unknown) {
   return {
@@ -71,5 +72,16 @@ describe("InterfaceEndpoints", () => {
         expect.objectContaining({ CidrIp: "255.255.255.255/32" }),
       ]);
     }
+  });
+
+  it("gives the names the SDK calls each endpoint's API at, for the DNS allowlist", () => {
+    const { stack } = buildNetwork();
+    const endpoints = stack.node.findChild("Endpoints") as InterfaceEndpoints;
+
+    expect(endpoints.hostnames).toEqual([
+      "lambda.eu-west-2.amazonaws.com",
+      "secretsmanager.eu-west-2.amazonaws.com",
+      "sts.eu-west-2.amazonaws.com",
+    ]);
   });
 });

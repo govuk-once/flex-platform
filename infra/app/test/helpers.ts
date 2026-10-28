@@ -6,6 +6,7 @@ import { selectTarget } from "../src/config/select-target.ts";
 import type {
   DomainAccountConfig,
   FrontdoorConfig,
+  GatewayConfig,
   NetworkConfig,
   StageConfig,
   ZoneConfig,
@@ -36,6 +37,15 @@ const THREE_ZONES: NetworkConfig = {
   availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
 };
 
+// A gateway with an upstream, a token host and a CDN behind both, the same in every environment so
+// environments stay alike.
+export const GATEWAYS: readonly GatewayConfig[] = [
+  {
+    id: "udp",
+    hostnames: ["api.udp.example", "auth.udp.example"],
+  },
+];
+
 function frontdoor(environment: string, account: string): FrontdoorConfig {
   return { ...FRONTDOOR, account, zone: zone(environment, account) };
 }
@@ -53,6 +63,7 @@ export function domainAccount(
     domains,
     zone: zone(environment, account),
     network,
+    gateways: GATEWAYS,
   };
 }
 
