@@ -1,3 +1,4 @@
+import { domainFunctionName, FUNCTION_NAME_LENGTH } from "@repo/domain-infra";
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
 import type { EnvironmentConfig, StageConfig, ZoneConfig } from "./types.ts";
@@ -37,7 +38,15 @@ export function validateStages(stages: readonly StageConfig[]): void {
         `${stage.name}/${environment.name} domain account`,
         environment.domainAccounts.map((domainAccount) => domainAccount.name),
       );
+
+      // Unique across the environment, not just the account: the Frontdoor routes by name.
+      checkNames(
+        `${stage.name}/${environment.name} domain`,
+        domainsOf(environment),
+      );
+
       checkEnvironment(`${stage.name}/${environment.name}`, environment);
+      checkDomains(`${stage.name}/${environment.name}`, environment);
     }
   }
   checkAccounts(accountUses(stages));
@@ -64,6 +73,24 @@ function checkEnvironment(at: string, environment: EnvironmentConfig): void {
     }
     if (clientIds.length === 0) {
       throw new Error(`${at}: the issuer ${issuer} names no app client`);
+    }
+  }
+}
+
+function domainsOf(environment: EnvironmentConfig): string[] {
+  return environment.domainAccounts.flatMap(({ domains }) => domains);
+}
+
+// The environment's and the domain's names are each valid alone, but together can pass Lambda's
+// limit on the function's name.
+function checkDomains(at: string, environment: EnvironmentConfig): void {
+  for (const domain of domainsOf(environment)) {
+    const functionName = domainFunctionName(environment.name, domain);
+
+    if (functionName.length > FUNCTION_NAME_LENGTH) {
+      throw new Error(
+        `${at} ${domain} domain: its function name ${functionName} is longer than Lambda's ${FUNCTION_NAME_LENGTH} characters`,
+      );
     }
   }
 }

@@ -1,5 +1,6 @@
 packages:
   - docs
+  - domains/*
   - frontdoor/*
   - packages/*
   - gateways/shared/*

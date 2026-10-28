@@ -1,0 +1,70 @@
+---
+title: Hosting a domain
+description: How a domain is declared in config, where its function runs, and what the platform provides around it.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A domain is hosted from a line of the platform's config. Domain teams write the domain's code and
+never write CDK. The platform provides everything the code runs with and behind.
+
+The config and its checks are in `infra/app`, and the names they use are in `domains/infra`
+(`@repo/domain-infra`). Nothing deploys a domain. Each part of this page that is planned says so.
+
+## Declaring a domain
+
+Each domain account in an environment lists the names of the domains it hosts in that environment:
+
+```ts
+domainAccounts: [
+  {
+    name: "domain00",
+    account: "098640806149",
+    domains: ["domain-a", "domain-b"],
+    zone: {
+      name: "development.flex-platform.once.service.gov.uk",
+      id: "Z0835542Q6J8ILWJ1RGR",
+    },
+  },
+],
+```
+
+The Frontdoor routes `/app/<name>/...` to a domain, and its resources are named from its name.
+Config holds no routes, and nothing else about what the domain does. See
+[routing a request](#routing-a-request).
+
+A domain is hosted only in the environments that list it. Moving it to another domain account is
+moving its name to that account's list.
+
+<Aside type="caution" title="Moving a domain between accounts">
+Moving a domain's name does not move its function or code. The destination account gets a new
+domain stack, and the domain team must release the function there before it can serve requests.
+The previous account's domain stack and its resources must be removed separately.
+</Aside>
+
+### Checks
+
+Before building any stage, the app checks every domain:
+
+- its name is 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not
+  ending with a hyphen;
+- its name is used once in its environment, across all of the environment's domain accounts,
+  since the Frontdoor routes by name alone;
+- its function's name, `domain-<environment>-<name>`, is within Lambda's 64 characters. Each name
+  is within 32 alone, but the two together can pass it.
+
+## Routing a request
+
+Planned. The domain's API answers every path and method under the domain's root, with `ANY` on
+`/` and on `/{proxy+}`, and passes each request to the domain's function unchanged. The API checks
+that the Frontdoor signed the request, and nothing about the path, method or body. The domain's
+code decides which routes exist and how each is handled, and answers anything else itself, such as
+with a 404.
+
+So a domain adds or changes a route by releasing its code. No change to the platform's config or
+stacks is needed.
+
+## The domain's function
+
+The function is named `domain-<environment>-<name>`, built by `domainFunctionName` in
+`@repo/domain-infra`. Everything that refers to the function finds it by this name.
