@@ -91,7 +91,7 @@ export class InterfaceEndpoints extends Construct {
     });
     endpoint.addToPolicy(
       new PolicyStatement({
-        principals: [new AnyPrincipal()],
+        principals: [new AnyPrincipal()], // NOSONAR: the conditions hold it to this account
         actions,
         resources,
         // An upstream may keep a gateway's secret, or the role it signs as, in its own account, so
