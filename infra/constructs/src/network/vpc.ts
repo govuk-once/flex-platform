@@ -240,7 +240,7 @@ export class NetworkVpc extends Construct {
     const handler = provider.node.findChild("Handler");
     const role = provider.node.findChild("Role");
     if (!(handler instanceof CfnResource) || !(role instanceof CfnResource)) {
-      throw new Error(
+      throw new TypeError(
         `${RESTRICT_DEFAULT_SG_PROVIDER} no longer has the Handler and Role this construct configures`,
       );
     }
