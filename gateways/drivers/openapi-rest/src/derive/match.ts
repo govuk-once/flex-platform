@@ -134,6 +134,8 @@ export function fit(path: string, template: string): Fit | string {
   if (ambiguous !== undefined) return ambiguous;
   const asked = segmentsOf(path);
   const offered = segmentsOf(template);
+  // Each result below `satisfies Fit`, since against `Fit | string` typescript-eslint reads the
+  // `fixed` key as String's deprecated `fixed` method.
   const fixed = new Map<string, string>();
   const carried = new Map<string, string>();
 
@@ -157,7 +159,7 @@ export function fit(path: string, template: string): Fit | string {
         texts.push(part.text);
       }
       fixed.set(segment.name, texts.join("/"));
-      return { fixed, carried };
+      return { fixed, carried } satisfies Fit;
     }
 
     const part = asked[index];
@@ -180,7 +182,7 @@ export function fit(path: string, template: string): Fit | string {
 
   return asked.length > offered.length
     ? "it has more segments than the template"
-    : { fixed, carried };
+    : ({ fixed, carried } satisfies Fit);
 }
 
 // Whether some value of a path's own parameters would produce a path the template takes. A
