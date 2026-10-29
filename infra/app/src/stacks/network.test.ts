@@ -3,6 +3,8 @@ import { Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
+import { STAGES } from "../config/stages.ts";
+import type { DomainAccountConfig } from "../config/types.ts";
 import { NetworkStack, networkStackName } from "./network.ts";
 
 const PROD = FIXTURE_STAGES[2];
@@ -103,5 +105,144 @@ describe("NetworkStack", () => {
           },
         }),
     ).toThrow('"eu-west-2d" is not an availability zone');
+  });
+
+  describe("DNS Firewall", () => {
+    // Every environment of every stage, fixtures and committed alike.
+    const NETWORKS = [...FIXTURE_STAGES, ...STAGES].flatMap((stage) =>
+      stage.environments.flatMap((environment) =>
+        environment.domainAccounts.map(
+          (domainAccount) =>
+            [
+              `${stage.name}/${environment.name}/${domainAccount.name}`,
+              stage,
+              environment,
+              domainAccount,
+            ] as const,
+        ),
+      ),
+    );
+
+    it.each(NETWORKS)(
+      "filters, fails closed and logs queries in %s",
+      (_, stage, environment, domainAccount) => {
+        const network = Template.fromJSON(
+          synthesizedStage(stage).getStackByName(
+            networkStackName(environment, domainAccount),
+          ).template as Record<string, unknown>,
+        );
+        const rules = Object.values(
+          network.findResources("AWS::Route53Resolver::FirewallRuleGroup"),
+        ).map(
+          ({ Properties }) =>
+            (Properties as { FirewallRules: Record<string, unknown>[] })
+              .FirewallRules,
+        );
+        const associations = Object.values(
+          network.findResources(
+            "AWS::Route53Resolver::FirewallRuleGroupAssociation",
+          ),
+        ).map(({ Properties }) => Properties as Record<string, unknown>);
+        const priority = (name: string) =>
+          associations.find(({ Name }) => Name === name)?.Priority as number;
+
+        expect(rules).toContainEqual([
+          expect.objectContaining({ Action: "ALLOW" }),
+        ]);
+        expect(rules).toContainEqual([
+          expect.objectContaining({
+            Action: "BLOCK",
+            BlockResponse: "NXDOMAIN",
+          }),
+        ]);
+        expect(priority(`network-${environment.name}-dns-allow`)).toBeLessThan(
+          priority(`network-${environment.name}-dns-block`),
+        );
+        network.hasResourceProperties(
+          "AWS::Route53Resolver::FirewallDomainList",
+          {
+            Domains: ["*"],
+          },
+        );
+        network.hasResourceProperties("AWS::Route53Resolver::FirewallConfig", {
+          FirewallFailOpen: "DISABLED",
+        });
+        network.resourceCountIs(
+          "AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation",
+          1,
+        );
+      },
+    );
+
+    it("allows the endpoints' names and every name its account's gateways declare", () => {
+      template().hasResourceProperties(
+        "AWS::Route53Resolver::FirewallDomainList",
+        {
+          Name: "network-prod-dns-allowed",
+          Domains: [
+            "api.udp.example",
+            "auth.udp.example",
+            "lambda.eu-west-2.amazonaws.com",
+            "secretsmanager.eu-west-2.amazonaws.com",
+            "sts.eu-west-2.amazonaws.com",
+          ],
+        },
+      );
+    });
+
+    it("removes a gateway's own names with it, keeping a name another gateway still declares", () => {
+      const allowed = (gateways: DomainAccountConfig["gateways"]) => {
+        const stack = new NetworkStack(cdkAppForTest(), {
+          environment: PROD_ENVIRONMENT,
+          domainAccount: { ...PROD_ENVIRONMENT.domainAccounts[0], gateways },
+        });
+        const [list] = Object.values(
+          Template.fromStack(stack).findResources(
+            "AWS::Route53Resolver::FirewallDomainList",
+            { Properties: { Name: "network-prod-dns-allowed" } },
+          ),
+        ) as { Properties: { Domains: string[] } }[];
+        return list?.Properties.Domains;
+      };
+      const udp = {
+        id: "udp",
+        hostnames: ["api.udp.example", "auth.shared.example"],
+      };
+      const uns = {
+        id: "uns",
+        hostnames: ["api.uns.example", "auth.shared.example"],
+      };
+
+      expect(allowed([udp, uns])).toEqual(
+        expect.arrayContaining([
+          "api.udp.example",
+          "api.uns.example",
+          "auth.shared.example",
+        ]),
+      );
+      const remaining = allowed([udp]);
+      expect(remaining).toContain("api.udp.example");
+      expect(remaining).toContain("auth.shared.example");
+      expect(remaining).not.toContain("api.uns.example");
+    });
+
+    it("allows only the endpoints' names in an account with no gateways", () => {
+      const stack = new NetworkStack(cdkAppForTest(), {
+        environment: PROD_ENVIRONMENT,
+        domainAccount: { ...PROD_ENVIRONMENT.domainAccounts[0], gateways: [] },
+      });
+
+      Template.fromStack(stack).hasResourceProperties(
+        "AWS::Route53Resolver::FirewallDomainList",
+        {
+          Name: "network-prod-dns-allowed",
+          Domains: [
+            "lambda.eu-west-2.amazonaws.com",
+            "secretsmanager.eu-west-2.amazonaws.com",
+            "sts.eu-west-2.amazonaws.com",
+          ],
+        },
+      );
+    });
   });
 });

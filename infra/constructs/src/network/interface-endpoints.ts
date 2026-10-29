@@ -31,6 +31,11 @@ export interface InterfaceEndpointsProps {
  * API. Traces need none: Lambda's X-Ray daemon sends from outside the VPC.
  */
 export class InterfaceEndpoints extends Construct {
+  /**
+   * The names the SDK calls the endpoints' APIs at, which private DNS answers with the endpoints'
+   * addresses. The DNS allowlist starts from these.
+   */
+  public readonly hostnames: readonly string[];
   public readonly lambda: InterfaceVpcEndpoint;
   public readonly secretsManager: InterfaceVpcEndpoint;
   public readonly sts: InterfaceVpcEndpoint;
@@ -66,6 +71,13 @@ export class InterfaceEndpoints extends Construct {
       actions: ["sts:AssumeRole"],
       resources: ["*"],
     });
+
+    // The SDK's regional endpoint for each, such as lambda.eu-west-2.amazonaws.com.
+    this.hostnames = [
+      InterfaceVpcEndpointAwsService.LAMBDA,
+      InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
+      InterfaceVpcEndpointAwsService.STS,
+    ].map(({ shortName }) => `${shortName}.${stack.region}.amazonaws.com`);
   }
 
   private endpoint(

@@ -1,6 +1,8 @@
 export { PlatformBucket } from "./bucket.ts";
 export { cdkApp } from "./cdk-app.ts";
 export { PlatformLogGroup } from "./log-group.ts";
+export { DnsFirewall } from "./network/dns-firewall.ts";
+export { dnsAllowlist } from "./network/dns-names.ts";
 export { FlowLogs } from "./network/flow-logs.ts";
 export { InterfaceEndpoints } from "./network/interface-endpoints.ts";
 export {

@@ -40,6 +40,7 @@ export const STAGES: readonly StageConfig[] = [
               id: "Z0835542Q6J8ILWJ1RGR",
             },
             network: TWO_ZONES,
+            gateways: [],
           },
         ],
         frontdoor: {
@@ -69,6 +70,7 @@ export const STAGES: readonly StageConfig[] = [
               id: "Z0085548AFKTJHKTHK3P",
             },
             network: TWO_ZONES,
+            gateways: [],
           },
         ],
         frontdoor: {
@@ -98,6 +100,7 @@ export const STAGES: readonly StageConfig[] = [
               id: "Z05812543BRVPCL728ND0",
             },
             network: THREE_ZONES,
+            gateways: [],
           },
         ],
         frontdoor: {
@@ -121,6 +124,7 @@ export const STAGES: readonly StageConfig[] = [
               id: "Z02914492HOQJQ6UXSZ9B",
             },
             network: THREE_ZONES,
+            gateways: [],
           },
         ],
         frontdoor: {
@@ -144,6 +148,7 @@ export const STAGES: readonly StageConfig[] = [
               id: "Z0411378AOM55J0BQQZI",
             },
             network: THREE_ZONES,
+            gateways: [],
           },
         ],
         frontdoor: {

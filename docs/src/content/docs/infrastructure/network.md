@@ -1,6 +1,6 @@
 ---
 title: Network
-description: The VPC in each domain account that domains and gateways run in, its tiers, endpoints and logs, and how other stacks find its IDs.
+description: The VPC in each domain account that domains and gateways run in, its tiers, endpoints, DNS filtering and logs, and how other stacks find its IDs.
 ---
 
 Each domain account has one network in each environment, in its own stack,
@@ -142,6 +142,123 @@ The rejected flows alone also go to a `PlatformLogGroup`, `/flex/network/<enviro
 through a second flow log. A rejection is the security signal in a flow log, something
 misconfigured or probing, and there should be few, so these are the flows log forwarding is to carry
 to the central logs, without the cost of indexing every flow. Forwarding is planned.
+
+## DNS filtering
+
+The VPC's Route 53 Resolver filters names with DNS Firewall, which denies by default: a name a
+workload asks for resolves only if it is on the VPC's allowlist, and anything else is answered
+`NXDOMAIN`. The
+construct is `DnsFirewall`, in `infra/constructs/src/network/dns-firewall.ts`.
+
+The allowlist is VPC-wide. Every workload in the network can resolve every name on it, so it
+doesn't give one gateway names another lacks.
+
+### Rules
+
+| Association priority | Rule group | Rule |
+|---|---|---|
+| 1000 | `network-<environment>-dns-allow` | Allow the names on `network-<environment>-dns-allowed` |
+| 9000 | `network-<environment>-dns-block` | Block every name, `*`, for every query type, with `NXDOMAIN` |
+
+The lower priority is evaluated first. The block is a rule group of its own, which no change to the
+allowlist touches. The allowlist is a domain list that the allow group's one rule names, so adding
+or removing a name changes that list and nothing else. An update or rollback of the
+allowlist never takes the block away, even for a moment.
+
+The allow rule trusts redirection. How an upstream serves its name, such as which CDN it is behind,
+is the upstream's to change, so config lists only the names a gateway connects to.
+
+If DNS Firewall can't evaluate a query, the resolver answers `SERVFAIL`: the VPC fails closed.
+That's AWS's default, but it's set explicitly, with an `AWS::Route53Resolver::FirewallConfig`, so a
+test and a reviewer can see it. aws-cdk-lib has no typed class for that resource yet, so the
+construct declares it as a `CfnResource`.
+
+### The allowlist
+
+The allowlist is the names the SDK calls each [endpoint](#endpoints)'s API at, and the names every
+gateway in the domain account declares:
+
+- `lambda.eu-west-2.amazonaws.com`, `secretsmanager.eu-west-2.amazonaws.com` and
+  `sts.eu-west-2.amazonaws.com`, which private DNS answers with the endpoints' addresses. Another
+  AWS name is added only when a workload is shown to need it. A suffix such as `*.amazonaws.com`
+  never is.
+- Each gateway's names, from its entry in `gateways` on its domain account in
+  [config](/flex-platform/infrastructure/overview/#config): the names it connects to, its
+  upstream's API and any host it takes a token from.
+
+```ts
+gateways: [
+  {
+    id: "udp",
+    hostnames: ["api.udp.example", "auth.udp.example"],
+  },
+],
+```
+
+Config is per environment, so an environment's gateways can use their own names. Every entry is
+checked when any stage is built, and the allowlist is lowercased, without repeats, and sorted, so
+the order config lists names in changes nothing. An entry is refused if it is:
+
+- a URL, or has a path, a query, a user or a port;
+- an IP address;
+- a wildcard;
+- malformed: a label that isn't letters, digits and hyphens, a name of one label, or one longer
+  than 253 characters. An internationalised name is written in its `xn--` form.
+
+Every name is exact. A wildcard can match names its upstream doesn't control, so none is admitted.
+
+A name gets onto the allowlist only through config. Nothing adds a name from a request, a DNS
+failure or a secret. If a gateway reads its upstream's address from its secret, that address's
+hostname must be in config too, or the gateway can't resolve it.
+
+### Changing the allowlist
+
+- Add a gateway's names in the same change that deploys it, or before. The network stack deploys
+  before the stacks that use it.
+- Remove a name only once no deployed gateway needs it. Removing a gateway from config removes its
+  names, unless another gateway or the platform's baseline still lists them.
+- Only the network stack's deployment changes the firewall. No workload's role is given any
+  `route53resolver` permission, so no workload can change its own allowlist.
+
+### Query logs
+
+Resolver query logging is enabled for the VPC, to a `PlatformLogGroup`,
+`/flex/network/<environment>/dns-queries`. Each record holds the name, its type, the answer, the
+address it came from, and DNS Firewall's decision and the rule that made it. VPC Flow Logs don't
+see this traffic. A resource policy of the stack's own lets only this account's log delivery write
+to the group.
+
+Resolver doesn't log a query it answers from its cache. The logs show which names were asked for,
+not how often, and a name asked for again within its answer's TTL may not appear. A test that looks
+for its query in the logs uses a name no earlier query has asked for.
+
+A query name can carry data a workload is trying to send out, so these logs are as sensitive as
+anything the platform holds. They are encrypted with the stack's log group key, so reading them
+takes that key as well as the group. Log forwarding to the central logs is planned.
+
+### Investigating a blocked query
+
+The alarm `network-<environment>-dns-blocked-queries` goes off when DNS Firewall blocks any query in
+a five-minute period. A workload's every legitimate name is on the allowlist, so any block is
+unexpected. DNS Firewall's metrics arrive several minutes late, so the alarm can go
+off up to about ten minutes after the query. A blocked name a workload asks for again may be
+answered from Resolver's cache and not logged, so the logs can show fewer blocks than the metric.
+
+1. In Logs Insights, query `/flex/network/<environment>/dns-queries` for
+   `firewall_rule_action = "BLOCK"` in the alarm's period. Note each `query_name` and the
+   `srcaddr` it came from.
+2. Find the network interface with that address. Its security group names the kind of workload:
+   domain, isolated gateway or private gateway. Lambda shares an interface between functions with
+   the same subnet and security group, so narrow it to a function with the functions' own logs at
+   that time.
+3. Decide which it is:
+   - a dependency missing from config, such as a new token host.
+     Add it to the gateway's entry, reviewed like any config change, and deploy the network;
+   - a misconfiguration, such as a secret naming a host config doesn't. Fix the secret or the
+     config;
+   - anything else: a name nobody expects, many unique subdomains, or labels that look like
+     encoded data. Treat it as possible exfiltration, and escalate it as a security incident,
+     with the query names as evidence. Don't add the name.
 
 ## The default security group
 

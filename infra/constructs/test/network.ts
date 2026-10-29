@@ -3,6 +3,7 @@ import { Template } from "aws-cdk-lib/assertions";
 import { AwsSolutionsChecks } from "cdk-nag";
 
 import { cdkApp } from "../src/cdk-app.ts";
+import { DnsFirewall } from "../src/network/dns-firewall.ts";
 import { FlowLogs } from "../src/network/flow-logs.ts";
 import { InterfaceEndpoints } from "../src/network/interface-endpoints.ts";
 import { networkZones } from "../src/network/layout.ts";
@@ -30,6 +31,15 @@ export class ZonedStack extends Stack {
   }
 }
 
+/** The names a gateway in the network resolves. */
+export interface UpstreamNames {
+  readonly hostnames: readonly string[];
+}
+
+export const UPSTREAM: UpstreamNames = {
+  hostnames: ["api.upstream.example", "auth.upstream.example"],
+};
+
 export interface BuiltNetwork {
   readonly app: App;
   readonly stack: Stack;
@@ -40,6 +50,7 @@ export interface BuiltNetwork {
 export function buildNetwork(
   zones: readonly string[] = ["eu-west-2a", "eu-west-2b"],
   nag = false,
+  upstream: UpstreamNames = UPSTREAM,
 ): BuiltNetwork {
   const app = cdkApp();
   if (nag) {
@@ -66,6 +77,11 @@ export function buildNetwork(
     vpc,
     subnets: subnets.isolated,
     invokableFunctions: "gateway-sandbox-*",
+  });
+  new DnsFirewall(stack, "DnsFirewall", {
+    environment: "sandbox",
+    vpc,
+    hostnames: [...endpoints.hostnames, ...upstream.hostnames],
   });
   const domain = new WorkloadSecurityGroup(stack, "Domain", {
     vpc,

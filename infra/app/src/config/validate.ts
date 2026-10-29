@@ -1,5 +1,6 @@
 import { domainFunctionName, FUNCTION_NAME_LENGTH } from "@repo/domain-infra";
-import { networkZones } from "@repo/infra-constructs";
+import { gatewayFunctionName } from "@repo/gateway-infra";
+import { dnsAllowlist, networkZones } from "@repo/infra-constructs";
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
 import type {
@@ -70,6 +71,11 @@ function checkEnvironment(at: string, environment: EnvironmentConfig): void {
       `${at} ${domainAccount.name} domain account network`,
       domainAccount,
     );
+    checkGateways(
+      `${at} ${domainAccount.name} domain account`,
+      environment,
+      domainAccount,
+    );
   }
   const { issuers } = environment.frontdoor;
   if (issuers.length === 0) {
@@ -111,6 +117,39 @@ function checkNetwork(at: string, { network }: DomainAccountConfig): void {
     networkZones(network.availabilityZones);
   } catch (error) {
     throw new Error(`${at}: ${(error as Error).message}`, { cause: error });
+  }
+}
+
+// A gateway's id names its function, and each name it connects to goes on the DNS allowlist, so both
+// are checked here for every stage, as the network checks them for the one it builds.
+function checkGateways(
+  at: string,
+  environment: EnvironmentConfig,
+  { gateways }: DomainAccountConfig,
+): void {
+  checkNames(
+    `${at} gateway`,
+    gateways.map(({ id }) => id),
+  );
+  for (const { id, hostnames } of gateways) {
+    const functionName = gatewayFunctionName(environment.name, id);
+    if (functionName.length > FUNCTION_NAME_LENGTH) {
+      throw new Error(
+        `${at} ${id} gateway: its function name ${functionName} is longer than Lambda's ${FUNCTION_NAME_LENGTH} characters`,
+      );
+    }
+    if (hostnames.length === 0) {
+      throw new Error(
+        `${at} ${id} gateway: it names no hostname, so it couldn't reach its upstream`,
+      );
+    }
+    try {
+      dnsAllowlist(hostnames);
+    } catch (error) {
+      throw new Error(`${at} ${id} gateway: ${(error as Error).message}`, {
+        cause: error,
+      });
+    }
   }
 }
 

@@ -3,6 +3,7 @@
 //
 //   network-{environment}                     the VPC
 //   network-{environment}-{tier}-{zone}       a subnet
+//   network-{environment}-dns-{thing}         the DNS Firewall's lists, rule groups and alarm
 //   network-{environment}-nat-{zone}-{thing}  a NAT gateway's alarms
 //   /flex/network/{environment}/...           log groups, and the parameters other stacks and the
 //                                             release pipeline read IDs from
@@ -52,6 +53,11 @@ export function restrictDefaultSecurityGroupLogGroupName(
   return `/flex/network/${environment}/restrict-default-security-group`;
 }
 
+/** A DNS Firewall domain list, rule group, query logging config or alarm. */
+export function dnsFirewallName(environment: string, thing: string): string {
+  return `${vpcName(environment)}-dns-${thing}`;
+}
+
 /** An alarm on one zone's NAT gateway. */
 export function natGatewayAlarmName(
   environment: string,
@@ -59,6 +65,11 @@ export function natGatewayAlarmName(
   thing: string,
 ): string {
   return `${vpcName(environment)}-nat-${zone}-${thing}`;
+}
+
+/** The VPC's Resolver query logs, with DNS Firewall's decision on each query. */
+export function dnsQueryLogGroupName(environment: string): string {
+  return `/flex/network/${environment}/dns-queries`;
 }
 
 /** The VPC's rejected flows, which are forwarded to the central logs. */

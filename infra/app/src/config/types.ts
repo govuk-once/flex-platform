@@ -25,6 +25,21 @@ export interface NetworkConfig {
   readonly availabilityZones: readonly string[];
 }
 
+/**
+ * A gateway deployed in a domain account, with the names it connects to in that environment. They
+ * join the account's DNS allowlist, which is VPC-wide: every workload in the network may resolve
+ * every name on it.
+ */
+export interface GatewayConfig {
+  /** As in its package's name, `@repo/gateway-service-<id>`. */
+  readonly id: string;
+  /**
+   * Exact hostnames it connects to: its upstream's API, and any host it takes a token from. Never
+   * a name read from a secret or a request, unless it is also here.
+   */
+  readonly hostnames: readonly string[];
+}
+
 export interface DomainAccountConfig {
   readonly name: string;
   readonly account: string;
@@ -33,6 +48,8 @@ export interface DomainAccountConfig {
   /** Each domain answers at `<domain>.<zone>`, under one wildcard certificate. */
   readonly zone: ZoneConfig;
   readonly network: NetworkConfig;
+  /** The gateways deployed in the account, in this environment. */
+  readonly gateways: readonly GatewayConfig[];
 }
 
 export interface SharedConfig {

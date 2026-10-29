@@ -136,6 +136,54 @@
         "type": "AWS::IAM::Role"
       },
       {
+        "logicalId": "DnsFirewallAllow0FFFE360",
+        "type": "AWS::Route53Resolver::FirewallRuleGroup"
+      },
+      {
+        "logicalId": "DnsFirewallAllowAssociationE4F7E5BC",
+        "type": "AWS::Route53Resolver::FirewallRuleGroupAssociation"
+      },
+      {
+        "logicalId": "DnsFirewallAllowedNames52400EAC",
+        "type": "AWS::Route53Resolver::FirewallDomainList"
+      },
+      {
+        "logicalId": "DnsFirewallBlock183D6BBE",
+        "type": "AWS::Route53Resolver::FirewallRuleGroup"
+      },
+      {
+        "logicalId": "DnsFirewallBlockAssociationE5C98E09",
+        "type": "AWS::Route53Resolver::FirewallRuleGroupAssociation"
+      },
+      {
+        "logicalId": "DnsFirewallBlockedQueries48C1F0C8",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "DnsFirewallEveryName79DF0734",
+        "type": "AWS::Route53Resolver::FirewallDomainList"
+      },
+      {
+        "logicalId": "DnsFirewallFailClosed4DBE11D3",
+        "type": "AWS::Route53Resolver::FirewallConfig"
+      },
+      {
+        "logicalId": "DnsFirewallQueryLogDeliveryResourcePolicy8350F2DF",
+        "type": "AWS::Logs::ResourcePolicy"
+      },
+      {
+        "logicalId": "DnsFirewallQueryLogging04499B03",
+        "type": "AWS::Route53Resolver::ResolverQueryLoggingConfig"
+      },
+      {
+        "logicalId": "DnsFirewallQueryLoggingAssociation6799B1F6",
+        "type": "AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation"
+      },
+      {
+        "logicalId": "DnsFirewallQueryLogsLogGroup0AB30E0D",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
         "logicalId": "DomainWorkloadIntoLambda304A1BB5",
         "type": "AWS::EC2::SecurityGroupIngress"
       },

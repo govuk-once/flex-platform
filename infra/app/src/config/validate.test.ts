@@ -4,6 +4,7 @@ import {
   domainAccount,
   FIXTURE_STAGES,
   FRONTDOOR,
+  GATEWAYS,
 } from "../../test/helpers.ts";
 import type {
   DomainAccountConfig,
@@ -374,6 +375,81 @@ describe("validateStages", () => {
         `platform-dev/sandbox main domain account network: `,
       );
       expect(() => validateStages([withZones(zones)])).toThrow(message);
+    });
+  });
+
+  describe("gateways", () => {
+    function withGateways(
+      gateways: DomainAccountConfig["gateways"],
+    ): StageConfig {
+      return withEnvironment({
+        domainAccounts: [{ ...MAIN_DOMAIN_ACCOUNT, gateways }],
+      });
+    }
+
+    const UDP = GATEWAYS[0]!;
+
+    it("accepts an account with no gateways", () => {
+      expect(() => validateStages([withGateways([])])).not.toThrow();
+    });
+
+    it("refuses a gateway id used twice in an account", () => {
+      expect(() => validateStages([withGateways([UDP, UDP])])).toThrow(
+        "The platform-dev/sandbox main domain account gateway name udp is used more than once",
+      );
+    });
+
+    it("refuses a gateway id that isn't a platform name", () => {
+      expect(() =>
+        validateStages([withGateways([{ ...UDP, id: "UDP" }])]),
+      ).toThrow('gateway name "UDP" must be');
+    });
+
+    it("refuses a gateway whose function name would be too long", () => {
+      const id = `g${"a".repeat(31)}`;
+      const environment = `e${"b".repeat(31)}`;
+      expect(() =>
+        validateStages([
+          {
+            ...STAGE,
+            environments: [
+              {
+                ...ENVIRONMENT,
+                name: environment,
+                domainAccounts: [
+                  { ...MAIN_DOMAIN_ACCOUNT, gateways: [{ ...UDP, id }] },
+                ],
+              },
+            ],
+          },
+        ]),
+      ).toThrow("is longer than Lambda's 64 characters");
+    });
+
+    it("refuses a gateway that names no hostname", () => {
+      expect(() =>
+        validateStages([withGateways([{ ...UDP, hostnames: [] }])]),
+      ).toThrow("udp gateway: it names no hostname");
+    });
+
+    it.each([
+      ["https://api.udp.example/v1", "is a URL"],
+      ["api.udp.example:443", "has a port"],
+      ["192.0.2.10", "is an IP address"],
+    ])("refuses the hostname %j", (hostname, why) => {
+      expect(() =>
+        validateStages([withGateways([{ ...UDP, hostnames: [hostname] }])]),
+      ).toThrow(
+        `platform-dev/sandbox main domain account udp gateway: ${JSON.stringify(hostname)} is not a hostname: it ${why}`,
+      );
+    });
+
+    it("refuses a wildcard, however narrow", () => {
+      expect(() =>
+        validateStages([
+          withGateways([{ ...UDP, hostnames: ["*.regions.cdn.example.net"] }]),
+        ]),
+      ).toThrow("is a wildcard; list each name exactly");
     });
   });
 });
