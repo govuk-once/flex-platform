@@ -14,16 +14,16 @@
     "@astrojs/starlight": "0.42.6",
     "@dagrejs/dagre": "3.1.1",
     "@repo/utils": "workspace:*",
-    "astro": "7.4.0",
+    "astro": "7.4.2",
     "sharp": "0.35.5",
     "starlight-links-validator": "0.27.0"
   },
   "devDependencies": {
-    "@astrojs/check": "0.9.10",
+    "@astrojs/check": "0.9.12",
     "@repo/eslint-config": "workspace:*",
-    "eslint": "10.12.0",
+    "eslint": "10.13.0",
     "eslint-plugin-astro": "3.2.1",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.71.2"
+    "typescript-eslint": "8.72.0"
   }
 }
