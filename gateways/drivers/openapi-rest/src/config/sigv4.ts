@@ -54,7 +54,6 @@ export interface AssumedRole {
   readonly arn: string;
   readonly externalId?: string;
   readonly sessionName: string;
-  readonly region: string;
 }
 
 // What a test supplies in place of the platform's: credentials that STS did not issue, and a
@@ -70,6 +69,9 @@ export interface SigV4Deps {
 const CONNECTION_TIMEOUT_MS = 2_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 
+// STS is called in the gateway's own region, the SDK's default from `AWS_REGION`, whatever region
+// the upstream signs in: that is where the network's STS endpoint is, and credentials from a
+// regional STS endpoint are valid in every region.
 const assumeWithSts = (role: AssumedRole): (() => Promise<Credentials>) =>
   fromTemporaryCredentials({
     params: {
@@ -78,7 +80,6 @@ const assumeWithSts = (role: AssumedRole): (() => Promise<Credentials>) =>
       ...(role.externalId === undefined ? {} : { ExternalId: role.externalId }),
     },
     clientConfig: {
-      region: role.region,
       // Without throwOnRequestTimeout the SDK only logs a breach of requestTimeout.
       requestHandler: {
         connectionTimeout: CONNECTION_TIMEOUT_MS,
@@ -213,7 +214,7 @@ export function sigV4With(
       // one when the secret is rotated to another role or another external ID.
       const roles = new Map<string, () => Promise<Credentials>>();
       const credentialsFor = (role: AssumedRole) => {
-        const key = JSON.stringify([role.arn, role.externalId, role.region]);
+        const key = JSON.stringify([role.arn, role.externalId]);
         let credentials = roles.get(key);
         if (credentials === undefined) {
           credentials = heldCredentials(assume(role));
@@ -253,7 +254,6 @@ export function sigV4With(
               arn: roleArn,
               ...(external === undefined ? {} : { externalId: external }),
               sessionName,
-              region: signingRegion,
             }),
             sha256: Hash.bind(null, "sha256"),
             // The hash of the body is part of what is signed either way; the header that repeats

@@ -5,6 +5,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  GATEWAY_REGION_ENV,
   readUpstreamOptions,
   readUpstreamSecretArn,
   readUpstreamTarget,
@@ -62,6 +63,7 @@ describe("readUpstreamOptions", () => {
   const env = {
     [UPSTREAM_TARGET_ENV]: "https://x.test",
     [UPSTREAM_SECRET_ARN_ENV]: ARN,
+    [GATEWAY_REGION_ENV]: "eu-west-2",
   };
 
   afterEach(() => {
@@ -91,10 +93,30 @@ describe("readUpstreamOptions", () => {
 
   it("requires the secret and leaves the target out where none is set", () => {
     expect(
-      readUpstreamOptions({ [UPSTREAM_SECRET_ARN_ENV]: ARN }),
+      readUpstreamOptions({
+        [UPSTREAM_SECRET_ARN_ENV]: ARN,
+        [GATEWAY_REGION_ENV]: "eu-west-2",
+      }),
     ).not.toHaveProperty("target");
     expect(() =>
-      readUpstreamOptions({ [UPSTREAM_TARGET_ENV]: "https://x.test" }),
+      readUpstreamOptions({
+        [UPSTREAM_TARGET_ENV]: "https://x.test",
+        [GATEWAY_REGION_ENV]: "eu-west-2",
+      }),
     ).toThrow(/UPSTREAM_SECRET_ARN must be set/);
+  });
+
+  it("requires the gateway's region, which Lambda sets", () => {
+    expect(() =>
+      readUpstreamOptions({ ...env, [GATEWAY_REGION_ENV]: undefined }),
+    ).toThrow(/AWS_REGION must be set/);
+  });
+
+  it("refuses a secret outside the gateway's region as it starts", () => {
+    expect(() =>
+      readUpstreamOptions({ ...env, [GATEWAY_REGION_ENV]: "eu-west-1" }),
+    ).toThrow(
+      /needs a secret in the gateway's region, eu-west-1, not eu-west-2/,
+    );
   });
 });

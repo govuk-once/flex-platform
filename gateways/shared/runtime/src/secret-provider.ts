@@ -4,8 +4,9 @@ import { isRecord } from "@repo/utils/is-record";
 
 import { GatewayError } from "./errors.ts";
 
-// arn:<partition>:secretsmanager:<region>:<account>:secret:<name>. The region is read from the
-// ARN so the client reaches the secret wherever it lives, not only where the workload runs.
+// arn:<partition>:secretsmanager:<region>:<account>:secret:<name>. The secret must be in the
+// gateway's own region: the gateway reaches Secrets Manager through its network's endpoint, which
+// serves that region only. A secret held elsewhere is replicated to it.
 const SECRET_ARN = /^arn:[^:\s]+:secretsmanager:([^:\s]+):[^:\s]*:secret:\S+$/;
 
 // How long Powertools serves a retrieved secret before the next call retrieves it again.
@@ -44,14 +45,23 @@ export function asSecretObject(value: unknown): SecretObject {
 }
 
 // One Powertools SecretsProvider per gateway, reading the secret the ARN names with the
-// workload's AWS identity in the ARN's region. Powertools keeps the cache; this wrapper adds
+// workload's AWS identity, in the gateway's region. Powertools keeps the cache; this wrapper adds
 // the deployment contract and controlled diagnostics. Nothing here knows what the secret
 // contains: validating its fields is the driver's job, on every read.
-export function createSecretProvider(arn: string): SecretProvider {
+export function createSecretProvider(
+  arn: string,
+  gatewayRegion: string,
+): SecretProvider {
   const region =
     typeof arn === "string" ? SECRET_ARN.exec(arn)?.[1] : undefined;
   if (region === undefined) {
     throw new TypeError("Secret provider needs a Secrets Manager secret ARN");
+  }
+  // Refused as the gateway starts, rather than timing out on the first read.
+  if (region !== gatewayRegion) {
+    throw new TypeError(
+      `Secret provider needs a secret in the gateway's region, ${gatewayRegion}, not ${region}; replicate it there`,
+    );
   }
   const secrets = new SecretsProvider({
     clientConfig: {

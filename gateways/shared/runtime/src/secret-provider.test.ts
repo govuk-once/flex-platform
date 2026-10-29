@@ -14,6 +14,7 @@ import { GatewayError } from "./errors.ts";
 import { asSecretObject, createSecretProvider } from "./secret-provider.ts";
 
 const ARN = "arn:aws:secretsmanager:eu-west-2:123456789012:secret:udp-AbCdEf";
+const REGION = "eu-west-2";
 
 type Output = Partial<GetSecretValueCommandOutput>;
 
@@ -91,18 +92,18 @@ describe("createSecretProvider", () => {
     "arn:aws:secretsmanager:eu-west-2:123456789012:secret:",
     "arn:aws:secretsmanager:eu-west-2:123456789012:secret:has space",
   ])("rejects %j at creation", (arn) => {
-    expect(() => createSecretProvider(arn)).toThrow(
+    expect(() => createSecretProvider(arn, REGION)).toThrow(
       /needs a Secrets Manager secret ARN/,
     );
   });
 
-  it("reads the secret by ARN, in the ARN's region, and returns the parsed object", async () => {
+  it("reads the secret by ARN, in the gateway's region, and returns the parsed object", async () => {
     let region: string | undefined;
     const send = answering(async function () {
       region = await this.config.region();
       return secretString({ token: "t1" });
     });
-    await expect(createSecretProvider(ARN).get()).resolves.toEqual({
+    await expect(createSecretProvider(ARN, REGION).get()).resolves.toEqual({
       token: "t1",
     });
     expect(send).toHaveBeenCalledTimes(1);
@@ -120,8 +121,22 @@ describe("createSecretProvider", () => {
     });
     await createSecretProvider(
       "arn:aws-cn:secretsmanager:cn-north-1:123456789012:secret:x",
+      "cn-north-1",
     ).get();
     expect(region).toBe("cn-north-1");
+  });
+
+  it("refuses a secret in another region at creation, since the gateway reaches only its own", () => {
+    const send = answering(() => Promise.resolve(secretString({})));
+    expect(() =>
+      createSecretProvider(
+        "arn:aws:secretsmanager:eu-west-1:123456789012:secret:udp-AbCdEf",
+        REGION,
+      ),
+    ).toThrow(
+      "Secret provider needs a secret in the gateway's region, eu-west-2, not eu-west-1; replicate it there",
+    );
+    expect(send).not.toHaveBeenCalled();
   });
 
   describe("with a clock", () => {
@@ -136,7 +151,7 @@ describe("createSecretProvider", () => {
         calls += 1;
         return Promise.resolve(secretString({ token: `t${calls}` }));
       });
-      const provider = createSecretProvider(ARN);
+      const provider = createSecretProvider(ARN, REGION);
       await expect(provider.get()).resolves.toEqual({ token: "t1" });
       vi.setSystemTime(299_000);
       await expect(provider.get()).resolves.toEqual({ token: "t1" });
@@ -154,7 +169,7 @@ describe("createSecretProvider", () => {
         calls += 1;
         return Promise.resolve(secretString({ token: `t${calls}` }));
       });
-      const provider = createSecretProvider(ARN);
+      const provider = createSecretProvider(ARN, REGION);
       await expect(provider.get()).resolves.toEqual({ token: "t1" });
 
       // Inside the cache age, as after an upstream refused what the cached copy held.
@@ -168,15 +183,15 @@ describe("createSecretProvider", () => {
 
     it("keeps one cache per provider", async () => {
       const send = answering(() => Promise.resolve(secretString({})));
-      await createSecretProvider(ARN).get();
-      await createSecretProvider(ARN).get();
+      await createSecretProvider(ARN, REGION).get();
+      await createSecretProvider(ARN, REGION).get();
       expect(send).toHaveBeenCalledTimes(2);
     });
   });
 
   it("answers concurrent callers, each of which may read", async () => {
     answering(() => Promise.resolve(secretString({ token: "t1" })));
-    const provider = createSecretProvider(ARN);
+    const provider = createSecretProvider(ARN, REGION);
     const values = await Promise.all([provider.get(), provider.get()]);
     expect(values).toEqual([{ token: "t1" }, { token: "t1" }]);
   });
@@ -187,7 +202,7 @@ describe("createSecretProvider", () => {
         SecretBinary: new TextEncoder().encode('{"token":"t1"}'),
       }),
     );
-    await expect(createSecretProvider(ARN).get()).resolves.toEqual({
+    await expect(createSecretProvider(ARN, REGION).get()).resolves.toEqual({
       token: "t1",
     });
   });
@@ -199,7 +214,7 @@ describe("createSecretProvider", () => {
       cause: new Error("SYNTHETIC_CAUSE"),
     });
     answering(() => Promise.reject(libraryError));
-    const err = await failure(createSecretProvider(ARN).get());
+    const err = await failure(createSecretProvider(ARN, REGION).get());
     expect(err.code).toBe("INTERNAL");
     expect(err.message).toBe("Failed to retrieve gateway secret");
     expect(err.cause).toBeUndefined();
@@ -208,13 +223,13 @@ describe("createSecretProvider", () => {
 
   it("replaces malformed JSON with the same diagnostic", async () => {
     answering(() => Promise.resolve({ SecretString: "{SYNTHETIC_SECRET" }));
-    const err = await failure(createSecretProvider(ARN).get());
+    const err = await failure(createSecretProvider(ARN, REGION).get());
     expect(err.message).toBe("Failed to retrieve gateway secret");
   });
 
   it("rejects a secret that is not a JSON object", async () => {
     answering(() => Promise.resolve(secretString(["SYNTHETIC"])));
-    const err = await failure(createSecretProvider(ARN).get());
+    const err = await failure(createSecretProvider(ARN, REGION).get());
     expect(err.message).toBe(
       "Gateway secret must be a JSON object, not an array",
     );
@@ -222,7 +237,7 @@ describe("createSecretProvider", () => {
 
   it("rejects a secret with no value", async () => {
     answering(() => Promise.resolve({}));
-    const err = await failure(createSecretProvider(ARN).get());
+    const err = await failure(createSecretProvider(ARN, REGION).get());
     expect(err.message).toMatch(/has no value/);
   });
 
@@ -234,7 +249,7 @@ describe("createSecretProvider", () => {
         calls === 1 ? { SecretString: "nope" } : secretString({ a: 1 }),
       );
     });
-    const provider = createSecretProvider(ARN);
+    const provider = createSecretProvider(ARN, REGION);
     await failure(provider.get());
     await expect(provider.get()).resolves.toEqual({ a: 1 });
     expect(send).toHaveBeenCalledTimes(2);
@@ -258,7 +273,7 @@ describe("createSecretProvider", () => {
       const received = new Promise<void>((resolve) => {
         server.once("request", () => resolve());
       });
-      const pending = failure(createSecretProvider(ARN).get());
+      const pending = failure(createSecretProvider(ARN, REGION).get());
       await received;
       await vi.advanceTimersByTimeAsync(5_000);
       const err = await pending;

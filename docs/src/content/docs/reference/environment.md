@@ -3,9 +3,9 @@ title: Environment
 description: The environment variables a deployed gateway reads, and the secret it expects.
 ---
 
-A deployed gateway reads two environment variables. Only the generated entry point reads them,
-through `readUpstreamOptions`. Gateway code never names a deployed address, a credential or an
-environment. These belong to the deployment.
+A deployed gateway reads two environment variables of its own, and `AWS_REGION`, which Lambda
+sets. Only the generated entry point reads them, through `readUpstreamOptions`. Gateway code never
+names a deployed address, a credential or an environment. These belong to the deployment.
 
 | Variable | Required | Purpose |
 |---|---|---|
@@ -16,6 +16,11 @@ If a driver's configuration names a secret field for the target and both are set
 the secret's field.
 
 ## The secret
+
+The secret must be in the gateway's own region, `AWS_REGION`, because the gateway reaches Secrets
+Manager through its [network's endpoint](/flex-platform/infrastructure/network/#endpoints), which
+serves that region only. An upstream that keeps its secret in another region replicates it to the
+gateway's. A secret in another region stops the gateway as it starts.
 
 The runtime retrieves the secret as a JSON object through Powertools Parameters. It caches the
 secret for five minutes, then reads it again on the first call after that. The runtime does not

@@ -257,8 +257,8 @@ describe("sigV4", () => {
     expect(headers.authorization).toBe(bySpecification(sent, EXAMPLE, options));
   });
 
-  it("signs what the transport sends, as the role the secret names", async () => {
-    const options = { service: "execute-api", region: "eu-west-2" };
+  it("signs what the transport sends, in the upstream's region, as the role the secret names", async () => {
+    const options = { service: "execute-api", region: "eu-west-1" };
     const assumed: AssumedRole[] = [];
     const ff = fakeFetch(() => json(200, { id: "u1" }));
     const gateway = defineGateway({
@@ -295,12 +295,12 @@ describe("sigV4", () => {
     const execute = await buildExecutor(
       gateway,
       {
-        target: "https://abc123.execute-api.eu-west-2.amazonaws.com/prod",
+        target: "https://abc123.execute-api.eu-west-1.amazonaws.com/prod",
         // An upstream's own secret, holding fields no part reads.
         secret: fakeSecret({
           consumerRoleArn: ROLE_ARN,
           externalId: "SYNTHETIC-EXTERNAL-ID",
-          region: "eu-west-2",
+          region: "eu-west-1",
           apiAccountId: "000000000000",
         }).provider,
       },
@@ -309,12 +309,12 @@ describe("sigV4", () => {
 
     await execute(passthroughContext(), "getUser", { id: "u 1" });
 
+    // The assumption names no region: STS is reached in the gateway's own, not the upstream's.
     expect(assumed).toEqual([
       {
         arn: ROLE_ARN,
         externalId: "SYNTHETIC-EXTERNAL-ID",
         sessionName: "udp-consumer-session",
-        region: "eu-west-2",
       },
     ]);
     const { signed, request: sent } = asSent(ff.calls[0]);

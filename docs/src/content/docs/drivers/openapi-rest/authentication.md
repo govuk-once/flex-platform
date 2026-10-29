@@ -95,7 +95,9 @@ assume the role the secret names. It passes:
 The credentials STS returns are kept until five minutes before they expire. The role is then
 assumed again. If the secret is rotated to another role, that role is assumed on the next
 request. Role assumption goes to STS through the AWS SDK. This is the one exception to using the
-driver's transport.
+driver's transport. STS is called in the gateway's own region, whatever region the upstream signs
+in: credentials from a regional STS endpoint are valid in every region, and the gateway's
+[network](/flex-platform/infrastructure/network/#endpoints) reaches STS in its own region only.
 
 The signature covers the method, the address, the headers set before it and a hash of the body.
 The signer leaves out the few headers a transport may add or change: `user-agent`, `expect`, and

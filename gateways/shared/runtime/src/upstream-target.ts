@@ -12,6 +12,8 @@ import { createSecretProvider } from "./secret-provider.ts";
 // the driver's configuration and checked there.
 export const UPSTREAM_TARGET_ENV = "UPSTREAM_TARGET";
 export const UPSTREAM_SECRET_ARN_ENV = "UPSTREAM_SECRET_ARN";
+// Lambda's own, set on every function: the region the gateway runs in.
+export const GATEWAY_REGION_ENV = "AWS_REGION";
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -33,6 +35,14 @@ export function readUpstreamSecretArn(env: Env = process.env): string {
   return value;
 }
 
+export function readGatewayRegion(env: Env = process.env): string {
+  const value = env[GATEWAY_REGION_ENV]?.trim();
+  if (value === undefined || value.length === 0) {
+    throw new Error(`Environment variable ${GATEWAY_REGION_ENV} must be set`);
+  }
+  return value;
+}
+
 export interface UpstreamOptions {
   readonly target?: string;
   readonly secret: SecretProvider;
@@ -45,6 +55,9 @@ export function readUpstreamOptions(env: Env = process.env): UpstreamOptions {
   const target = readUpstreamTarget(env);
   return {
     ...(target === undefined ? {} : { target }),
-    secret: createSecretProvider(readUpstreamSecretArn(env)),
+    secret: createSecretProvider(
+      readUpstreamSecretArn(env),
+      readGatewayRegion(env),
+    ),
   };
 }
