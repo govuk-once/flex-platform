@@ -3,7 +3,7 @@ import type {
   DriverLogFields,
   SecretObject,
   SecretProvider,
-} from "@repo/gateway-types";
+} from "@repo/gateway-core";
 
 export interface CapturedRequest {
   readonly url: string;

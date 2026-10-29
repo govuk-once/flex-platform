@@ -387,12 +387,12 @@ importers:
       '@repo/gateway-config':
         specifier: workspace:*
         version: link:../../shared/config
+      '@repo/gateway-core':
+        specifier: workspace:*
+        version: link:../../shared/core
       '@repo/gateway-runtime':
         specifier: workspace:*
         version: link:../../shared/runtime
-      '@repo/gateway-types':
-        specifier: workspace:*
-        version: link:../../shared/types
       '@repo/utils':
         specifier: workspace:*
         version: link:../../../packages/utils
@@ -461,9 +461,9 @@ importers:
       '@repo/gateway-codegen':
         specifier: workspace:*
         version: link:../../shared/codegen
-      '@repo/gateway-types':
+      '@repo/gateway-core':
         specifier: workspace:*
-        version: link:../../shared/types
+        version: link:../../shared/core
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../../../packages/tsconfig
@@ -476,9 +476,9 @@ importers:
       '@repo/gateway-config':
         specifier: workspace:*
         version: link:../config
-      '@repo/gateway-types':
+      '@repo/gateway-core':
         specifier: workspace:*
-        version: link:../types
+        version: link:../core
       '@repo/utils':
         specifier: workspace:*
         version: link:../../../packages/utils
@@ -525,9 +525,9 @@ importers:
 
   gateways/shared/config:
     dependencies:
-      '@repo/gateway-types':
+      '@repo/gateway-core':
         specifier: workspace:*
-        version: link:../types
+        version: link:../core
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -544,6 +544,24 @@ importers:
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))
+
+  gateways/shared/core:
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../../packages/eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../../../packages/tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../../../packages/vitest-config
+      eslint:
+        specifier: 10.12.0
+        version: 10.12.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   gateways/shared/runtime:
     dependencies:
@@ -556,33 +574,15 @@ importers:
       '@repo/gateway-config':
         specifier: workspace:*
         version: link:../config
-      '@repo/gateway-types':
+      '@repo/gateway-core':
         specifier: workspace:*
-        version: link:../types
+        version: link:../core
       '@repo/utils':
         specifier: workspace:*
         version: link:../../../packages/utils
       pino:
         specifier: 10.4.0
         version: 10.4.0
-    devDependencies:
-      '@repo/eslint-config':
-        specifier: workspace:*
-        version: link:../../../packages/eslint-config
-      '@repo/tsconfig':
-        specifier: workspace:*
-        version: link:../../../packages/tsconfig
-      '@repo/vitest-config':
-        specifier: workspace:*
-        version: link:../../../packages/vitest-config
-      eslint:
-        specifier: 10.12.0
-        version: 10.12.0(jiti@2.7.0)(supports-color@7.2.0)
-      vitest:
-        specifier: 5.0.5
-        version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1))
-
-  gateways/shared/types:
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*

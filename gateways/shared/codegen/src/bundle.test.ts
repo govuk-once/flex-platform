@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { GatewaySchemas, Validator } from "@repo/gateway-types";
+import type { GatewaySchemas, Validator } from "@repo/gateway-core";
 import esbuild from "esbuild";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 

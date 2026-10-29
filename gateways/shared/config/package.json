@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@repo/gateway-types": "workspace:*"
+    "@repo/gateway-core": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

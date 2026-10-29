@@ -14,7 +14,7 @@
     "@aws-lambda-powertools/parameters": "2.36.0",
     "@aws-sdk/client-secrets-manager": "3.1152.0",
     "@repo/gateway-config": "workspace:*",
-    "@repo/gateway-types": "workspace:*",
+    "@repo/gateway-core": "workspace:*",
     "@repo/utils": "workspace:*",
     "pino": "10.4.0"
   },

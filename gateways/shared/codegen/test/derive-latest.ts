@@ -1,5 +1,5 @@
 import type { DeriveSchemas } from "@repo/gateway-config";
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas } from "@repo/gateway-core";
 
 // A derivation for gateways whose versions are a test's own data rather than derived from
 // anything: it answers with the latest of them, read through the sources as a driver's own

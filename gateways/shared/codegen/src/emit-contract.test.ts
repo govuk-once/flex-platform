@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type { GatewaySchemas, Validator } from "@repo/gateway-types";
+import type { GatewaySchemas, Validator } from "@repo/gateway-core";
 import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -11,7 +11,7 @@ import { emitValidators } from "./emit-validators.ts";
 import { CONTRACT_MODULE } from "./layout.ts";
 
 // Generated beside the package rather than in the system temp directory: the contract imports
-// @repo/gateway-types, which resolves from here, and the compiler check needs it to resolve.
+// @repo/gateway-core, which resolves from here, and the compiler check needs it to resolve.
 const GENERATED_ROOT = path.join(import.meta.dirname, "..", ".gen");
 
 const GATEWAY_ID = "test";

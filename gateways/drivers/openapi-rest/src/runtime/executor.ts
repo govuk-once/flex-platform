@@ -1,6 +1,6 @@
 import type { ExecutorOptions } from "@repo/gateway-config";
+import type { ExecuteFn } from "@repo/gateway-core";
 import { GatewayError, UPSTREAM_TARGET_ENV } from "@repo/gateway-runtime";
-import type { ExecuteFn } from "@repo/gateway-types";
 import { isRecord } from "@repo/utils/is-record";
 
 import type {

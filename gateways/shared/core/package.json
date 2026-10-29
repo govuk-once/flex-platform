@@ -1,5 +1,5 @@
 {
-  "name": "@repo/gateway-types",
+  "name": "@repo/gateway-core",
   "version": "0.0.0",
   "type": "module",
   "exports": {

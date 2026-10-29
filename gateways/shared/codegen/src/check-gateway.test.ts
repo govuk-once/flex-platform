@@ -1,5 +1,5 @@
 import type { DriverDefinition } from "@repo/gateway-config";
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas } from "@repo/gateway-core";
 import { describe, expect, it } from "vitest";
 
 import { checkGateway, GatewayCheckError } from "./check-gateway.ts";

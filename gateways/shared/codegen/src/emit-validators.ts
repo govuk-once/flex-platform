@@ -1,4 +1,4 @@
-import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
+import type { GatewaySchemas, JSONSchema } from "@repo/gateway-core";
 import { sortedEntries } from "@repo/utils/sorted-entries";
 import ajvModule from "ajv/dist/2020.js";
 import standaloneModule from "ajv/dist/standalone/index.js";

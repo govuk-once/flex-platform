@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import type { SchemaSources } from "@repo/gateway-config";
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas } from "@repo/gateway-core";
 
 import { checkGateway } from "./check-gateway.ts";
 import { checkVersions, compareCandidate } from "./compare-schemas.ts";

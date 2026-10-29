@@ -1,4 +1,4 @@
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 
 // UDP keeps whatever it is given under whatever path, and describes all of it once: a template
 // that takes any path, and data of any shape. An operation on something kept there writes its

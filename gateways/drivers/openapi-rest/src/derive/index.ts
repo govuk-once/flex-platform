@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { checkValue } from "@repo/gateway-codegen";
 import type { DeriveSchemas } from "@repo/gateway-config";
-import type { JSONSchema, OperationSchemas } from "@repo/gateway-types";
+import type { JSONSchema, OperationSchemas } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 import { sortedNames } from "@repo/utils/sorted-names";
 
