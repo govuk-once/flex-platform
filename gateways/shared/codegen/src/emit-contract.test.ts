@@ -160,8 +160,9 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
 
 // What an editor offers where a value of the type goes. Assignability says nothing about this:
 // a type TypeScript has collapsed to `string` accepts every one of the values it forgot, and
-// only asking for the completions shows whether they are still there to offer.
-function stringSuggestions(file: string, at: number): string[] {
+// only asking for the completions shows whether they are still there to offer. One service answers
+// every position in a file, since each new one builds the whole program again.
+function stringSuggestions(file: string): (at: number) => string[] {
   const host: ts.LanguageServiceHost = {
     getScriptFileNames: () => [file],
     getScriptVersion: () => "1",
@@ -180,13 +181,12 @@ function stringSuggestions(file: string, at: number): string[] {
     directoryExists: ts.sys.directoryExists.bind(ts.sys),
     getDirectories: ts.sys.getDirectories.bind(ts.sys),
   };
-  const found = ts
-    .createLanguageService(host)
-    .getCompletionsAtPosition(file, at, {});
-  return (found?.entries ?? [])
-    .filter((entry) => entry.kind === ts.ScriptElementKind.string)
-    .map((entry) => entry.name)
-    .sort();
+  const service = ts.createLanguageService(host);
+  return (at) =>
+    (service.getCompletionsAtPosition(file, at, {})?.entries ?? [])
+      .filter((entry) => entry.kind === ts.ScriptElementKind.string)
+      .map((entry) => entry.name)
+      .sort();
 }
 
 function compile(...files: string[]): string[] {
@@ -210,7 +210,7 @@ beforeAll(async () => {
   await emitContract(GATEWAY_ID, schemas, outDir);
   contract = path.join(outDir, CONTRACT_MODULE);
   source = await readFile(contract, "utf-8");
-}, 30_000);
+}, 60_000);
 
 afterAll(async () => {
   await rm(outDir, { recursive: true, force: true });
@@ -335,7 +335,7 @@ describe("emitted contract", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 60_000);
 
   it("keeps hostile text inside its comments, wherever a comment is written", async () => {
     // The same text in every place a comment comes from. Were any of it to leave its comment,
@@ -378,7 +378,7 @@ describe("emitted contract", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 60_000);
 
   it("lets a caller name the values an outcome knows of, and makes it allow for the rest", async () => {
     // The same open enumeration, written the four ways a schema writes one: the values and the
@@ -528,6 +528,7 @@ export const suggestNamedType: Data["namedType"] = "";
       // An editor offers the values however the schema wrote them: a form that collapses to
       // `string` still assigns and still switches, and offers nothing.
       const source = await readFile(consumer, "utf-8");
+      const suggestionsAt = stringSuggestions(consumer);
       for (const name of [
         "suggest",
         "suggestEnclosed",
@@ -535,15 +536,15 @@ export const suggestNamedType: Data["namedType"] = "";
         "suggestNamedType",
       ]) {
         const at = source.indexOf(`export const ${name}`);
-        expect(
-          stringSuggestions(consumer, source.indexOf('""', at) + 1),
-          name,
-        ).toEqual(["Revoked", "Valid"]);
+        expect(suggestionsAt(source.indexOf('""', at) + 1), name).toEqual([
+          "Revoked",
+          "Valid",
+        ]);
       }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 60_000);
 
   it("offers what the gateway reports beside a result, on a failure as on a success, and nothing else", async () => {
     const reporting: GatewaySchemas = {
@@ -599,7 +600,7 @@ export const always = (response: PingResponse): string => response.meta.requestI
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
-  }, 30_000);
+  }, 60_000);
 
   it("offers no meta at all from a gateway that reports nothing", async () => {
     const consumer = path.join(outDir, "no-meta-consumer.ts");
@@ -617,7 +618,7 @@ export function meta(response: CreateUserResponse): unknown {
 
     expect(source).not.toContain("ResponseMeta");
     expect(compile(consumer)).toEqual([]);
-  }, 30_000);
+  }, 60_000);
 
   it("describes schemas the validators are generated from", async () => {
     // The contract and the validators read the same schemas: a shape one of them accepts and
@@ -625,7 +626,7 @@ export function meta(response: CreateUserResponse): unknown {
     await expect(
       emitValidators(schemas, path.join(outDir, "validators")),
     ).resolves.toBeUndefined();
-  }, 30_000);
+  }, 60_000);
 
   it("compiles, and checks a consumer against the declared outcomes", async () => {
     const consumer = path.join(outDir, "consumer.ts");

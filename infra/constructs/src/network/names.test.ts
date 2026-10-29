@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   natGatewayAlarmName,
   restrictDefaultSecurityGroupLogGroupName,
+  securityGroupIdParameterName,
   subnetIdsParameterName,
   subnetName,
   vpcIdParameterName,
@@ -18,6 +19,9 @@ describe("network names", () => {
     expect(vpcIdParameterName("dev")).toBe("/flex/network/dev/vpc-id");
     expect(subnetIdsParameterName("dev", "private")).toBe(
       "/flex/network/dev/private-subnet-ids",
+    );
+    expect(securityGroupIdParameterName("dev", "domain")).toBe(
+      "/flex/network/dev/security-group/domain",
     );
     expect(restrictDefaultSecurityGroupLogGroupName("dev")).toBe(
       "/flex/network/dev/restrict-default-security-group",

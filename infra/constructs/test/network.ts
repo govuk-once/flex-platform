@@ -4,11 +4,13 @@ import { AwsSolutionsChecks } from "cdk-nag";
 
 import { cdkApp } from "../src/cdk-app.ts";
 import { FlowLogs } from "../src/network/flow-logs.ts";
+import { InterfaceEndpoints } from "../src/network/interface-endpoints.ts";
 import { networkZones } from "../src/network/layout.ts";
 import { NatAddresses } from "../src/network/nat-addresses.ts";
 import { NetworkAcls } from "../src/network/network-acls.ts";
 import { NetworkParameters } from "../src/network/network-parameters.ts";
 import { NetworkVpc } from "../src/network/vpc.ts";
+import { WorkloadSecurityGroup } from "../src/network/workload-security-group.ts";
 import { BucketHttpsCheck } from "../src/validation/bucket-https-check.ts";
 import { LogGroupCheck } from "../src/validation/log-group-check.ts";
 
@@ -60,10 +62,31 @@ export function buildNetwork(
   });
   new NetworkAcls(stack, "NetworkAcls", { vpc, subnets });
   new FlowLogs(stack, "FlowLogs", { environment: "sandbox", vpc });
+  const endpoints = new InterfaceEndpoints(stack, "Endpoints", {
+    vpc,
+    subnets: subnets.isolated,
+    invokableFunctions: "gateway-sandbox-*",
+  });
+  const domain = new WorkloadSecurityGroup(stack, "Domain", {
+    vpc,
+    workload: "domain",
+    placement: "isolated",
+    endpoints: [endpoints.lambda],
+  });
+  const gateway = new WorkloadSecurityGroup(stack, "PrivateGateway", {
+    vpc,
+    workload: "private-gateway",
+    placement: "private",
+    endpoints: [endpoints.secretsManager, endpoints.sts],
+  });
   new NetworkParameters(stack, "Parameters", {
     environment: "sandbox",
     vpc,
     subnets: { isolated: subnets.isolated, private: subnets.private },
+    securityGroups: {
+      domain: domain.securityGroup,
+      "private-gateway": gateway.securityGroup,
+    },
   });
 
   return { app, stack, template: Template.fromStack(stack) };
