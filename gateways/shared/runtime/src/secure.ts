@@ -1,4 +1,4 @@
-import type { SecureValue } from "@repo/gateway-types";
+import type { SecureValue } from "@repo/gateway-core";
 import { sortedEntries } from "@repo/utils/sorted-entries";
 
 import { GatewayError } from "./errors.ts";

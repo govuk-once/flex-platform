@@ -1,5 +1,5 @@
+import type { DriverContext } from "@repo/gateway-core";
 import { GatewayError } from "@repo/gateway-runtime";
-import type { DriverContext } from "@repo/gateway-types";
 
 import type { OpenApiRestAuthRequest } from "../config/auth.ts";
 import { validateHeaders } from "../headers.ts";

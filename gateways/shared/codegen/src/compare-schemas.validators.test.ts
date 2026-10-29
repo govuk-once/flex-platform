@@ -3,11 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import type {
-  GatewaySchemas,
-  JSONSchema,
-  Validator,
-} from "@repo/gateway-types";
+import type { GatewaySchemas, JSONSchema, Validator } from "@repo/gateway-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { compareSchemas } from "./compare-schemas.ts";

@@ -1,4 +1,4 @@
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 
 import type { AnyGatewayConfig } from "./load-config.ts";

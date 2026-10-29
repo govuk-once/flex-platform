@@ -1,4 +1,4 @@
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 import ajvModule from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 

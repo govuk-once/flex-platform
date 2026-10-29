@@ -1,5 +1,5 @@
+import type { SecretProvider } from "@repo/gateway-core";
 import { GatewayError } from "@repo/gateway-runtime";
-import type { SecretProvider } from "@repo/gateway-types";
 import { describe, expect, it } from "vitest";
 
 import { fakeSecret } from "../../test/helpers.ts";

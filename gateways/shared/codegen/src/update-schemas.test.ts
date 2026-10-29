@@ -10,7 +10,7 @@ import {
 import path from "node:path";
 import { promisify } from "node:util";
 
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas } from "@repo/gateway-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { GatewayCheckError } from "./check-gateway.ts";

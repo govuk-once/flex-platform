@@ -1,4 +1,4 @@
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 import { describe, expect, it } from "vitest";
 
 import { type TypeContext, typeExpression } from "./schema-types.ts";

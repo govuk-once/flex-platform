@@ -1,16 +1,16 @@
 import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import type { BrandedHandler } from "@repo/gateway-config";
 import { defineGateway } from "@repo/gateway-config";
+import type {
+  OperationHandler,
+  SecretProvider,
+  Validator,
+} from "@repo/gateway-core";
 import {
   createHandler,
   createSecretProvider,
   GatewayError,
 } from "@repo/gateway-runtime";
-import type {
-  OperationHandler,
-  SecretProvider,
-  Validator,
-} from "@repo/gateway-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

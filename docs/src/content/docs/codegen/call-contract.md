@@ -4,7 +4,7 @@ description: The generated TypeScript types a caller compiles against.
 ---
 
 `.gen/client/rpc.ts` describes what a caller sends and receives. It contains types only. Its one
-import is a type import of `@repo/gateway-types` for the envelope shapes, which is removed when it
+import is a type import of `@repo/gateway-core` for the envelope shapes, which is removed when it
 compiles. That package declares no dependencies of its own, so a consumer needs neither the
 runtime nor the generator.
 

@@ -1,4 +1,4 @@
-import type { EnvelopeInbound, SecureValue } from "@repo/gateway-types";
+import type { EnvelopeInbound, SecureValue } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 import { isScalar } from "@repo/utils/is-scalar";
 

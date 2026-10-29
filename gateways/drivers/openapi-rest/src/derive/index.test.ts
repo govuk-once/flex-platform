@@ -3,7 +3,7 @@ import type {
   OperationConfig,
   SchemaSources,
 } from "@repo/gateway-config";
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 import { describe, expect, it } from "vitest";
 
 import type { OpenApiRestDriver, ParameterMapping } from "../index.ts";

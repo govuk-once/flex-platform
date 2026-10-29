@@ -1,4 +1,4 @@
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 
 // What Flex keeps under /v1/groups: the groups a user is subscribed to, all of them at once.
 export const GROUP_SUBSCRIPTIONS: JSONSchema = {

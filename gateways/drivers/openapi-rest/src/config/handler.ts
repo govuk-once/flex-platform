@@ -1,4 +1,4 @@
-import type { OperationResult } from "@repo/gateway-types";
+import type { OperationResult } from "@repo/gateway-core";
 
 import type { OpenApiRestClient, OpenApiRestHandler } from "../types.ts";
 

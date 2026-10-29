@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 import { sortedNames } from "@repo/utils/sorted-names";
 

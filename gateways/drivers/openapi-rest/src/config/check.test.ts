@@ -1,4 +1,4 @@
-import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
+import type { GatewaySchemas, JSONSchema } from "@repo/gateway-core";
 import { describe, expect, it } from "vitest";
 
 import type { MetadataConfig } from "../metadata.ts";
