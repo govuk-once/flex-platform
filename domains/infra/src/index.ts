@@ -6,6 +6,7 @@ export {
   certificateParameterName,
   DOMAIN_REGION,
   domainFunctionName,
+  domainHost,
   FUNCTION_NAME_LENGTH,
   functionLogGroupName,
 } from "./names.ts";

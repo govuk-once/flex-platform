@@ -3,10 +3,11 @@ title: Infrastructure
 description: The CDK app that deploys the platform, its stages and config, and the rules for adding to it.
 ---
 
-The platform deploys with AWS CDK, from one app in `infra/app`. So far it builds the
-[Frontdoor](/flex-platform/frontdoor/overview/)'s stacks and each domain account's
-[network](/flex-platform/infrastructure/network/). This page describes the app and the rules every
-stack added to it follows.
+The platform deploys with AWS CDK, from one app in `infra/app`. It builds the
+[Frontdoor](/flex-platform/frontdoor/overview/)'s stacks, each domain account's
+[network](/flex-platform/infrastructure/network/), and the stacks that
+[host the domains](/flex-platform/domains/hosting/). This page describes the app and the rules
+every stack added to it follows.
 
 Infrastructure lives with the section it belongs to. A section's constructs are in its own
 `infra/` package, such as `frontdoor/infra`. Constructs and checks more than one section uses are in
@@ -53,6 +54,8 @@ Each environment has these stacks:
 | `frontdoor-<environment>-edge-logs-eu-west-2` | Frontdoor | eu-west-2 | Environment | Lambda@Edge's log group, and the policy that lets its role write to it |
 | `frontdoor-<environment>` | Frontdoor | us-east-1 | Environment | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
 | `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, interface endpoints, security groups, network ACLs, DNS Firewall, and its flow and query logs: see [Network](/flex-platform/infrastructure/network/) |
+| `domain-<environment>-<account>` | Domain | eu-west-2 | Domain account | What the account's domains share: see [what a domain account provides](/flex-platform/domains/hosting/#what-a-domain-account-provides) |
+| `domain-<environment>-<domain>` | Domain | eu-west-2 | Domain | The domain's API and host: see [what a domain provides](/flex-platform/domains/hosting/#what-a-domain-provides) |
 
 The Frontdoor's stacks are in us-east-1 because CloudFront takes its web ACL, its certificate and
 its Lambda@Edge functions from there. Lambda@Edge's log group is in a stack of its own, in the one
@@ -60,13 +63,25 @@ region its logs are kept: see [the Frontdoor's logs](/flex-platform/frontdoor/ov
 region is in the stack's name, so keeping logs in another region later is another stack beside it.
 `frontdoor-<environment>` depends on it, so it deploys first.
 
-A network's stack depends on no other, and nothing depends on it yet.
+A domain account's stack depends on its network's, whose subnet and security group IDs its deploy
+role reads. A domain's stack depends on its account's, whose certificate ARN it reads and whose API
+Gateway logging setting its stage logs through. `frontdoor-<environment>` depends on every domain
+stack in its environment, across accounts and regions, so it never routes to a host before the host
+exists. So an environment deploys in that order: the networks, the domain accounts' stacks, the
+domains' stacks, then the Frontdoor's.
 
-Every stack has termination protection. Deleting `frontdoor-<environment>` would take the app's
-entry point and its domain name with it, deleting the log stack would leave Lambda@Edge's logs
-nowhere to go, and deleting a network would take every workload's network with it, and the NAT
-addresses upstreams allowlist. So deleting any of them takes a deliberate step first: turning the
-protection off.
+Every domain account has its stack, whether or not it hosts a domain, so adding a domain deploys
+only the domain's own stack and the Frontdoor's, whose routing map gains it.
+
+Every stack but a domain's has termination protection. Deleting `frontdoor-<environment>` would
+take the app's entry point and its domain name with it, deleting the log stack would leave
+Lambda@Edge's logs nowhere to go, deleting a network would take every workload's network with it,
+and the NAT addresses upstreams allowlist, and deleting a domain account's stack would take the
+roles and certificate every domain in it uses, and leave the account's API Gateway logging setting
+naming a deleted role. So deleting any of them takes a deliberate step first: turning the
+protection off. A domain's stack has none, since everything in it but its log groups, which are
+retained, is built again from config. CDK doesn't delete a stack the app no longer builds, so
+removing a domain from config leaves its stack to be deleted by hand.
 
 Each account is bootstrapped for CDK in each region it deploys to, so a frontdoor account is
 bootstrapped in us-east-1 and eu-west-2, and a domain account in eu-west-2.
@@ -116,9 +131,9 @@ Before building any stage, the app checks every stage's config:
   name, must fit within it;
 - every environment trusts at least one issuer, each an `https` URL naming at least one app
   client;
-- every domain's name follows the same rule as the names above and is used once in its
-  environment, across all its domain accounts, and its function's name is within Lambda's 64
-  characters. See [checks](/flex-platform/domains/hosting/#checks);
+- every domain's name follows the same rule as the names above, is used once in its environment,
+  across all its domain accounts, and is none of its domain accounts' names, and its function's
+  name is within Lambda's 64 characters. See [checks](/flex-platform/domains/hosting/#checks);
 - every domain account's network lists at least two availability zones, each once, and each one
   the network has a layout for;
 - every gateway's id is a name as above, used once in its account, and short enough for its

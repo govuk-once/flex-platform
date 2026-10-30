@@ -5,17 +5,15 @@ sidebar:
   label: Overview
 ---
 
-import { Aside, Badge } from "@astrojs/starlight/components";
-
-<Badge text="Planned" variant="caution" size="medium" />
+import { Aside } from "@astrojs/starlight/components";
 
 A **domain** is the logic behind a personalised feature of the GOV.UK app. It sits between the app
 and the upstreams that hold the data it needs.
 
-In the planned hosting model, each domain is an Amazon API Gateway at its own domain name, under
-its domain account's hosted zone. A
-Lambda proxy integration hands every request to the domain's code. The
-[Frontdoor](/flex-platform/frontdoor/overview/) routes requests to the domain. The app never calls a domain directly.
+Each domain is an Amazon API Gateway at its own domain name, under its domain account's hosted
+zone. A Lambda proxy integration hands every request to the domain's code. The
+[Frontdoor](/flex-platform/frontdoor/overview/) routes requests to the domain. The app never calls
+a domain directly. See [Hosting a domain](/flex-platform/domains/hosting/).
 
 Developers outside the platform team write domains. A domain defines the behaviour the app needs:
 it can expose data from one upstream, combine several upstream calls, or compute a response without
@@ -30,9 +28,9 @@ declared, and where it runs, is in [Hosting a domain](/flex-platform/domains/hos
 
 ## Releasing a domain
 
-A domain publishes a new version to its development environment. This development environment
-runs inside the platform's production environment. From there, the domain promotes the version to
-staging, and then to production.
+A domain publishes a new version to its development environment. This development
+environment runs inside the platform's production environment. From there, the domain promotes the
+version to staging, and then to production.
 
 ## Network
 
