@@ -228,6 +228,18 @@ describe("prepare", () => {
     ]);
   });
 
+  it("refuses a declared version behind its last release", async () => {
+    await firstRelease();
+    await change(
+      "client/package.json",
+      '{ "name": "@govuk-once/client", "version": "0.0.9" }\n',
+    );
+
+    await expect(prepare(workspace, releaseAll, noHistory)).rejects.toThrow(
+      "client/package.json holds 0.0.9, behind 0.1.0, its last release.",
+    );
+  });
+
   it("writes nothing when nothing is chosen", async () => {
     await firstRelease();
     const record = await readText(RECORD_FILE);
@@ -245,9 +257,9 @@ describe("prepare", () => {
     let builds = 0;
     const failing: Workspace = {
       ...workspace,
-      build: async (root, sources, directories) => {
+      build: async (root, sources) => {
         if (++builds === 2) throw new Error("build failed");
-        await workspace.build!(root, sources, directories);
+        await workspace.build!(root, sources);
       },
     };
 
@@ -406,6 +418,16 @@ describe("packRelease", () => {
       })),
     ]);
   });
+
+  it("refuses a record that releases a package nothing builds", async () => {
+    await firstRelease();
+    await rm(path.join(workspace.root, "gateways/b/package.json"));
+    const { registry } = memoryRegistry(out());
+
+    await expect(packRelease(workspace, options(), registry)).rejects.toThrow(
+      `${RECORD_FILE} releases ${gateway("b")}, which nothing here builds.`,
+    );
+  });
 });
 
 describe("publishRelease", () => {
@@ -437,6 +459,16 @@ describe("publishRelease", () => {
       "production/govuk-once-gateway-a-0.1.0.tgz latest",
       "production/govuk-once-gateway-b-0.1.0.tgz latest",
     ]);
+  });
+
+  it("refuses a plan that lists no such stage", async () => {
+    const out = path.join(workspace.root, "release-out");
+    await setFile(out, PLAN_FILE, "{}\n");
+    const { registry } = memoryRegistry(out);
+
+    await expect(publishRelease(out, "merge", registry)).rejects.toThrow(
+      `${PLAN_FILE} lists no merge.`,
+    );
   });
 });
 
@@ -470,6 +502,15 @@ describe("verifyRelease", () => {
         `${gateway("a")} does not build as ${RECORD_FILE} releases it, at 0.1.0. Prepare the release again.`,
         `${gateway("b")} does not build as ${RECORD_FILE} releases it, at 0.1.0. Prepare the release again.`,
       ].join("\n"),
+    );
+  });
+
+  it("refuses a release of a package nothing builds", async () => {
+    await firstRelease();
+    await rm(path.join(workspace.root, "gateways/b/package.json"));
+
+    await expect(verifyRelease(workspace, new Map())).rejects.toThrow(
+      `${RECORD_FILE} releases ${gateway("b")}, which nothing here builds.`,
     );
   });
 });
