@@ -4,6 +4,7 @@ import type { GatewaySchemas } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 import { oneOrMoreStrings } from "@repo/utils/one-or-more-strings";
 import { ownValue } from "@repo/utils/own-value";
+import { sortedEntries } from "@repo/utils/sorted-entries";
 import { sortedNames } from "@repo/utils/sorted-names";
 import { stringsIn } from "@repo/utils/strings-in";
 
@@ -76,7 +77,7 @@ const ANNOTATIONS: ReadonlySet<string> = new Set([
 
 // Bounds a value must reach, and bounds it must stay within: raising the first or lowering the
 // second admits less.
-const LOWER_BOUNDS = new Set([
+const LOWER_BOUNDS = new Set<Bound>([
   "exclusiveMinimum",
   "minContains",
   "minItems",
@@ -84,7 +85,7 @@ const LOWER_BOUNDS = new Set([
   "minProperties",
   "minimum",
 ]);
-const UPPER_BOUNDS = [
+const UPPER_BOUNDS: readonly Bound[] = [
   "exclusiveMaximum",
   "maxContains",
   "maxItems",
@@ -100,7 +101,7 @@ const UNORDERED = ["format", "multipleOf", "pattern"];
 // nothing said, so neither adding nor removing it there is a difference, and one removed from
 // below its default tightens rather than loosens: without `minContains`, an array has to hold a
 // match, so `minContains: 0` taken away is a bound arriving, not one going.
-const BOUND_DEFAULTS: Readonly<Record<string, number>> = {
+const BOUND_DEFAULTS = {
   exclusiveMaximum: Number.POSITIVE_INFINITY,
   exclusiveMinimum: Number.NEGATIVE_INFINITY,
   maxContains: Number.POSITIVE_INFINITY,
@@ -113,7 +114,9 @@ const BOUND_DEFAULTS: Readonly<Record<string, number>> = {
   minLength: 0,
   minProperties: 0,
   minimum: Number.NEGATIVE_INFINITY,
-};
+} satisfies Readonly<Record<string, number>>;
+// Every bound has a default, so each one read can be placed.
+type Bound = keyof typeof BOUND_DEFAULTS;
 
 // The two bounds that count matches rather than measure a value. With no `contains` to count
 // they constrain nothing, and a `contains` that came or went is a difference in its own right.
@@ -588,7 +591,7 @@ class Comparison {
   }
 
   #bound(
-    key: string,
+    key: Bound,
     before: unknown,
     after: unknown,
     lower: boolean,
@@ -606,11 +609,7 @@ class Comparison {
     }
     // A bound left out is whatever its keyword means by saying nothing, so what is compared is
     // what each version holds a value to, not whether the keyword is written.
-    const fallback = ownValue(BOUND_DEFAULTS, key);
-    if (fallback === undefined) {
-      this.add("unknown", position, at, "is not a bound that can be placed");
-      return;
-    }
+    const fallback = BOUND_DEFAULTS[key];
     const previous = before ?? fallback;
     const next = after ?? fallback;
     if (previous === next) return;
@@ -1129,11 +1128,9 @@ function compareOperations(
   previous: GatewaySchemas,
   next: GatewaySchemas,
 ): void {
-  for (const name of sortedNames(Object.keys(previous.operations))) {
-    const before = ownValue(previous.operations, name);
+  for (const [name, before] of sortedEntries(previous.operations)) {
     const after = ownValue(next.operations, name);
     const where = `operations.${name}`;
-    if (before === undefined) continue;
     if (after === undefined) {
       comparison.breaks(where, "was removed");
       continue;

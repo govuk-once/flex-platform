@@ -100,6 +100,15 @@ describe("schemaSources, from an address", () => {
     expect(fetching).not.toHaveBeenCalled();
   });
 
+  it("refuses an address with a scheme that is not a URL, without fetching it", async () => {
+    const fetching = answering(new Response(""));
+
+    await expect(schemaSources(gatewayDir).load("https://")).rejects.toThrow(
+      'Cannot read "https://": it is not a URL',
+    );
+    expect(fetching).not.toHaveBeenCalled();
+  });
+
   it("refuses an answer that is not a success, and one that failed to arrive", async () => {
     answering(new Response("gone", { status: 404 }));
     await expect(
@@ -110,6 +119,13 @@ describe("schemaSources, from an address", () => {
     await expect(
       schemaSources(gatewayDir).load("https://upstream.test/a"),
     ).rejects.toThrow(/the request failed/);
+  });
+
+  it("refuses a success that carries no body", async () => {
+    answering(new Response(null, { status: 200 }));
+    await expect(
+      schemaSources(gatewayDir).load("https://upstream.test/a"),
+    ).rejects.toThrow(/the response carried no document/);
   });
 
   it("refuses more than any description of an API holds, and bytes that are not text", async () => {

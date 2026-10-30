@@ -110,6 +110,28 @@ describe("compareSchemas", () => {
       },
     );
 
+    it("finds nothing in a keyword both sides write the same, beside one that changed", () => {
+      const text = (minLength: number): JSONSchema => ({
+        type: "string",
+        format: "uuid",
+        minLength,
+      });
+      const array = (minItems: number): JSONSchema => ({
+        type: "array",
+        uniqueItems: true,
+        minItems,
+      });
+
+      expect(input(text(1), text(0))).toEqual({
+        breaking: [],
+        compatible: ["operations.op.input.minLength: changed from 1 to 0"],
+      });
+      expect(input(array(1), array(0))).toEqual({
+        breaking: [],
+        compatible: ["operations.op.input.minItems: changed from 1 to 0"],
+      });
+    });
+
     it("reads a number beside an integer as a number", () => {
       expect(
         input({ type: ["number", "integer"] }, { type: "number" }),
@@ -228,6 +250,12 @@ describe("compareSchemas", () => {
         "operations.op.input.items.type: changed from null | string to string",
       ],
       [
+        "an element type where any element was taken",
+        { type: "array" },
+        { type: "array", items: { type: "string" } },
+        "operations.op.input.items.type: changed from any type to string",
+      ],
+      [
         "a change deep inside it",
         person({ properties: { name: { type: "string" }, age: {} } }),
         person(),
@@ -309,6 +337,18 @@ describe("compareSchemas", () => {
         { type: "object", additionalProperties: false },
         { type: "object" },
         "operations.op.input.additionalProperties: no longer admits nothing",
+      ],
+      [
+        "elements that need no longer be unique",
+        { type: "array", uniqueItems: true },
+        { type: "array" },
+        "operations.op.input.uniqueItems: items need no longer be unique",
+      ],
+      [
+        "an element type that is removed",
+        { type: "array", items: { type: "string" } },
+        { type: "array" },
+        "operations.op.input.items.type: changed from string to any type",
       ],
     ])("accepts %s", (_what, previous, next, change) => {
       expect(input(previous, next)).toEqual({
@@ -416,6 +456,25 @@ describe("compareSchemas", () => {
 
     it("accepts a value an open enum comes to know, since it took any string already", () => {
       expect(outcome(status("Valid"), status("Valid", "Revoked"))).toEqual({
+        breaking: [],
+        compatible: [
+          "operations.op.outcomes.ok.anyOf: lists different known values of a type it admits in full",
+        ],
+      });
+    });
+
+    it("reads a known value however it is written, as a constant or beside its type", () => {
+      expect(
+        outcome(
+          { anyOf: [{ const: "Valid" }, { type: "string" }] },
+          {
+            anyOf: [
+              { type: "string", enum: ["Valid", "Revoked"] },
+              { type: "string" },
+            ],
+          },
+        ),
+      ).toEqual({
         breaking: [],
         compatible: [
           "operations.op.outcomes.ok.anyOf: lists different known values of a type it admits in full",
@@ -652,6 +711,43 @@ describe("compareSchemas", () => {
       ).toEqual(['defs.Node (as input).required: "next" is now required']);
     });
 
+    it("refuses a reference on one side that cannot be read as what it stands for", () => {
+      const unread =
+        "operations.op.input: has a reference on one side that cannot be read as its definition";
+
+      // One that names no definition, and one with a constraint beside it, which both apply.
+      expect(input(ref("Missing"), { type: "string" }).breaking).toEqual([
+        unread,
+      ]);
+      const defs = { Name: { type: "string" } };
+      expect(
+        compareSchemas(
+          asInput({ $ref: "Name", minLength: 1 }, defs),
+          asInput({ type: "string", minLength: 1 }, defs),
+        ).breaking,
+      ).toEqual([unread]);
+    });
+
+    it("refuses references that lead only to each other rather than following them for ever", () => {
+      const defs = { A: ref("B"), B: ref("A") };
+
+      expect(
+        compareSchemas(
+          asInput(ref("A"), defs),
+          asInput({ type: "string" }, defs),
+        ).breaking,
+      ).toEqual(["operations.op.input: is nested too deeply to compare"]);
+    });
+
+    it("reports a definition that is removed once, where the definitions are listed", () => {
+      expect(
+        compareSchemas(
+          asInput(ref("Person"), { Person: person() }),
+          asInput(ref("Person"), {}),
+        ),
+      ).toEqual({ breaking: ["defs.Person: was removed"], compatible: [] });
+    });
+
     it("reads a definition nothing refers to both ways, since either could be its use", () => {
       const { breaking, compatible } = compareSchemas(
         asInput({}, { Person: person() }),
@@ -732,6 +828,37 @@ describe("compareSchemas", () => {
       expect(outcome(one, two).breaking).toEqual([
         "operations.op.outcomes.ok.anyOf: has 2 branches where it had 1",
       ]);
+    });
+
+    it("reads a composition that comes or goes", () => {
+      const parts: JSONSchema = {
+        type: "object",
+        allOf: [{ required: ["a"] }],
+      };
+      const union: JSONSchema = { anyOf: [{ type: "string" }] };
+
+      expect(input({ type: "object" }, parts).breaking).toEqual([
+        "operations.op.input.allOf: has 1 parts where it had 0",
+      ]);
+      expect(input(parts, { type: "object" }).breaking).toEqual([
+        "operations.op.input.allOf: has 0 parts where it had 1",
+      ]);
+      expect(input({}, union).breaking).toEqual([
+        "operations.op.input.anyOf: was added",
+      ]);
+      expect(input(union, {})).toEqual({
+        breaking: [],
+        compatible: ["operations.op.input.anyOf: was removed"],
+      });
+    });
+
+    it("reads a union with a boolean branch beside the ones that changed", () => {
+      expect(
+        input(
+          { anyOf: [false, { type: "string" }] },
+          { anyOf: [false, { type: "string", minLength: 1 }] },
+        ).breaking,
+      ).toEqual(["operations.op.input.anyOf.1.minLength: is now 1"]);
     });
 
     it("refuses a change in a keyword it does not read, and accepts none", () => {
@@ -825,6 +952,15 @@ describe("compareSchemas", () => {
       ]);
       expect(outcome(two, three).breaking).toEqual([
         "operations.op.outcomes.ok.oneOf: has 3 branches where it had 2",
+      ]);
+    });
+
+    it("refuses a oneOf that comes or goes, whichever side it is on", () => {
+      expect(input({}, disjoint).breaking).toEqual([
+        "operations.op.input.oneOf: was added",
+      ]);
+      expect(outcome(disjoint, {}).breaking).toEqual([
+        "operations.op.outcomes.ok.oneOf: was removed",
       ]);
     });
 
@@ -1055,6 +1191,31 @@ describe("compareSchemas", () => {
       expect(
         outcome(two, { ...two, properties: { code: { type: "string" } } })
           .breaking,
+      ).toEqual([
+        "operations.op.outcomes.ok.properties.code: was added under more than one pattern, so what held the name cannot be read",
+      ]);
+
+      // A pattern that does not match the name held nothing of it.
+      const other = patterned({ "^x-": { type: "number" } });
+      expect(
+        outcome(other, { ...other, properties: { code: { type: "string" } } }),
+      ).toEqual({
+        breaking: [],
+        compatible: ["operations.op.outcomes.ok.properties.code: was added"],
+      });
+    });
+
+    it("refuses a name under a pattern it cannot read, since what held it cannot be told", () => {
+      const unreadable: JSONSchema = {
+        type: "object",
+        patternProperties: { "(": { type: "string" } },
+      };
+
+      expect(
+        outcome(unreadable, {
+          ...unreadable,
+          properties: { code: { type: "string" } },
+        }).breaking,
       ).toEqual([
         "operations.op.outcomes.ok.properties.code: was added under more than one pattern, so what held the name cannot be read",
       ]);
