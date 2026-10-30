@@ -2,11 +2,12 @@ import { cdkApp, NETWORK_REGION } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES } from "../../test/helpers.ts";
+import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
 import {
   DomainAccountStack,
   domainAccountStackName,
 } from "./domain-account.ts";
+import { networkStackName } from "./network.ts";
 
 const PROD = FIXTURE_STAGES[2];
 const [DEV] = PROD.environments;
@@ -21,6 +22,26 @@ function build() {
 }
 
 describe("DomainAccountStack", () => {
+  it("is one per domain account, hosting domains or not, deployed after its network", () => {
+    const assembly = synthesizedStage(PROD);
+
+    for (const environment of PROD.environments) {
+      for (const domainAccount of environment.domainAccounts) {
+        const stack = assembly.getStackByName(
+          domainAccountStackName(environment, domainAccount),
+        );
+
+        expect(stack.environment).toMatchObject({
+          account: domainAccount.account,
+          region: NETWORK_REGION,
+        });
+        expect(stack.dependencies.map(({ id }) => id)).toContain(
+          networkStackName(environment, domainAccount),
+        );
+      }
+    }
+  });
+
   it("holds what every domain shares, and nothing per domain", () => {
     const resources = Object.values(
       build().template.toJSON().Resources as Record<string, { Type: string }>,

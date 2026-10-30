@@ -42,8 +42,13 @@ describe("ApiHost", () => {
     });
   });
 
-  it("maps the host's root to the API's stage", () => {
-    build().template.hasResourceProperties("AWS::ApiGateway::BasePathMapping", {
+  it("maps the host's root to the API's stage, under an ID no name changes", () => {
+    const { template } = build();
+
+    expect(
+      Object.keys(template.findResources("AWS::ApiGateway::BasePathMapping")),
+    ).toEqual([expect.stringMatching(/^HostMapping[0-9A-F]{8}$/)]);
+    template.hasResourceProperties("AWS::ApiGateway::BasePathMapping", {
       DomainName: { Ref: Match.stringLikeRegexp("^HostDomainName") },
       RestApiId: { Ref: Match.stringLikeRegexp("^DomainApi") },
       Stage: { Ref: Match.stringLikeRegexp("Stagedefault") },

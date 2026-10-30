@@ -1,8 +1,10 @@
+import { domainHost } from "@repo/domain-infra";
 import {
   Edge,
   OriginRequestFunction,
   ViewerRequestFunction,
 } from "@repo/frontdoor-infra";
+import { sortedEntries } from "@repo/utils/sorted-entries";
 import { CfnOutput, Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 
@@ -38,9 +40,7 @@ export class FrontdoorStack extends Stack {
     const originRequest = new OriginRequestFunction(this, "OriginRequest", {
       environment: environment.name,
       issuers: environment.frontdoor.issuers,
-      // Built from config once FLEX-497 adds domains to it. Until then every verified request is
-      // a 404.
-      routes: {},
+      routes: domainRoutes(environment),
       apiAccounts: environment.domainAccounts.map(({ account }) => account),
     });
 
@@ -59,4 +59,18 @@ export class FrontdoorStack extends Stack {
       value: edge.distribution.distributionDomainName,
     });
   }
+}
+
+// Each domain's host, by domain name. Sorted, so the bundle the routes are baked into is the same
+// whatever order config lists them in.
+export function domainRoutes(
+  environment: EnvironmentConfig,
+): Record<string, string> {
+  const hosts = Object.fromEntries(
+    environment.domainAccounts.flatMap(({ domains, zone }) =>
+      domains.map((domain) => [domain, domainHost(domain, zone.name)] as const),
+    ),
+  );
+
+  return Object.fromEntries(sortedEntries(hosts));
 }
