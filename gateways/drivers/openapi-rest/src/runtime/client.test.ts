@@ -334,6 +334,12 @@ describe("client.request", () => {
     ).rejects.toThrow(
       'Request body cannot be serialised as JSON for operation "getUser"',
     );
+    // A function is not JSON either: JSON.stringify gives nothing for it, rather than throwing.
+    await expect(
+      c.request({ method: "POST", path: "/users", body: () => "body" }),
+    ).rejects.toThrow(
+      'Request body cannot be serialised as JSON for operation "getUser"',
+    );
   });
 
   it("stops reading and cancels a body past maxResponseBytes", async () => {

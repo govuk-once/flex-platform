@@ -1,7 +1,17 @@
+import { Stack } from "aws-cdk-lib";
 import { Match } from "aws-cdk-lib/assertions";
+import {
+  InterfaceVpcEndpointAwsService,
+  type IVpc,
+  SecurityGroup,
+  SubnetType,
+  Vpc,
+} from "aws-cdk-lib/aws-ec2";
 import { describe, expect, it } from "vitest";
 
-import { buildNetwork } from "../../test/network.ts";
+import { ACCOUNT, buildNetwork } from "../../test/network.ts";
+import { cdkApp } from "../cdk-app.ts";
+import { WorkloadSecurityGroup } from "./workload-security-group.ts";
 
 type Template = ReturnType<typeof buildNetwork>["template"];
 type Rule = Record<string, unknown>;
@@ -108,5 +118,37 @@ describe("WorkloadSecurityGroup", () => {
       ]),
     );
     expect(ingress).toHaveLength(3);
+  });
+
+  // Each rule is written to the endpoint's one group, which nothing else is let into.
+  it("refuses an endpoint without one security group of its own", () => {
+    const stack = new Stack(cdkApp(), "Test", {
+      env: { account: ACCOUNT, region: "eu-west-2" },
+    });
+    // As NetworkVpc does, since `exactOptionalPropertyTypes` won't match Vpc to IVpc.
+    const vpc = new Vpc(stack, "Vpc", {
+      maxAzs: 1,
+      natGateways: 0,
+      subnetConfiguration: [
+        { name: "isolated", subnetType: SubnetType.PRIVATE_ISOLATED },
+      ],
+    }) as IVpc;
+    const endpoint = vpc.addInterfaceEndpoint("Sts", {
+      service: InterfaceVpcEndpointAwsService.STS,
+      securityGroups: [
+        new SecurityGroup(stack, "First", { vpc }),
+        new SecurityGroup(stack, "Second", { vpc }),
+      ],
+    });
+
+    expect(
+      () =>
+        new WorkloadSecurityGroup(stack, "Workload", {
+          vpc,
+          workload: "domain",
+          placement: "isolated",
+          endpoints: [endpoint],
+        }),
+    ).toThrow("The Sts endpoint must have one security group of its own");
   });
 });

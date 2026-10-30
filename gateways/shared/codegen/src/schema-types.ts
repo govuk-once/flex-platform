@@ -592,7 +592,12 @@ function propertyOf(
     if (typeof candidate.$ref === "string") {
       return propertyOf(candidate.$ref, field, ctx, searched);
     }
-    if (isRecord(candidate.properties) && field in candidate.properties) {
+    // Own properties only: a field named for something every object inherits is declared where
+    // a schema declares it, not found on the prototype of one that does not.
+    if (
+      isRecord(candidate.properties) &&
+      Object.hasOwn(candidate.properties, field)
+    ) {
       return candidate.properties[field];
     }
     if (Array.isArray(candidate.allOf)) {

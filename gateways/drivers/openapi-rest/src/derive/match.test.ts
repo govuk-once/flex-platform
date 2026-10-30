@@ -48,6 +48,11 @@ describe("fit", () => {
       'what "{resourcePath+}" takes has to be written out, and "{id}" is a parameter',
     ],
     [
+      "/v1/{file}.json",
+      "/v1/{resourcePath+}",
+      'what "{resourcePath+}" takes has to be written out, and a parameter is a parameter',
+    ],
+    [
       "/v1/a/b",
       "/v1/{rest+}/b",
       '"{rest+}" takes every segment that is left, so it can only come last',
@@ -92,10 +97,39 @@ describe("couldReach", () => {
     ).toBe(true);
   });
 
+  it("finds each piece of text in order, from the start to the end of the segment", () => {
+    const template = "/v1/v{major}.{minor}.json";
+    expect(couldReach("/v1/v1.2.json", template, nothingExcluded)).toBe(true);
+    expect(couldReach("/v1/x1.2.json", template, nothingExcluded)).toBe(false);
+    // The middle "." is there only as the one ".json" needs for itself.
+    expect(couldReach("/v1/v1-2.json", template, nothingExcluded)).toBe(false);
+    // Ending on a parameter, which takes whatever is left.
+    expect(
+      couldReach("/v1/v1.2", "/v1/v{major}.{minor}", nothingExcluded),
+    ).toBe(true);
+    expect(couldReach("/v1/v12", "/v1/v{major}.{minor}", nothingExcluded)).toBe(
+      false,
+    );
+  });
+
   it("takes a parameter of the path's own to reach such a segment, since its value could", () => {
     expect(couldReach("/v1/{id}", "/v1/{file}.json", nothingExcluded)).toBe(
       true,
     );
+  });
+
+  it("takes text that cannot be read as a segment to reach one, since nothing tells them apart", () => {
+    expect(couldReach("/v1/a", "/v1/%ZZ", nothingExcluded)).toBe(true);
+    expect(couldReach("/v1/%ZZ", "/v1/{file}.json", nothingExcluded)).toBe(
+      true,
+    );
+    expect(couldReach("/v1/a.json", "/v1/{file}.%ZZ", nothingExcluded)).toBe(
+      true,
+    );
+  });
+
+  it("does not reach a template that takes the rest from a path with nothing left for it", () => {
+    expect(couldReach("/v1", "/v1/{rest+}", nothingExcluded)).toBe(false);
   });
 });
 

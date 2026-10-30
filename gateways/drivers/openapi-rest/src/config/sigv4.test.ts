@@ -257,6 +257,15 @@ describe("sigV4", () => {
     expect(headers.authorization).toBe(bySpecification(sent, EXAMPLE, options));
   });
 
+  it("signs an address with a port, as the transport sends it", async () => {
+    const options = { service: "execute-api", region: "eu-west-2" };
+    const sent = request({ url: new URL("https://localhost:8443/prod/v1") });
+
+    const headers = await signing(EXAMPLE, options).headers(sent);
+
+    expect(headers.authorization).toBe(bySpecification(sent, EXAMPLE, options));
+  });
+
   it("signs what the transport sends, in the upstream's region, as the role the secret names", async () => {
     const options = { service: "execute-api", region: "eu-west-1" };
     const assumed: AssumedRole[] = [];
@@ -552,6 +561,34 @@ describe("sigV4", () => {
       instance.headers(request({ url: new URL("https://example.test/") })),
     ).rejects.toThrow(/^sigV4 auth: the secret's region is not a region name$/);
   });
+
+  it.each([
+    ["no role", { region: "eu-west-2" }],
+    ["no region", { roleArn: ROLE_ARN }],
+  ])(
+    "refuses to sign where an optional field leaves it %s",
+    async (_what, secret) => {
+      const instance = sigV4With(
+        {
+          service: "service",
+          region: fromSecret("region", { optional: true }),
+          role: {
+            ...ROLE_OPTIONS,
+            arn: fromSecret("roleArn", { optional: true }),
+          },
+        },
+        { assumeRole: () => () => Promise.resolve(ROLE) },
+      ).create({ secret: fields(secret), transport });
+
+      await expect(
+        instance.headers(request({ url: new URL("https://example.test/") })),
+      ).rejects.toMatchObject({
+        code: "INTERNAL",
+        message:
+          "sigV4 auth: the secret holds no role or no region to sign with",
+      });
+    },
+  );
 
   it.each<[string, SigV4Options, RegExp]>([
     [

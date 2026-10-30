@@ -482,6 +482,31 @@ describe("createExecutor", () => {
     expect(ff.calls).toHaveLength(0);
   });
 
+  it("rejects authentication that gives anything but a record of header values", async () => {
+    const ff = fakeFetch(() => json(200, {}));
+    const listing = defineAuth({
+      headers: ["authorization"],
+      fields: [],
+      create: () => ({
+        headers: () =>
+          Promise.resolve(["Bearer t"] as unknown as Record<string, string>),
+      }),
+    });
+    const execute = await buildExecutor(
+      gatewayWith([listing]),
+      { target: TARGET, secret: emptySecret() },
+      { fetch: ff.fetch },
+    );
+    await expect(execute(passthroughContext(), "op", {})).rejects.toMatchObject(
+      {
+        code: "INTERNAL",
+        message:
+          'Authentication must return a record of header values for operation "op"',
+      },
+    );
+    expect(ff.calls).toHaveLength(0);
+  });
+
   it("rejects a config for another driver", async () => {
     const other = defineGateway({
       id: "x",
@@ -579,6 +604,17 @@ describe("where the upstream is", () => {
       'Gateway "x" has no upstream: set UPSTREAM_TARGET, or name the secret field that holds it as the driver\'s target',
     );
     expect(secret.reads()).toBe(0);
+  });
+
+  it("refuses to start where an optional field is absent and there is no UPSTREAM_TARGET", async () => {
+    await expect(
+      createExecutor(
+        gatewayWith([], { target: fromSecret("apiUrl", { optional: true }) }),
+        { secret: emptySecret() },
+      ),
+    ).rejects.toThrow(
+      'Gateway "x" has no upstream: set UPSTREAM_TARGET, or name the secret field that holds it as the driver\'s target',
+    );
   });
 
   it("refuses an address from the secret as UPSTREAM_TARGET's is refused, never quoting it", async () => {

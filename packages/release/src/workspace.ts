@@ -30,12 +30,8 @@ export interface Manifest {
 export interface Workspace {
   readonly root: string;
   readonly sources: readonly Source[];
-  /** Runs each source's build script in the given directories. Tests stand in for it. */
-  readonly build?: (
-    root: string,
-    sources: readonly Source[],
-    directories: readonly string[],
-  ) => Promise<void>;
+  /** Runs each source's build script. Tests stand in for it. */
+  readonly build?: (root: string, sources: readonly Source[]) => Promise<void>;
 }
 
 export interface Publishable {
@@ -76,7 +72,7 @@ export function sourceDirectories(root: string, source: Source): string[] {
 const execFile = promisify(execFileCb);
 
 // What a command wrote before it failed, from the error execFile rejects with.
-export function outputOf(error: unknown): string {
+function outputOf(error: unknown): string {
   if (!isRecord(error)) return "";
   const { stdout, stderr } = error;
   return [stdout, stderr]
@@ -88,12 +84,12 @@ export function outputOf(error: unknown): string {
 async function buildSources(
   root: string,
   sources: readonly Source[],
-  directories: readonly string[],
 ): Promise<void> {
   for (const source of sources) {
-    const filters = sourceDirectories(root, source)
-      .filter((d) => directories.includes(d))
-      .flatMap((d) => ["--filter", `./${d}`]);
+    const filters = sourceDirectories(root, source).flatMap((d) => [
+      "--filter",
+      `./${d}`,
+    ]);
     if (filters.length === 0) continue;
     try {
       await execFile("pnpm", [...filters, "run", source.script], {
@@ -108,23 +104,16 @@ async function buildSources(
   }
 }
 
-// Builds the sources' packages, or those in the given directories, and reads each as its build
-// wrote it.
+// Builds the sources' packages, and reads each as its build wrote it.
 export async function buildWorkspace(
   workspace: Workspace,
-  only?: ReadonlySet<string>,
 ): Promise<Publishable[]> {
   const { root, sources } = workspace;
-  const directories = sources
-    .flatMap((source) => sourceDirectories(root, source))
-    .filter((d) => only?.has(d) ?? true);
-  await (workspace.build ?? buildSources)(root, sources, directories);
+  await (workspace.build ?? buildSources)(root, sources);
   const found: Publishable[] = [];
   for (const source of sources) {
     for (const directory of sourceDirectories(root, source)) {
-      if (directories.includes(directory)) {
-        found.push(await readBuilt(root, source, directory));
-      }
+      found.push(await readBuilt(root, source, directory));
     }
   }
   const names = found.map(nameOf);

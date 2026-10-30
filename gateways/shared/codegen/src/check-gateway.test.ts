@@ -75,6 +75,15 @@ describe("checkGateway", () => {
       'operation "ping" has no input schema',
       'operation "ping" declares no outcomes',
     ]);
+    // Left out rather than empty, as untyped schemas can.
+    expect(
+      problemsOf(() =>
+        checkGateway(
+          gateway({ ping: {} }),
+          schemas({ ping: { input: { type: "object" } } }),
+        ),
+      ),
+    ).toEqual(['operation "ping" declares no outcomes']);
   });
 
   it.each([undefined, "derives", "https://upstream.test/derive.js"])(

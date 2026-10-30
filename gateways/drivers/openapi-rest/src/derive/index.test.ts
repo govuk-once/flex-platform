@@ -2398,4 +2398,423 @@ describe("derive, the value a path writes into a parameter", () => {
       'GET /things/abc fills path parameter "id" with "abc", which the document does not admit there: unknown format "weird" ignored in schema at path "#"',
     ]);
   });
+
+  it("reads a flag as the flag it writes, and nothing else as one", async () => {
+    await expect(
+      filling("/things/true", { type: "boolean" }),
+    ).resolves.toBeDefined();
+    expect(
+      await problemsOf(filling("/things/yes", { type: "boolean" })),
+    ).toEqual([
+      'GET /things/yes fills path parameter "id" with "yes", which the document does not admit there: must be boolean',
+    ]);
+  });
+
+  it("refuses text that cannot be read as a segment", async () => {
+    // Every escape is complete, and together they are no UTF-8.
+    expect(
+      await problemsOf(filling("/things/%C3%28", { type: "string" })),
+    ).toEqual([
+      'GET /things/%C3%28 fills path parameter "id" with "%C3%28", which the document does not admit there: it is not a segment that can be read',
+    ]);
+  });
+});
+
+describe("derive, a parameter as the document declares it", () => {
+  const listing = (parameters: object[], openapi = "3.0.3") => ({
+    ...document({ "/things": { get: { parameters, responses: ok(THING) } } }),
+    openapi,
+  });
+  const sending = (mappings: Record<string, ParameterMapping>): Operations => ({
+    listThings: { upstream: "GET /things", parameters: mappings },
+  });
+
+  it("takes the operation's own in place of one its path declares", async () => {
+    const { schemas } = await deriving(
+      document({
+        "/things": {
+          parameters: [{ in: "query", name: "q", schema: { type: "integer" } }],
+          get: {
+            parameters: [
+              {
+                in: "query",
+                name: "q",
+                required: true,
+                schema: { type: "string" },
+              },
+            ],
+            responses: ok(THING),
+          },
+        },
+      }),
+      sending({ q: { in: "query" } }),
+    );
+
+    expect(schemas.operations.listThings?.input).toEqual({
+      type: "object",
+      properties: { q: { type: "string" } },
+      required: ["q"],
+      additionalProperties: false,
+    });
+  });
+
+  it("gives the field what the parameter says of itself", async () => {
+    const { schemas } = await deriving(
+      listing([
+        {
+          in: "query",
+          name: "q",
+          description: "Old",
+          deprecated: true,
+          schema: { type: "string" },
+        },
+      ]),
+      sending({ q: { in: "query" } }),
+    );
+
+    expect(schemas.operations.listThings?.input.properties).toEqual({
+      q: { type: "string", description: "Old", deprecated: true },
+    });
+  });
+
+  it("refuses one described by its content, or by a schema that admits anything", async () => {
+    expect(
+      await problemsOf(
+        deriving(
+          listing([
+            {
+              in: "query",
+              name: "f",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+          ]),
+          sending({ f: { in: "query" } }),
+        ),
+      ),
+    ).toEqual([
+      'GET /things describes query parameter "f" by its content rather than a schema, which is not supported',
+    ]);
+    expect(
+      await problemsOf(
+        deriving(
+          listing([{ in: "query", name: "q", schema: true }], "3.1.0"),
+          sending({ q: { in: "query" } }),
+        ),
+      ),
+    ).toEqual([
+      'query parameter "q" of GET /things admits a value of any type, so what the driver would have to send cannot be read',
+    ]);
+  });
+
+  it("refuses a required array that a count from none lets be empty", async () => {
+    const counting = (minContains: number) =>
+      deriving(
+        listing(
+          [
+            {
+              in: "query",
+              name: "ids",
+              required: true,
+              schema: {
+                type: "array",
+                items: { type: "string" },
+                contains: { const: "a" },
+                minContains,
+              },
+            },
+          ],
+          "3.1.0",
+        ),
+        sending({ ids: { in: "query" } }),
+      );
+
+    expect(await problemsOf(counting(0))).toEqual([
+      'query parameter "ids" of GET /things is required and admits an array with nothing in it, which the driver does not send: an empty array leaves a parameter out',
+    ]);
+    await expect(counting(2)).resolves.toBeDefined();
+  });
+
+  it("refuses a path parameter serialised another way than the driver writes it", async () => {
+    expect(
+      await problemsOf(
+        deriving(
+          document({
+            "/things/{id}": {
+              get: {
+                parameters: [
+                  {
+                    in: "path",
+                    name: "id",
+                    required: true,
+                    style: "label",
+                    schema: { type: "string" },
+                  },
+                ],
+                responses: ok(THING),
+              },
+            },
+          }),
+          {
+            getThing: {
+              upstream: "GET /things/{id}",
+              parameters: { id: { in: "path" } },
+            },
+          },
+        ),
+      ),
+    ).toEqual([
+      'path parameter "id" of GET /things/{id} is serialised as "label", and the driver writes a path parameter as "simple"',
+    ]);
+  });
+
+  it("refuses one it reaches other than through the document's own components", async () => {
+    const elsewhere = document({
+      "/things": {
+        get: {
+          parameters: [{ $ref: "#/paths/~1other/get/parameters/0" }],
+          responses: ok(THING),
+        },
+      },
+      "/other": {
+        get: {
+          parameters: [{ in: "query", name: "q", schema: { type: "string" } }],
+          responses: ok(THING),
+        },
+      },
+    });
+    expect(
+      await problemsOf(
+        deriving(elsewhere, { listThings: { upstream: "GET /things" } }),
+      ),
+    ).toEqual([
+      'GET /things parameter refers to "#/paths/~1other/get/parameters/0", which is not in the document\'s own components',
+    ]);
+
+    // A chain of references longer than any document needs is not followed to its end.
+    const parameters: Record<string, object> = {};
+    for (let index = 0; index < 17; index += 1) {
+      parameters[`p${String(index)}`] = {
+        $ref: `#/components/parameters/p${String(index + 1)}`,
+      };
+    }
+    parameters.p17 = { in: "query", name: "q", schema: { type: "string" } };
+    expect(
+      await problemsOf(
+        deriving(
+          document(
+            {
+              "/things": {
+                get: {
+                  parameters: [{ $ref: "#/components/parameters/p0" }],
+                  responses: ok(THING),
+                },
+              },
+            },
+            { parameters },
+          ),
+          { listThings: { upstream: "GET /things" } },
+        ),
+      ),
+    ).toEqual(["GET /things parameter is not an object, or refers to itself"]);
+  });
+
+  it("leaves a header name the driver would refuse to the configuration's own check", async () => {
+    const { schemas } = await deriving(
+      listing([{ in: "header", name: "x bad", schema: { type: "string" } }]),
+      sending({ bad: { in: "header", name: "x bad" } }),
+    );
+
+    expect(schemas.operations.listThings?.input.properties).toEqual({
+      bad: { type: "string" },
+    });
+  });
+});
+
+describe("derive, what an operation's configuration says", () => {
+  const things = document({ "/things": { get: { responses: ok(THING) } } });
+
+  it("refuses an upstream request it cannot read", async () => {
+    expect(
+      await problemsOf(
+        deriving(things, {
+          // What a configuration that is not type-checked could still say.
+          listThings: {
+            upstream: "FETCH /things",
+          } as unknown as Operations[string],
+        }),
+      ),
+    ).toEqual([
+      'operation "listThings": Upstream "FETCH /things" uses unsupported method "FETCH"; expected one of GET, POST, PUT, PATCH, DELETE',
+    ]);
+  });
+
+  it("refuses a method the document's path does not take", async () => {
+    expect(
+      await problemsOf(
+        deriving(things, { makeThing: { upstream: "POST /things" } }),
+      ),
+    ).toEqual([
+      'operation "makeThing" is POST /things, which the document does not describe',
+    ]);
+  });
+
+  it("refuses a narrowing that is not an object, or whose outcomes are not", async () => {
+    const narrowed = (narrow: unknown) =>
+      deriving(things, {
+        listThings: { upstream: "GET /things", narrow } as Operations[string],
+      });
+
+    expect(await problemsOf(narrowed("x"))).toEqual([
+      'operation "listThings" narrowing must be an object',
+    ]);
+    expect(await problemsOf(narrowed({ outcomes: [] }))).toEqual([
+      'operation "listThings" narrowing.outcomes must be an object of schemas',
+    ]);
+  });
+
+  it("refuses a driver that names no document", async () => {
+    for (const spec of [undefined, ""]) {
+      const driver = {
+        ...openapiRest({ spec: "openapi.json", auth: [] }),
+        spec,
+      };
+      const error: unknown = await derive(
+        { id: "test", driver, operations: {} },
+        { load: () => Promise.reject(new Error("not read")) },
+      ).then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+      expect(error).toBeInstanceOf(OpenApiDeriveError);
+      expect((error as OpenApiDeriveError).problems).toEqual([
+        "the driver names no OpenAPI document as its `spec`",
+      ]);
+    }
+  });
+});
+
+describe("derive, what the document holds", () => {
+  it("refuses text that is neither JSON nor YAML", async () => {
+    expect(
+      await problemsOf(
+        deriving("\t- a\n  b: : :\n{", {
+          listThings: { upstream: "GET /things" },
+        }),
+      ),
+    ).toEqual(["it is neither JSON nor YAML"]);
+  });
+
+  it("describes no operation where it has no paths", async () => {
+    expect(
+      await problemsOf(
+        deriving(
+          {
+            openapi: "3.1.0",
+            info: { title: "Upstream", version: "1.0.0" },
+            webhooks: {},
+          },
+          { listThings: { upstream: "GET /things" } },
+        ),
+      ),
+    ).toEqual([
+      'operation "listThings" is GET /things, which the document does not describe',
+    ]);
+  });
+
+  it("refuses a path it reaches other than through the document's own components", async () => {
+    expect(
+      await problemsOf(
+        deriving(
+          {
+            ...document({
+              "/things": { $ref: "#/paths/~1other" },
+              "/other": { get: { responses: ok(THING) } },
+            }),
+            openapi: "3.1.0",
+          },
+          { listThings: { upstream: "GET /things" } },
+        ),
+      ),
+    ).toEqual([
+      'GET /things refers to "#/paths/~1other", which is not in the document\'s own components',
+      'operation "listThings" is GET /things, which the document does not describe',
+    ]);
+  });
+
+  it("says a body is offered under no media type where it lists none", async () => {
+    expect(
+      await problemsOf(
+        deriving(
+          document({
+            "/things": {
+              post: { requestBody: { content: {} }, responses: ok(THING) },
+            },
+          }),
+          { makeThing: { upstream: "POST /things" } },
+        ),
+      ),
+    ).toEqual([
+      "POST /things takes a request body the driver cannot send: it is offered under no media type and the driver sends application/json",
+    ]);
+  });
+
+  const A = { type: "object", properties: { a: { type: "string" } } };
+  const sendsAndAnswers = (sent: object, answered: object) => ({
+    "/things": {
+      post: {
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: sent } },
+        },
+        responses: ok(answered),
+      },
+    },
+  });
+
+  it("gives an input its own name for a definition that refers to one held apart", async () => {
+    // B is the same on both sides, and refers to A, which an input closes.
+    const B = { type: "array", items: { $ref: "#/components/schemas/A" } };
+    const { schemas } = await deriving(
+      document(
+        sendsAndAnswers(
+          { $ref: "#/components/schemas/B" },
+          { $ref: "#/components/schemas/B" },
+        ),
+        { schemas: { A, B } },
+      ),
+      { makeThing: { upstream: "POST /things" } },
+    );
+
+    expect(schemas.defs).toEqual({
+      A,
+      AInput: { ...A, additionalProperties: false },
+      B: { type: "array", items: { $ref: "A" } },
+      BInput: { type: "array", items: { $ref: "AInput" } },
+    });
+  });
+
+  it("refuses the name an input would take where the document already uses it", async () => {
+    expect(
+      await problemsOf(
+        deriving(
+          document(
+            sendsAndAnswers(
+              { $ref: "#/components/schemas/A" },
+              {
+                type: "object",
+                properties: {
+                  a: { $ref: "#/components/schemas/A" },
+                  b: { $ref: "#/components/schemas/AInput" },
+                },
+              },
+            ),
+            { schemas: { A, AInput: { type: "string" } } },
+          ),
+          { makeThing: { upstream: "POST /things" } },
+        ),
+      ),
+    ).toEqual([
+      'schema "A" is held differently as an input, which needs the name "AInput" the document already uses',
+    ]);
+  });
 });

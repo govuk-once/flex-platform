@@ -2,7 +2,7 @@ import type { SecureValue } from "@repo/gateway-core";
 import { sortedEntries } from "@repo/utils/sorted-entries";
 
 import { GatewayError } from "./errors.ts";
-import { compilePaths, valueAt } from "./field-path.ts";
+import { compilePath, valueAt } from "./field-path.ts";
 
 export function prepareSecurePayload(
   values: Readonly<Record<string, SecureValue>>,
@@ -22,12 +22,7 @@ export function compileBindings(
   if (!secure) return [];
 
   return Object.entries(secure).map(([inputPath, secureKey]) => {
-    const [compiled] = compilePaths([inputPath]);
-    if (!compiled) {
-      throw new TypeError(
-        `Invalid secure binding path: ${JSON.stringify(inputPath)}`,
-      );
-    }
+    const compiled = compilePath(inputPath);
     // A wildcard would bind many input values to one secure value, which has no meaning.
     if (compiled.wildcard) {
       throw new TypeError(

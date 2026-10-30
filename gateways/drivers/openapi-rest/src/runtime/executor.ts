@@ -50,11 +50,14 @@ function checkAuthParts(
   });
 }
 
-// The headers each part owns, lowercased. No two parts may own one: whichever ran second would
-// replace what the first set, and a signature over the first's value would no longer match.
-function ownedHeaders(
-  parts: readonly OpenApiRestAuth[],
-): readonly ReadonlySet<string>[] {
+interface Claim {
+  readonly part: OpenApiRestAuth;
+  readonly owned: ReadonlySet<string>;
+}
+
+// Each part with the headers it owns, lowercased. No two parts may own one: whichever ran second
+// would replace what the first set, and a signature over the first's value would no longer match.
+function ownedHeaders(parts: readonly OpenApiRestAuth[]): readonly Claim[] {
   const claimed = new Set<string>();
   return parts.map((part) => {
     const owned = new Set(
@@ -70,7 +73,7 @@ function ownedHeaders(
       }
       claimed.add(name);
     }
-    return owned;
+    return { part, owned };
   });
 }
 
@@ -165,8 +168,8 @@ export async function buildExecutor(
   // the driver's static headers, an operation's mappings nor a handler's call may set them, so
   // mapped input cannot replace what the gateway authenticates with.
   const parts = checkAuthParts(config.id, config.driver.auth);
-  const owned = ownedHeaders(parts);
-  const reservedHeaders = new Set(owned.flatMap((names) => [...names]));
+  const claims = ownedHeaders(parts);
+  const reservedHeaders = new Set(claims.flatMap(({ owned }) => [...owned]));
   const targetField: unknown = config.driver.target;
   if (targetField !== undefined && !isSecretField(targetField)) {
     throw new TypeError(
@@ -251,14 +254,14 @@ export async function buildExecutor(
     target,
     maxResponseBytes,
   });
-  const steps = parts.map((part, index): AuthStep => {
+  const steps = claims.map(({ part, owned }, index): AuthStep => {
     const instance: unknown = part.create({ secret, transport });
     if (!isAuthInstance(instance)) {
       throw new TypeError(
         `Gateway "${config.id}" driver auth part ${String(index)} create() must return an instance with a headers function`,
       );
     }
-    return { instance, owned: owned[index] ?? new Set() };
+    return { instance, owned };
   });
 
   const clientDeps: ClientDeps = {

@@ -108,6 +108,18 @@ describe("createTokenVerifier", () => {
     await expect(verify(refused)).resolves.toEqual({ reason });
   });
 
+  // A key published without an algorithm verifies whatever algorithm the token names.
+  it("refuses a token the issuer's key verifies under another algorithm than RS256", async () => {
+    const [published] = jwks([{ kid: KID, key: ISSUER_KEY }]).keys;
+    const { verify } = verifier({
+      [jwksUri(ISSUER)]: { keys: [{ ...published, alg: undefined }] },
+    });
+
+    await expect(
+      verify(token({ header: { alg: "RS512" }, digest: "sha512" })),
+    ).resolves.toEqual({ reason: "algorithm" });
+  });
+
   // The signature's last character has spare bits, which a decoder ignores.
   it("refuses another encoding of a token the issuer signed, which would verify", async () => {
     const { verify } = verifier();
