@@ -205,7 +205,17 @@ export function narrowInto(
   }
 
   if (!isPlainObject(derived) || !isPlainObject(narrowing)) return beside;
+  return narrowObject(derived, narrowing, where, problems) ?? beside;
+}
 
+// Two plain objects, merged field by field, or undefined where what the narrowing says of the
+// fields neither lists would have to be weighed against the document.
+function narrowObject(
+  derived: Schema,
+  narrowing: Schema,
+  where: string,
+  problems: string[],
+): Record<string, unknown> | undefined {
   // Closing an object admits less. Anything else said of the fields it does not list would have
   // to be weighed against what the document says of them, which `allOf` does without weighing.
   const closes = narrowing.additionalProperties === false;
@@ -217,9 +227,35 @@ export function narrowInto(
       derived.additionalProperties,
     )
   ) {
-    return beside;
+    return undefined;
   }
 
+  const properties = narrowedProperties(derived, narrowing, where, problems);
+  const required = [
+    ...new Set([...strings(derived.required), ...strings(narrowing.required)]),
+  ];
+  // In the order the document wrote them, with what changed written where it was.
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(derived)) {
+    if (key === "required" || key === "additionalProperties") continue;
+    setKey(result, key, key === "properties" ? properties : value);
+  }
+  setKey(result, "properties", properties);
+  if (required.length > 0) setKey(result, "required", required);
+  if (closes) setKey(result, "additionalProperties", false);
+  else if (derived.additionalProperties !== undefined) {
+    setKey(result, "additionalProperties", derived.additionalProperties);
+  }
+  return withAnnotations(result, narrowing);
+}
+
+// Each field the narrowing states, set into what the document says of that field.
+function narrowedProperties(
+  derived: Schema,
+  narrowing: Schema,
+  where: string,
+  problems: string[],
+): Record<string, unknown> {
   const documented = isRecord(derived.properties) ? derived.properties : {};
   const properties: Record<string, unknown> = { ...documented };
   for (const [name, stated] of Object.entries(
@@ -250,23 +286,7 @@ export function narrowInto(
       );
     }
   }
-
-  const required = [
-    ...new Set([...strings(derived.required), ...strings(narrowing.required)]),
-  ];
-  // In the order the document wrote them, with what changed written where it was.
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(derived)) {
-    if (key === "required" || key === "additionalProperties") continue;
-    setKey(result, key, key === "properties" ? properties : value);
-  }
-  setKey(result, "properties", properties);
-  if (required.length > 0) setKey(result, "required", required);
-  if (closes) setKey(result, "additionalProperties", false);
-  else if (derived.additionalProperties !== undefined) {
-    setKey(result, "additionalProperties", derived.additionalProperties);
-  }
-  return withAnnotations(result, narrowing);
+  return properties;
 }
 
 // What a narrowing says of what it narrows, its description say, kept over what the document

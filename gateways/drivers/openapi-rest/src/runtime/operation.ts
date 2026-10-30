@@ -59,6 +59,32 @@ interface Mappings {
   readonly recognised: ReadonlySet<string>;
 }
 
+// Every template parameter must be declared, so the mapping reads completely against the input
+// schema and a renamed field cannot be mistaken for an omission. Binding the steps here, where
+// that is established, leaves a request with no absent case to handle.
+function pathSteps(
+  context: string,
+  upstream: ParsedUpstream,
+  // Path parameter -> input field.
+  params: ReadonlyMap<string, string>,
+): PathStep[] {
+  const steps: PathStep[] = [];
+  for (const part of upstream.parts) {
+    if (part.kind === "literal") {
+      steps.push({ kind: "literal", value: part.value });
+      continue;
+    }
+    const field = params.get(part.name);
+    if (field === undefined) {
+      throw new TypeError(
+        `${context}: path parameter "{${part.name}}" needs a parameters entry with in: "path"`,
+      );
+    }
+    steps.push({ kind: "param", name: part.name, field });
+  }
+  return steps;
+}
+
 function compileParameters(
   context: string,
   upstream: ParsedUpstream,
@@ -129,26 +155,8 @@ function compileParameters(
     }
   }
 
-  // Every template parameter must be declared, so the mapping reads completely against the
-  // input schema and a renamed field cannot be mistaken for an omission. Binding the steps
-  // here, where that is established, leaves a request with no absent case to handle.
-  const steps: PathStep[] = [];
-  for (const part of upstream.parts) {
-    if (part.kind === "literal") {
-      steps.push({ kind: "literal", value: part.value });
-      continue;
-    }
-    const field = params.get(part.name);
-    if (field === undefined) {
-      throw new TypeError(
-        `${context}: path parameter "{${part.name}}" needs a parameters entry with in: "path"`,
-      );
-    }
-    steps.push({ kind: "param", name: part.name, field });
-  }
-
   return {
-    steps,
+    steps: pathSteps(context, upstream, params),
     query,
     headers,
     recognised: new Set([
