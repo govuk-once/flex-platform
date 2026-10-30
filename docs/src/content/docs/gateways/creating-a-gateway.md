@@ -125,8 +125,11 @@ one run. Fix each one. See [What codegen checks](/flex-platform/codegen/checks/)
 ## 5. Prepare for deployment
 
 The deployment artifact is `.gen/runtime/bundle.mjs`, for a Node 24 Lambda function with handler
-`bundle.handler`. This repository does not yet provision the function, its permissions or its
-network. See [The platform](/flex-platform/start/platform/) for the planned hosting model.
+`bundle.handler`. The function is named `gateway-<environment>-<id>`, by `gatewayFunctionName` in
+`@repo/gateway-core`, with one alias, `live`, which every
+[gateway client](/flex-platform/domains/overview/#calling-gateways) invokes. This repository does
+not yet provision the function, its permissions or its network. See
+[The platform](/flex-platform/start/platform/) for the planned hosting model.
 
 Set the [environment](/flex-platform/reference/environment/):
 
@@ -134,9 +137,10 @@ Set the [environment](/flex-platform/reference/environment/):
 - `UPSTREAM_TARGET`, unless the driver reads the target from the secret
 
 The function's role needs permission to read that secret, plus any permissions its authentication
-requires. See [Environment](/flex-platform/reference/environment/). Callers use `.gen/client/rpc.ts`
-for the [call contract](/flex-platform/codegen/call-contract/); it provides types, not an invocation
-client.
+requires. See [Environment](/flex-platform/reference/environment/). Callers install
+the [client package](/flex-platform/codegen/overview/#the-client-package) in `.gen/client/package/`,
+which holds the [call contract](/flex-platform/codegen/call-contract/) and a function that creates
+a client typed by it.
 
 ## Changing it later
 

@@ -19,6 +19,7 @@ gateways/
     types/         Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
     config/        defineGateway, driver definition and executor contract, policy presets
     runtime/       Envelope parsing, dispatch, timeouts, bindings, logging and secret retrieval
+    client/        The gateway client, which domains install to call a gateway
     codegen/       Schema loading, configuration checks, validators, contract and entry point
   drivers/
     openapi-rest/  HTTP request construction, status mapping, authentication and custom handlers

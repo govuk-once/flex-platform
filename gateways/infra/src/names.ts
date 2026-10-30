@@ -1,5 +1,6 @@
 // Names derived from config, so nothing reads one back from a deployed stack. A gateway's function
-// is named by the gateway's id, which its package names (`@repo/gateway-service-<id>`):
+// is named by `gatewayFunctionName` in @repo/gateway-core, which the client that invokes it uses
+// too:
 //
 //   gateway-{environment}-{id}    a gateway's function
 //
@@ -7,11 +8,9 @@
 // any function whose name starts with `gateway-{environment}-`. So no other function the gateways
 // section creates may have it.
 
-export function gatewayFunctionName(environment: string, id: string): string {
-  return `gateway-${environment}-${id}`;
-}
+import { gatewayFunctionPrefix } from "@repo/gateway-core";
 
 /** Every gateway's function in the environment, and each one's versions and aliases. */
 export function gatewayFunctionPattern(environment: string): string {
-  return gatewayFunctionName(environment, "*");
+  return `${gatewayFunctionPrefix(environment)}*`;
 }

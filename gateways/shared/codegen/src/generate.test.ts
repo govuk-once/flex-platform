@@ -1,19 +1,27 @@
 import { execFile as execFileCb } from "node:child_process";
 import type * as FsPromises from "node:fs/promises";
 import {
+  cp,
   mkdir,
   mkdtemp,
   readdir,
   readFile,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
+import { createServer } from "node:http";
+import { createRequire } from "node:module";
+import type { AddressInfo } from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import type { EnvelopeResponse } from "@repo/gateway-core";
 import { GatewayError } from "@repo/gateway-runtime";
+import { type OutputOptions, rolldown, type RolldownOptions } from "rolldown";
+import ts from "typescript";
 import {
   afterAll,
   afterEach,
@@ -28,13 +36,16 @@ import {
 import { stub } from "../test/fixture/driver.ts";
 import { GatewayCheckError } from "./check-gateway.ts";
 import { SchemaCompatibilityError } from "./compare-schemas.ts";
+import { clientPackageName } from "./emit-client.ts";
 import { generate } from "./generate.ts";
 import {
   BUNDLE_MODULE,
   CLIENT_DIR,
+  CLIENT_ENTRY_MODULE,
   CONTRACT_MODULE,
   ENTRY_MODULE,
   GENERATED_DIR,
+  PACKAGE_DIR,
   RUNTIME_DIR,
   SCHEMAS_DIR,
   VALIDATORS_DIR,
@@ -286,6 +297,7 @@ describe("the generated gateway", () => {
   const outDir = path.join(fixtureDir, GENERATED_DIR);
   const contract = path.join(outDir, CLIENT_DIR, CONTRACT_MODULE);
   const bundlePath = path.join(outDir, RUNTIME_DIR, BUNDLE_MODULE);
+  const packageDir = path.join(outDir, CLIENT_DIR, PACKAGE_DIR);
 
   interface LambdaContext {
     getRemainingTimeInMillis(): number;
@@ -296,6 +308,8 @@ describe("the generated gateway", () => {
     context: LambdaContext,
   ) => Promise<EnvelopeResponse>;
   let bundle: string;
+  let clientModule: string;
+  let clientDeclarations: string;
 
   const call = (operation: string, input: unknown) => ({
     operation,
@@ -315,6 +329,11 @@ describe("the generated gateway", () => {
     vi.stubEnv("AWS_REGION", "eu-west-2");
 
     bundle = await readFile(bundlePath, "utf-8");
+    clientModule = await readFile(path.join(packageDir, "index.js"), "utf-8");
+    clientDeclarations = await readFile(
+      path.join(packageDir, "index.d.ts"),
+      "utf-8",
+    );
     // The generated module, loaded as the platform loads the bundle's entry point. The
     // specifier is built rather than written, so nothing typechecked imports generated code.
     const entryModule = [
@@ -343,11 +362,18 @@ describe("the generated gateway", () => {
       "index.js",
       "schemas.js",
     ]);
-    expect(await listing(CLIENT_DIR)).toEqual([CONTRACT_MODULE]);
+    expect(await listing(CLIENT_DIR)).toEqual(
+      [CONTRACT_MODULE, CLIENT_ENTRY_MODULE, PACKAGE_DIR].toSorted(),
+    );
+    expect(await listing(CLIENT_DIR, PACKAGE_DIR)).toEqual([
+      "index.d.ts",
+      "index.js",
+      "package.json",
+    ]);
   });
 
   it("fails a run whose output cannot be written, and the next replaces what it left", async () => {
-    // The contract is written last, so this is a run that fails after the bundle was built.
+    // The contract is written after the bundle, so this is a run that fails once it was built.
     duringWrite.do = (target) =>
       target.endsWith(CONTRACT_MODULE)
         ? Promise.reject(new Error("write refused"))
@@ -365,6 +391,12 @@ describe("the generated gateway", () => {
     await generate(fixtureDir);
 
     expect(await readFile(bundlePath, "utf-8")).toBe(bundle);
+    expect(await readFile(path.join(packageDir, "index.js"), "utf-8")).toBe(
+      clientModule,
+    );
+    expect(await readFile(path.join(packageDir, "index.d.ts"), "utf-8")).toBe(
+      clientDeclarations,
+    );
   }, 60_000);
 
   it("bundles everything but Node's own builtins", () => {
@@ -512,5 +544,259 @@ describe("the generated gateway", () => {
         getRemainingTimeInMillis: () => 0,
       }),
     ).resolves.toEqual({ ok: false, error: { code: "UPSTREAM_TIMEOUT" } });
+  });
+
+  describe("its client package", () => {
+    const name = clientPackageName("fixture");
+    const sharedClient = "@govuk-once/flex-gateway-client";
+    const workspace = createRequire(import.meta.url);
+    const installed = (specifier: string, from = workspace) =>
+      path.dirname(from.resolve(`${specifier}/package.json`));
+    const sharedClientDir = installed(sharedClient);
+
+    let domain: string;
+
+    // A domain outside the workspace with the package installed, and its peers beside it, the
+    // gateway client as it is published, so nothing resolves through this repository's own
+    // packages.
+    beforeAll(async () => {
+      domain = await mkdtemp(path.join(os.tmpdir(), "codegen-domain-"));
+      const modules = path.join(domain, "node_modules");
+      await cp(packageDir, path.join(modules, name), { recursive: true });
+
+      const { default: config } = (await import(
+        pathToFileURL(path.join(sharedClientDir, "rolldown.config.ts")).href
+      )) as { default: RolldownOptions };
+      const { output, ...input } = config;
+      const build = await rolldown(input);
+      try {
+        await build.write({
+          ...(output as OutputOptions),
+          dir: path.join(modules, sharedClient),
+        });
+      } finally {
+        await build.close();
+      }
+
+      await mkdir(path.join(modules, "@aws-sdk"), { recursive: true });
+      await symlink(
+        installed("@aws-sdk/client-lambda", createRequire(sharedClientDir)),
+        path.join(modules, "@aws-sdk", "client-lambda"),
+      );
+      await mkdir(path.join(modules, "@types"), { recursive: true });
+      await symlink(
+        installed("@types/node"),
+        path.join(modules, "@types", "node"),
+      );
+      await writeFile(
+        path.join(domain, "package.json"),
+        JSON.stringify({ type: "module" }),
+      );
+    }, 60_000);
+
+    afterAll(async () => {
+      await rm(domain, { recursive: true, force: true });
+    });
+
+    it("is versioned from its schemas, and names the gateway client as its one peer", async () => {
+      const manifest = JSON.parse(
+        await readFile(path.join(packageDir, "package.json"), "utf-8"),
+      ) as Record<string, unknown>;
+      const { version } = JSON.parse(
+        await readFile(path.join(sharedClientDir, "package.json"), "utf-8"),
+      ) as { version: string };
+
+      expect(manifest).toMatchObject({
+        name,
+        type: "module",
+        exports: { ".": { types: "./index.d.ts", default: "./index.js" } },
+        // The fixture holds two schema versions.
+        version: `${version.split(".")[0]}.2.0`,
+        peerDependencies: {
+          [sharedClient]: `>=${version} <${Number(version.split(".")[0]) + 1}.0.0`,
+        },
+      });
+      expect(manifest).not.toHaveProperty("dependencies");
+    });
+
+    it("imports nothing but the gateway client", () => {
+      const imported = (source: string) =>
+        [
+          ...source.matchAll(
+            /^\s*(?:import|export)\b(?:[^;"]*?\bfrom)?\s*"([^"]+)"/gm,
+          ),
+        ]
+          .map((match) => match[1] ?? "")
+          .toSorted();
+
+      expect(imported(clientModule)).toEqual([sharedClient]);
+      expect(imported(clientDeclarations)).toEqual([sharedClient]);
+      expect(clientModule.startsWith("// GENERATED FILE.")).toBe(true);
+    });
+
+    it("typechecks a domain against its declarations", async () => {
+      const consumer = path.join(domain, "consumer.ts");
+      await writeFile(
+        consumer,
+        `
+import { GatewayInvocationError } from "${sharedClient}";
+import { withCallerContext } from "${sharedClient}/caller";
+import { createFixtureClient, type CreateUserResponse } from "${name}";
+
+const fixture = createFixtureClient();
+
+export async function created(email: string): Promise<string | undefined> {
+  const response: CreateUserResponse = await fixture.createUser({
+    payload: { email },
+  });
+  if (!response.ok) return response.meta?.requestId ?? response.error.code;
+  return response.data.id;
+}
+
+export const handled = (email: string) =>
+  withCallerContext({ deadline: Date.now() + 1_000 }, () => created(email));
+
+export const failed = (error: unknown): boolean =>
+  error instanceof GatewayInvocationError && error.reason === "aborted";
+
+// @ts-expect-error only the gateway's operations have a function
+export const unknown = () => fixture.deleteUser({});
+// @ts-expect-error the input is the operation's
+export const wrong = () => fixture.createUser({ payload: {} });
+// @ts-expect-error the function is named from the gateway's id, never by a domain
+export const named = () => createFixtureClient({ functionName: "other" });
+`,
+      );
+      // A domain's settings rather than this repository's, with the packages' declarations and
+      // the SDK's checked too.
+      const program = ts.createProgram([consumer], {
+        strict: true,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.NodeNext,
+        moduleResolution: ts.ModuleResolutionKind.NodeNext,
+        noEmit: true,
+        skipLibCheck: false,
+        types: ["node"],
+      });
+      const problems = ts
+        .getPreEmitDiagnostics(program)
+        .map((diagnostic) =>
+          ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+        );
+
+      expect(problems).toEqual([]);
+    }, 60_000);
+
+    it("calls the gateway's function under plain Node", async () => {
+      // Lambda's API, answering each invocation in turn.
+      const answers = [
+        {
+          status: 200,
+          headers: {},
+          body: JSON.stringify({
+            ok: true,
+            outcome: "created",
+            data: { id: "u-1" },
+          }),
+        },
+        {
+          status: 200,
+          headers: { "x-amz-function-error": "Unhandled" },
+          body: "{}",
+        },
+        // Retryable, were the SDK's retries on.
+        {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+            "x-amzn-errortype": "TooManyRequestsException",
+          },
+          body: JSON.stringify({ message: "Rate exceeded" }),
+        },
+      ];
+      const sent: { url: string | undefined; body: unknown }[] = [];
+      const lambda = createServer((request, response) => {
+        const chunks: Buffer[] = [];
+        request.on("data", (chunk: Buffer) => chunks.push(chunk));
+        request.on("end", () => {
+          sent.push({
+            url: request.url,
+            body: JSON.parse(Buffer.concat(chunks).toString("utf-8")),
+          });
+          const answer = answers[sent.length - 1];
+          response.writeHead(answer?.status ?? 500, answer?.headers);
+          response.end(answer?.body);
+        });
+      });
+      await new Promise<void>((resolve) => {
+        lambda.listen(0, "127.0.0.1", resolve);
+      });
+      const { port } = lambda.address() as AddressInfo;
+
+      const script = `
+        import { GatewayInvocationError } from ${JSON.stringify(sharedClient)};
+        import { withCallerContext } from ${JSON.stringify(`${sharedClient}/caller`)};
+        import { createFixtureClient } from ${JSON.stringify(name)};
+
+        const fixture = createFixtureClient();
+        const input = { payload: { email: "a@b.test" } };
+        const reason = (call) => call.then(
+          () => "answered",
+          (error) => error instanceof GatewayInvocationError ? error.reason : "other",
+        );
+        // The context the SDK sets, reaching a call made through the gateway's package.
+        const secure = { values: { sub: "u-1" }, signature: "sig" };
+        const response = await withCallerContext(
+          { deadline: Date.now() + 60_000, secure },
+          () => fixture.createUser(input),
+        );
+        const failures = [
+          await reason(fixture.createUser(input)),
+          await reason(fixture.createUser(input)),
+        ];
+        console.log(JSON.stringify({ operations: Object.keys(fixture), response, failures }));
+      `;
+      try {
+        // What a domain's function is given, and nothing from this machine's own AWS settings.
+        const { stdout } = await execFile(
+          process.execPath,
+          ["--input-type=module", "-e", script],
+          {
+            cwd: domain,
+            env: {
+              AWS_REGION: "eu-west-2",
+              AWS_ACCESS_KEY_ID: "AKIDEXAMPLE",
+              AWS_SECRET_ACCESS_KEY: "SYNTHETIC",
+              AWS_CONFIG_FILE: path.join(domain, "no-config"),
+              AWS_SHARED_CREDENTIALS_FILE: path.join(domain, "no-credentials"),
+              AWS_ENDPOINT_URL_LAMBDA: `http://127.0.0.1:${String(port)}`,
+              FLEX_ENVIRONMENT: "sandbox",
+            },
+          },
+        );
+
+        expect(JSON.parse(stdout)).toEqual({
+          operations: ["createUser"],
+          response: { ok: true, outcome: "created", data: { id: "u-1" } },
+          failures: ["function_error", "invoke_failed"],
+        });
+        // The throttled call was sent once.
+        expect(sent).toHaveLength(3);
+        expect(sent[0]).toEqual({
+          url: `/2015-03-31/functions/${encodeURIComponent("gateway-sandbox-fixture:live")}/invocations`,
+          body: {
+            operation: "createUser",
+            input: { payload: { email: "a@b.test" } },
+            secure: { values: { sub: "u-1" }, signature: "sig" },
+          },
+        });
+        // Outside the context, a call has none.
+        expect(sent[1]?.body).toMatchObject({
+          secure: { values: {}, signature: "" },
+        });
+      } finally {
+        lambda.close();
+      }
+    }, 60_000);
   });
 });
