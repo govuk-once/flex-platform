@@ -122,32 +122,9 @@ export async function buildWorkspace(
   const found: Publishable[] = [];
   for (const source of sources) {
     for (const directory of sourceDirectories(root, source)) {
-      if (!directories.includes(directory)) continue;
-      const builtDir = path.join(root, directory, source.output);
-      const built = await readManifest(
-        path.join(builtDir, "package.json"),
-      ).catch(() => {
-        throw new Error(
-          `${directory} has no package in ${source.output}/ after its ${source.script} script.`,
-        );
-      });
-      if (!built.name.startsWith(SCOPE)) {
-        throw new Error(
-          `${directory} builds ${built.name}, which is not in ${SCOPE}.`,
-        );
+      if (directories.includes(directory)) {
+        found.push(await readBuilt(root, source, directory));
       }
-      parseVersion(built.version);
-      if (source.versioning === "declared") {
-        const own = await readManifest(
-          path.join(root, directory, "package.json"),
-        );
-        if (own.name !== built.name || own.version !== built.version) {
-          throw new Error(
-            `${directory} builds ${built.name}@${built.version}, not itself, ${own.name}@${own.version}.`,
-          );
-        }
-      }
-      found.push({ source, directory, builtDir, built });
     }
   }
   const names = found.map(nameOf);
@@ -156,6 +133,38 @@ export async function buildWorkspace(
     throw new Error(`More than one directory builds ${repeated}.`);
   }
   return found;
+}
+
+// One directory's package as its build wrote it, held to being in the scope and, when its
+// manifest declares the version, to being the package the manifest names.
+async function readBuilt(
+  root: string,
+  source: Source,
+  directory: string,
+): Promise<Publishable> {
+  const builtDir = path.join(root, directory, source.output);
+  const built = await readManifest(path.join(builtDir, "package.json")).catch(
+    () => {
+      throw new Error(
+        `${directory} has no package in ${source.output}/ after its ${source.script} script.`,
+      );
+    },
+  );
+  if (!built.name.startsWith(SCOPE)) {
+    throw new Error(
+      `${directory} builds ${built.name}, which is not in ${SCOPE}.`,
+    );
+  }
+  parseVersion(built.version);
+  if (source.versioning === "declared") {
+    const own = await readManifest(path.join(root, directory, "package.json"));
+    if (own.name !== built.name || own.version !== built.version) {
+      throw new Error(
+        `${directory} builds ${built.name}@${built.version}, not itself, ${own.name}@${own.version}.`,
+      );
+    }
+  }
+  return { source, directory, builtDir, built };
 }
 
 // The repository each package is published from, from the workspace root's manifest.
@@ -226,8 +235,7 @@ export function dependencyOrder(pkgs: readonly Publishable[]): Publishable[] {
   return ordered;
 }
 
-// The packages a release, or a merge's candidates, must hold besides those it starts from, and
-// why. One that depends on a package released names its new version once built again, so it is
+// The packages a release must hold besides those it chooses, and why. One that depends on a package released names its new version once built again, so it is
 // released too. A package with unreleased changes that a released one depends on was built into
 // it, so it is released too.
 export function lockedIn(

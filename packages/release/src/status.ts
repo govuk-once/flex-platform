@@ -52,7 +52,7 @@ function reasonFor(
 // build can be released as. A derived package's build writes its major and minor, and the release
 // its patch.
 export function buildsAsRecorded({ pkg, released, digest }: Status): boolean {
-  if (released === undefined || released.digest !== digest) return false;
+  if (released?.digest !== digest) return false;
   if (pkg.source.versioning === "declared") {
     return pkg.built.version === released.version;
   }

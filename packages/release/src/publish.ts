@@ -256,7 +256,7 @@ export async function publishRelease(
   ) as unknown;
   const packed = isRecord(plan) ? plan[stage] : undefined;
   if (!Array.isArray(packed)) {
-    throw new Error(`${PLAN_FILE} lists no ${stage}.`);
+    throw new TypeError(`${PLAN_FILE} lists no ${stage}.`);
   }
   const published: string[] = [];
   const skipped: string[] = [];

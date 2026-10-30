@@ -43,6 +43,12 @@ export function toggled(
   return next;
 }
 
+function checkbox(ticked: boolean, active: boolean): string {
+  if (ticked) return styleText("green", S_CHECKBOX_SELECTED);
+  if (active) return styleText("cyan", S_CHECKBOX_ACTIVE);
+  return styleText("dim", S_CHECKBOX_INACTIVE);
+}
+
 function answered<T>(answer: T): Exclude<T, symbol> {
   if (isCancel(answer)) {
     cancel("Nothing was released.");
@@ -63,7 +69,9 @@ export async function chooseRelease(
   );
   const groups: Record<string, Item[]> = {};
   for (const { pkg } of choices) {
-    (groups[pkg.source.group] ??= []).push({ value: nameOf(pkg) });
+    const members = groups[pkg.source.group] ?? [];
+    members.push({ value: nameOf(pkg) });
+    groups[pkg.source.group] = members;
   }
   let chosen = new Set<string>();
   let locked: ReadonlyMap<string, string> = new Map();
@@ -73,7 +81,8 @@ export async function chooseRelease(
     const versions = `${released?.version ?? "none"} → ${next}`;
     const forced = chosen.has(name) ? undefined : locked.get(name);
     const why = [reason, forced].filter(Boolean).join(", ") || "no changes";
-    return `${name}  ${versions}  ${styleText("dim", `(${why})`)}`;
+    const note = styleText("dim", `(${why})`);
+    return `${name}  ${versions}  ${note}`;
   };
   const line = (item: Item, active: boolean): string => {
     const members =
@@ -81,11 +90,7 @@ export async function chooseRelease(
         ? groups[item.value]!.map((i) => i.value)
         : [item.value];
     const ticked = members.every((n) => chosen.has(n) || locked.has(n));
-    const box = ticked
-      ? styleText("green", S_CHECKBOX_SELECTED)
-      : active
-        ? styleText("cyan", S_CHECKBOX_ACTIVE)
-        : styleText("dim", S_CHECKBOX_INACTIVE);
+    const box = checkbox(ticked, active);
     const text = item.group === true ? item.value : describe(item.value);
     const indent = item.group === true ? "" : "  ";
     return `${indent}${box} ${active ? text : styleText("dim", text)}`;
@@ -98,7 +103,8 @@ export async function chooseRelease(
     render() {
       const title = `${styleText("gray", S_BAR)}\n${symbol(this.state)}  Which packages are released?`;
       if (this.state === "submit") {
-        return `${title}\n${styleText("gray", S_BAR)}  ${styleText("dim", `${chosen.size + locked.size} packages`)}`;
+        const count = styleText("dim", `${chosen.size + locked.size} packages`);
+        return `${title}\n${styleText("gray", S_BAR)}  ${count}`;
       }
       if (this.state === "cancel") return title;
       const lines = limitOptions({

@@ -51,12 +51,12 @@ export function publishedManifest(
     const deps = built[field];
     if (deps === undefined) continue;
     if (!isRecord(deps)) {
-      throw new Error(`${built.name}'s ${field} is not an object.`);
+      throw new TypeError(`${built.name}'s ${field} is not an object.`);
     }
     manifest[field] = Object.fromEntries(
       Object.entries(deps).map(([name, spec]) => {
         if (typeof spec !== "string") {
-          throw new Error(
+          throw new TypeError(
             `${built.name}'s ${field} gives ${name} as something other than a range.`,
           );
         }
