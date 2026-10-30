@@ -19,6 +19,6 @@
     "@repo/gateway-codegen": "workspace:*",
     "@repo/gateway-core": "workspace:*",
     "@repo/tsconfig": "workspace:*",
-    "eslint": "10.12.0"
+    "eslint": "10.13.0"
   }
 }

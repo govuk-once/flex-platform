@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@repo/infra-constructs": "workspace:*",
-    "aws-cdk-lib": "2.273.0",
+    "aws-cdk-lib": "2.274.0",
     "constructs": "10.8.1"
   },
   "devDependencies": {
@@ -21,7 +21,7 @@
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "cdk-nag": "3.0.2",
-    "eslint": "10.12.0",
+    "eslint": "10.13.0",
     "vitest": "5.0.5"
   }
 }
