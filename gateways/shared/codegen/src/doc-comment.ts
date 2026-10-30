@@ -19,16 +19,14 @@ export interface Documented {
   readonly deprecated?: boolean;
 }
 
+const textIn = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() !== "" ? value : undefined;
+
 // What a schema offers to document itself with. `title` is used only where there is no
 // description: written for a form label, it says less.
 export function documentationOf(schema: unknown): Documented {
   if (!isRecord(schema)) return {};
-  const text =
-    typeof schema.description === "string" && schema.description.trim() !== ""
-      ? schema.description
-      : typeof schema.title === "string" && schema.title.trim() !== ""
-        ? schema.title
-        : undefined;
+  const text = textIn(schema.description) ?? textIn(schema.title);
   return {
     ...(text === undefined ? {} : { description: text }),
     ...(schema.deprecated === true ? { deprecated: true } : {}),
@@ -64,5 +62,6 @@ export function docComment({ description, deprecated }: Documented): string {
   if (deprecated === true) lines.push("@deprecated");
   if (lines.length === 0) return "";
   if (lines.length === 1) return `\n/** ${lines[0] ?? ""} */\n`;
-  return `\n/**\n${lines.map((line) => (line === "" ? " *" : ` * ${line}`)).join("\n")}\n */\n`;
+  const body = lines.map((line) => (line === "" ? " *" : ` * ${line}`));
+  return `\n/**\n${body.join("\n")}\n */\n`;
 }

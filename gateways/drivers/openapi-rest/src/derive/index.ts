@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { checkValue } from "@repo/gateway-codegen";
 import type { DeriveSchemas } from "@repo/gateway-config";
 import type { JSONSchema, OperationSchemas } from "@repo/gateway-core";
+import { asStringList } from "@repo/utils/as-string-list";
 import { isRecord } from "@repo/utils/is-record";
 import { sortedNames } from "@repo/utils/sorted-names";
 
@@ -227,11 +228,7 @@ function admittedBy(
     return Array.isArray(held) ? (held as unknown[]) : [];
   };
 
-  const named = Array.isArray(schema.type)
-    ? schema.type.filter((type): type is string => typeof type === "string")
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : [];
+  const named = asStringList(schema.type) ?? [];
   const own = elementsOf(schema, branchesOf("prefixItems"), defs, seen);
   // What it says of itself: the types it names, or every type where it names none, which is
   // what leaves the rest of the parts to say.

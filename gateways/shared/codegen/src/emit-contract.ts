@@ -100,10 +100,14 @@ function outcomeUnion(
   ctx: TypeContext,
 ): string {
   // What an outcome's schema says about itself describes the data it carries.
-  const members = sortedEntries(outcomes).map(
-    ([name, schema]) =>
-      `{ readonly outcome: ${JSON.stringify(name)}; ${docComment(documentationOf(schema))}readonly data: ${typeOf(schema, ctx, `outcome "${name}" of operation "${operation}"`)} }`,
-  );
+  const members = sortedEntries(outcomes).map(([name, schema]) => {
+    const data = typeOf(
+      schema,
+      ctx,
+      `outcome "${name}" of operation "${operation}"`,
+    );
+    return `{ readonly outcome: ${JSON.stringify(name)}; ${docComment(documentationOf(schema))}readonly data: ${data} }`;
+  });
   // An operation with no outcomes is refused before this runs; `never` would silently stand in.
   return members.join(" | ");
 }
@@ -150,10 +154,10 @@ export async function emitContract(
   const metaEntries = sortedEntries(schemas.meta ?? {});
   const reports = metaEntries.length > 0;
   if (reports) {
-    const members = metaEntries.map(
-      ([name, schema]) =>
-        `${docComment(documentationOf(schema))}readonly ${JSON.stringify(name)}?: ${typeOf(schema, ctx, `metadata "${name}"`)};`,
-    );
+    const members = metaEntries.map(([name, schema]) => {
+      const type = typeOf(schema, ctx, `metadata "${name}"`);
+      return `${docComment(documentationOf(schema))}readonly ${JSON.stringify(name)}?: ${type};`;
+    });
     declarations.push(
       `${docComment({ description: META_ABOUT })}export type ResponseMeta = { ${members.join(" ")} };`,
     );
@@ -165,8 +169,9 @@ export async function emitContract(
   );
 
   for (const [name, schema] of defEntries) {
+    const type = typeOf(schema, ctx, `shared definition "${name}"`);
     declarations.push(
-      `${docComment(documentationOf(schema))}export type ${name} = ${typeOf(schema, ctx, `shared definition "${name}"`)};`,
+      `${docComment(documentationOf(schema))}export type ${name} = ${type};`,
     );
   }
 
@@ -186,8 +191,13 @@ export async function emitContract(
       described === undefined ? {} : { description: described },
     );
 
+    const input = typeOf(
+      opSchemas.input,
+      ctx,
+      `the input of operation "${opName}"`,
+    );
     declarations.push(
-      `${about}export type ${base}Input = ${typeOf(opSchemas.input, ctx, `the input of operation "${opName}"`)};`,
+      `${about}export type ${base}Input = ${input};`,
       `${about}export type ${base}Result = ${outcomeUnion(opName, opSchemas.outcomes, ctx)};`,
       `${about}export type ${base}Response = ErrorResponse | ({ ${SUCCESS} } & ${base}Result);`,
     );
