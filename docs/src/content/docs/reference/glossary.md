@@ -24,7 +24,7 @@ acts on it. See
 
 The logic behind a personalised feature of the GOV.UK app. Developers outside the platform team
 write domains, and the Frontdoor routes requests to them. Each domain is an API Gateway with a
-Lambda proxy integration, in isolated subnets. Planned. See [Domains](/flex-platform/domains/overview/).
+Lambda proxy integration, in isolated subnets. See [Domains](/flex-platform/domains/overview/).
 
 ## Domain library
 

@@ -8,8 +8,9 @@ import { Aside } from "@astrojs/starlight/components";
 A domain is hosted from a line of the platform's config. Domain teams write the domain's code and
 never write CDK. The platform provides everything the code runs with and behind.
 
-The config and its checks are in `infra/app`, with the stacks. The constructs and the names they
-use are in `domains/infra` (`@repo/domain-infra`).
+The config, its checks and the stacks are in `infra/app`, with a
+[stack](/flex-platform/infrastructure/overview/#stacks) for every domain account and every domain.
+The constructs and the names they use are in `domains/infra` (`@repo/domain-infra`).
 
 ## Declaring a domain
 
@@ -50,6 +51,8 @@ Before building any stage, the app checks every domain:
   ending with a hyphen;
 - its name is used once in its environment, across all of the environment's domain accounts,
   since the Frontdoor routes by name alone;
+- its name is none of its environment's domain accounts' names, since a domain's stack is
+  `domain-<environment>-<domain>` and an account's is `domain-<environment>-<account>`;
 - its function's name, `domain-<environment>-<name>`, is within Lambda's 64 characters. Each name
   is within 32 alone, but the two together can pass it.
 
@@ -99,8 +102,7 @@ If the network is ever replaced, the stack deploys with `--force` to read the ne
 
 ### Permissions
 
-Every domain has the same permissions, so they are in one role, with a permission boundary that
-holds the same limits in case the role is ever widened by mistake. A domain's function may:
+Every domain has the same permissions, so they are in one role. A domain's function may:
 
 - invoke any function named `gateway-<environment>-*`, with any qualifier, such as `:live`. Any
   domain may call any gateway in its environment, and only gateways have that name. The stack
@@ -113,6 +115,17 @@ Lambda manages those network interfaces with the role's credentials, which the f
 holds too. So the role denies the network interface actions to any call made from a domain's code,
 which Lambda marks with the function's ARN. Lambda's own calls carry no function's ARN, so they
 are still allowed.
+
+<Aside type="caution" title="A log stream's name doesn't prove which domain wrote it">
+Every domain's function writes to the same log group. Lambda names each stream after the function
+that wrote it, but a domain's code can write a stream named after another domain's function. So
+when investigating, trust a stream's name only for what Lambda itself writes.
+</Aside>
+
+The role runs code that teams outside the platform write, with that code holding its credentials.
+So it has a permission boundary that holds the same statements. Whatever policy is ever attached to
+the role, by mistake or by hand, a domain's code can do no more than the boundary allows. The deploy
+role has none: it runs no one's code, and its denies already hold whatever else it is ever allowed.
 
 The deploy role may be assumed only by principals in its own account that are themselves allowed
 to assume it. It may create, configure, release and read functions named
@@ -134,8 +147,9 @@ create none, so it writes only to log groups that already exist, encrypted.
 
 `DomainStack`, `domain-<environment>-<domain>`, holds one domain's API and the host it answers at,
 in the domain account that hosts it, in eu-west-2. It holds no function: the API reaches the
-domain's function by name. It has no termination protection: removing a domain from config removes
-its stack, its log groups are retained, and the rest is built again from config.
+domain's function by name. It has no termination protection, since everything in it but its log
+groups, which are retained, is built again from config. CDK doesn't delete a stack the app no longer
+builds, so a domain removed from config keeps its stack until someone deletes it.
 
 | Construct | Builds |
 |---|---|
@@ -145,8 +159,8 @@ its stack, its log groups are retained, and the rest is built again from config.
 The stage is traced with X-Ray, logs errors, and never logs request or response bodies. Its access
 logs go to `/flex/domain/<environment>/<domain>/api-access`, one JSON line per request. Its
 execution logs go to `API-Gateway-Execution-Logs_<api id>/default`, which the stack creates, since
-API Gateway's logging role may not, so it is encrypted and kept for a year. The stage has no throttling of its own,
-so it shares the account's limits.
+API Gateway's logging role may not, so it is encrypted and kept for a year. The stage has no
+throttling of its own, so it shares the account's limits.
 
 ### Who can call it
 
