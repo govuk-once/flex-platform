@@ -23,6 +23,12 @@ describe("versionsFrom", () => {
     ).toEqual([]);
   });
 
+  it("refuses an answer that is not versions", () => {
+    expect(() => versionsFrom('[1, "0.1.0"]', "@govuk-once/a")).toThrow(
+      "The registry gave no versions for @govuk-once/a",
+    );
+  });
+
   it("refuses any other error, such as a refused token", () => {
     const refused = JSON.stringify({ error: { code: "ERR_PNPM_FETCH_401" } });
 

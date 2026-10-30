@@ -49,6 +49,17 @@ describe("contentDigest", () => {
     await setFile(dir, "built/types/index.d.ts", "export type X = 1;\n");
     expect(await contentDigest(built(), manifest())).not.toBe(digest);
   });
+
+  it("keeps the order of a list in the manifest, which says something", async () => {
+    const digest = await contentDigest(
+      built(),
+      manifest({ files: ["a", "b"] }),
+    );
+
+    expect(
+      await contentDigest(built(), manifest({ files: ["b", "a"] })),
+    ).not.toBe(digest);
+  });
 });
 
 describe("packPackage", () => {
@@ -89,5 +100,14 @@ describe("packPackage", () => {
     expect(await tar("-xzOf", file, `package/${deep}`)).toBe(
       "export const deep = 1;\n",
     );
+  });
+
+  it("refuses a file whose name alone is longer than a header holds", async () => {
+    const long = `${"x".repeat(101)}.js`;
+    await setFile(dir, `built/${long}`, "export {};\n");
+
+    await expect(
+      packPackage(built(), manifest(), path.join(dir, "x.tgz")),
+    ).rejects.toThrow(`package/${long} is too long a path to pack.`);
   });
 });

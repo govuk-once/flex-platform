@@ -366,6 +366,7 @@ describe("selectFrameLocations", () => {
         site("https://example.test/handler.js?token=SYNTHETIC"),
         site("data:text/javascript,SYNTHETIC"),
         site("file://host/srv/handler.js"),
+        site("file://["),
         site("file:///srv/handler.js?v=SYNTHETIC"),
         site("file:///srv/handler.js#SYNTHETIC"),
         site("/srv/handler.js", 0, 1),
