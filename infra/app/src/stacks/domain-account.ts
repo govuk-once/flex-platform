@@ -1,15 +1,20 @@
 import {
   ApiGatewayLogging,
   certificateParameterName,
+  DeployRole,
   DOMAIN_REGION,
   ExecutionRole,
   functionLogGroupName,
   WildcardCertificate,
 } from "@repo/domain-infra";
 import { gatewayFunctionPattern } from "@repo/gateway-infra";
-import { PlatformLogGroup } from "@repo/infra-constructs";
+import {
+  PlatformLogGroup,
+  securityGroupIdParameterName,
+  subnetIdsParameterName,
+} from "@repo/infra-constructs";
 import { Stack } from "aws-cdk-lib";
-import { StringParameter } from "aws-cdk-lib/aws-ssm";
+import { StringListParameter, StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 
 import type {
@@ -41,8 +46,6 @@ export class DomainAccountStack extends Stack {
     super(scope, domainAccountStackName(environment, domainAccount), {
       description: `Flex domain hosting shared by the ${domainAccount.name} domain account in the ${environment.name} environment`,
       env: { account: domainAccount.account, region: DOMAIN_REGION },
-      // Deleting it would take the domains' execution role and certificate with it, and leave the
-      // account's API Gateway logging setting naming a deleted role.
       terminationProtection: true,
     });
 
@@ -62,10 +65,25 @@ export class DomainAccountStack extends Stack {
       logGroupName: functionLogGroupName(environment.name),
     });
 
+    const gatewayFunctions = gatewayFunctionPattern(environment.name);
+
     new ExecutionRole(this, "Execution", {
       environment: environment.name,
-      gatewayFunctions: gatewayFunctionPattern(environment.name),
+      gatewayFunctions,
       logGroupKey: key,
+    });
+
+    new DeployRole(this, "Deploy", {
+      environment: environment.name,
+      gatewayFunctions,
+      subnetIds: StringListParameter.valueForTypedListParameter(
+        this,
+        subnetIdsParameterName(environment.name, "isolated"),
+      ),
+      securityGroupId: StringParameter.valueForStringParameter(
+        this,
+        securityGroupIdParameterName(environment.name, "domain"),
+      ),
     });
 
     new ApiGatewayLogging(this, "ApiGatewayLogging", {

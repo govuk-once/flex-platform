@@ -4,6 +4,7 @@ import {
   apiAccessLogGroupName,
   apiExecutionLogGroupName,
   certificateParameterName,
+  deployRoleName,
   domainFunctionName,
   executionRoleName,
   functionLogGroupName,
@@ -18,6 +19,7 @@ describe("names", () => {
 
   it("name what every domain in an environment shares from the environment's name", () => {
     expect(executionRoleName("sandbox")).toBe("domain-sandbox-execution");
+    expect(deployRoleName("sandbox")).toBe("domain-sandbox-deploy");
   });
 
   it("put the platform's log groups and parameters under /flex/domain", () => {
