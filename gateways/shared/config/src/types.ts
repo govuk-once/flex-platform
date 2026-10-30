@@ -1,6 +1,6 @@
 import type { DriverDefinition, HandlerOf, OperationFields } from "./driver.ts";
 
-export type FieldPath = string;
+export type FieldPath = string; // NOSONAR: names what a log selection's strings are
 
 export interface LogConfig {
   readonly input?: readonly FieldPath[];
