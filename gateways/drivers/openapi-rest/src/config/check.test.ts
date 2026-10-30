@@ -198,6 +198,31 @@ describe("checkOperationSchemas", () => {
     ]);
   });
 
+  it("reserves only the headers an authentication part it can read declares", () => {
+    // Malformed parts are the executor's to refuse as it starts; here they reserve nothing, and
+    // a well-formed name beside a malformed one is still reserved.
+    const unreadable = [
+      "not a part",
+      { headers: "Authorization" },
+      { headers: [1, "bad name", "X-Api-Key"] },
+    ] as unknown as Auth;
+    const operation: Operation = {
+      upstream: "GET /v1/users",
+      parameters: {
+        token: { in: "header", name: "Authorization" },
+        key: { in: "header", name: "X-Api-Key" },
+      },
+    };
+    const schemas = withSchemas(stringFields("token", "key"));
+
+    expect(check(operation, schemas, unreadable)).toEqual([
+      'Operation "op": parameter "key" maps to header "X-Api-Key", which the gateway\'s authentication owns',
+    ]);
+    expect(check(operation, schemas, "not a list" as unknown as Auth)).toEqual(
+      [],
+    );
+  });
+
   it("reports a header name the transport cannot send", () => {
     expect(
       check(
@@ -678,11 +703,31 @@ describe("checkOperationSchemas, on what the gateway reports beside a result", (
     ).toEqual([]);
   });
 
+  it("leaves a type it cannot read to the check that reads it", () => {
+    // A stored schema that names no single type is codegen's to report, and a configured one
+    // the executor's, so neither is compared here.
+    expect(
+      reporting(
+        { remaining: { header: "X-Remaining", schema: { type: "integer" } } },
+        { remaining: { type: ["integer", "null"] } as unknown as JSONSchema },
+      ),
+    ).toEqual([]);
+  });
+
   it("reports metadata the executor would refuse to start on", () => {
     // @ts-expect-error a header is required, and the check says so of one the compiler did not see
     expect(reporting({ requestId: { schema: { type: "string" } } })).toEqual([
       'Driver metadata "requestId" must name the response header it is read from',
       'metadata "requestId" is read from a header, and the schemas do not declare it',
+    ]);
+
+    // An entry that is not an object at all is reported once, and not compared with the schemas.
+    expect(
+      reporting({ requestId: "X-Request-Id" } as unknown as MetadataConfig, {
+        requestId: { type: "string" },
+      }),
+    ).toEqual([
+      'Driver metadata "requestId" must name the response header it is read from',
     ]);
   });
 });
