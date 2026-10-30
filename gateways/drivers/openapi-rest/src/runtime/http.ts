@@ -75,15 +75,13 @@ async function readBody(
   let total = 0;
   for (;;) {
     const { done, value } = await reader.read(); // NOSONAR: a stream reads in order
-    if (done) break;
+    if (done) return Buffer.concat(chunks).toString("utf8");
     total += value.byteLength;
-    if (total > limit) {
-      await reader.cancel();
-      throw tooLarge();
-    }
+    if (total > limit) break;
     chunks.push(value);
   }
-  return Buffer.concat(chunks).toString("utf8");
+  await reader.cancel();
+  throw tooLarge();
 }
 
 // Called with the response's headers as soon as they arrive, before its body is read. What a

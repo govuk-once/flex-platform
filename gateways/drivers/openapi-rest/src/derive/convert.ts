@@ -1,4 +1,5 @@
 import { isRecord } from "@repo/utils/is-record";
+import { oneOrMoreStrings } from "@repo/utils/one-or-more-strings";
 
 // One schema of an upstream's OpenAPI document as a gateway holds it. The two sides of a call
 // are converted differently, because they fail differently. An input is what a caller sends and
@@ -231,11 +232,10 @@ function reverses(
 // `{b:2,a:1}` — and a tag read as text would take those for two.
 function singleValue(schema: unknown): string | undefined {
   if (!isRecord(schema)) return undefined;
-  const [value, ...rest] = Object.hasOwn(schema, "const")
-    ? [schema.const]
-    : Array.isArray(schema.enum)
-      ? (schema.enum as unknown[])
-      : [];
+  let values: unknown[] = [];
+  if (Object.hasOwn(schema, "const")) values = [schema.const];
+  else if (Array.isArray(schema.enum)) values = schema.enum as unknown[];
+  const [value, ...rest] = values;
   if (rest.length > 0 || value === undefined) return undefined;
   const kind = typeof value;
   return kind === "string" || kind === "number" || kind === "boolean"
@@ -282,11 +282,7 @@ function taggedUnion(branches: readonly unknown[]): boolean {
 }
 
 const typesOf = (schema: Readonly<Record<string, unknown>>): string[] =>
-  Array.isArray(schema.type)
-    ? schema.type.filter((type): type is string => typeof type === "string")
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : [];
+  oneOrMoreStrings(schema.type) ?? [];
 
 const admits = (types: readonly string[], type: string): boolean =>
   types.includes(type) || (type === "number" && types.includes("integer"));

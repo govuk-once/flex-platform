@@ -1,5 +1,6 @@
 import type { JSONSchema } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
+import { oneOrMoreStrings } from "@repo/utils/one-or-more-strings";
 import { stringsIn } from "@repo/utils/strings-in";
 
 import { docComment, documentationOf, type Documented } from "./doc-comment.ts";
@@ -205,11 +206,9 @@ function standsFor(
   schema: unknown,
 ): Pick<TypeExpression, "literalOf" | "admits"> {
   if (!isRecord(schema)) return {};
-  const values = Array.isArray(schema.enum)
-    ? schema.enum
-    : Object.hasOwn(schema, "const")
-      ? [schema.const]
-      : undefined;
+  let values: unknown[] | undefined;
+  if (Array.isArray(schema.enum)) values = schema.enum;
+  else if (Object.hasOwn(schema, "const")) values = [schema.const];
   if (values !== undefined) {
     const kinds = new Set(values.map((value) => literalType(value).literalOf));
     const [only] = [...kinds];
@@ -338,11 +337,7 @@ function cloneComposition(composition: Composition): Composition {
 // Ajv accepts OpenAPI's `nullable` beside a type and validates null against it, so a contract
 // that left it out would reject a value the gateway takes.
 function declaredTypes(schema: JSONSchema): readonly string[] | undefined {
-  const declared = Array.isArray(schema.type)
-    ? stringsIn(schema.type)
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : undefined;
+  const declared = oneOrMoreStrings(schema.type);
   if (declared === undefined) return undefined;
   return schema.nullable === true && !declared.includes("null")
     ? [...declared, "null"]

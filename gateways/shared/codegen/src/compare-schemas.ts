@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import type { GatewaySchemas } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
+import { oneOrMoreStrings } from "@repo/utils/one-or-more-strings";
 import { ownValue } from "@repo/utils/own-value";
 import { sortedNames } from "@repo/utils/sorted-names";
 import { stringsIn } from "@repo/utils/strings-in";
@@ -32,6 +33,20 @@ export interface SchemaComparison {
 // What a difference does to the values a schema admits. "unknown" is a difference nothing here
 // can place, which is a break in either direction.
 type Effect = "narrows" | "widens" | "unknown";
+
+// The effect of a difference that may widen or narrow, and never both.
+function effectOf(widens: boolean, narrows: boolean): Effect {
+  if (widens) return "widens";
+  if (narrows) return "narrows";
+  return "unknown";
+}
+
+// A keyword's value before and after, as a report says it: added, removed or changed.
+function changed(before: unknown, after: unknown): string {
+  if (before === undefined) return `is now ${JSON.stringify(after)}`;
+  if (after === undefined) return `is no longer ${JSON.stringify(before)}`;
+  return `changed from ${JSON.stringify(before)} to ${JSON.stringify(after)}`;
+}
 
 // Where a schema sits in the one that holds it. A schema under a negation, a condition or a
 // counted `contains` does not act on the whole the way it acts on itself, so which side of the
@@ -244,11 +259,7 @@ const sameAt = (key: string, previous: unknown, next: unknown): boolean =>
 // The types a schema names, or undefined when it names none and so admits any. Ajv reads
 // OpenAPI's `nullable` beside a type as null being one of them.
 function typesOf(schema: Schema): ReadonlySet<string> | undefined {
-  const declared = Array.isArray(schema.type)
-    ? stringsIn(schema.type)
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : undefined;
+  const declared = oneOrMoreStrings(schema.type);
   if (declared === undefined) return undefined;
   return new Set(schema.nullable === true ? [...declared, "null"] : declared);
 }
@@ -470,18 +481,10 @@ class Comparison {
       const after = next[key];
       if (isDeepStrictEqual(before, after)) continue;
       this.add(
-        before === undefined
-          ? "narrows"
-          : after === undefined
-            ? "widens"
-            : "unknown",
+        effectOf(after === undefined, before === undefined),
         position,
         `${where}.${key}`,
-        before === undefined
-          ? `is now ${JSON.stringify(after)}`
-          : after === undefined
-            ? `is no longer ${JSON.stringify(before)}`
-            : `changed from ${JSON.stringify(before)} to ${JSON.stringify(after)}`,
+        changed(before, after),
       );
     }
 
@@ -561,7 +564,7 @@ class Comparison {
     // Spelt differently and admitting the same: "number" beside "integer" adds nothing.
     if (keeps && adds) return;
     this.add(
-      keeps ? "widens" : adds ? "narrows" : "unknown",
+      effectOf(keeps, adds),
       position,
       `${where}.type`,
       `changed from ${spell(before)} to ${spell(after)}`,
@@ -634,11 +637,7 @@ class Comparison {
       next > previous === lower ? "narrows" : "widens",
       position,
       at,
-      before === undefined
-        ? `is now ${JSON.stringify(after)}`
-        : after === undefined
-          ? `is no longer ${JSON.stringify(before)}`
-          : `changed from ${String(before)} to ${String(after)}`,
+      changed(before, after),
     );
   }
 
@@ -891,11 +890,7 @@ class Comparison {
     // Branches that only came, or only went, move the whole the way they move it. Some of each
     // is a union that changed too much to place.
     this.add(
-      pairing.previous.length === 0
-        ? "widens"
-        : pairing.next.length === 0
-          ? "narrows"
-          : "unknown",
+      effectOf(pairing.previous.length === 0, pairing.next.length === 0),
       position,
       at,
       `has ${String(next.length)} branches where it had ${String(previous.length)}`,
