@@ -60,7 +60,7 @@ function expectedAuthorization(request: RequestToSign): string {
     ...Object.entries(request.headers),
     ["host", request.host],
     ["x-amz-date", AMZ_DATE],
-    ["x-amz-security-token", CREDENTIALS.sessionToken ?? ""],
+    ["x-amz-security-token", CREDENTIALS.sessionToken],
   ]);
   const names = [...headers.keys()].sort();
   const canonical = [
@@ -140,6 +140,23 @@ describe("createRequestSigner", () => {
     );
   });
 
+  it("signs every value of a name the query repeats", async () => {
+    const repeated = { ...REQUEST, querystring: "a=3&a=1&a=2" };
+
+    expect((await sign(repeated)).authorization).toBe(
+      expectedAuthorization(repeated),
+    );
+  });
+
+  it("signs a query with an empty pair as it signs one without", async () => {
+    const sent = { ...REQUEST, querystring: "a=1&&b=2&" };
+    const canonical = { ...REQUEST, querystring: "a=1&b=2" };
+
+    expect((await sign(sent)).authorization).toBe(
+      (await sign(canonical)).authorization,
+    );
+  });
+
   // What API Gateway canonicalised b=2&a=x+y&a=1&flag&s=%20z%2Fw as, in the SigV4 probe.
   it("signs a query as API Gateway reads it, with a plus as a space", async () => {
     const sent = { ...REQUEST, querystring: "b=2&a=x+y&a=1&flag&s=%20z%2Fw" };
@@ -180,6 +197,14 @@ describe("createRequestSigner", () => {
   it("refuses to sign without credentials", () => {
     vi.stubEnv("AWS_ACCESS_KEY_ID", "");
     vi.stubEnv("AWS_SECRET_ACCESS_KEY", "");
+
+    expect(() => credentialsFromEnvironment()).toThrow(/credentials/);
+  });
+
+  it("refuses to sign without a session token, which a role's credentials always carry", () => {
+    vi.stubEnv("AWS_ACCESS_KEY_ID", "AKIDEXAMPLE");
+    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "secret");
+    vi.stubEnv("AWS_SESSION_TOKEN", "");
 
     expect(() => credentialsFromEnvironment()).toThrow(/credentials/);
   });

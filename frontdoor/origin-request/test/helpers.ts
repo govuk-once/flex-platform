@@ -68,12 +68,14 @@ export function base64url(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
-// A Cognito access token, signed with RS256 by `key`. Set a claim to undefined to leave it out.
+// A Cognito access token, signed with RS256 by `key`, or with RSA over `digest`. Set a claim to
+// undefined to leave it out.
 export function token(
   options: {
     header?: Record<string, unknown>;
     payload?: Record<string, unknown>;
     key?: KeyPair;
+    digest?: "sha256" | "sha512";
   } = {},
 ): string {
   const header = base64url({ alg: "RS256", kid: KID, ...options.header });
@@ -87,7 +89,7 @@ export function token(
     ...options.payload,
   });
   const signature = sign(
-    "sha256",
+    options.digest ?? "sha256",
     Buffer.from(`${header}.${payload}`),
     (options.key ?? ISSUER_KEY).privateKey,
   ).toString("base64url");
