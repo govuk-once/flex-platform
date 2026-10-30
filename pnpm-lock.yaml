@@ -633,6 +633,9 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
+      '@repo/frontdoor-origin-request':
+        specifier: workspace:*
+        version: link:../../frontdoor/origin-request
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
