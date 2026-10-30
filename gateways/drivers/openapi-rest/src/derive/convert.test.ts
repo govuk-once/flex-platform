@@ -61,9 +61,11 @@ describe("convertSchema, on either side", () => {
       required: ["id"],
     });
     expect(Object.keys(convert({ items: {} }) as object)[0]).toBe("type");
+    expect(convert({ minLength: 1 })).toEqual({ type: "string" });
     expect([...conversion.notes]).toEqual([
       "here declares no type; its keywords are those of an object, so it was given that type",
       "here declares no type; its keywords are those of an array, so it was given that type",
+      "here declares no type; its keywords are those of a string, so it was given that type",
     ]);
   });
 
@@ -258,6 +260,14 @@ describe("convertSchema, for an outcome", () => {
         tags: { type: "array", items: { type: "string" } },
       },
     });
+    // Closed the other way it can be, which an upstream's added field would fail just the same.
+    expect(
+      asOutput({
+        type: "object",
+        properties: { name: { type: "string" } },
+        unevaluatedProperties: false,
+      }),
+    ).toEqual({ type: "object", properties: { name: { type: "string" } } });
   });
 
   it("turns the values it lists into the values it knows of, where the type was", () => {
@@ -273,6 +283,9 @@ describe("convertSchema, for an outcome", () => {
     });
     expect(asOutput({ type: "integer", enum: [1, 2] })).toEqual({
       anyOf: [{ enum: [1, 2] }, { type: "integer" }],
+    });
+    expect(asOutput({ type: "number", enum: [0.5, 1] })).toEqual({
+      anyOf: [{ enum: [0.5, 1] }, { type: "number" }],
     });
     expect(asOutput({ type: ["string", "null"], enum: ["a", null] })).toEqual({
       anyOf: [{ enum: ["a"] }, { type: "string" }, { type: "null" }],
@@ -421,6 +434,14 @@ describe("convertSchema, for an outcome", () => {
           branch({ const: { b: 2, a: 1 } }),
         ],
       },
+      // A tag that fixes no value, or is written as a schema that admits any.
+      { oneOf: [branch({ type: "string" }), branch({ type: "string" })] },
+      { oneOf: [branch(true), tag("cash")] },
+      // A branch with no fields to read, or no list of the ones it requires.
+      { oneOf: [{ type: "object", required: ["kind"] }, tag("cash")] },
+      { oneOf: [{ ...tag("card"), required: "kind" }, tag("cash")] },
+      // One branch, which has nothing to be told apart from.
+      { oneOf: [tag("card")] },
     ]) {
       expect(asOutput(untagged), JSON.stringify(untagged)).toEqual(untagged);
     }
