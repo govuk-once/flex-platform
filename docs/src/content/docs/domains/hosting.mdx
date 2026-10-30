@@ -58,14 +58,15 @@ Before building any stage, the app checks every domain:
 `DomainAccountStack`, `domain-<environment>-<account>`, holds what every domain in a domain account
 shares in one environment. Nothing in it names a domain, so adding or removing one never changes
 it. It is in eu-west-2, the region the edge signs requests for, and has termination protection:
-deleting it would take the domains' execution role and certificate with it, and leave the account's
-API Gateway logging setting naming a deleted role.
+deleting it would take the domains' execution and deploy roles and their certificate with it, and
+leave the account's API Gateway logging setting naming a deleted role.
 
 | Construct | Builds |
 |---|---|
 | `WildcardCertificate` | A CAA record at the zone's apex, `0 issue "amazon.com"`, so only Amazon may issue certificates for the zone. Then `*.<zone>`, validated through DNS in the account's own zone. |
 | `PlatformLogGroup` | `/flex/domain/<environment>/function`, the log group every domain's function logs to |
 | `ExecutionRole` | `domain-<environment>-execution`, the role every domain's function runs as, and its permission boundary. See [permissions](#permissions). |
+| `DeployRole` | `domain-<environment>-deploy`, the role a release assumes to create and update a domain's function. See [permissions](#permissions). |
 | `ApiGatewayLogging` | API Gateway's logging role, set on the account, so every API in it can write its access and execution logs |
 
 One wildcard certificate serves every domain because ACM limits a certificate's first name to 64
@@ -83,6 +84,17 @@ reaches an upstream through a gateway, and a gateway that needs the internet has
 security group a domain's function runs in, which may reach only the `lambda` endpoint: see
 [what a workload may reach](/flex-platform/infrastructure/network/#what-a-workload-may-reach).
 
+The stack reads two of the network's
+[parameters](/flex-platform/infrastructure/network/#ids-other-stacks-read) when it deploys, and
+holds the deploy role to them:
+
+| Parameter | Holds |
+|---|---|
+| `/flex/network/<environment>/isolated-subnet-ids` | The isolated subnets' IDs |
+| `/flex/network/<environment>/security-group/domain` | The `domain` security group's ID |
+
+If the network is ever replaced, the stack deploys with `--force` to read the new IDs.
+
 ### Permissions
 
 Every domain has the same permissions, so they are in one role, with a permission boundary that
@@ -99,6 +111,18 @@ Lambda manages those network interfaces with the role's credentials, which the f
 holds too. So the role denies the network interface actions to any call made from a domain's code,
 which Lambda marks with the function's ARN. Lambda's own calls carry no function's ARN, so they
 are still allowed.
+
+The deploy role may be assumed only by principals in its own account that are themselves allowed
+to assume it. It may create, configure, release and read functions named
+`domain-<environment>-*`, describe the network Lambda checks a function's placement against, and
+pass only the execution role, only to Lambda. It denies:
+
+- every Lambda action on any function named `gateway-<environment>-*`;
+- creating or configuring a domain's function with no VPC, in any subnet but the isolated ones, or
+  with any security group but the `domain` group.
+
+The denies hold whatever else the role is ever allowed, so a domain's function can only run where
+the platform places it.
 
 API Gateway's logging role may write only to the domains' API access log groups,
 `/flex/domain/<environment>/<domain>/api-access`, and to API Gateway's execution log groups. It may
@@ -119,3 +143,21 @@ stacks is needed.
 
 The function is named `domain-<environment>-<name>`, built by `domainFunctionName` in
 `@repo/domain-infra`. Everything that refers to the function finds it by this name.
+
+## Releasing a domain's function
+
+A release creates and updates a domain's function as `domain-<environment>-deploy`. It sets:
+
+- the name, `domain-<environment>-<name>`;
+- the role, `domain-<environment>-execution`;
+- the isolated subnets and the `domain` security group, from the network's parameters above. The
+  deploy role refuses a configuration with no VPC, so a release sends them with every configuration
+  update;
+- logging to `/flex/domain/<environment>/function`;
+- `FLEX_ENVIRONMENT`, the environment's name, which the code uses only to build names, such as a
+  gateway's function name, and never to choose what it does;
+- active tracing, so Lambda sends its traces to X-Ray.
+
+Then it publishes a version and points the `live` alias at it. The deploy role can enforce the
+function's name, role and network, but not its logging, environment or tracing, which only the
+release sets.
