@@ -3,17 +3,25 @@
 //
 // Every name follows one template, and stack names too:
 //
-//   domain-{environment}-{domain}    a domain's function
+//   domain-{environment}-{domain}    a domain's function, and its API with -api
 //   domain-{environment}-{thing}     what every domain in the environment shares
 //
-// A log group's or parameter's name is a path instead: /flex/domain/{environment}/{thing}. Where AWS
-// sets a name, the name follows it: API Gateway's execution logs.
+// A log group's or parameter's name is a path instead: /flex/domain/{environment}/{thing}. A domain
+// answers at {domain}.{zone}. Where AWS sets a name, the name follows it: API Gateway's execution
+// logs.
 
 /** Domains are built in the region the edge signs requests for. */
 export const DOMAIN_REGION = "eu-west-2";
 
 /** Lambda's limit on a function's name. */
 export const FUNCTION_NAME_LENGTH = 64;
+
+/** The alias each release moves, and the only one a domain's API invokes. */
+export const LIVE_ALIAS = "live";
+
+export function domainHost(domain: string, zoneName: string): string {
+  return `${domain}.${zoneName}`;
+}
 
 // The function is created outside CloudFormation, from the team's code, so everything else finds
 // it by this name rather than by reference.
@@ -22,6 +30,10 @@ export function domainFunctionName(
   domain: string,
 ): string {
   return `domain-${environment}-${domain}`;
+}
+
+export function apiName(environment: string, domain: string): string {
+  return `${domainFunctionName(environment, domain)}-api`;
 }
 
 export function executionRoleName(environment: string): string {

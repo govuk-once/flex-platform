@@ -3,17 +3,26 @@ import { describe, expect, it } from "vitest";
 import {
   apiAccessLogGroupName,
   apiExecutionLogGroupName,
+  apiName,
   certificateParameterName,
   deployRoleName,
   domainFunctionName,
+  domainHost,
   executionRoleName,
   functionLogGroupName,
 } from "./names.ts";
 
 describe("names", () => {
-  it("name a domain's function from the environment's and the domain's names", () => {
+  it("name a domain's function and API from the environment's and the domain's names", () => {
     expect(domainFunctionName("sandbox", "domain-a")).toBe(
       "domain-sandbox-domain-a",
+    );
+    expect(apiName("sandbox", "domain-a")).toBe("domain-sandbox-domain-a-api");
+  });
+
+  it("put a domain's host under its account's zone", () => {
+    expect(domainHost("domain-a", "sandbox.flex-domain00.example")).toBe(
+      "domain-a.sandbox.flex-domain00.example",
     );
   });
 
