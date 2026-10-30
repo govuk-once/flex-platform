@@ -1,4 +1,5 @@
 export { ApiGatewayLogging } from "./api-gateway-logging.ts";
+export { DeployRole } from "./deploy-role.ts";
 export { ExecutionRole } from "./execution-role.ts";
 export {
   certificateParameterName,
