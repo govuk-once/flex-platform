@@ -136,41 +136,29 @@ export async function packRelease(
           ),
       );
 
-  for (const pkg of pkgs) {
-    const name = nameOf(pkg);
-    const release = record.get(name);
-    if (release === undefined) continue;
-    const { version } = release;
-    const versions = published.get(name)!;
-    if (versions.has(version)) continue;
+  // Why a recorded version is not packed, or nothing when it is.
+  const withheld = (pkg: Publishable): string | undefined => {
     // A release is checked as it merges, so main building it differently means later changes
     // replaced it. It is passed over, and the next release takes the next version.
-    if (!buildsAsRecorded(statuses.get(name)!)) {
-      plan.withheld.push({
-        name,
-        version,
-        reason:
-          "main has changed it since its release, so a later release replaces it",
-      });
-      continue;
+    if (!buildsAsRecorded(statuses.get(nameOf(pkg))!)) {
+      return "main has changed it since its release, so a later release replaces it";
     }
     const dep = unpublished(pkg);
-    if (dep !== undefined) {
-      plan.withheld.push({
-        name,
-        version,
-        reason: `its build names ${dep.name} ${dep.version}, which is not published`,
-      });
-      continue;
-    }
+    return dep === undefined
+      ? undefined
+      : `its build names ${dep.name} ${dep.version}, which is not published`;
+  };
+  // A final goes out at merge, or at production with a candidate at merge, unless one went out.
+  const packReleased = async (
+    pkg: Publishable,
+    version: string,
+    versions: ReadonlySet<string>,
+  ) => {
     if (pkg.source.finalAt === "merge") {
       await pack("merge", "latest", pkg, version);
-      continue;
+      return;
     }
-    const candidates = [...versions].filter((v) =>
-      v.startsWith(`${version}-rc.`),
-    );
-    if (candidates.length === 0) {
+    if (![...versions].some((v) => v.startsWith(`${version}-rc.`))) {
       await pack(
         "merge",
         "rc",
@@ -179,6 +167,18 @@ export async function packRelease(
       );
     }
     await pack("production", "latest", pkg, version);
+  };
+
+  for (const pkg of pkgs) {
+    const name = nameOf(pkg);
+    const release = record.get(name);
+    if (release === undefined) continue;
+    const { version } = release;
+    const versions = published.get(name)!;
+    if (versions.has(version)) continue;
+    const reason = withheld(pkg);
+    if (reason === undefined) await packReleased(pkg, version, versions);
+    else plan.withheld.push({ name, version, reason });
   }
   await writeFile(
     path.join(options.out, PLAN_FILE),
@@ -256,7 +256,7 @@ export async function publishRelease(
   ) as unknown;
   const packed = isRecord(plan) ? plan[stage] : undefined;
   if (!Array.isArray(packed)) {
-    throw new Error(`${PLAN_FILE} lists no ${stage}.`);
+    throw new TypeError(`${PLAN_FILE} lists no ${stage}.`);
   }
   const published: string[] = [];
   const skipped: string[] = [];

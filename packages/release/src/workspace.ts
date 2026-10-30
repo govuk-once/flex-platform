@@ -113,31 +113,7 @@ export async function buildWorkspace(
   const found: Publishable[] = [];
   for (const source of sources) {
     for (const directory of sourceDirectories(root, source)) {
-      const builtDir = path.join(root, directory, source.output);
-      const built = await readManifest(
-        path.join(builtDir, "package.json"),
-      ).catch(() => {
-        throw new Error(
-          `${directory} has no package in ${source.output}/ after its ${source.script} script.`,
-        );
-      });
-      if (!built.name.startsWith(SCOPE)) {
-        throw new Error(
-          `${directory} builds ${built.name}, which is not in ${SCOPE}.`,
-        );
-      }
-      parseVersion(built.version);
-      if (source.versioning === "declared") {
-        const own = await readManifest(
-          path.join(root, directory, "package.json"),
-        );
-        if (own.name !== built.name || own.version !== built.version) {
-          throw new Error(
-            `${directory} builds ${built.name}@${built.version}, not itself, ${own.name}@${own.version}.`,
-          );
-        }
-      }
-      found.push({ source, directory, builtDir, built });
+      found.push(await readBuilt(root, source, directory));
     }
   }
   const names = found.map(nameOf);
@@ -146,6 +122,38 @@ export async function buildWorkspace(
     throw new Error(`More than one directory builds ${repeated}.`);
   }
   return found;
+}
+
+// One directory's package as its build wrote it, held to being in the scope and, when its
+// manifest declares the version, to being the package the manifest names.
+async function readBuilt(
+  root: string,
+  source: Source,
+  directory: string,
+): Promise<Publishable> {
+  const builtDir = path.join(root, directory, source.output);
+  const built = await readManifest(path.join(builtDir, "package.json")).catch(
+    () => {
+      throw new Error(
+        `${directory} has no package in ${source.output}/ after its ${source.script} script.`,
+      );
+    },
+  );
+  if (!built.name.startsWith(SCOPE)) {
+    throw new Error(
+      `${directory} builds ${built.name}, which is not in ${SCOPE}.`,
+    );
+  }
+  parseVersion(built.version);
+  if (source.versioning === "declared") {
+    const own = await readManifest(path.join(root, directory, "package.json"));
+    if (own.name !== built.name || own.version !== built.version) {
+      throw new Error(
+        `${directory} builds ${built.name}@${built.version}, not itself, ${own.name}@${own.version}.`,
+      );
+    }
+  }
+  return { source, directory, builtDir, built };
 }
 
 export interface Repository {
@@ -221,10 +229,9 @@ export function dependencyOrder(pkgs: readonly Publishable[]): Publishable[] {
   return ordered;
 }
 
-// The packages a release, or a merge's candidates, must hold besides those it starts from, and
-// why. One that depends on a package released names its new version once built again, so it is
-// released too. A package with unreleased changes that a released one depends on was built into
-// it, so it is released too.
+// The packages a release must hold besides those it chooses, and why. One that depends on a
+// package released names its new version once built again, so it is released too. A package with
+// unreleased changes that a released one depends on was built into it, so it is released too.
 export function lockedIn(
   pkgs: readonly Publishable[],
   chosen: ReadonlySet<string>,
@@ -232,27 +239,33 @@ export function lockedIn(
 ): Map<string, string> {
   const releasing = new Set(chosen);
   const locked = new Map<string, string>();
-  const lock = (name: string, why: string) => {
-    releasing.add(name);
-    locked.set(name, why);
-  };
-  for (let added = true; added;) {
-    added = false;
+  // Each package locked in can bring others with it, so until a pass brings none.
+  let size: number;
+  do {
+    size = releasing.size;
     for (const pkg of pkgs) {
-      const name = nameOf(pkg);
-      if (releasing.has(name)) {
-        for (const dep of dependenciesOf(pkg, pending)) {
-          if (releasing.has(dep)) continue;
-          lock(dep, `${name} depends on it`);
-          added = true;
-        }
-      } else {
-        const [dep] = dependenciesOf(pkg, releasing);
-        if (dep === undefined) continue;
-        lock(name, `depends on ${dep}`);
-        added = true;
+      for (const [name, why] of locksFor(pkg, releasing, pending)) {
+        releasing.add(name);
+        locked.set(name, why);
       }
     }
-  }
+  } while (releasing.size > size);
   return locked;
+}
+
+// What one package brings into a release so far, and why: when it is released, the unreleased
+// changes it was built with, and otherwise itself, once it depends on a package released.
+function locksFor(
+  pkg: Publishable,
+  releasing: ReadonlySet<string>,
+  pending: ReadonlySet<string>,
+): [string, string][] {
+  const name = nameOf(pkg);
+  if (releasing.has(name)) {
+    return dependenciesOf(pkg, pending)
+      .filter((dep) => !releasing.has(dep))
+      .map((dep) => [dep, `${name} depends on it`]);
+  }
+  const [dep] = dependenciesOf(pkg, releasing);
+  return dep === undefined ? [] : [[name, `depends on ${dep}`]];
 }
