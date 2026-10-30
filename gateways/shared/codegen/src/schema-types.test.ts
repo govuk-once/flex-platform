@@ -182,6 +182,31 @@ describe("typeExpression", () => {
     );
   });
 
+  it("reads what a name stands for from the values it lists or its one type, and nothing else", () => {
+    const definitions: Readonly<Record<string, JSONSchema>> = {
+      Constant: { const: "a" },
+      Flags: { enum: [true, false] },
+      Loose: {},
+    };
+    const named: TypeContext = {
+      defs: new Map(Object.keys(definitions).map((key) => [key, key])),
+      schemas: new Map(Object.entries(definitions)),
+    };
+    const typed = (schema: JSONSchema) => typeExpression(schema, named);
+
+    // A constant lists one value of a primitive, as an enum lists several.
+    expect(typed({ anyOf: [{ $ref: "Constant" }, { type: "string" }] })).toBe(
+      "Constant | (string & {})",
+    );
+    // Values of no primitive, and a definition that names no type, stand for nothing to keep.
+    expect(typed({ anyOf: [{ $ref: "Flags" }, { type: "string" }] })).toBe(
+      "Flags | string",
+    );
+    expect(typed({ anyOf: [{ enum: ["a"] }, { $ref: "Loose" }] })).toBe(
+      '"a" | Loose',
+    );
+  });
+
   it("writes the type that admits them all once, however the union is nested", () => {
     expect(
       type({
@@ -510,6 +535,87 @@ describe("typeExpression", () => {
         mutual,
       ),
     ).toBe("Left & { readonly id: unknown; }");
+
+    // One that leads to a definition nobody declared ends there too.
+    const dangling: TypeContext = {
+      defs: new Map([["Dangling", "Dangling"]]),
+      schemas: new Map([["Dangling", { $ref: "Missing" }]]),
+    };
+    expect(
+      typeExpression(
+        { type: "object", required: ["id"], allOf: [{ $ref: "Dangling" }] },
+        dangling,
+      ),
+    ).toBe("Dangling & { readonly id: unknown; }");
+  });
+
+  it("requires a field a definition declares inside its allOf", () => {
+    const wrapped: TypeContext = {
+      defs: new Map([["Wrapped", "Wrapped"]]),
+      schemas: new Map([
+        [
+          "Wrapped",
+          {
+            // A part that is a boolean schema declares nothing, and the search reads past it.
+            allOf: [
+              true,
+              { type: "object", properties: { id: { type: "string" } } },
+            ],
+          },
+        ],
+      ]),
+    };
+
+    expect(
+      typeExpression(
+        { type: "object", required: ["id"], allOf: [{ $ref: "Wrapped" }] },
+        wrapped,
+      ),
+    ).toBe("Wrapped & { readonly id: string; }");
+  });
+
+  it("finds a field named like an inherited member where it is declared, not on the prototype", () => {
+    // `toString` is on every object, so a definition that declares no such property must not be
+    // taken to: the search goes on to the part that does.
+    const inherited: TypeContext = {
+      defs: new Map([["Named", "Named"]]),
+      schemas: new Map([
+        [
+          "Named",
+          {
+            type: "object",
+            properties: {},
+            allOf: [{ properties: { toString: { type: "string" } } }],
+          },
+        ],
+      ]),
+    };
+
+    expect(
+      typeExpression(
+        { type: "object", required: ["toString"], allOf: [{ $ref: "Named" }] },
+        inherited,
+      ),
+    ).toBe("Named & { readonly toString: string; }");
+  });
+
+  it("refuses a definition nested deeper than it reads while searching it for a field", () => {
+    let deep: JSONSchema = {
+      type: "object",
+      properties: { id: { type: "string" } },
+    };
+    for (let level = 0; level < 110; level += 1) deep = { allOf: [deep] };
+    const nested: TypeContext = {
+      defs: new Map([["Deep", "Deep"]]),
+      schemas: new Map([["Deep", deep]]),
+    };
+
+    expect(() =>
+      typeExpression(
+        { type: "object", required: ["id"], allOf: [{ $ref: "Deep" }] },
+        nested,
+      ),
+    ).toThrow(/Schema nests more than 100 levels deep/);
   });
 
   it("keeps the constraints written beside a reference", () => {
@@ -551,6 +657,10 @@ describe("typeExpression", () => {
     expect(
       type({ properties: { id: { type: "string" } }, required: ["id"] }),
     ).toBe("{ readonly id: string; }");
+  });
+
+  it("describes an array from its items without a type", () => {
+    expect(type({ items: { type: "string" } })).toBe("readonly string[]");
   });
 
   it("groups a compound element without reading its literals", () => {
@@ -743,6 +853,10 @@ describe("typeExpression", () => {
     expect(type({ const: "fixed" })).toBe('"fixed"');
   });
 
+  it("widens an enum value that has no literal type", () => {
+    expect(type({ enum: [{ a: 1 }, [1]] })).toBe("unknown");
+  });
+
   it("combines anyOf, oneOf and allOf", () => {
     expect(type({ anyOf: [{ type: "string" }, { type: "number" }] })).toBe(
       "string | number",
@@ -752,6 +866,47 @@ describe("typeExpression", () => {
     );
     expect(type({ allOf: [{ $ref: "UserRecord" }, { type: "object" }] })).toBe(
       "UserRecord & object",
+    );
+  });
+
+  it("intersects the parts of an allOf that are not object keywords", () => {
+    expect(type({ allOf: [{ type: "string" }, { minLength: 1 }] })).toBe(
+      "string",
+    );
+    expect(
+      type({
+        allOf: [
+          true,
+          { type: "object", properties: { a: { type: "string" } } },
+        ],
+      }),
+    ).toBe("{ readonly a?: string; } & unknown");
+  });
+
+  it("keeps the strictest additionalProperties the parts of an allOf give", () => {
+    expect(
+      type({
+        type: "object",
+        allOf: [
+          { additionalProperties: { type: "string" } },
+          { additionalProperties: false },
+        ],
+      }),
+    ).toBe("Record<string, never>");
+    expect(
+      type({
+        type: "object",
+        allOf: [
+          { additionalProperties: false },
+          { additionalProperties: { type: "string" } },
+        ],
+      }),
+    ).toBe("Record<string, never>");
+  });
+
+  it("reads a union branch that is a boolean schema as admitting anything", () => {
+    expect(type({ anyOf: [true, { type: "string" }] })).toBe(
+      "unknown | string",
     );
   });
 

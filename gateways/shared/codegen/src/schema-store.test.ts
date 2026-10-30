@@ -1,4 +1,5 @@
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readdir,
@@ -436,6 +437,27 @@ describe("writeVersion", () => {
       "0001.json",
     ]);
   });
+
+  // A directory it cannot write to says so whoever runs it, except root.
+  it.skipIf(process.getuid?.() === 0)(
+    "passes on a failure to write as itself, not as a version that exists",
+    async () => {
+      const dir = path.join(gatewayDir, SCHEMAS_DIR);
+      await chmod(dir, 0o555);
+      try {
+        const refusal = await writeNextVersion(
+          gatewayDir,
+          "0001",
+          schemasOf("ok"),
+        ).catch((caught: unknown) => caught);
+
+        expect(refusal).not.toBeInstanceOf(SchemaStoreError);
+        expect((refusal as NodeJS.ErrnoException).code).toBe("EACCES");
+      } finally {
+        await chmod(dir, 0o755);
+      }
+    },
+  );
 
   it("still refuses what is not a version when a gateway may have none", async () => {
     await writeFile(inStore("notes.md"), "");
