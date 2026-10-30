@@ -16,6 +16,8 @@ imported here so they are always in context:
 
 - Run `pnpm schemas` only when asked. It reaches the network and writes schema versions, and a
   person reviews what it writes.
+- Run `pnpm release` only when asked. It chooses what is published and at which versions, and a
+  person makes that decision.
 - Never add the `schema-history-override` label to a pull request. It exists so that a person
   decides to change a merged version.
 
@@ -40,5 +42,6 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 | The driver contract, and writing a driver | `drivers/contract.md`, `drivers/writing-a-driver.md` |
 | The openapi-rest driver | `drivers/openapi-rest/` |
 | Environment variables and the secret | `reference/environment.md` |
+| Releasing packages, the record, candidates | `start/releasing.md` |
 | The CDK app, stages, config and its rules | `infrastructure/overview.md` |
 | Terms | `reference/glossary.md` |

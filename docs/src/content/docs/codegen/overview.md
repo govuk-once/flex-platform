@@ -111,8 +111,9 @@ schema version, then `0`: `0.1.0` for a gateway at `0001.json` and client `0.1.0
 at `0010.json`. Writing a schema version raises it with nothing else to change, and a client at
 `1.x` takes every gateway's package to `1.<n>.0` on its next generation. Its peer range is the
 client it was generated with and every later release of that major, such as `>=0.1.0 <1.0.0`,
-spelled out because under `1.0.0` a caret admits only the same minor. Publishing either package
-is not set up yet.
+spelled out because under `1.0.0` a caret admits only the same minor. This is the version codegen
+writes. A release keeps its major and minor and sets the patch: see
+[Releasing packages](/flex-platform/start/releasing/).
 
 ## Validators
 
