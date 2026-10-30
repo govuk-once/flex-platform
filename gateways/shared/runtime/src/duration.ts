@@ -1,10 +1,11 @@
-const DURATION_RE = /^(\d+(?:\.\d+)?)(ms|s|m)$/;
-
-const MULTIPLIERS: Record<string, number> = {
+const MULTIPLIERS = {
   ms: 1,
   s: 1_000,
   m: 60_000,
-};
+} as const;
+
+// The pattern names every unit MULTIPLIERS holds, and no other.
+const DURATION_RE = /^(\d+(?:\.\d+)?)(ms|s|m)$/;
 
 export function parseDuration(value: string): number {
   const match = DURATION_RE.exec(value);
@@ -13,11 +14,6 @@ export function parseDuration(value: string): number {
   }
 
   const [, rawAmount, unit] = match as RegExpExecArray &
-    [string, string, string];
-  const multiplier = MULTIPLIERS[unit];
-  if (multiplier === undefined) {
-    throw new TypeError(`Unknown duration unit: ${unit}`);
-  }
-
-  return Number(rawAmount) * multiplier;
+    [string, string, keyof typeof MULTIPLIERS];
+  return Number(rawAmount) * MULTIPLIERS[unit];
 }

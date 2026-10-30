@@ -409,8 +409,7 @@ export function checkOperationSchemas(
   const problems: string[] = [...metadataAgreement(config, schemas)];
 
   for (const [name, operation] of Object.entries(config.operations)) {
-    if (!Object.hasOwn(schemas.operations, name)) continue;
-    const opSchemas = schemas.operations[name];
+    const opSchemas = ownValue(schemas.operations, name);
     if (opSchemas === undefined) continue;
     problems.push(
       ...checkOperation(name, operation, opSchemas.input, defs, reserved),

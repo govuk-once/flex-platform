@@ -6,14 +6,16 @@ export interface CompiledPath {
   readonly wildcard: boolean;
 }
 
+export function compilePath(raw: string): CompiledPath {
+  const segments = raw.split(".");
+  if (raw.length === 0 || segments.some((s) => s.length === 0)) {
+    throw new TypeError(`Invalid field path: ${JSON.stringify(raw)}`);
+  }
+  return { raw, segments, wildcard: segments.includes("*") };
+}
+
 export function compilePaths(paths: readonly string[]): CompiledPath[] {
-  return paths.map((raw) => {
-    const segments = raw.split(".");
-    if (raw.length === 0 || segments.some((s) => s.length === 0)) {
-      throw new TypeError(`Invalid field path: ${JSON.stringify(raw)}`);
-    }
-    return { raw, segments, wildcard: segments.includes("*") };
-  });
+  return paths.map(compilePath);
 }
 
 // Every value the path matches; a `*` fans out over array entries and object values.
