@@ -33,17 +33,24 @@ export function stackIn(region: string, nag = false): Stack {
   });
 }
 
-export function edgeIn(stack: Stack): Edge {
-  const viewerRequest = new ViewerRequestFunction(stack, "ViewerRequest", {
-    environment: "sandbox",
-    issuers: ISSUERS,
-  });
-  const originRequest = new OriginRequestFunction(stack, "OriginRequest", {
-    environment: "sandbox",
-    issuers: ISSUERS,
-    routes: ROUTES,
-    apiAccounts: API_ACCOUNTS,
-  });
+// The functions are built in `functionsStack` when it is given, so a test can build the edge
+// somewhere they refuse to be.
+export function edgeIn(stack: Stack, functionsStack = stack): Edge {
+  const viewerRequest = new ViewerRequestFunction(
+    functionsStack,
+    "ViewerRequest",
+    { environment: "sandbox", issuers: ISSUERS },
+  );
+  const originRequest = new OriginRequestFunction(
+    functionsStack,
+    "OriginRequest",
+    {
+      environment: "sandbox",
+      issuers: ISSUERS,
+      routes: ROUTES,
+      apiAccounts: API_ACCOUNTS,
+    },
+  );
   return new Edge(stack, "Edge", {
     environment: "sandbox",
     zone: ZONE,

@@ -6,7 +6,10 @@ import { CONTENT_SECURITY_POLICY } from "./response-headers-policy.ts";
 
 describe("Edge", () => {
   it("refuses any region but us-east-1", () => {
-    expect(() => edgeIn(stackIn("eu-west-2"))).toThrow("us-east-1");
+    // Its functions refuse the region too, so they are built where they belong.
+    expect(() => edgeIn(stackIn("eu-west-2"), stackIn("us-east-1"))).toThrow(
+      "The edge must be created in us-east-1",
+    );
   });
 
   it("has no unacknowledged cdk-nag finding", () => {
