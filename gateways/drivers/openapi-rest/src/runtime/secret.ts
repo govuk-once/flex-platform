@@ -1,5 +1,5 @@
+import type { SecretProvider, SecretReadOptions } from "@repo/gateway-core";
 import { GatewayError } from "@repo/gateway-runtime";
-import type { SecretProvider, SecretReadOptions } from "@repo/gateway-types";
 import { isRecord } from "@repo/utils/is-record";
 
 import type { SecretField, SecretValues } from "../config/secret-field.ts";

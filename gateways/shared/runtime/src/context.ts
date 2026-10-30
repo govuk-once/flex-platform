@@ -2,7 +2,7 @@ import type {
   DriverContext,
   DriverLogFields,
   DriverLogger,
-} from "@repo/gateway-types";
+} from "@repo/gateway-core";
 import { isScalar } from "@repo/utils/is-scalar";
 
 import { GatewayError } from "./errors.ts";

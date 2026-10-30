@@ -12,8 +12,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
+import type { EnvelopeResponse } from "@repo/gateway-core";
 import { GatewayError } from "@repo/gateway-runtime";
-import type { EnvelopeResponse } from "@repo/gateway-types";
 import {
   afterAll,
   afterEach,

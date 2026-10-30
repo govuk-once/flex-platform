@@ -1,5 +1,5 @@
 import type { DriverDefinition, ExecutorOptions } from "@repo/gateway-config";
-import type { ExecuteFn } from "@repo/gateway-types";
+import type { ExecuteFn } from "@repo/gateway-core";
 
 // A driver with no transport: enough to generate, bundle and dispatch without involving a driver
 // package. The generated entry point, the configuration and a test all reach this module, so a

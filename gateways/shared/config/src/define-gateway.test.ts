@@ -4,7 +4,7 @@ import type {
   GatewaySchemas,
   OperationHandler,
   SecretProvider,
-} from "@repo/gateway-types";
+} from "@repo/gateway-core";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { defineGateway } from "./define-gateway.ts";

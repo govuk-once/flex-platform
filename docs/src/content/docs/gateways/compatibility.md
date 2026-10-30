@@ -117,6 +117,6 @@ Accepting an unsafe change costs every caller.
 
 :::caution[Not covered]
 The check covers the schemas only. It does not compare the generated types when the generator
-changes. It does not compare the error codes, which live in `@repo/gateway-types`. A change to
+changes. It does not compare the error codes, which live in `@repo/gateway-core`. A change to
 either needs the same rules applied by hand.
 :::

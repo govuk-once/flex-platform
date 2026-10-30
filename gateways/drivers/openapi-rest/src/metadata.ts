@@ -1,4 +1,4 @@
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 
 import { normaliseHeaderName } from "./headers.ts";

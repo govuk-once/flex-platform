@@ -76,7 +76,7 @@ export default [
   "dependencies": {
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-runtime": "workspace:*",
-    "@repo/gateway-types": "workspace:*"
+    "@repo/gateway-core": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -98,7 +98,7 @@ handler type:
 
 ```ts title="src/types.ts"
 import type { BrandedHandler } from "@repo/gateway-config";
-import type { OperationResult } from "@repo/gateway-types";
+import type { OperationResult } from "@repo/gateway-core";
 
 export const JSON_RPC_DRIVER_TYPE = "json-rpc";
 
@@ -134,7 +134,7 @@ import type {
   ExecutorOptions,
   GatewayConfig,
 } from "@repo/gateway-config";
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 
 import { JSON_RPC_DRIVER_TYPE, type JsonRpcHandler } from "../types.ts";
 import { checkOperationSchemas } from "./check.ts";
@@ -193,7 +193,7 @@ so deriving copies each operation's declared schemas, in the order they are writ
 
 ```ts title="src/derive/index.ts"
 import type { DeriveSchemas } from "@repo/gateway-config";
-import type { OperationSchemas } from "@repo/gateway-types";
+import type { OperationSchemas } from "@repo/gateway-core";
 
 import type { JsonRpcGatewayConfig } from "../config/definition.ts";
 
@@ -224,7 +224,7 @@ import type {
   DriverDefinition,
   GatewayConfig,
 } from "@repo/gateway-config";
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas } from "@repo/gateway-core";
 
 // The input is sent whole as the call's params, and the automatic mapping answers `ok` and
 // nothing else. An operation with a handler decides its own outcomes.
@@ -254,7 +254,7 @@ them itself, without the network, and fails if `pnpm schemas` would write a new 
 ## 5. Custom handlers
 
 ```ts title="src/config/handler.ts"
-import type { OperationResult } from "@repo/gateway-types";
+import type { OperationResult } from "@repo/gateway-core";
 
 import type { JsonRpcClient, JsonRpcHandler } from "../types.ts";
 
@@ -285,7 +285,7 @@ import type {
   DriverContext,
   ExecuteFn,
   SecretProvider,
-} from "@repo/gateway-types";
+} from "@repo/gateway-core";
 
 import type { JsonRpcGatewayConfig } from "../config/definition.ts";
 import type { JsonRpcClient } from "../types.ts";

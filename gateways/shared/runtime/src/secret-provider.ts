@@ -1,5 +1,5 @@
 import { SecretsProvider } from "@aws-lambda-powertools/parameters/secrets";
-import type { SecretObject, SecretProvider } from "@repo/gateway-types";
+import type { SecretObject, SecretProvider } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 
 import { GatewayError } from "./errors.ts";

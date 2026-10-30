@@ -8,7 +8,7 @@ that means methods, paths, status codes and headers. A driver turns a validated 
 calls, and turns the upstream's answer into a named outcome.
 
 The runtime and the generator know nothing about a driver except the contract on this page. The
-contract lives in `@repo/gateway-config` (the definition) and `@repo/gateway-types` (the execution
+contract lives in `@repo/gateway-config` (the definition) and `@repo/gateway-core` (the execution
 types).
 
 ## The driver definition

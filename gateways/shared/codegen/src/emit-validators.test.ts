@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-import type { GatewaySchemas, Validator } from "@repo/gateway-types";
+import type { GatewaySchemas, Validator } from "@repo/gateway-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { compileValidators, emitValidators } from "./emit-validators.ts";

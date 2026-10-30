@@ -6,7 +6,7 @@ import type {
   EnvelopeInbound,
   EnvelopeSuccess,
   Validator,
-} from "@repo/gateway-types";
+} from "@repo/gateway-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GatewayError } from "./errors.ts";

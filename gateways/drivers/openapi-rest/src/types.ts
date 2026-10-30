@@ -1,5 +1,5 @@
 import type { BrandedHandler } from "@repo/gateway-config";
-import type { OperationResult } from "@repo/gateway-types";
+import type { OperationResult } from "@repo/gateway-core";
 
 export const OPENAPI_REST_DRIVER_TYPE = "openapi-rest";
 

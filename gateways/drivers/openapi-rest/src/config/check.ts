@@ -1,4 +1,4 @@
-import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
+import type { GatewaySchemas, JSONSchema } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 import { ownValue } from "@repo/utils/own-value";
 import { stringsIn } from "@repo/utils/strings-in";

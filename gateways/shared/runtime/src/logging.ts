@@ -1,4 +1,4 @@
-import type { DriverLogger } from "@repo/gateway-types";
+import type { DriverLogger } from "@repo/gateway-core";
 import { isScalar } from "@repo/utils/is-scalar";
 import type { Logger } from "pino";
 import pino from "pino";

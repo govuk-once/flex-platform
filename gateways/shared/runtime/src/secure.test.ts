@@ -1,4 +1,4 @@
-import type { SecureValue } from "@repo/gateway-types";
+import type { SecureValue } from "@repo/gateway-core";
 import { describe, expect, it } from "vitest";
 
 import { GatewayError } from "./errors.ts";

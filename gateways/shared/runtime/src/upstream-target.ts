@@ -1,4 +1,4 @@
-import type { SecretProvider } from "@repo/gateway-types";
+import type { SecretProvider } from "@repo/gateway-core";
 
 import { createSecretProvider } from "./secret-provider.ts";
 

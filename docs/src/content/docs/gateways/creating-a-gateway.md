@@ -43,7 +43,7 @@ gateways/services/example/
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/gateway-codegen": "workspace:*",
-    "@repo/gateway-types": "workspace:*",
+    "@repo/gateway-core": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "eslint": "10.10.0"
   }

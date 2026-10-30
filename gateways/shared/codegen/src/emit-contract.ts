@@ -1,4 +1,4 @@
-import type { GatewaySchemas, JSONSchema } from "@repo/gateway-types";
+import type { GatewaySchemas, JSONSchema } from "@repo/gateway-core";
 import { sortedEntries } from "@repo/utils/sorted-entries";
 
 import { docComment, documentationOf } from "./doc-comment.ts";
@@ -21,7 +21,7 @@ function typeOf(schema: JSONSchema, ctx: TypeContext, context: string): string {
 }
 
 // The call contract, as types only. A caller names an operation, builds its input and reads the
-// response. The emitted module carries one import, a type import of "@repo/gateway-types" for the
+// response. The emitted module carries one import, a type import of "@repo/gateway-core" for the
 // envelope and secure-value shapes, erased when the file compiles, so nothing here is imported at
 // run time at all. That package declares no dependencies of its own, so naming an envelope costs
 // a consumer neither the runtime nor the generator.
@@ -200,7 +200,7 @@ export async function emitContract(
 
   const source = [
     preamble(gatewayId),
-    `import type { ErrorCode, SecureValue } from "@repo/gateway-types";`,
+    `import type { ErrorCode, SecureValue } from "@repo/gateway-core";`,
     "",
     declarations.join("\n\n"),
     "",

@@ -4,7 +4,7 @@ import type {
   GatewaySchemas,
   OperationHandler,
   SecretProvider,
-} from "@repo/gateway-types";
+} from "@repo/gateway-core";
 
 import type { GatewayConfig, OperationConfig } from "./types.ts";
 
