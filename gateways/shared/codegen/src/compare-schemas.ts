@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import type { GatewaySchemas } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
+import { oneOrMoreStrings } from "@repo/utils/one-or-more-strings";
 import { ownValue } from "@repo/utils/own-value";
 import { sortedNames } from "@repo/utils/sorted-names";
 import { stringsIn } from "@repo/utils/strings-in";
@@ -32,6 +33,20 @@ export interface SchemaComparison {
 // What a difference does to the values a schema admits. "unknown" is a difference nothing here
 // can place, which is a break in either direction.
 type Effect = "narrows" | "widens" | "unknown";
+
+// The effect of a difference that may widen or narrow, and never both.
+function effectOf(widens: boolean, narrows: boolean): Effect {
+  if (widens) return "widens";
+  if (narrows) return "narrows";
+  return "unknown";
+}
+
+// A keyword's value before and after, as a report says it: added, removed or changed.
+function changed(before: unknown, after: unknown): string {
+  if (before === undefined) return `is now ${JSON.stringify(after)}`;
+  if (after === undefined) return `is no longer ${JSON.stringify(before)}`;
+  return `changed from ${JSON.stringify(before)} to ${JSON.stringify(after)}`;
+}
 
 // Where a schema sits in the one that holds it. A schema under a negation, a condition or a
 // counted `contains` does not act on the whole the way it acts on itself, so which side of the
@@ -104,6 +119,12 @@ const BOUND_DEFAULTS: Readonly<Record<string, number>> = {
 // they constrain nothing, and a `contains` that came or went is a difference in its own right.
 const CONTAINS_BOUNDS = new Set(["maxContains", "minContains"]);
 
+// Nothing counts matches without a `contains` on both sides to count; one that came or went is
+// read as the difference it is.
+const countsNothing = (key: string, previous: Schema, next: Schema): boolean =>
+  CONTAINS_BOUNDS.has(key) &&
+  !(Object.hasOwn(previous, "contains") && Object.hasOwn(next, "contains"));
+
 const SUBSCHEMA_MAPS = new Set([
   "$defs",
   "dependentSchemas",
@@ -160,28 +181,27 @@ function shapeOf(value: unknown): unknown {
   if (!isRecord(value)) return value;
   const shape: Record<string, unknown> = {};
   for (const key of sortedNames(Object.keys(value))) {
-    if (ANNOTATIONS.has(key)) continue;
-    const held = value[key];
-    if (SUBSCHEMA_MAPS.has(key) && isRecord(held)) {
-      shape[key] = Object.fromEntries(
-        sortedNames(Object.keys(held)).map((name) => [
-          name,
-          shapeOf(held[name]),
-        ]),
-      );
-    } else if (BRANCH_LISTS.has(key) && Array.isArray(held)) {
-      shape[key] = byJson(held.map(shapeOf));
-    } else if (SUBSCHEMA_LISTS.has(key) && Array.isArray(held)) {
-      shape[key] = held.map(shapeOf);
-    } else if (SUBSCHEMAS.has(key)) {
-      shape[key] = shapeOf(held);
-    } else if (key === "required" || key === "type" || key === "enum") {
-      shape[key] = Array.isArray(held) ? byJson(held) : held;
-    } else {
-      shape[key] = held;
-    }
+    if (!ANNOTATIONS.has(key)) shape[key] = keywordShape(key, value[key]);
   }
   return shape;
+}
+
+// What one keyword holds, with any schemas in it read as shapes too.
+function keywordShape(key: string, held: unknown): unknown {
+  if (SUBSCHEMA_MAPS.has(key) && isRecord(held)) {
+    return Object.fromEntries(
+      sortedNames(Object.keys(held)).map((name) => [name, shapeOf(held[name])]),
+    );
+  }
+  if (BRANCH_LISTS.has(key) && Array.isArray(held)) {
+    return byJson(held.map(shapeOf));
+  }
+  if (SUBSCHEMA_LISTS.has(key) && Array.isArray(held)) return held.map(shapeOf);
+  if (SUBSCHEMAS.has(key)) return shapeOf(held);
+  if (key === "required" || key === "type" || key === "enum") {
+    return Array.isArray(held) ? byJson(held) : held;
+  }
+  return held;
 }
 
 const sameShape = (previous: unknown, next: unknown): boolean =>
@@ -244,11 +264,7 @@ const sameAt = (key: string, previous: unknown, next: unknown): boolean =>
 // The types a schema names, or undefined when it names none and so admits any. Ajv reads
 // OpenAPI's `nullable` beside a type as null being one of them.
 function typesOf(schema: Schema): ReadonlySet<string> | undefined {
-  const declared = Array.isArray(schema.type)
-    ? stringsIn(schema.type)
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : undefined;
+  const declared = oneOrMoreStrings(schema.type);
   if (declared === undefined) return undefined;
   return new Set(schema.nullable === true ? [...declared, "null"] : declared);
 }
@@ -339,6 +355,28 @@ class Comparison {
     return beside.length === 0 ? (ownValue(defs, value.$ref) ?? value) : value;
   }
 
+  // A reference on one side only is compared as the definition it stands for.
+  #oneReference(
+    previous: Schema,
+    next: Schema,
+    position: Position,
+    where: string,
+    depth: number,
+  ): void {
+    const resolvedPrevious = this.#resolve(previous, this.#previous);
+    const resolvedNext = this.#resolve(next, this.#next);
+    if (resolvedPrevious === previous && resolvedNext === next) {
+      this.add(
+        "unknown",
+        position,
+        where,
+        "has a reference on one side that cannot be read as its definition",
+      );
+      return;
+    }
+    this.schema(resolvedPrevious, resolvedNext, position, where, depth + 1);
+  }
+
   schema(
     previousValue: unknown,
     nextValue: unknown,
@@ -374,36 +412,22 @@ class Comparison {
       return;
     }
 
-    if (typeof previous.$ref === "string" || typeof next.$ref === "string") {
-      if (previous.$ref === next.$ref && typeof next.$ref === "string") {
-        this.definition(next.$ref, position);
-      } else if (
-        typeof previous.$ref === "string" &&
-        typeof next.$ref === "string"
-      ) {
-        // A definition is a type a caller names, so another in its place is another type.
-        this.add(
-          "unknown",
-          position,
-          where,
-          `refers to "${next.$ref}" where it referred to "${previous.$ref}"`,
-        );
-        return;
-      } else {
-        const resolvedPrevious = this.#resolve(previous, this.#previous);
-        const resolvedNext = this.#resolve(next, this.#next);
-        if (resolvedPrevious === previous && resolvedNext === next) {
-          this.add(
-            "unknown",
-            position,
-            where,
-            "has a reference on one side that cannot be read as its definition",
-          );
-          return;
-        }
-        this.schema(resolvedPrevious, resolvedNext, position, where, depth + 1);
-        return;
-      }
+    const before = previous.$ref;
+    const after = next.$ref;
+    if (typeof after === "string" && before === after) {
+      this.definition(after, position);
+    } else if (typeof before === "string" && typeof after === "string") {
+      // A definition is a type a caller names, so another in its place is another type.
+      this.add(
+        "unknown",
+        position,
+        where,
+        `refers to "${after}" where it referred to "${before}"`,
+      );
+      return;
+    } else if (typeof before === "string" || typeof after === "string") {
+      this.#oneReference(previous, next, position, where, depth);
+      return;
     }
 
     // What is written beside a reference applies as well, so it is read like any other schema.
@@ -443,17 +467,7 @@ class Comparison {
     if (take("enum", "const")) this.#values(previous, next, position, where);
 
     for (const key of [...LOWER_BOUNDS, ...UPPER_BOUNDS]) {
-      if (!take(key)) continue;
-      // Nothing counts matches without a `contains` to count; one that came or went is read
-      // below, as the difference it is.
-      if (
-        CONTAINS_BOUNDS.has(key) &&
-        !(
-          Object.hasOwn(previous, "contains") && Object.hasOwn(next, "contains")
-        )
-      ) {
-        continue;
-      }
+      if (!take(key) || countsNothing(key, previous, next)) continue;
       this.#bound(
         key,
         previous[key],
@@ -463,40 +477,10 @@ class Comparison {
         where,
       );
     }
-
     for (const key of UNORDERED) {
-      if (!take(key)) continue;
-      const before = previous[key];
-      const after = next[key];
-      if (isDeepStrictEqual(before, after)) continue;
-      this.add(
-        before === undefined
-          ? "narrows"
-          : after === undefined
-            ? "widens"
-            : "unknown",
-        position,
-        `${where}.${key}`,
-        before === undefined
-          ? `is now ${JSON.stringify(after)}`
-          : after === undefined
-            ? `is no longer ${JSON.stringify(before)}`
-            : `changed from ${JSON.stringify(before)} to ${JSON.stringify(after)}`,
-      );
+      if (take(key)) this.#unordered(key, previous, next, position, where);
     }
-
-    if (take("uniqueItems")) {
-      const before = previous.uniqueItems === true;
-      const after = next.uniqueItems === true;
-      if (before !== after) {
-        this.add(
-          after ? "narrows" : "widens",
-          position,
-          `${where}.uniqueItems`,
-          after ? "items must now be unique" : "items need no longer be unique",
-        );
-      }
-    }
+    if (take("uniqueItems")) this.#unique(previous, next, position, where);
 
     if (take("required")) this.#required(previous, next, position, where);
     if (take("properties")) {
@@ -561,7 +545,7 @@ class Comparison {
     // Spelt differently and admitting the same: "number" beside "integer" adds nothing.
     if (keeps && adds) return;
     this.add(
-      keeps ? "widens" : adds ? "narrows" : "unknown",
+      effectOf(keeps, adds),
       position,
       `${where}.type`,
       `changed from ${spell(before)} to ${spell(after)}`,
@@ -634,11 +618,42 @@ class Comparison {
       next > previous === lower ? "narrows" : "widens",
       position,
       at,
-      before === undefined
-        ? `is now ${JSON.stringify(after)}`
-        : after === undefined
-          ? `is no longer ${JSON.stringify(before)}`
-          : `changed from ${String(before)} to ${String(after)}`,
+      changed(before, after),
+    );
+  }
+
+  #unordered(
+    key: string,
+    previous: Schema,
+    next: Schema,
+    position: Position,
+    where: string,
+  ): void {
+    const before = previous[key];
+    const after = next[key];
+    if (isDeepStrictEqual(before, after)) return;
+    this.add(
+      effectOf(after === undefined, before === undefined),
+      position,
+      `${where}.${key}`,
+      changed(before, after),
+    );
+  }
+
+  #unique(
+    previous: Schema,
+    next: Schema,
+    position: Position,
+    where: string,
+  ): void {
+    const before = previous.uniqueItems === true;
+    const after = next.uniqueItems === true;
+    if (before === after) return;
+    this.add(
+      after ? "narrows" : "widens",
+      position,
+      `${where}.uniqueItems`,
+      after ? "items must now be unique" : "items need no longer be unique",
     );
   }
 
@@ -706,45 +721,57 @@ class Comparison {
       const at = `${where}.properties.${name}`;
       if (Object.hasOwn(before, name)) {
         this.schema(before[name], after[name], position, at, depth + 1);
-        continue;
+      } else {
+        this.#added(previous, name, after[name], position, at, depth);
       }
-      const governing = this.#governing(previous, name);
-      if (governing === UNPLACEABLE) {
-        this.add(
-          "unknown",
-          position,
-          at,
-          "was added under more than one pattern, so what held the name cannot be read",
-        );
-        continue;
-      }
-      // A dictionary already said what values the name carried, and a declaration of it has to
-      // keep saying that: an outcome whose values were strings does not quietly gain a number.
-      if (constrains(governing)) {
-        this.schema(governing, after[name], position, at, depth + 1);
-        continue;
-      }
-      if (position === "output") {
-        // Nothing was promised under the name, so more to read breaks no one who was not
-        // reading it. Declaring it is what puts it in the contract; what an outcome does with a
-        // field it does not declare is a separate question, and not one a caller was told.
-        this.survives(at, "was added");
-        continue;
-      }
-      // A name an open object took any value under is now held to a schema; a closed one
-      // refused the name, and now takes it.
-      this.add(
-        governing === false ? "widens" : "narrows",
-        position,
-        at,
-        "was added",
-      );
     }
     for (const name of sortedNames(Object.keys(before))) {
       if (Object.hasOwn(after, name)) continue;
       // Either way a caller names it: one goes on sending it, the other goes on reading it.
       this.breaks(`${where}.properties.${name}`, "was removed");
     }
+  }
+
+  // A property the previous version did not declare, read against what held its name there.
+  #added(
+    previous: Schema,
+    name: string,
+    schema: unknown,
+    position: Position,
+    at: string,
+    depth: number,
+  ): void {
+    const governing = this.#governing(previous, name);
+    if (governing === UNPLACEABLE) {
+      this.add(
+        "unknown",
+        position,
+        at,
+        "was added under more than one pattern, so what held the name cannot be read",
+      );
+      return;
+    }
+    // A dictionary already said what values the name carried, and a declaration of it has to
+    // keep saying that: an outcome whose values were strings does not quietly gain a number.
+    if (constrains(governing)) {
+      this.schema(governing, schema, position, at, depth + 1);
+      return;
+    }
+    if (position === "output") {
+      // Nothing was promised under the name, so more to read breaks no one who was not
+      // reading it. Declaring it is what puts it in the contract; what an outcome does with a
+      // field it does not declare is a separate question, and not one a caller was told.
+      this.survives(at, "was added");
+      return;
+    }
+    // A name an open object took any value under is now held to a schema; a closed one
+    // refused the name, and now takes it.
+    this.add(
+      governing === false ? "widens" : "narrows",
+      position,
+      at,
+      "was added",
+    );
   }
 
   #additional(
@@ -891,11 +918,7 @@ class Comparison {
     // Branches that only came, or only went, move the whole the way they move it. Some of each
     // is a union that changed too much to place.
     this.add(
-      pairing.previous.length === 0
-        ? "widens"
-        : pairing.next.length === 0
-          ? "narrows"
-          : "unknown",
+      effectOf(pairing.previous.length === 0, pairing.next.length === 0),
       position,
       at,
       `has ${String(next.length)} branches where it had ${String(previous.length)}`,
@@ -1024,6 +1047,22 @@ function usageOf(schemas: GatewaySchemas): ReadonlyMap<string, Set<Position>> {
   return used;
 }
 
+// Which side of a call each definition is used on in either version.
+function usageOfEither(
+  previous: GatewaySchemas,
+  next: GatewaySchemas,
+): ReadonlyMap<string, ReadonlySet<Position>> {
+  const usage = new Map<string, Set<Position>>();
+  for (const version of [previous, next]) {
+    for (const [name, positions] of usageOf(version)) {
+      const merged = usage.get(name) ?? new Set<Position>();
+      usage.set(name, merged);
+      for (const position of positions) merged.add(position);
+    }
+  }
+  return usage;
+}
+
 function withoutKey(schema: Schema, key: string): Schema {
   return Object.fromEntries(
     Object.entries(schema).filter(([name]) => name !== key),
@@ -1078,10 +1117,18 @@ export function compareSchemas(
   previous: GatewaySchemas,
   next: GatewaySchemas,
 ): SchemaComparison {
-  const previousDefs: Defs = previous.defs ?? {};
-  const nextDefs: Defs = next.defs ?? {};
-  const comparison = new Comparison(previousDefs, nextDefs);
+  const comparison = new Comparison(previous.defs ?? {}, next.defs ?? {});
+  compareOperations(comparison, previous, next);
+  compareMeta(comparison, previous.meta ?? {}, next.meta ?? {});
+  compareDefinitions(comparison, previous, next);
+  return { breaking: comparison.breaking, compatible: comparison.compatible };
+}
 
+function compareOperations(
+  comparison: Comparison,
+  previous: GatewaySchemas,
+  next: GatewaySchemas,
+): void {
   for (const name of sortedNames(Object.keys(previous.operations))) {
     const before = ownValue(previous.operations, name);
     const after = ownValue(next.operations, name);
@@ -1093,32 +1140,44 @@ export function compareSchemas(
     }
 
     comparison.schema(before.input, after.input, "input", `${where}.input`);
-
-    for (const outcome of sortedNames(Object.keys(before.outcomes))) {
-      const at = `${where}.outcomes.${outcome}`;
-      const was = ownValue(before.outcomes, outcome);
-      const is = ownValue(after.outcomes, outcome);
-      if (is === undefined) comparison.breaks(at, "was removed");
-      else comparison.schema(was, is, "output", at);
-    }
-    for (const outcome of sortedNames(Object.keys(after.outcomes))) {
-      if (Object.hasOwn(before.outcomes, outcome)) continue;
-      // A caller's switch over the outcomes was complete, and no longer is.
-      comparison.breaks(`${where}.outcomes.${outcome}`, "was added");
-    }
+    compareOutcomes(comparison, where, before.outcomes, after.outcomes);
   }
   for (const name of sortedNames(Object.keys(next.operations))) {
     if (!Object.hasOwn(previous.operations, name)) {
       comparison.survives(`operations.${name}`, "was added");
     }
   }
+}
 
-  // What a gateway reports beside a result runs the way an outcome does. Every name in it is
-  // optional, so a caller already handles one that is absent: a name may come or go, and one
-  // that goes leaves a caller compiled against it with a branch that no longer runs, and one
-  // compiled after it with nothing to name. A name that stays is held to what it promised.
-  const previousMeta = previous.meta ?? {};
-  const nextMeta = next.meta ?? {};
+function compareOutcomes(
+  comparison: Comparison,
+  where: string,
+  previous: Readonly<Record<string, unknown>>,
+  next: Readonly<Record<string, unknown>>,
+): void {
+  for (const outcome of sortedNames(Object.keys(previous))) {
+    const at = `${where}.outcomes.${outcome}`;
+    const was = ownValue(previous, outcome);
+    const is = ownValue(next, outcome);
+    if (is === undefined) comparison.breaks(at, "was removed");
+    else comparison.schema(was, is, "output", at);
+  }
+  for (const outcome of sortedNames(Object.keys(next))) {
+    if (Object.hasOwn(previous, outcome)) continue;
+    // A caller's switch over the outcomes was complete, and no longer is.
+    comparison.breaks(`${where}.outcomes.${outcome}`, "was added");
+  }
+}
+
+// What a gateway reports beside a result runs the way an outcome does. Every name in it is
+// optional, so a caller already handles one that is absent: a name may come or go, and one
+// that goes leaves a caller compiled against it with a branch that no longer runs, and one
+// compiled after it with nothing to name. A name that stays is held to what it promised.
+function compareMeta(
+  comparison: Comparison,
+  previousMeta: Readonly<Record<string, unknown>>,
+  nextMeta: Readonly<Record<string, unknown>>,
+): void {
   for (const name of sortedNames(Object.keys(previousMeta))) {
     const is = ownValue(nextMeta, name);
     if (is === undefined) comparison.survives(`meta.${name}`, "was removed");
@@ -1136,20 +1195,20 @@ export function compareSchemas(
       comparison.survives(`meta.${name}`, "was added");
     }
   }
+}
 
-  // A definition is a type the call contract exports under its name, whatever refers to it, so
-  // every one is read: on each side of the call it is used on, taken from both versions, and on
-  // both sides when nothing refers to it and nothing says which way it runs. What the comparison
-  // reached on its way through the operations is already read and is not read twice.
-  const usage = new Map<string, Set<Position>>();
-  for (const version of [previous, next]) {
-    for (const [name, positions] of usageOf(version)) {
-      const merged = usage.get(name) ?? new Set<Position>();
-      usage.set(name, merged);
-      for (const position of positions) merged.add(position);
-    }
-  }
-
+// A definition is a type the call contract exports under its name, whatever refers to it, so
+// every one is read: on each side of the call it is used on, taken from both versions, and on
+// both sides when nothing refers to it and nothing says which way it runs. What the comparison
+// reached on its way through the operations is already read and is not read twice.
+function compareDefinitions(
+  comparison: Comparison,
+  previous: GatewaySchemas,
+  next: GatewaySchemas,
+): void {
+  const previousDefs: Defs = previous.defs ?? {};
+  const nextDefs: Defs = next.defs ?? {};
+  const usage = usageOfEither(previous, next);
   for (const name of sortedNames(Object.keys(previousDefs))) {
     if (!Object.hasOwn(nextDefs, name)) {
       comparison.breaks(`defs.${name}`, "was removed");
@@ -1167,8 +1226,6 @@ export function compareSchemas(
       comparison.survives(`defs.${name}`, "was added");
     }
   }
-
-  return { breaking: comparison.breaking, compatible: comparison.compatible };
 }
 
 // A version a caller of one before it would not survive. Every break between every pair is

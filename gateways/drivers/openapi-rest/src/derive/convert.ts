@@ -1,4 +1,5 @@
 import { isRecord } from "@repo/utils/is-record";
+import { oneOrMoreStrings } from "@repo/utils/one-or-more-strings";
 
 // One schema of an upstream's OpenAPI document as a gateway holds it. The two sides of a call
 // are converted differently, because they fail differently. An input is what a caller sends and
@@ -231,11 +232,10 @@ function reverses(
 // `{b:2,a:1}` — and a tag read as text would take those for two.
 function singleValue(schema: unknown): string | undefined {
   if (!isRecord(schema)) return undefined;
-  const [value, ...rest] = Object.hasOwn(schema, "const")
-    ? [schema.const]
-    : Array.isArray(schema.enum)
-      ? (schema.enum as unknown[])
-      : [];
+  let values: unknown[] = [];
+  if (Object.hasOwn(schema, "const")) values = [schema.const];
+  else if (Array.isArray(schema.enum)) values = schema.enum as unknown[];
+  const [value, ...rest] = values;
   if (rest.length > 0 || value === undefined) return undefined;
   const kind = typeof value;
   return kind === "string" || kind === "number" || kind === "boolean"
@@ -282,11 +282,7 @@ function taggedUnion(branches: readonly unknown[]): boolean {
 }
 
 const typesOf = (schema: Readonly<Record<string, unknown>>): string[] =>
-  Array.isArray(schema.type)
-    ? schema.type.filter((type): type is string => typeof type === "string")
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : [];
+  oneOrMoreStrings(schema.type) ?? [];
 
 const admits = (types: readonly string[], type: string): boolean =>
   types.includes(type) || (type === "number" && types.includes("integer"));
@@ -298,7 +294,7 @@ export function convertSchema(
   position: Position = TOP,
 ): unknown {
   if (!isRecord(schema)) return schema;
-  const { side, notes, problems } = conversion;
+  const { side, notes } = conversion;
   const composed =
     position.composed || COMPOSITION.some((key) => Object.hasOwn(schema, key));
   let converted: Record<string, unknown> = {};
@@ -327,93 +323,24 @@ export function convertSchema(
       continue;
     }
 
-    const reversed = position.reversed || reverses(key, schema);
     if (key === "$ref") {
-      const name =
-        typeof value === "string" ? SCHEMA_REF.exec(value)?.[1] : undefined;
-      if (name === undefined) {
-        problems.push(
-          `${where} refers to ${JSON.stringify(value)}; only a schema in the document's own components can be referred to`,
-        );
-        continue;
-      }
-      // Where it is used, not only that it is: a definition stands for every place it is named,
-      // and is converted for the strictest of them.
-      const use = conversion.refs.get(name) ?? {
-        composed: false,
-        unionBranch: false,
-        branchField: false,
-        reversed: false,
-      };
-      conversion.refs.set(name, {
-        composed: use.composed || composed,
-        unionBranch: use.unionBranch || position.unionBranch,
-        branchField: use.branchField || position.branchField,
-        reversed: use.reversed || position.reversed,
+      const name = referredTo(value, where, conversion, {
+        ...position,
+        composed,
       });
-      setKey(converted, "$ref", name);
-    } else if (SUBSCHEMA_MAPS.includes(key) && isRecord(value)) {
-      const held: Record<string, unknown> = {};
-      for (const [name, member] of Object.entries(value)) {
-        setKey(
-          held,
-          name,
-          convertSchema(member, `${where}.${key}.${name}`, conversion, {
-            composed,
-            unionBranch: false,
-            branchField: key === "properties" && position.unionBranch,
-            reversed,
-          }),
-        );
-      }
-      setKey(converted, key, held);
-    } else if (SUBSCHEMAS.includes(key)) {
-      setKey(
-        converted,
-        key,
-        convertSchema(value, `${where}.${key}`, conversion, {
-          composed,
-          unionBranch: false,
-          branchField: false,
-          reversed,
-        }),
-      );
-    } else if (COMPOSITION.includes(key) && Array.isArray(value)) {
-      // A branch of an `anyOf` that comes to admit more makes the whole admit more, which is
-      // the way every conversion here already runs. A branch of a `oneOf` does that only while
-      // the branches stay apart, so one whose branches nothing tells apart is left as written.
-      const branchReversed =
-        position.reversed || (key === "oneOf" && !taggedUnion(value));
-      setKey(
-        converted,
-        key,
-        value.map((held, index) =>
-          convertSchema(held, `${where}.${key}.${String(index)}`, conversion, {
-            composed: true,
-            unionBranch: key === "anyOf" || key === "oneOf",
-            branchField: false,
-            reversed: branchReversed,
-          }),
-        ),
-      );
-    } else if (key === "prefixItems" && Array.isArray(value)) {
-      // The elements of a tuple, each a schema in its own right rather than another way of
-      // saying what the whole is: an ordinary object among them is closed like any other.
-      setKey(
-        converted,
-        key,
-        value.map((held, index) =>
-          convertSchema(held, `${where}.${key}.${String(index)}`, conversion, {
-            composed,
-            unionBranch: false,
-            branchField: false,
-            reversed,
-          }),
-        ),
-      );
-    } else {
-      setKey(converted, key, value);
+      if (name !== undefined) setKey(converted, "$ref", name);
+      continue;
     }
+
+    setKey(
+      converted,
+      key,
+      convertHeld(key, value, where, conversion, {
+        composed,
+        unionBranch: position.unionBranch,
+        reversed: position.reversed || reverses(key, schema),
+      }),
+    );
   }
 
   if (side === "input" && converted.readOnly === true) {
@@ -445,56 +372,169 @@ export function convertSchema(
   }
 
   if (side === "output") {
-    // Left out, `minContains` is one: a zero taken away is a bound arriving, not one going, and
-    // an array with no match at all would pass the upstream and fail here. It stays, and
-    // `maxContains` stays with it, since a validator refuses a zero with none beside it.
-    const counted = converted.minContains === 0;
-    if (counted) {
-      notes.add(
-        `${where} counts matches from none, which is not what counting from one would say, so both of its bounds are kept`,
+    return loosenedOutcome(converted, where, conversion, position.branchField);
+  }
+  return closedInput(converted, where, notes, composed);
+}
+
+// The definition a `$ref` names, which must be one of the document's own.
+function referredTo(
+  value: unknown,
+  where: string,
+  { problems, refs }: Conversion,
+  position: Position,
+): string | undefined {
+  const name =
+    typeof value === "string" ? SCHEMA_REF.exec(value)?.[1] : undefined;
+  if (name === undefined) {
+    problems.push(
+      `${where} refers to ${JSON.stringify(value)}; only a schema in the document's own components can be referred to`,
+    );
+    return undefined;
+  }
+  // Where it is used, not only that it is: a definition stands for every place it is named,
+  // and is converted for the strictest of them.
+  const use = refs.get(name) ?? {
+    composed: false,
+    unionBranch: false,
+    branchField: false,
+    reversed: false,
+  };
+  refs.set(name, {
+    composed: use.composed || position.composed,
+    unionBranch: use.unionBranch || position.unionBranch,
+    branchField: use.branchField || position.branchField,
+    reversed: use.reversed || position.reversed,
+  });
+  return name;
+}
+
+// What a keyword holds, with each schema in it converted for the position it is in. A keyword
+// that holds no schema is carried through as written.
+function convertHeld(
+  key: string,
+  value: unknown,
+  where: string,
+  conversion: Conversion,
+  { composed, unionBranch, reversed }: Omit<Position, "branchField">,
+): unknown {
+  if (SUBSCHEMA_MAPS.includes(key) && isRecord(value)) {
+    const held: Record<string, unknown> = {};
+    for (const [name, member] of Object.entries(value)) {
+      setKey(
+        held,
+        name,
+        convertSchema(member, `${where}.${key}.${name}`, conversion, {
+          composed,
+          unionBranch: false,
+          branchField: key === "properties" && unionBranch,
+          reversed,
+        }),
       );
     }
-    for (const key of Object.keys(converted)) {
-      if (!VALUE_CONSTRAINTS.has(key)) continue;
-      if (counted && CONTAINS_BOUNDS.has(key)) continue;
-      delete converted[key];
-    }
-    // Closed, an outcome would refuse a response for a field the upstream added.
-    if (converted.additionalProperties === false) {
-      delete converted.additionalProperties;
-    }
-    if (converted.unevaluatedProperties === false) {
-      delete converted.unevaluatedProperties;
-    }
-    const tag =
-      position.branchField &&
-      Array.isArray(converted.enum) &&
-      converted.enum.length === 1;
-    return tag ? converted : withOpenValues(converted, where, conversion);
+    return held;
   }
+  if (SUBSCHEMAS.includes(key)) {
+    return convertSchema(value, `${where}.${key}`, conversion, {
+      composed,
+      unionBranch: false,
+      branchField: false,
+      reversed,
+    });
+  }
+  if (COMPOSITION.includes(key) && Array.isArray(value)) {
+    // A branch of an `anyOf` that comes to admit more makes the whole admit more, which is
+    // the way every conversion here already runs. A branch of a `oneOf` does that only while
+    // the branches stay apart, so one whose branches nothing tells apart is left as written.
+    const branchReversed = reversed || (key === "oneOf" && !taggedUnion(value));
+    return value.map((held, index) =>
+      convertSchema(held, `${where}.${key}.${String(index)}`, conversion, {
+        composed: true,
+        unionBranch: key === "anyOf" || key === "oneOf",
+        branchField: false,
+        reversed: branchReversed,
+      }),
+    );
+  }
+  if (key === "prefixItems" && Array.isArray(value)) {
+    // The elements of a tuple, each a schema in its own right rather than another way of
+    // saying what the whole is: an ordinary object among them is closed like any other.
+    return value.map((held, index) =>
+      convertSchema(held, `${where}.${key}.${String(index)}`, conversion, {
+        composed,
+        unionBranch: false,
+        branchField: false,
+        reversed,
+      }),
+    );
+  }
+  return value;
+}
 
+// An outcome, held to its shape and to nothing an upstream may relax without asking.
+function loosenedOutcome(
+  converted: Record<string, unknown>,
+  where: string,
+  conversion: Conversion,
+  branchField: boolean,
+): unknown {
+  const { notes } = conversion;
+  // Left out, `minContains` is one: a zero taken away is a bound arriving, not one going, and
+  // an array with no match at all would pass the upstream and fail here. It stays, and
+  // `maxContains` stays with it, since a validator refuses a zero with none beside it.
+  const counted = converted.minContains === 0;
+  if (counted) {
+    notes.add(
+      `${where} counts matches from none, which is not what counting from one would say, so both of its bounds are kept`,
+    );
+  }
+  for (const key of Object.keys(converted)) {
+    if (!VALUE_CONSTRAINTS.has(key)) continue;
+    if (counted && CONTAINS_BOUNDS.has(key)) continue;
+    delete converted[key];
+  }
+  // Closed, an outcome would refuse a response for a field the upstream added.
+  if (converted.additionalProperties === false) {
+    delete converted.additionalProperties;
+  }
+  if (converted.unevaluatedProperties === false) {
+    delete converted.unevaluatedProperties;
+  }
+  const tag =
+    branchField && Array.isArray(converted.enum) && converted.enum.length === 1;
+  return tag ? converted : withOpenValues(converted, where, conversion);
+}
+
+// An input, closed to every field it does not name.
+function closedInput(
+  converted: Record<string, unknown>,
+  where: string,
+  notes: Set<string>,
+  composed: boolean,
+): Record<string, unknown> {
   const isObject =
     admits(typesOf(converted), "object") || isRecord(converted.properties);
   if (
-    isObject &&
-    converted.$ref === undefined &&
-    converted.additionalProperties === undefined &&
-    converted.unevaluatedProperties === undefined
+    !isObject ||
+    converted.$ref !== undefined ||
+    converted.additionalProperties !== undefined ||
+    converted.unevaluatedProperties !== undefined
   ) {
-    if (composed) {
-      notes.add(
-        `${where} is part of a composition, so it is left open: closing one part would refuse the fields the others declare`,
-      );
-    } else if (!namesFields(converted)) {
-      // An object of any shape, which is what a store that keeps whatever it is given says of
-      // what it keeps. Closed, it would admit only `{}`; open, it is what the upstream takes,
-      // and an operation's narrowing is where the shape a gateway sends there is stated.
-      notes.add(
-        `${where} names no field, so it is left open as an object of any shape; an operation's "narrow" can state the shape it takes`,
-      );
-    } else {
-      converted.additionalProperties = false;
-    }
+    return converted;
+  }
+  if (composed) {
+    notes.add(
+      `${where} is part of a composition, so it is left open: closing one part would refuse the fields the others declare`,
+    );
+  } else if (!namesFields(converted)) {
+    // An object of any shape, which is what a store that keeps whatever it is given says of
+    // what it keeps. Closed, it would admit only `{}`; open, it is what the upstream takes,
+    // and an operation's narrowing is where the shape a gateway sends there is stated.
+    notes.add(
+      `${where} names no field, so it is left open as an object of any shape; an operation's "narrow" can state the shape it takes`,
+    );
+  } else {
+    converted.additionalProperties = false;
   }
   return converted;
 }

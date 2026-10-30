@@ -1,5 +1,6 @@
 import type { JSONSchema } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
+import { oneOrMoreStrings } from "@repo/utils/one-or-more-strings";
 import { stringsIn } from "@repo/utils/strings-in";
 
 import { docComment, documentationOf, type Documented } from "./doc-comment.ts";
@@ -205,11 +206,9 @@ function standsFor(
   schema: unknown,
 ): Pick<TypeExpression, "literalOf" | "admits"> {
   if (!isRecord(schema)) return {};
-  const values = Array.isArray(schema.enum)
-    ? schema.enum
-    : Object.hasOwn(schema, "const")
-      ? [schema.const]
-      : undefined;
+  let values: unknown[] | undefined;
+  if (Array.isArray(schema.enum)) values = schema.enum;
+  else if (Object.hasOwn(schema, "const")) values = [schema.const];
   if (values !== undefined) {
     const kinds = new Set(values.map((value) => literalType(value).literalOf));
     const [only] = [...kinds];
@@ -338,11 +337,7 @@ function cloneComposition(composition: Composition): Composition {
 // Ajv accepts OpenAPI's `nullable` beside a type and validates null against it, so a contract
 // that left it out would reject a value the gateway takes.
 function declaredTypes(schema: JSONSchema): readonly string[] | undefined {
-  const declared = Array.isArray(schema.type)
-    ? stringsIn(schema.type)
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : undefined;
+  const declared = oneOrMoreStrings(schema.type);
   if (declared === undefined) return undefined;
   return schema.nullable === true && !declared.includes("null")
     ? [...declared, "null"]
@@ -412,24 +407,10 @@ function absorb(
   depth: number,
 ): void {
   if (depth > MAX_DEPTH) tooDeep();
-  const { shape } = into;
 
   // A reference keeps its name; in the 2020-12 dialect the keywords beside it still apply.
   if (typeof schema.$ref === "string") {
-    const name = ctx.defs.get(schema.$ref);
-    if (name === undefined) {
-      // A reference is the key of a shared definition, which the contract declares as a type of
-      // that name. A pointer into the schema itself, or into another document, is one the
-      // validators resolve and this cannot name. It is refused rather than read as `unknown`:
-      // the type would compile while describing nothing, where hoisting the definition into the
-      // gateway's `defs` leaves both readers on the same declaration.
-      throw new Error(
-        schema.$ref.startsWith("#") || schema.$ref.includes("/")
-          ? `Schema references "${schema.$ref}", which names no shared definition. A reference the contract can name is a key of the gateway's "defs"; declare the subschema there and reference it by that key.`
-          : `Schema references shared definition "${schema.$ref}", which is not declared`,
-      );
-    }
-    into.refs.push({ key: schema.$ref, name });
+    into.refs.push({ key: schema.$ref, name: referenceName(schema.$ref, ctx) });
   }
 
   // Every part of an `allOf` must hold at once, so each one narrows what the composition admits:
@@ -437,6 +418,49 @@ function absorb(
   // one that says it may also be null keeps null.
   into.types = narrow(into.types, declaredTypes(schema));
 
+  absorbObject(schema, into.shape, ctx, depth);
+  absorbArray(schema, into);
+
+  if (Array.isArray(schema.allOf)) {
+    for (const branch of schema.allOf) {
+      if (mergeable(branch)) {
+        absorb(branch, into, ctx, depth + 1);
+      } else {
+        into.parts.push(expressionOf(branch, ctx, depth + 1));
+      }
+    }
+  }
+
+  for (const keyword of ["anyOf", "oneOf"] as const) {
+    const branches = schema[keyword];
+    if (Array.isArray(branches) && branches.length > 0) {
+      into.unions.push({ branches, depth });
+    }
+  }
+}
+
+// A reference is the key of a shared definition, which the contract declares as a type of that
+// name. A pointer into the schema itself, or into another document, is one the validators
+// resolve and this cannot name. It is refused rather than read as `unknown`: the type would
+// compile while describing nothing, where hoisting the definition into the gateway's `defs`
+// leaves both readers on the same declaration.
+function referenceName(ref: string, ctx: TypeContext): string {
+  const name = ctx.defs.get(ref);
+  if (name !== undefined) return name;
+  throw new Error(
+    ref.startsWith("#") || ref.includes("/")
+      ? `Schema references "${ref}", which names no shared definition. A reference the contract can name is a key of the gateway's "defs"; declare the subschema there and reference it by that key.`
+      : `Schema references shared definition "${ref}", which is not declared`,
+  );
+}
+
+// The object keywords of one part, joined to the composition's shape.
+function absorbObject(
+  schema: JSONSchema,
+  shape: ObjectShape,
+  ctx: TypeContext,
+  depth: number,
+): void {
   if (isRecord(schema.properties)) {
     shape.present = true;
     for (const [name, property] of Object.entries(schema.properties)) {
@@ -469,7 +493,10 @@ function absorb(
       shape.additional = schema.additionalProperties;
     }
   }
+}
 
+// The array keywords of one part, joined to the composition.
+function absorbArray(schema: JSONSchema, into: Composition): void {
   if (Object.hasOwn(schema, "items")) into.items.push(schema.items);
   if (Array.isArray(schema.prefixItems)) into.prefixes.push(schema.prefixItems);
   // Each part must hold, so the bounds are the strictest of them.
@@ -481,23 +508,6 @@ function absorb(
       into.maxItems ?? Number.POSITIVE_INFINITY,
       schema.maxItems,
     );
-  }
-
-  if (Array.isArray(schema.allOf)) {
-    for (const branch of schema.allOf) {
-      if (mergeable(branch)) {
-        absorb(branch, into, ctx, depth + 1);
-      } else {
-        into.parts.push(expressionOf(branch, ctx, depth + 1));
-      }
-    }
-  }
-
-  for (const keyword of ["anyOf", "oneOf"] as const) {
-    const branches = schema[keyword];
-    if (Array.isArray(branches) && branches.length > 0) {
-      into.unions.push({ branches, depth });
-    }
   }
 }
 
@@ -596,18 +606,18 @@ function propertyOf(
   return search(schema, 0);
 }
 
-function objectFromShape(
+// A field the composition requires but does not declare here: naming it makes the intersection
+// require it, since a property is required if any member requires it. A reference may declare
+// it, and then its type is what the reference says. Where nothing found declares it — it is
+// behind a union inside a definition, or the schema requires a field it never describes — the
+// field is still one every valid request carries, so it is named as `unknown`: leaving it out
+// would let a caller omit it and read the rejection from the gateway instead of the compiler.
+function declareRequired(
   shape: ObjectShape,
   refs: readonly Reference[],
   ctx: TypeContext,
   depth: number,
-): TypeExpression {
-  // A field the composition requires but does not declare here: naming it makes the intersection
-  // require it, since a property is required if any member requires it. A reference may declare
-  // it, and then its type is what the reference says. Where nothing found declares it — it is
-  // behind a union inside a definition, or the schema requires a field it never describes — the
-  // field is still one every valid request carries, so it is named as `unknown`: leaving it out
-  // would let a caller omit it and read the rejection from the gateway instead of the compiler.
+): void {
   for (const field of shape.required) {
     if (shape.properties.has(field)) continue;
     let declaration: unknown;
@@ -621,6 +631,15 @@ function objectFromShape(
         : expressionOf(declaration, ctx, depth + 1),
     ]);
   }
+}
+
+function objectFromShape(
+  shape: ObjectShape,
+  refs: readonly Reference[],
+  ctx: TypeContext,
+  depth: number,
+): TypeExpression {
+  declareRequired(shape, refs, ctx, depth);
 
   const members: string[] = [];
   const declared: TypeExpression[] = [];

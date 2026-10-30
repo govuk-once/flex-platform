@@ -4,6 +4,7 @@ import { checkValue } from "@repo/gateway-codegen";
 import type { DeriveSchemas } from "@repo/gateway-config";
 import type { JSONSchema, OperationSchemas } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
+import { oneOrMoreStrings } from "@repo/utils/one-or-more-strings";
 import { sortedNames } from "@repo/utils/sorted-names";
 
 import type { ParameterMapping } from "../config/definition.ts";
@@ -11,7 +12,7 @@ import { normaliseHeaderName } from "../headers.ts";
 import { type MetadataConfig, metadataProblems } from "../metadata.ts";
 import { outcomeForStatus } from "../outcomes.ts";
 import { PAYLOAD_FIELD } from "../types.ts";
-import { parseUpstream } from "../upstream.ts";
+import { type ParsedUpstream, parseUpstream } from "../upstream.ts";
 import {
   type Conversion,
   convertSchema,
@@ -227,11 +228,7 @@ function admittedBy(
     return Array.isArray(held) ? (held as unknown[]) : [];
   };
 
-  const named = Array.isArray(schema.type)
-    ? schema.type.filter((type): type is string => typeof type === "string")
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : [];
+  const named = oneOrMoreStrings(schema.type) ?? [];
   const own = elementsOf(schema, branchesOf("prefixItems"), defs, seen);
   // What it says of itself: the types it names, or every type where it names none, which is
   // what leaves the rest of the parts to say.
@@ -443,14 +440,33 @@ interface Sides {
   readonly output: Conversion;
 }
 
-function deriveOperation(
+// What each step of deriving one operation reads: the operation, the request it is, and where
+// what it finds is written.
+interface Deriving {
+  readonly name: string;
+  readonly where: string;
+  readonly document: OpenApiDocument;
+  readonly sides: Sides;
+  readonly problems: string[];
+  readonly notes: Set<string>;
+}
+
+// The request an operation is, and what the document says of it.
+interface Located {
+  readonly upstream: ParsedUpstream;
+  readonly where: string;
+  readonly paths: Readonly<Record<string, unknown>>;
+  readonly served: Served;
+  readonly pathItem: Readonly<Record<string, unknown>>;
+  readonly operation: Readonly<Record<string, unknown>>;
+}
+
+function located(
   name: string,
   configured: Readonly<Record<string, unknown>>,
   document: OpenApiDocument,
-  sides: Sides,
-  checks: ParameterCheck[],
-): OperationSchemas | undefined {
-  const { problems, notes } = sides.input;
+  problems: string[],
+): Located | undefined {
   if (typeof configured.upstream !== "string") {
     problems.push(`operation "${name}" names no upstream request`);
     return undefined;
@@ -489,6 +505,21 @@ function deriveOperation(
     );
     return undefined;
   }
+  return { upstream, where, paths, served, pathItem, operation };
+}
+
+function deriveOperation(
+  name: string,
+  configured: Readonly<Record<string, unknown>>,
+  document: OpenApiDocument,
+  sides: Sides,
+  checks: ParameterCheck[],
+): OperationSchemas | undefined {
+  const { problems, notes } = sides.input;
+  const found = located(name, configured, document, problems);
+  if (found === undefined) return undefined;
+  const { where, served, operation } = found;
+  const ctx: Deriving = { name, where, document, sides, problems, notes };
 
   const narrowing = narrowingOf(name, configured.narrow, problems);
 
@@ -496,7 +527,7 @@ function deriveOperation(
   const mappings = isRecord(configured.parameters) ? configured.parameters : {};
   const everyParameter = parametersOf(
     document,
-    pathItem,
+    found.pathItem,
     operation,
     where,
     problems,
@@ -504,15 +535,48 @@ function deriveOperation(
   problems.push(
     ...reachesOthers(
       name,
-      upstream.template,
+      found.upstream.template,
       served,
       everyParameter,
       document,
-      isRecord(paths) ? Object.keys(paths) : [],
+      Object.keys(found.paths),
     ),
   );
 
-  const declared = everyParameter
+  const declared = callerParameters(ctx, served, everyParameter);
+  const input: InputFields = { properties: {}, required: [] };
+  const taken = mapFields(ctx, mappings, declared, checks, input);
+  unmappedProblems(ctx, declared, taken);
+  addBody(ctx, operation, narrowing.payload, input);
+
+  // ---- the outcomes: each status the upstream answers a request it carried out with
+  const outcomes = outcomesOf(ctx, operation, narrowing);
+
+  return {
+    input: {
+      type: "object",
+      properties: input.properties,
+      ...(input.required.length > 0 ? { required: input.required } : {}),
+      additionalProperties: false,
+    },
+    outcomes,
+  };
+}
+
+// The input as it is built: a field for each parameter the configuration maps, and the body.
+interface InputFields {
+  readonly properties: Schema;
+  readonly required: string[];
+}
+
+// The parameters a caller fills, by the names it fills them under. One the operation's own path
+// fixes is filled by that path, and one the path carries to the template takes the path's name.
+function callerParameters(
+  { name, where, document, problems, notes }: Deriving,
+  served: Served,
+  everyParameter: readonly Declared[],
+): Declared[] {
+  return everyParameter
     .filter((parameter) => {
       const text =
         parameter.in === "path"
@@ -544,10 +608,18 @@ function deriveOperation(
           ? served.fit.carried.get(parameter.name)
           : undefined) ?? parameter.name,
     }));
-  const properties: Schema = {};
-  const required: string[] = [];
-  const taken = new Set<Declared>();
+}
 
+// A field of the input for each parameter the configuration maps one to, returning the
+// parameters it mapped.
+function mapFields(
+  { name, where, sides, problems }: Deriving,
+  mappings: Readonly<Record<string, unknown>>,
+  declared: readonly Declared[],
+  checks: ParameterCheck[],
+  { properties, required }: InputFields,
+): Set<Declared> {
+  const taken = new Set<Declared>();
   for (const [field, mapping] of Object.entries(mappings)) {
     if (!isRecord(mapping) || typeof mapping.in !== "string") continue;
     const { in: location, name: mapped } =
@@ -584,7 +656,14 @@ function deriveOperation(
     setKey(properties, field, converted);
     if (parameter.required) required.push(field);
   }
+  return taken;
+}
 
+function unmappedProblems(
+  { name, where, problems, notes }: Deriving,
+  declared: readonly Declared[],
+  taken: ReadonlySet<Declared>,
+): void {
   for (const parameter of declared) {
     if (taken.has(parameter)) continue;
     const what = `${parameter.in} parameter "${parameter.name}" of ${where}`;
@@ -603,7 +682,14 @@ function deriveOperation(
       );
     }
   }
+}
 
+function addBody(
+  { name, where, document, sides, problems }: Deriving,
+  operation: Readonly<Record<string, unknown>>,
+  payload: unknown,
+  { properties, required }: InputFields,
+): void {
   const body =
     operation.requestBody === undefined
       ? undefined
@@ -625,7 +711,7 @@ function deriveOperation(
         PAYLOAD_FIELD,
         narrowInto(
           convertSchema(schema, `${where} request body`, sides.input),
-          narrowing.payload,
+          payload,
           `operation "${name}" narrowing of the request body`,
           problems,
         ),
@@ -635,16 +721,19 @@ function deriveOperation(
       required.push(PAYLOAD_FIELD);
     }
   }
-  if (
-    narrowing.payload !== undefined &&
-    properties[PAYLOAD_FIELD] === undefined
-  ) {
+  if (payload !== undefined && properties[PAYLOAD_FIELD] === undefined) {
     problems.push(
       `operation "${name}" narrows a request body, and ${where} takes none`,
     );
   }
+}
 
-  // ---- the outcomes: each status the upstream answers a request it carried out with
+function outcomesOf(
+  ctx: Deriving,
+  operation: Readonly<Record<string, unknown>>,
+  narrowing: Narrowing,
+): Record<string, JSONSchema> {
+  const { name, where, document, problems, notes } = ctx;
   const outcomes: Record<string, JSONSchema> = {};
   const responses = isRecord(operation.responses) ? operation.responses : {};
   for (const [status, entry] of Object.entries(responses)) {
@@ -664,32 +753,8 @@ function deriveOperation(
       problems,
     );
     if (response === undefined) continue;
-    const schema = jsonSchemaOf(response.content);
-    if (status === "204" || response.content === undefined) {
-      if (status === "204" && schema !== undefined) {
-        notes.add(
-          `${where} describes a body for its 204, which has none; it was left out`,
-        );
-      }
-      outcomes[outcome] = { type: "null" };
-    } else if (schema === undefined) {
-      problems.push(`${where} answers ${status} with a body that is not JSON`);
-    } else {
-      outcomes[outcome] = narrowInto(
-        convertSchema(schema, `${where} response ${status}`, sides.output),
-        // Ours to state, and an outcome all the same: held to its shape as any other is, so a
-        // field one of our own services comes to keep there fails no one's read of it.
-        narrowing.outcomes[outcome] === undefined
-          ? undefined
-          : convertSchema(
-              narrowing.outcomes[outcome],
-              `operation "${name}" narrowing of outcome "${outcome}"`,
-              sides.output,
-            ),
-        `operation "${name}" narrowing of outcome "${outcome}"`,
-        problems,
-      ) as JSONSchema;
-    }
+    const schema = outcomeSchema(ctx, status, outcome, response, narrowing);
+    if (schema !== undefined) outcomes[outcome] = schema;
   }
   for (const outcome of Object.keys(narrowing.outcomes)) {
     if (!Object.hasOwn(outcomes, outcome) || isNull(outcomes[outcome])) {
@@ -703,16 +768,45 @@ function deriveOperation(
       `${where} describes no response the driver maps to an outcome (200, 201, 202 or 204)`,
     );
   }
+  return outcomes;
+}
 
-  return {
-    input: {
-      type: "object",
-      properties,
-      ...(required.length > 0 ? { required } : {}),
-      additionalProperties: false,
-    },
-    outcomes,
-  };
+// An outcome's data, from the response that gives it, or undefined where the driver cannot read
+// the response's body.
+function outcomeSchema(
+  { name, where, sides, problems, notes }: Deriving,
+  status: string,
+  outcome: string,
+  response: Readonly<Record<string, unknown>>,
+  narrowing: Narrowing,
+): JSONSchema | undefined {
+  const schema = jsonSchemaOf(response.content);
+  if (status === "204" || response.content === undefined) {
+    if (status === "204" && schema !== undefined) {
+      notes.add(
+        `${where} describes a body for its 204, which has none; it was left out`,
+      );
+    }
+    return { type: "null" };
+  }
+  if (schema === undefined) {
+    problems.push(`${where} answers ${status} with a body that is not JSON`);
+    return undefined;
+  }
+  return narrowInto(
+    convertSchema(schema, `${where} response ${status}`, sides.output),
+    // Ours to state, and an outcome all the same: held to its shape as any other is, so a
+    // field one of our own services comes to keep there fails no one's read of it.
+    narrowing.outcomes[outcome] === undefined
+      ? undefined
+      : convertSchema(
+          narrowing.outcomes[outcome],
+          `operation "${name}" narrowing of outcome "${outcome}"`,
+          sides.output,
+        ),
+    `operation "${name}" narrowing of outcome "${outcome}"`,
+    problems,
+  ) as JSONSchema;
 }
 
 // What a body is offered under, for saying why none of it can be sent.
@@ -978,11 +1072,7 @@ function definitionsFor(
   document: OpenApiDocument,
   conversion: Conversion,
 ): Map<string, unknown> {
-  const components = document.components;
-  const schemas =
-    isRecord(components) && isRecord(components.schemas)
-      ? components.schemas
-      : {};
+  const schemas = componentsOf(document);
   const converted = new Map<string, unknown>();
   // What each was converted for, so one whose uses grow is converted again: a definition first
   // met on its own and later inside a composition must not stay closed against the fields its
@@ -1049,6 +1139,58 @@ function renamingRefs(
 
 const INPUT_SUFFIX = "Input";
 
+// A definition both sides use is one definition where both hold it the same way. Where they do
+// not, an object the input closes and the outcome leaves open, the input takes a name of its
+// own, and so does whatever refers to it from that side.
+function heldApart(
+  inputs: ReadonlyMap<string, unknown>,
+  outputs: ReadonlyMap<string, unknown>,
+): Set<string> {
+  const apart = new Set(
+    [...inputs.keys()].filter(
+      (name) =>
+        outputs.has(name) &&
+        !isDeepStrictEqual(inputs.get(name), outputs.get(name)),
+    ),
+  );
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, schema] of inputs) {
+      if (apart.has(name) || !outputs.has(name)) continue;
+      if ([...refsIn(schema)].some((ref) => apart.has(ref))) {
+        apart.add(name);
+        grew = true;
+      }
+    }
+  }
+  return apart;
+}
+
+// In the order the document declares them, an input's own beside the one it parted from.
+function definitionsInOrder(
+  document: OpenApiDocument,
+  inputs: ReadonlyMap<string, unknown>,
+  outputs: ReadonlyMap<string, unknown>,
+  renamed: ReadonlyMap<string, string>,
+): Record<string, JSONSchema> {
+  const defs: Record<string, JSONSchema> = {};
+  for (const name of Object.keys(componentsOf(document))) {
+    const apart = renamed.has(name);
+    if (outputs.has(name)) setKey(defs, name, outputs.get(name));
+    else if (inputs.has(name) && !apart) {
+      setKey(defs, name, renamingRefs(inputs.get(name), renamed));
+    }
+    if (apart) {
+      setKey(
+        defs,
+        `${name}${INPUT_SUFFIX}`,
+        renamingRefs(inputs.get(name), renamed),
+      );
+    }
+  }
+  return defs;
+}
+
 const derive: DeriveSchemas = async (config, sources) => {
   const location = (config.driver as { readonly spec?: unknown }).spec;
   if (typeof location !== "string" || location === "") {
@@ -1083,26 +1225,7 @@ const derive: DeriveSchemas = async (config, sources) => {
   for (const check of checks)
     problems.push(...parameterProblems(check, inputs));
 
-  // A definition both sides use is one definition where both hold it the same way. Where they
-  // do not, an object the input closes and the outcome leaves open, the input takes a name of
-  // its own, and so does whatever refers to it from that side.
-  const apart = new Set(
-    [...inputs.keys()].filter(
-      (name) =>
-        outputs.has(name) &&
-        !isDeepStrictEqual(inputs.get(name), outputs.get(name)),
-    ),
-  );
-  for (let grew = true; grew;) {
-    grew = false;
-    for (const [name, schema] of inputs) {
-      if (apart.has(name) || !outputs.has(name)) continue;
-      if ([...refsIn(schema)].some((ref) => apart.has(ref))) {
-        apart.add(name);
-        grew = true;
-      }
-    }
-  }
+  const apart = heldApart(inputs, outputs);
   const renamed = new Map(
     [...apart].map((name) => [name, `${name}${INPUT_SUFFIX}`]),
   );
@@ -1127,27 +1250,7 @@ const derive: DeriveSchemas = async (config, sources) => {
     throw new OpenApiDeriveError(location, [...new Set(problems)]);
   }
 
-  // In the order the document declares them, an input's own beside the one it parted from.
-  const components = document.components;
-  const declaredOrder = Object.keys(
-    isRecord(components) && isRecord(components.schemas)
-      ? components.schemas
-      : {},
-  );
-  const defs: Record<string, JSONSchema> = {};
-  for (const name of declaredOrder) {
-    if (outputs.has(name)) setKey(defs, name, outputs.get(name));
-    else if (inputs.has(name) && !apart.has(name)) {
-      setKey(defs, name, renamingRefs(inputs.get(name), renamed));
-    }
-    if (apart.has(name)) {
-      setKey(
-        defs,
-        `${name}${INPUT_SUFFIX}`,
-        renamingRefs(inputs.get(name), renamed),
-      );
-    }
-  }
+  const defs = definitionsInOrder(document, inputs, outputs, renamed);
   for (const operation of Object.values(operations)) {
     operation.input = renamingRefs(operation.input, renamed) as JSONSchema;
   }
