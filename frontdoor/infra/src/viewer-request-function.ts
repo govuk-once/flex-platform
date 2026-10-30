@@ -63,7 +63,7 @@ export class ViewerRequestFunction extends Construct {
       new PolicyStatement({
         sid: "AllowCloudFrontFunctionLogs",
         effect: Effect.ALLOW,
-        principals: [new AnyPrincipal()],
+        principals: [new AnyPrincipal()], // NOSONAR: the conditions hold it to the logger role
         actions: ["kms:Encrypt", "kms:GenerateDataKey*"],
         resources: ["*"],
         conditions: {
