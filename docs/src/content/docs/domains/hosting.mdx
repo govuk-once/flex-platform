@@ -1,6 +1,6 @@
 ---
 title: Hosting a domain
-description: How a domain is declared in config, where its function runs, and what the platform provides around it.
+description: How a domain is declared in config, what each domain account provides, and what the platform provides around a domain's function.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -8,8 +8,8 @@ import { Aside } from "@astrojs/starlight/components";
 A domain is hosted from a line of the platform's config. Domain teams write the domain's code and
 never write CDK. The platform provides everything the code runs with and behind.
 
-The config and its checks are in `infra/app`, and the names they use are in `domains/infra`
-(`@repo/domain-infra`). Nothing deploys a domain. Each part of this page that is planned says so.
+The config and its checks are in `infra/app`, with the stacks. The constructs and the names they
+use are in `domains/infra` (`@repo/domain-infra`).
 
 ## Declaring a domain
 
@@ -52,6 +52,57 @@ Before building any stage, the app checks every domain:
   since the Frontdoor routes by name alone;
 - its function's name, `domain-<environment>-<name>`, is within Lambda's 64 characters. Each name
   is within 32 alone, but the two together can pass it.
+
+## What a domain account provides
+
+`DomainAccountStack`, `domain-<environment>-<account>`, holds what every domain in a domain account
+shares in one environment. Nothing in it names a domain, so adding or removing one never changes
+it. It is in eu-west-2, the region the edge signs requests for, and has termination protection:
+deleting it would take the domains' execution role and certificate with it, and leave the account's
+API Gateway logging setting naming a deleted role.
+
+| Construct | Builds |
+|---|---|
+| `WildcardCertificate` | A CAA record at the zone's apex, `0 issue "amazon.com"`, so only Amazon may issue certificates for the zone. Then `*.<zone>`, validated through DNS in the account's own zone. |
+| `PlatformLogGroup` | `/flex/domain/<environment>/function`, the log group every domain's function logs to |
+| `ExecutionRole` | `domain-<environment>-execution`, the role every domain's function runs as, and its permission boundary. See [permissions](#permissions). |
+| `ApiGatewayLogging` | API Gateway's logging role, set on the account, so every API in it can write its access and execution logs |
+
+One wildcard certificate serves every domain because ACM limits a certificate's first name to 64
+characters. A certificate for `<domain>.<zone>` would leave a domain's name as few as 18.
+
+ACM generates the certificate's ARN, so the stack writes it to SSM, at
+`/flex/domain/<environment>/certificate-arn`.
+
+### Network
+
+Every domain runs in its domain account's [network](/flex-platform/infrastructure/network/), in
+the isolated subnets, with no route to the internet. There is no setting to change this: a domain
+reaches an upstream through a gateway, and a gateway that needs the internet has its own
+[placement](/flex-platform/reference/glossary/#placement). The network creates the `domain`
+security group a domain's function runs in, which may reach only the `lambda` endpoint: see
+[what a workload may reach](/flex-platform/infrastructure/network/#what-a-workload-may-reach).
+
+### Permissions
+
+Every domain has the same permissions, so they are in one role, with a permission boundary that
+holds the same limits in case the role is ever widened by mistake. A domain's function may:
+
+- invoke any function named `gateway-<environment>-*`, with any qualifier, such as `:live`. Any
+  domain may call any gateway in its environment, and only gateways have that name. The stack
+  takes the pattern from `gatewayFunctionPattern` in `gateways/infra`;
+- write to the domain log group, and use its key for that through CloudWatch Logs;
+- send its traces to X-Ray;
+- create and remove the network interfaces Lambda needs to run it in the VPC.
+
+Lambda manages those network interfaces with the role's credentials, which the function's code
+holds too. So the role denies the network interface actions to any call made from a domain's code,
+which Lambda marks with the function's ARN. Lambda's own calls carry no function's ARN, so they
+are still allowed.
+
+API Gateway's logging role may write only to the domains' API access log groups,
+`/flex/domain/<environment>/<domain>/api-access`, and to API Gateway's execution log groups. It may
+create none, so it writes only to log groups that already exist, encrypted.
 
 ## Routing a request
 

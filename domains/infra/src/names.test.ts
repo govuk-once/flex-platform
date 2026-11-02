@@ -1,11 +1,40 @@
 import { describe, expect, it } from "vitest";
 
-import { domainFunctionName } from "./names.ts";
+import {
+  apiAccessLogGroupName,
+  apiExecutionLogGroupName,
+  certificateParameterName,
+  domainFunctionName,
+  executionRoleName,
+  functionLogGroupName,
+} from "./names.ts";
 
-describe("domainFunctionName", () => {
-  it("derives the name from the environment's and the domain's", () => {
+describe("names", () => {
+  it("name a domain's function from the environment's and the domain's names", () => {
     expect(domainFunctionName("sandbox", "domain-a")).toBe(
       "domain-sandbox-domain-a",
+    );
+  });
+
+  it("name what every domain in an environment shares from the environment's name", () => {
+    expect(executionRoleName("sandbox")).toBe("domain-sandbox-execution");
+  });
+
+  it("put the platform's log groups and parameters under /flex/domain", () => {
+    expect(functionLogGroupName("sandbox")).toBe(
+      "/flex/domain/sandbox/function",
+    );
+    expect(apiAccessLogGroupName("sandbox", "domain-a")).toBe(
+      "/flex/domain/sandbox/domain-a/api-access",
+    );
+    expect(certificateParameterName("sandbox")).toBe(
+      "/flex/domain/sandbox/certificate-arn",
+    );
+  });
+
+  it("follow API Gateway's name for a stage's execution logs", () => {
+    expect(apiExecutionLogGroupName("abc123", "live")).toBe(
+      "API-Gateway-Execution-Logs_abc123/live",
     );
   });
 });
