@@ -1,4 +1,4 @@
-import { cdkApp } from "@repo/infra-constructs";
+import { cdkApp, NETWORK_REGION } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
@@ -32,6 +32,7 @@ describe("DomainAccountStack", () => {
       "AWS::IAM::ManagedPolicy",
       "AWS::IAM::Role",
       "AWS::IAM::Role",
+      "AWS::IAM::Role",
       "AWS::KMS::Key",
       "AWS::Logs::LogGroup",
       "AWS::Route53::RecordSet",
@@ -43,12 +44,12 @@ describe("DomainAccountStack", () => {
     expect(domainAccountStackName(DEV, MAIN)).toBe("domain-dev-main");
   });
 
-  it("is in its domain account, in eu-west-2, protected from deletion", () => {
+  it("is in its domain account, in the network's region, protected from deletion", () => {
     const { stack } = build();
 
     expect(stack.stackName).toBe("domain-dev-main");
     expect(stack.account).toBe(MAIN.account);
-    expect(stack.region).toBe("eu-west-2");
+    expect(stack.region).toBe(NETWORK_REGION);
     expect(stack.terminationProtection).toBe(true);
   });
 
@@ -68,12 +69,62 @@ describe("DomainAccountStack", () => {
     });
   });
 
-  it("reads no parameter", () => {
-    const parameters = Object.keys(
-      build().template.toJSON().Parameters as object,
+  it("reads the network's IDs, and outputs nothing", () => {
+    const { Parameters, Outputs } = build().template.toJSON() as {
+      Parameters: Record<string, { Default: string }>;
+      Outputs?: Record<string, unknown>;
+    };
+
+    // Besides CDK's bootstrap check, each parameter is an SSM read, named by what it reads, since
+    // CDK gives its ID a hash.
+    const parameters = Object.entries(Parameters).map(([id, { Default }]) =>
+      id === "BootstrapVersion" ? id : Default,
     );
 
-    expect(parameters).toEqual(["BootstrapVersion"]);
+    expect(parameters.toSorted()).toEqual([
+      "/flex/network/dev/isolated-subnet-ids",
+      "/flex/network/dev/security-group/domain",
+      "BootstrapVersion",
+    ]);
+    expect(Object.keys(Outputs ?? {})).toEqual([]);
+  });
+
+  it("holds the deploy role to the network's IDs", () => {
+    const { template } = build();
+    const parameters = template.toJSON().Parameters as Record<
+      string,
+      { Default: string }
+    >;
+    const id = (name: string) =>
+      Object.keys(parameters).find((key) => parameters[key]?.Default === name);
+    const deny = (condition: Record<string, unknown>) =>
+      Match.objectLike({ Effect: "Deny", Condition: condition });
+
+    template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "domain-dev-deploy",
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              deny({
+                "ForAnyValue:StringNotEquals": {
+                  "lambda:SubnetIds": {
+                    Ref: id("/flex/network/dev/isolated-subnet-ids"),
+                  },
+                },
+              }),
+              deny({
+                "ForAnyValue:StringNotEquals": {
+                  "lambda:SecurityGroupIds": [
+                    { Ref: id("/flex/network/dev/security-group/domain") },
+                  ],
+                },
+              }),
+            ]),
+          },
+        },
+      ],
+    });
   });
 
   it("creates the log group every domain's function logs to, named from config", () => {

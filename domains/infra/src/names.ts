@@ -28,6 +28,10 @@ export function executionRoleName(environment: string): string {
   return `domain-${environment}-execution`;
 }
 
+export function deployRoleName(environment: string): string {
+  return `domain-${environment}-deploy`;
+}
+
 export function functionLogGroupName(environment: string): string {
   return `/flex/domain/${environment}/function`;
 }
