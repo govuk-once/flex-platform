@@ -9,6 +9,11 @@ export const ZONE = {
   hostedZoneId: "Z100000000003",
 };
 
+export const EDGE_ROLE = {
+  account: "100000000002",
+  name: "frontdoor-sandbox-edge",
+};
+
 export function stackIn(region: string, nag = false): Stack {
   const app = cdkApp();
 
