@@ -23,13 +23,11 @@ function typeOf(schema: JSONSchema, ctx: TypeContext, context: string): string {
 // The call contract, as types only. A caller names an operation, builds its input and reads the
 // response. The emitted module carries one import, a type import of "@repo/gateway-core" for the
 // envelope and secure-value shapes, erased when the file compiles, so nothing here is imported at
-// run time at all. That package declares no dependencies of its own, so naming an envelope costs
-// a consumer neither the runtime nor the generator.
+// run time at all. That package depends only on @repo/utils, so naming an envelope costs a
+// consumer neither the runtime nor the generator.
 //
-// It is a workspace package, so the import resolves for a consumer in this repository and nowhere
-// else, which every consumer is. Carrying the contract outside would mean publishing that package
-// or emitting the two shapes into this file instead; that choice belongs to the client library,
-// which is planned and does not exist.
+// It is a workspace package, so the import resolves only in this repository. A domain outside it
+// installs the gateway's client package instead, whose declarations bundle these shapes in.
 
 const preamble = (id: string) => `// The call contract for gateway "${id}".
 //
@@ -194,7 +192,7 @@ export async function emitContract(
       `${about}export type ${base}Response = ErrorResponse | ({ ${SUCCESS} } & ${base}Result);`,
     );
     operations.push(
-      `${about}readonly ${opName}: { readonly input: ${base}Input; readonly result: ${base}Result };`,
+      `${about}readonly ${opName}: { readonly input: ${base}Input; readonly result: ${base}Result; readonly response: ${base}Response };`,
     );
   }
 
@@ -209,9 +207,7 @@ export async function emitContract(
     "export type OperationName = keyof Operations;",
     'export type OperationInput<TName extends OperationName> = Operations[TName]["input"];',
     'export type OperationResult<TName extends OperationName> = Operations[TName]["result"];',
-    "export type OperationResponse<TName extends OperationName> =",
-    "  | ErrorResponse",
-    `  | ({ ${SUCCESS} } & OperationResult<TName>);`,
+    'export type OperationResponse<TName extends OperationName> = Operations[TName]["response"];',
     "",
     "// One call as the gateway receives it. `secure` carries the caller's asserted values; an",
     "// operation's secure bindings are compared against them, and the signature is not verified.",

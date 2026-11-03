@@ -1,10 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
+import { type ErrorRuling } from "./errors.ts";
 import { ERROR_CODES } from "./index.ts";
 
 const signalOf = (code: keyof typeof ERROR_CODES) => ERROR_CODES[code].signal;
 
 describe("ERROR_CODES", () => {
+  it("gives every code a ruling", () => {
+    expectTypeOf(ERROR_CODES).toExtend<Readonly<Record<string, ErrorRuling>>>();
+  });
+
   it("counts an upstream's own answer as a response, not a failure", () => {
     expect(signalOf("NOT_FOUND")).toBe("upstream_success");
     expect(signalOf("UPSTREAM_REJECTED")).toBe("upstream_success");

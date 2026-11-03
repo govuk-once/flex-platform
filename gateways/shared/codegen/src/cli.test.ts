@@ -8,8 +8,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { main } from "./cli.ts";
 import {
   CLIENT_DIR,
+  CLIENT_ENTRY_MODULE,
   CONTRACT_MODULE,
   GENERATED_DIR,
+  PACKAGE_DIR,
   RUNTIME_DIR,
   SCHEMAS_DIR,
   VALIDATORS_DIR,
@@ -109,9 +111,9 @@ describe("gateway-codegen", () => {
     expect(
       (await readdir(path.join(gen, RUNTIME_DIR, VALIDATORS_DIR))).toSorted(),
     ).toEqual(["index.js", "schemas.js"]);
-    expect(await readdir(path.join(gen, CLIENT_DIR))).toEqual([
-      CONTRACT_MODULE,
-    ]);
+    expect((await readdir(path.join(gen, CLIENT_DIR))).toSorted()).toEqual(
+      [CLIENT_ENTRY_MODULE, CONTRACT_MODULE, PACKAGE_DIR].toSorted(),
+    );
   }, 60_000);
 
   it("reports why it stopped and exits non-zero", async () => {

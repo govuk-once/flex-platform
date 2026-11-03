@@ -11,8 +11,8 @@ domain is an API Gateway, and many upstreams run on it too.
 ## Call contract
 
 The TypeScript types that codegen writes to `.gen/client/rpc.ts`: each operation's input and the
-union of its outcomes. A caller compiles against it, and the client libraries will be built from
-it. See [The call contract](/flex-platform/codegen/call-contract/).
+union of its outcomes. A caller compiles against it, and the gateway client is typed by it. See
+[The call contract](/flex-platform/codegen/call-contract/).
 
 ## CloudFront Function
 
@@ -62,10 +62,12 @@ The single CloudFront distribution that every request to the platform enters thr
 A Lambda function, generated from this repository, that sits in front of one upstream and exposes
 its operations to domains. See [How a gateway works](/flex-platform/gateways/overview/).
 
-## Gateway client library
+## Gateway client
 
-A typed library, generated from a gateway's call contract, that a domain installs to invoke the
-gateway's Lambda function directly. Planned.
+`@govuk-once/flex-gateway-client`, which a domain calls a gateway through. It invokes the gateway's
+Lambda function directly, by a name derived from the gateway's id. Each gateway's client package
+creates one typed by the gateway's call contract. See
+[Calling gateways](/flex-platform/domains/overview/#calling-gateways).
 
 ## Lambda@Edge
 
