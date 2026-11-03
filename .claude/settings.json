@@ -1,8 +1,10 @@
 {
-  "deny": [
-    "Bash(npm *)",
-    "Bash(npx *)",
-    "Bash(yarn *)",
-    "Bash(pnpx *)"
-  ]
+  "permissions": {
+    "deny": [
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(yarn *)",
+      "Bash(pnpx *)"
+    ]
+  }
 }
