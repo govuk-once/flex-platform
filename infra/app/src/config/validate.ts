@@ -97,10 +97,24 @@ function domainsOf(environment: EnvironmentConfig): string[] {
   return environment.domainAccounts.flatMap(({ domains }) => domains);
 }
 
-// The environment's and the domain's names are each valid alone, but together can pass Lambda's
-// limit on the function's name.
+// A domain's name may not be one of its environment's domain accounts' names, and with the
+// environment's name it must fit the function's name.
 function checkDomains(at: string, environment: EnvironmentConfig): void {
+  // A domain account's stack is domain-<environment>-<account>, and a domain's is
+  // domain-<environment>-<domain>, so the two names can't be the same.
+  const domainAccountNames = new Set(
+    environment.domainAccounts.map(({ name }) => name),
+  );
+
   for (const domain of domainsOf(environment)) {
+    if (domainAccountNames.has(domain)) {
+      throw new Error(
+        `${at} ${domain} domain: a domain account has the same name, and their stacks would both be domain-${environment.name}-${domain}`,
+      );
+    }
+
+    // The environment's and the domain's names are each valid alone, but together can pass
+    // Lambda's limit on the function's name.
     const functionName = domainFunctionName(environment.name, domain);
 
     if (functionName.length > FUNCTION_NAME_LENGTH) {

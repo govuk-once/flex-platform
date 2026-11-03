@@ -3,8 +3,10 @@ import { cdkApp } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES } from "../../test/helpers.ts";
+import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
 import { DomainStack, domainStackName } from "./domain.ts";
+import { domainAccountStackName } from "./domain-account.ts";
+import { frontdoorStackName } from "./frontdoor.ts";
 
 const PROD = FIXTURE_STAGES[2];
 const [DEV] = PROD.environments;
@@ -22,6 +24,33 @@ function build() {
 }
 
 describe("DomainStack", () => {
+  it("is one per domain, in the account that hosts it, deployed after that account's stack and before the edge", () => {
+    const assembly = synthesizedStage(PROD);
+
+    for (const environment of PROD.environments) {
+      const frontdoor = assembly
+        .getStackByName(frontdoorStackName(environment))
+        .dependencies.map(({ id }) => id);
+
+      for (const domainAccount of environment.domainAccounts) {
+        for (const domain of domainAccount.domains) {
+          const stack = assembly.getStackByName(
+            domainStackName(environment, domain),
+          );
+
+          expect(stack.environment).toMatchObject({
+            account: domainAccount.account,
+            region: SIGNING_REGION,
+          });
+          expect(stack.dependencies.map(({ id }) => id)).toContain(
+            domainAccountStackName(environment, domainAccount),
+          );
+          expect(frontdoor).toContain(domainStackName(environment, domain));
+        }
+      }
+    }
+  });
+
   it("holds one domain's API and host, and nothing shared", () => {
     const resources = Object.values(
       build().template.toJSON().Resources as Record<string, { Type: string }>,

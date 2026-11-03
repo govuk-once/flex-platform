@@ -1,9 +1,154 @@
 [
   {
+    "name": "domain-development-domain00",
+    "account": "098640806149",
+    "region": "eu-west-2",
+    "dependencies": [
+      "network-development-domain00"
+    ],
+    "resources": [
+      {
+        "logicalId": "ApiGatewayLoggingAccount6B9E3F2C",
+        "type": "AWS::ApiGateway::Account"
+      },
+      {
+        "logicalId": "ApiGatewayLoggingRoleCE57A8ED",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "CertificateArn85F1724F",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "DeployRoleFF7E9D15",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "ExecutionBoundaryC4D3311A",
+        "type": "AWS::IAM::ManagedPolicy"
+      },
+      {
+        "logicalId": "ExecutionRole829ADBFF",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "FunctionLogsLogGroup6E831F5E",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "ZoneCaaEA820757",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "ZoneCertificate5B37E146",
+        "type": "AWS::CertificateManager::Certificate"
+      }
+    ]
+  },
+  {
+    "name": "domain-development-example",
+    "account": "098640806149",
+    "region": "eu-west-2",
+    "dependencies": [
+      "domain-development-domain00"
+    ],
+    "resources": [
+      {
+        "logicalId": "DomainAccessLogsLogGroup492C5CEA",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "DomainApi505A06DA",
+        "type": "AWS::ApiGateway::RestApi"
+      },
+      {
+        "logicalId": "DomainApiACCESSDENIEDF89246A2",
+        "type": "AWS::ApiGateway::GatewayResponse"
+      },
+      {
+        "logicalId": "DomainApiANY739491DC",
+        "type": "AWS::ApiGateway::Method"
+      },
+      {
+        "logicalId": "DomainApiDEFAULT4XX1DD328B8",
+        "type": "AWS::ApiGateway::GatewayResponse"
+      },
+      {
+        "logicalId": "DomainApiDEFAULT5XXF2DFFA7F",
+        "type": "AWS::ApiGateway::GatewayResponse"
+      },
+      {
+        "logicalId": "DomainApiDeployment33015D01fbfcc47d546747ac4610cfc15f3f1fb9",
+        "type": "AWS::ApiGateway::Deployment"
+      },
+      {
+        "logicalId": "DomainApiDeploymentStagedefault2582480F",
+        "type": "AWS::ApiGateway::Stage"
+      },
+      {
+        "logicalId": "DomainApiEXPIREDTOKENB0124361",
+        "type": "AWS::ApiGateway::GatewayResponse"
+      },
+      {
+        "logicalId": "DomainApiINVALIDSIGNATURE76A649CF",
+        "type": "AWS::ApiGateway::GatewayResponse"
+      },
+      {
+        "logicalId": "DomainApiMISSINGAUTHENTICATIONTOKEN64D51E48",
+        "type": "AWS::ApiGateway::GatewayResponse"
+      },
+      {
+        "logicalId": "DomainApiTHROTTLED4A3B4782",
+        "type": "AWS::ApiGateway::GatewayResponse"
+      },
+      {
+        "logicalId": "DomainApiUNAUTHORIZEDADA41E6A",
+        "type": "AWS::ApiGateway::GatewayResponse"
+      },
+      {
+        "logicalId": "DomainApiproxyANY01B64767",
+        "type": "AWS::ApiGateway::Method"
+      },
+      {
+        "logicalId": "DomainApiproxyDE0E0752",
+        "type": "AWS::ApiGateway::Resource"
+      },
+      {
+        "logicalId": "DomainExecutionLogsLogGroupD8ABA14F",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "DomainIntegrationRoleACB070C2",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "HostAliasC359947A",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "HostDomainName667699D2",
+        "type": "AWS::ApiGateway::DomainName"
+      },
+      {
+        "logicalId": "HostMapping8C464718",
+        "type": "AWS::ApiGateway::BasePathMapping"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      }
+    ]
+  },
+  {
     "name": "frontdoor-development",
     "account": "553915472156",
     "region": "us-east-1",
     "dependencies": [
+      "domain-development-example",
       "frontdoor-development-edge-logs-eu-west-2"
     ],
     "resources": [

@@ -124,8 +124,11 @@ The request leaves for the domain's host over HTTPS on port 443, with TLS 1.2, a
 timeout (API Gateway's own is 29 seconds) and a 5-second keep-alive, and with `Host` set to the
 domain's host.
 
-Domains in config are planned, and the routing map is built from them. Until then it's empty, and
-every verified request is a 404.
+The routing map is built from config: every domain listed under the environment's domain accounts,
+to `<domain>.<domain_account_zone>`. The domain's host is named with the same function,
+`domainHost`, so the two can't drift. A domain that isn't in the map is a 404. The Frontdoor's
+stack deploys after every domain stack in its environment, so it never routes to a host that
+doesn't exist.
 
 ## Signing
 
