@@ -7,5 +7,7 @@ export default defineConfig({
     globals: false,
     environment: "node",
     passWithNoTests: true,
+    // Its own module cache, as @repo/vitest-config gives every other package.
+    fsModuleCachePath: "node_modules/.vitest-cache",
   },
 });
