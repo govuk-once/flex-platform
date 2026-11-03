@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 
-import type { GatewaySchemas } from "@repo/gateway-types";
+import type { GatewaySchemas } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 import { ownValue } from "@repo/utils/own-value";
 import { sortedNames } from "@repo/utils/sorted-names";

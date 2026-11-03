@@ -1,5 +1,5 @@
+import type { ErrorCode } from "@repo/gateway-core";
 import { GatewayError } from "@repo/gateway-runtime";
-import type { ErrorCode } from "@repo/gateway-types";
 
 // Codes for statuses with a specific meaning. Other 4xx are UPSTREAM_REJECTED and 5xx are
 // UPSTREAM_ERROR. 401 and 403 mean the gateway's own credentials were refused, which the

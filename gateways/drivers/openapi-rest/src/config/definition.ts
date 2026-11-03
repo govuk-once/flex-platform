@@ -4,7 +4,7 @@ import type {
   ExecutorOptions,
   GatewayConfig,
 } from "@repo/gateway-config";
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 
 import type { MetadataConfig } from "../metadata.ts";
 import {

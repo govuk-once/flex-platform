@@ -1,4 +1,4 @@
-import type { JSONSchema } from "@repo/gateway-types";
+import type { JSONSchema } from "@repo/gateway-core";
 
 // What Flex keeps under /v1/notifications: whether a user takes notifications, and where they
 // are pushed to.

@@ -4,11 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { emitValidators } from "@repo/gateway-codegen";
-import type {
-  GatewaySchemas,
-  JSONSchema,
-  Validator,
-} from "@repo/gateway-types";
+import type { GatewaySchemas, JSONSchema, Validator } from "@repo/gateway-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { openapiRest } from "../index.ts";

@@ -10,8 +10,8 @@ import type {
   MetaValue,
   SignalRuling,
   Validator,
-} from "@repo/gateway-types";
-import { ERROR_CODES } from "@repo/gateway-types";
+} from "@repo/gateway-core";
+import { ERROR_CODES } from "@repo/gateway-core";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 import { isScalar } from "@repo/utils/is-scalar";
 
