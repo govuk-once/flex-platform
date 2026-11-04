@@ -10,11 +10,13 @@
   "scripts": {
     "codegen": "turbo run codegen",
     "schemas": "turbo run schemas --continue",
+    "release": "release",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "@repo/release": "workspace:*",
     "@types/node": "24.19.2",
     "eslint": "10.12.0",
     "turbo": "2.11.8",
