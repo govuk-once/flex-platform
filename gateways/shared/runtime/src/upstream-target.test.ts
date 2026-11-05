@@ -45,11 +45,11 @@ describe("readUpstreamSecretArn", () => {
 
   it("throws when unset or blank", () => {
     expect(() => readUpstreamSecretArn({})).toThrow(
-      /UPSTREAM_SECRET_ARN must be set/,
+      /FLEX_UPSTREAM_SECRET_ARN must be set/,
     );
     expect(() =>
       readUpstreamSecretArn({ [UPSTREAM_SECRET_ARN_ENV]: " " }),
-    ).toThrow(/UPSTREAM_SECRET_ARN must be set/);
+    ).toThrow(/FLEX_UPSTREAM_SECRET_ARN must be set/);
   });
 
   it("does not judge the value's shape; the provider does", () => {
@@ -103,7 +103,7 @@ describe("readUpstreamOptions", () => {
         [UPSTREAM_TARGET_ENV]: "https://x.test",
         [GATEWAY_REGION_ENV]: "eu-west-2",
       }),
-    ).toThrow(/UPSTREAM_SECRET_ARN must be set/);
+    ).toThrow(/FLEX_UPSTREAM_SECRET_ARN must be set/);
   });
 
   it("requires the gateway's region, which Lambda sets", () => {

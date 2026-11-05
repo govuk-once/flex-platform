@@ -24,8 +24,8 @@ import { meta, validators } from "./${VALIDATORS_DIR}/${VALIDATORS_MODULE}";
 
 // Built while this module loads, which is the platform's initialisation phase: the operations
 // compile and the driver retrieves and validates the gateway secret once, before any request
-// rather than during the first one. UPSTREAM_TARGET and UPSTREAM_SECRET_ARN are read here and
-// nowhere else.
+// rather than during the first one. FLEX_UPSTREAM_TARGET and FLEX_UPSTREAM_SECRET_ARN are read
+// here and nowhere else.
 const execute = await config.driver.createExecutor(config, {
   ...readUpstreamOptions(),
   log: createStartupLog(config.id),

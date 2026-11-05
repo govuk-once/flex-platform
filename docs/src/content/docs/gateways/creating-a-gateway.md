@@ -133,8 +133,8 @@ not yet provision the function, its permissions or its network. See
 
 Set the [environment](/flex-platform/reference/environment/):
 
-- `UPSTREAM_SECRET_ARN`, always
-- `UPSTREAM_TARGET`, unless the driver reads the target from the secret
+- `FLEX_UPSTREAM_SECRET_ARN`, always
+- `FLEX_UPSTREAM_TARGET`, unless the driver reads the target from the secret
 
 The function's role needs permission to read that secret, plus any permissions its authentication
 requires. See [Environment](/flex-platform/reference/environment/). Callers install

@@ -204,12 +204,12 @@ for an integration does not mean that integration is implemented.
     credentials or environment names in gateway code. Deployment-specific configuration belongs at
     the integration boundary.
     - Every driver takes its secret from the AWS Secrets Manager secret whose ARN is in
-      `UPSTREAM_SECRET_ARN`. It is required, even for a gateway that sends no credential.
-    - A driver takes its upstream location from `UPSTREAM_TARGET` when that is set. The runtime
+      `FLEX_UPSTREAM_SECRET_ARN`. It is required, even for a gateway that sends no credential.
+    - A driver takes its upstream location from `FLEX_UPSTREAM_TARGET` when that is set. The runtime
       names both variables.
     - A secret may be the gateway's own, or one an upstream provides in its own shape. So a driver
       may also take the location from a field of the secret that its configuration names. That
-      field is used in place of `UPSTREAM_TARGET` when both are there. A driver with neither
+      field is used in place of `FLEX_UPSTREAM_TARGET` when both are there. A driver with neither
       refuses to start.
     - The driver decides what the target means and which secret fields are read, and declares both
       on its definition. The runtime only retrieves the secret as a JSON object and caches it for a

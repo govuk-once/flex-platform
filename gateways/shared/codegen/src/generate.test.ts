@@ -324,8 +324,8 @@ describe("the generated gateway", () => {
     await generate(fixtureDir);
 
     // The deployment, as the platform supplies it: the entry point reads it while it loads.
-    vi.stubEnv("UPSTREAM_TARGET", TARGET);
-    vi.stubEnv("UPSTREAM_SECRET_ARN", SECRET_ARN);
+    vi.stubEnv("FLEX_UPSTREAM_TARGET", TARGET);
+    vi.stubEnv("FLEX_UPSTREAM_SECRET_ARN", SECRET_ARN);
     vi.stubEnv("AWS_REGION", "eu-west-2");
 
     bundle = await readFile(bundlePath, "utf-8");
@@ -419,8 +419,8 @@ describe("the generated gateway", () => {
     // entry point instead would not catch what only the bundle has, such as a bundled
     // dependency reaching for `require`.
     const script = `
-      process.env.UPSTREAM_TARGET = ${JSON.stringify(TARGET)};
-      process.env.UPSTREAM_SECRET_ARN = ${JSON.stringify(SECRET_ARN)};
+      process.env.FLEX_UPSTREAM_TARGET = ${JSON.stringify(TARGET)};
+      process.env.FLEX_UPSTREAM_SECRET_ARN = ${JSON.stringify(SECRET_ARN)};
       process.env.AWS_REGION = "eu-west-2";
       const { handler } = await import(${JSON.stringify(pathToFileURL(bundlePath).href)});
       const response = await handler(

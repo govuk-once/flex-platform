@@ -48,7 +48,7 @@ openapiRest({
 
 If a required field is missing, the gateway does not start. If an optional field is missing, it
 is logged by name as the gateway starts. Anything that reads it does without it: a header is
-left out, or `UPSTREAM_TARGET` is used instead. Only mark a field optional if the deployment is
+left out, or `FLEX_UPSTREAM_TARGET` is used instead. Only mark a field optional if the deployment is
 valid without it. If the upstream still expects the header, it will refuse every request.
 
 The secret is checked against the fields the configuration names, and nothing else:

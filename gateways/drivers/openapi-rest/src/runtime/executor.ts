@@ -190,7 +190,7 @@ export async function buildExecutor(
 
   const metadata = compileMetadata(config.driver.metadata);
 
-  // With no field of the secret naming the upstream, UPSTREAM_TARGET is the only place it can
+  // With no field of the secret naming the upstream, FLEX_UPSTREAM_TARGET is the only place it can
   // come from, and it is checked with the rest of the configuration, before the secret is read.
   const noUpstream = () =>
     new TypeError(
@@ -220,7 +220,7 @@ export async function buildExecutor(
   const initial = await secret.get();
 
   // A field marked optional is one the secret's owner does not always provide, and what reads it
-  // goes without: a header left out, UPSTREAM_TARGET used instead. Said once, as the gateway
+  // goes without: a header left out, FLEX_UPSTREAM_TARGET used instead. Said once, as the gateway
   // starts, so a field the owner stopped providing shows here rather than only as the upstream's
   // refusal. The name is the configuration's; nothing of the secret is logged.
   const absent = new Set(
@@ -235,7 +235,7 @@ export async function buildExecutor(
     );
   }
 
-  // A target the secret names is used in place of UPSTREAM_TARGET, so the environment variable
+  // A target the secret names is used in place of FLEX_UPSTREAM_TARGET, so the environment variable
   // and the secret can each be set without the other. Read once, here: an address that moves
   // takes effect when the executor is next created.
   const fromSecret =
