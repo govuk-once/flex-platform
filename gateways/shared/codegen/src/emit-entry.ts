@@ -16,7 +16,8 @@ import { formatSource, HEADER, writeGenerated } from "./output.ts";
 // are keyed by the configuration's operations, so this module is the same for every gateway.
 
 const entryModule = (id: string) => `
-// Entry point for gateway "${id}". The platform calls the handler; nothing else is exported.
+// Entry point for gateway ${JSON.stringify(id)}. The platform calls the handler; nothing else is
+// exported.
 import { createHandler, createStartupLog, readUpstreamOptions } from "@repo/gateway-runtime";
 
 import config from "${CONFIG_MODULE}";

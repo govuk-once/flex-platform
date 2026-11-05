@@ -29,7 +29,9 @@ function typeOf(schema: JSONSchema, ctx: TypeContext, context: string): string {
 // It is a workspace package, so the import resolves only in this repository. A domain outside it
 // installs the gateway's client package instead, whose declarations bundle these shapes in.
 
-const preamble = (id: string) => `// The call contract for gateway "${id}".
+const preamble = (
+  id: string,
+) => `// The call contract for gateway ${JSON.stringify(id)}.
 //
 // Each operation takes one input object, as its schema describes it. A response is an error
 // envelope or a success carrying one of the operation's declared outcomes, so a switch over

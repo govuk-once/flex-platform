@@ -174,6 +174,29 @@ describe("generate", () => {
     await expect(readdir(generated())).rejects.toThrow();
   });
 
+  it("refuses an id that can't name the gateway before touching the last run's output", async () => {
+    await writeGateway(
+      tmp,
+      gatewayModule("{ createUser: {} }"),
+      schemasVersion(CREATE_USER_SCHEMAS),
+    );
+    await generate(tmp);
+    const before = await readFile(contractPath(), "utf-8");
+
+    await writeFile(
+      path.join(tmp, "gateway.config.ts"),
+      gatewayModule("{ createUser: {} }").replace(
+        'id: "generated"',
+        'id: "Not An Id */"',
+      ),
+    );
+
+    await expect(generate(tmp)).rejects.toThrow(
+      'The gateway id "Not An Id */" must be',
+    );
+    expect(await readFile(contractPath(), "utf-8")).toBe(before);
+  }, 60_000);
+
   it("emits nothing when the driver rejects an operation", async () => {
     await writeGateway(
       tmp,

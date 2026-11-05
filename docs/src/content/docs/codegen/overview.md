@@ -84,11 +84,8 @@ which the gateway client names from the id and the domain's environment, with a 
 operation the latest schema version holds. The package lists their names, because the contract's
 types are gone at runtime.
 
-An id that cannot name the function fails generation, checked by `assertGatewayId` in
-`@repo/gateway-core`: one that is not 1 to 32 lowercase letters, digits and hyphens, starting
-with a letter and not ending with a hyphen. So does an operation named `then`. A client with a
-`then` function would be taken for a promise, and returning it from an async function would call
-that operation.
+Codegen [refuses](/flex-platform/codegen/checks/#generic-checks) an id that can't name the
+package or the function, and an operation named `then`, before it writes anything.
 
 rolldown builds `index.js` and `index.d.ts` in one pass from `client/index.ts`, so the two agree
 on what is external:
