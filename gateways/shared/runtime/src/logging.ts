@@ -7,8 +7,6 @@ import { driverLogger } from "./context.ts";
 import type { CompiledPath } from "./field-path.ts";
 import { resolvePath } from "./field-path.ts";
 
-export type { Logger } from "pino";
-
 export function createLogger(gatewayId: string): Logger {
   return pino({ name: gatewayId });
 }
