@@ -251,15 +251,9 @@ describe("validateStages", () => {
       );
     });
 
-    it("refuses a domain with the same name as one of its environment's domain accounts", () => {
-      expect(() => validateStages([withDomains([], ["main"])])).toThrow(
-        "platform-dev/sandbox main domain: a domain account has the same name, and their stacks would both be domain-sandbox-main",
-      );
-    });
-
-    it("keeps the domain's function name within Lambda's limit", () => {
+    it("keeps the domain's execution role's name within IAM's limit", () => {
       const environment = "e".repeat(32);
-      const fits = "d".repeat(64 - 32 - "domain--".length);
+      const fits = "d".repeat(64 - 32 - "domain---execution".length);
 
       const stage = (name: string): StageConfig => ({
         ...STAGE,
@@ -274,7 +268,7 @@ describe("validateStages", () => {
 
       expect(() => validateStages([stage(fits)])).not.toThrow();
       expect(() => validateStages([stage(`${fits}d`)])).toThrow(
-        `platform-dev/${environment} ${fits}d domain: its function name domain-${environment}-${fits}d is longer than Lambda's 64 characters`,
+        `platform-dev/${environment} ${fits}d domain: its execution role's name domain-${environment}-${fits}d-execution is longer than IAM's 64 characters`,
       );
     });
   });

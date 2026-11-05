@@ -1,12 +1,21 @@
 import {
   ApiHost,
   certificateParameterName,
+  DeployRole,
   DOMAIN_REGION,
+  ExecutionRole,
+  functionLogGroupName,
   ProxyApi,
 } from "@repo/domain-infra";
 import { edgeRoleName } from "@repo/frontdoor-infra";
+import { gatewayFunctionPattern } from "@repo/gateway-infra";
+import {
+  PlatformLogGroup,
+  securityGroupIdParameterName,
+  subnetIdsParameterName,
+} from "@repo/infra-constructs";
 import { Stack } from "aws-cdk-lib";
-import { StringParameter } from "aws-cdk-lib/aws-ssm";
+import { StringListParameter, StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 
 import type {
@@ -27,7 +36,10 @@ interface DomainStackProps {
   readonly domain: string;
 }
 
-/** One domain's API and the host it answers at, in the domain account that hosts it. */
+/**
+ * One domain's API and the host it answers at, and the log group and roles its function runs and
+ * is released with, in the domain account that hosts it.
+ */
 export class DomainStack extends Stack {
   constructor(
     scope: Construct,
@@ -58,6 +70,33 @@ export class DomainStack extends Stack {
         certificateParameterName(environment.name),
       ),
       api,
+    });
+
+    const { key } = new PlatformLogGroup(this, "FunctionLogs", {
+      logGroupName: functionLogGroupName(environment.name, domain),
+    });
+
+    const gatewayFunctions = gatewayFunctionPattern(environment.name);
+
+    new ExecutionRole(this, "Execution", {
+      environment: environment.name,
+      domain,
+      gatewayFunctions,
+      logGroupKey: key,
+    });
+
+    new DeployRole(this, "Deploy", {
+      environment: environment.name,
+      domain,
+      gatewayFunctions,
+      subnetIds: StringListParameter.valueForTypedListParameter(
+        this,
+        subnetIdsParameterName(environment.name, "isolated"),
+      ),
+      securityGroupId: StringParameter.valueForStringParameter(
+        this,
+        securityGroupIdParameterName(environment.name, "domain"),
+      ),
     });
   }
 }

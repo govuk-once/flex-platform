@@ -7,6 +7,7 @@ import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
 import { DomainStack, domainStackName } from "./domain.ts";
 import { domainAccountStackName } from "./domain-account.ts";
 import { frontdoorStackName } from "./frontdoor.ts";
+import { networkStackName } from "./network.ts";
 
 const PROD = FIXTURE_STAGES[2];
 const [DEV] = PROD.environments;
@@ -24,7 +25,7 @@ function build() {
 }
 
 describe("DomainStack", () => {
-  it("is one per domain, in the account that hosts it, deployed after that account's stack and before the edge", () => {
+  it("is one per domain, in the account that hosts it, deployed after that account's network and stack and before the edge", () => {
     const assembly = synthesizedStage(PROD);
 
     for (const environment of PROD.environments) {
@@ -42,8 +43,11 @@ describe("DomainStack", () => {
             account: domainAccount.account,
             region: SIGNING_REGION,
           });
-          expect(stack.dependencies.map(({ id }) => id)).toContain(
-            domainAccountStackName(environment, domainAccount),
+          expect(stack.dependencies.map(({ id }) => id)).toEqual(
+            expect.arrayContaining([
+              networkStackName(environment, domainAccount),
+              domainAccountStackName(environment, domainAccount),
+            ]),
           );
           expect(frontdoor).toContain(domainStackName(environment, domain));
         }
@@ -51,7 +55,7 @@ describe("DomainStack", () => {
     }
   });
 
-  it("holds one domain's API and host, and nothing shared", () => {
+  it("holds one domain's API, host, log group and roles, and nothing shared", () => {
     const resources = Object.values(
       build().template.toJSON().Resources as Record<string, { Type: string }>,
     ).map(({ Type }) => Type);
@@ -73,8 +77,12 @@ describe("DomainStack", () => {
       "AWS::ApiGateway::Resource",
       "AWS::ApiGateway::RestApi",
       "AWS::ApiGateway::Stage",
+      "AWS::IAM::ManagedPolicy",
+      "AWS::IAM::Role",
+      "AWS::IAM::Role",
       "AWS::IAM::Role",
       "AWS::KMS::Key",
+      "AWS::Logs::LogGroup",
       "AWS::Logs::LogGroup",
       "AWS::Logs::LogGroup",
       "AWS::Route53::RecordSet",
@@ -94,7 +102,7 @@ describe("DomainStack", () => {
     expect(stack.terminationProtection).toBe(false);
   });
 
-  it("reads the account's certificate, and outputs nothing", () => {
+  it("reads the account's certificate and the network's IDs, and outputs nothing", () => {
     const { Parameters, Outputs } = build().template.toJSON() as {
       Parameters: Record<string, { Default: string }>;
       Outputs?: Record<string, unknown>;
@@ -108,6 +116,8 @@ describe("DomainStack", () => {
 
     expect(parameters.toSorted()).toEqual([
       "/flex/domain/dev/certificate-arn",
+      "/flex/network/dev/isolated-subnet-ids",
+      "/flex/network/dev/security-group/domain",
       "BootstrapVersion",
     ]);
     expect(Object.keys(Outputs ?? {})).toEqual([]);
@@ -145,6 +155,88 @@ describe("DomainStack", () => {
           }),
         ]),
       },
+    });
+  });
+
+  it("holds the deploy role to the network's IDs", () => {
+    const { template } = build();
+    const parameters = template.toJSON().Parameters as Record<
+      string,
+      { Default: string }
+    >;
+    const id = (name: string) =>
+      Object.keys(parameters).find((key) => parameters[key]?.Default === name);
+    const deny = (condition: Record<string, unknown>) =>
+      Match.objectLike({ Effect: "Deny", Condition: condition });
+
+    template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "domain-dev-domain-a-deploy",
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              deny({
+                "ForAnyValue:StringNotEquals": {
+                  "lambda:SubnetIds": {
+                    Ref: id("/flex/network/dev/isolated-subnet-ids"),
+                  },
+                },
+              }),
+              deny({
+                "ForAnyValue:StringNotEquals": {
+                  "lambda:SecurityGroupIds": [
+                    { Ref: id("/flex/network/dev/security-group/domain") },
+                  ],
+                },
+              }),
+            ]),
+          },
+        },
+      ],
+    });
+  });
+
+  it("creates the log group the domain's function logs to, named from config", () => {
+    build().template.hasResourceProperties("AWS::Logs::LogGroup", {
+      LogGroupName: "/flex/domain/dev/domain-a/function",
+    });
+  });
+
+  it("gives the execution role the log group's key", () => {
+    build().template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "domain-dev-domain-a-execution",
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Action: ["kms:Encrypt", "kms:GenerateDataKey*"],
+                Resource: {
+                  "Fn::GetAtt": [Match.stringLikeRegexp("^LogGroupKey"), "Arn"],
+                },
+              }),
+            ]),
+          },
+        },
+      ],
+    });
+  });
+
+  it("lets the domain's function invoke the environment's gateways", () => {
+    build().template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "domain-dev-domain-a-execution",
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Action: "lambda:InvokeFunction",
+                Resource: `arn:aws:lambda:eu-west-2:${MAIN.account}:function:gateway-dev-*`,
+              }),
+            ]),
+          },
+        },
+      ],
     });
   });
 });

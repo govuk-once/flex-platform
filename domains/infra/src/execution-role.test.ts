@@ -10,6 +10,7 @@ function build(nag = false) {
   const stack = stackIn("eu-west-2", nag);
   new ExecutionRole(stack, "Execution", {
     environment: "sandbox",
+    domain: "domain-a",
     gatewayFunctions: "gateway-sandbox-*",
     logGroupKey: new Key(stack, "LogGroupKey", { enableKeyRotation: true }),
   });
@@ -18,7 +19,7 @@ function build(nag = false) {
 
 const ARN = `eu-west-2:${ACCOUNT}`;
 
-const FUNCTION_LOG_GROUP = `arn:aws:logs:${ARN}:log-group:/flex/domain/sandbox/function`;
+const FUNCTION_LOG_GROUP = `arn:aws:logs:${ARN}:log-group:/flex/domain/sandbox/domain-a/function`;
 
 const STATEMENTS = [
   {
@@ -83,7 +84,7 @@ describe("ExecutionRole", () => {
 
   it("is assumed by Lambda alone, with a fixed name", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
-      RoleName: "domain-sandbox-execution",
+      RoleName: "domain-sandbox-domain-a-execution",
       AssumeRolePolicyDocument: Match.exact({
         Statement: [
           {
@@ -97,7 +98,7 @@ describe("ExecutionRole", () => {
     });
   });
 
-  it("may invoke the gateways named, write its logs and traces and run in a VPC, and denies the network to its code", () => {
+  it("may invoke the gateways named, write its own domain's logs and its traces and run in a VPC, and denies the network to its code", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
       Policies: Match.exact([
         {

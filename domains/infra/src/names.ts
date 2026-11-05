@@ -1,20 +1,22 @@
 // Names derived from config. The app and the constructs build them with these same functions, so a
 // consumer that needs one never reads it back from the deployed stack.
 //
-// Every name follows one template, and stack names too:
+// Every name follows one template, and a domain's stack name too:
 //
-//   domain-{environment}-{domain}    a domain's function, and its API with -api
-//   domain-{environment}-{thing}     what every domain in the environment shares
+//   domain-{environment}-{domain}    a domain's function and stack, its API with -api, and its
+//                                    roles with -execution and -deploy
 //
-// A log group's or parameter's name is a path instead: /flex/domain/{environment}/{thing}. A domain
-// answers at {domain}.{zone}. Where AWS sets a name, the name follows it: API Gateway's execution
+// A domain account's stack is domainaccount-{environment}-{account}, so it is never a domain's.
+//
+// A log group's or parameter's name is a path instead: /flex/domain/{environment}/{thing}, with
+// {domain}/ before {thing} for one of a domain's. A domain answers at {domain}.{zone}. Where AWS sets a name, the name follows it: API Gateway's execution
 // logs.
 
 /** Domains are built in the region the edge signs requests for. */
 export const DOMAIN_REGION = "eu-west-2";
 
-/** Lambda's limit on a function's name. */
-export const FUNCTION_NAME_LENGTH = 64;
+/** IAM's limit on a role's name. */
+export const ROLE_NAME_LENGTH = 64;
 
 /** The alias each release moves, and the only one a domain's API invokes. */
 export const LIVE_ALIAS = "live";
@@ -36,16 +38,21 @@ export function apiName(environment: string, domain: string): string {
   return `${domainFunctionName(environment, domain)}-api`;
 }
 
-export function executionRoleName(environment: string): string {
-  return `domain-${environment}-execution`;
+// Of the names Lambda and IAM limit to 64 characters, the longest a domain has, so the one config
+// checks.
+export function executionRoleName(environment: string, domain: string): string {
+  return `${domainFunctionName(environment, domain)}-execution`;
 }
 
-export function deployRoleName(environment: string): string {
-  return `domain-${environment}-deploy`;
+export function deployRoleName(environment: string, domain: string): string {
+  return `${domainFunctionName(environment, domain)}-deploy`;
 }
 
-export function functionLogGroupName(environment: string): string {
-  return `/flex/domain/${environment}/function`;
+export function functionLogGroupName(
+  environment: string,
+  domain: string,
+): string {
+  return `/flex/domain/${environment}/${domain}/function`;
 }
 
 export function apiAccessLogGroupName(

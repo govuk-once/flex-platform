@@ -81,25 +81,24 @@ function environmentShapes(
     ),
   );
 
-  const accounts = environment.domainAccounts.map((domainAccount) => {
-    const network = networkStackName(environment, domainAccount);
-    const stack = stackNamed(
-      domainAccountStackName(environment, domainAccount),
-    );
-
-    return {
-      ...stack,
-      name: "domain-{environment}-{account}",
-      account: "{domain account}",
-      dependencies: stack.dependencies.map((name) =>
-        name === network ? "network-{environment}-{account}" : name,
-      ),
-    };
-  });
+  const accounts = environment.domainAccounts.map((domainAccount) => ({
+    ...stackNamed(domainAccountStackName(environment, domainAccount)),
+    name: "domainaccount-{environment}-{account}",
+    account: "{domain account}",
+  }));
 
   const domains = environment.domainAccounts.flatMap((domainAccount) =>
     domainAccount.domains.map((domain) => {
-      const account = domainAccountStackName(environment, domainAccount);
+      const placeholders = new Map([
+        [
+          networkStackName(environment, domainAccount),
+          "network-{environment}-{account}",
+        ],
+        [
+          domainAccountStackName(environment, domainAccount),
+          "domainaccount-{environment}-{account}",
+        ],
+      ]);
       const stack = stackNamed(domainStackName(environment, domain));
 
       return {
@@ -116,8 +115,8 @@ function environmentShapes(
               }
             : resource,
         ),
-        dependencies: stack.dependencies.map((name) =>
-          name === account ? "domain-{environment}-{account}" : name,
+        dependencies: stack.dependencies.map(
+          (name) => placeholders.get(name) ?? name,
         ),
       };
     }),

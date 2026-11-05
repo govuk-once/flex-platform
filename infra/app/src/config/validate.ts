@@ -1,4 +1,4 @@
-import { domainFunctionName, FUNCTION_NAME_LENGTH } from "@repo/domain-infra";
+import { executionRoleName, ROLE_NAME_LENGTH } from "@repo/domain-infra";
 import { gatewayFunctionName } from "@repo/gateway-core";
 import { dnsAllowlist, networkZones } from "@repo/infra-constructs";
 import { isPlatformName } from "@repo/utils/is-platform-name";
@@ -97,29 +97,15 @@ function domainsOf(environment: EnvironmentConfig): string[] {
   return environment.domainAccounts.flatMap(({ domains }) => domains);
 }
 
-// A domain's name may not be one of its environment's domain accounts' names, and with the
-// environment's name it must fit the function's name.
+// The environment's and the domain's names are each valid alone, but together can pass IAM's limit
+// on the execution role's name, the longest of a domain's names that Lambda or IAM limits.
 function checkDomains(at: string, environment: EnvironmentConfig): void {
-  // A domain account's stack is domain-<environment>-<account>, and a domain's is
-  // domain-<environment>-<domain>, so the two names can't be the same.
-  const domainAccountNames = new Set(
-    environment.domainAccounts.map(({ name }) => name),
-  );
-
   for (const domain of domainsOf(environment)) {
-    if (domainAccountNames.has(domain)) {
-      throw new Error(
-        `${at} ${domain} domain: a domain account has the same name, and their stacks would both be domain-${environment.name}-${domain}`,
-      );
-    }
+    const roleName = executionRoleName(environment.name, domain);
 
-    // The environment's and the domain's names are each valid alone, but together can pass
-    // Lambda's limit on the function's name.
-    const functionName = domainFunctionName(environment.name, domain);
-
-    if (functionName.length > FUNCTION_NAME_LENGTH) {
+    if (roleName.length > ROLE_NAME_LENGTH) {
       throw new Error(
-        `${at} ${domain} domain: its function name ${functionName} is longer than Lambda's ${FUNCTION_NAME_LENGTH} characters`,
+        `${at} ${domain} domain: its execution role's name ${roleName} is longer than IAM's ${ROLE_NAME_LENGTH} characters`,
       );
     }
   }

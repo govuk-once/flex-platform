@@ -1,20 +1,11 @@
 import {
   ApiGatewayLogging,
   certificateParameterName,
-  DeployRole,
   DOMAIN_REGION,
-  ExecutionRole,
-  functionLogGroupName,
   WildcardCertificate,
 } from "@repo/domain-infra";
-import { gatewayFunctionPattern } from "@repo/gateway-infra";
-import {
-  PlatformLogGroup,
-  securityGroupIdParameterName,
-  subnetIdsParameterName,
-} from "@repo/infra-constructs";
 import { Stack } from "aws-cdk-lib";
-import { StringListParameter, StringParameter } from "aws-cdk-lib/aws-ssm";
+import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 
 import type {
@@ -22,11 +13,13 @@ import type {
   EnvironmentConfig,
 } from "../config/types.ts";
 
+// Not domain-, which a domain's stack starts with: names may hold hyphens, so only a different first
+// word keeps an account's stack name from ever being a domain's.
 export function domainAccountStackName(
   environment: EnvironmentConfig,
   domainAccount: DomainAccountConfig,
 ): string {
-  return `domain-${environment.name}-${domainAccount.name}`;
+  return `domainaccount-${environment.name}-${domainAccount.name}`;
 }
 
 interface DomainAccountStackProps {
@@ -59,31 +52,6 @@ export class DomainAccountStack extends Stack {
     new StringParameter(this, "CertificateArn", {
       parameterName: certificateParameterName(environment.name),
       stringValue: certificate.certificateArn,
-    });
-
-    const { key } = new PlatformLogGroup(this, "FunctionLogs", {
-      logGroupName: functionLogGroupName(environment.name),
-    });
-
-    const gatewayFunctions = gatewayFunctionPattern(environment.name);
-
-    new ExecutionRole(this, "Execution", {
-      environment: environment.name,
-      gatewayFunctions,
-      logGroupKey: key,
-    });
-
-    new DeployRole(this, "Deploy", {
-      environment: environment.name,
-      gatewayFunctions,
-      subnetIds: StringListParameter.valueForTypedListParameter(
-        this,
-        subnetIdsParameterName(environment.name, "isolated"),
-      ),
-      securityGroupId: StringParameter.valueForStringParameter(
-        this,
-        securityGroupIdParameterName(environment.name, "domain"),
-      ),
     });
 
     new ApiGatewayLogging(this, "ApiGatewayLogging", {
