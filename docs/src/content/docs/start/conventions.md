@@ -54,7 +54,9 @@ change you are making.
   by names derived from config.
 - Publishable packages use the `@govuk-once/` scope. Registry configuration is in `.npmrc`. A
   package is published only by a release, which `packages/release/src/sources.ts` lists it for.
-  See [Releasing packages](/flex-platform/start/releasing/).
+  A package a release doesn't publish is `private`. A gateway's package is too, because a release
+  publishes the package codegen generates for it. See
+  [Releasing packages](/flex-platform/start/releasing/).
 
 ## Tests
 
