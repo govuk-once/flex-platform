@@ -258,12 +258,22 @@ describe("connect", () => {
         data: { name: "Ada" },
         meta: ["r1"],
       }),
+      answered({
+        ok: true,
+        outcome: "ok",
+        data: { name: "Ada" },
+        meta: { nested: { a: 1 } },
+      }),
     );
     await expect(
       called(() => client.getUser({ id: "u1" })),
     ).resolves.toMatchObject({
       meta: { requestId: "r1" },
     });
+    await expect(
+      called(() => client.getUser({ id: "u1" })),
+    ).resolves.not.toHaveProperty("meta");
+    // Nothing left of it is no meta at all, rather than an empty one.
     await expect(
       called(() => client.getUser({ id: "u1" })),
     ).resolves.not.toHaveProperty("meta");

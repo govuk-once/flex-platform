@@ -212,26 +212,26 @@ export function couldReach(
   ) {
     return false;
   }
+  // The lengths are held above, so every segment offered has one of the path's to meet it.
   return offered.every((segment, index) =>
-    segmentCouldReach(segment, asked[index], (text) => excludes(index, text)),
+    segmentCouldReach(segment, asked[index]!, (text) => excludes(index, text)),
   );
 }
 
 // Whether a segment of the path could be one the template's segment takes.
 function segmentCouldReach(
   segment: Segment,
-  part: Segment | undefined,
+  part: Segment,
   excludes: (text: string) => boolean,
 ): boolean {
   // A parameter sharing its segment with text takes only what has that text around it:
   // "notifications" is not "{file}.json". What a parameter of the path's own could come to is
   // not something a list of values says of the text around it, so that is taken to fit.
   if (segment.kind === "mixed") {
-    return part?.kind !== "literal" || mixedCouldBe(segment.parts, part.text);
+    return part.kind !== "literal" || mixedCouldBe(segment.parts, part.text);
   }
   // A parameter of the template takes whatever reaches it.
   if (segment.kind !== "literal") return true;
-  if (part === undefined) return false;
   switch (part.kind) {
     case "literal":
       return sameText(part.text, segment.text);

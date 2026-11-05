@@ -79,6 +79,26 @@ describe("narrowInto", () => {
     });
   });
 
+  it("reaches into the elements of a list the document says nothing of", () => {
+    expect(
+      narrowing({ type: "array" }, { type: "array", items: { type: "string" } })
+        .result,
+    ).toEqual({ type: "array", items: { type: "string" } });
+  });
+
+  it("gives fields to an object that only says which it requires", () => {
+    expect(
+      narrowing(
+        { type: "object", required: ["id"] },
+        { type: "object", properties: { id: { type: "string" } } },
+      ).result,
+    ).toEqual({
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    });
+  });
+
   it("closes an object the document left open, and adds a field to one it did", () => {
     expect(
       narrowing(
@@ -249,5 +269,32 @@ describe("narrowInto", () => {
       'here must be written out; it has nothing a "$ref" could refer to',
       'there.properties.a must be written out; it has nothing a "$dynamicRef" could refer to',
     ]);
+  });
+
+  it("refuses a name an object literal would read as its prototype, wherever it is written", () => {
+    const problems: string[] = [];
+    // Parsed, since a literal written here would set the prototype instead.
+    narrowingProblems(
+      JSON.parse('{ "type": "object", "__proto__": {} }'),
+      "here",
+      problems,
+    );
+    narrowingProblems(
+      { type: "object", required: ["id", "__proto__"] },
+      "there",
+      problems,
+    );
+
+    expect(problems).toEqual([
+      'here cannot declare "__proto__"',
+      'there.required cannot list "__proto__"',
+    ]);
+  });
+
+  it("refuses a list of schemas written as something else", () => {
+    const problems: string[] = [];
+    narrowingProblems({ allOf: { type: "string" } }, "here", problems);
+
+    expect(problems).toEqual(["here.allOf must be a list of schemas"]);
   });
 });

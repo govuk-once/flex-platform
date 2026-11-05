@@ -41,6 +41,13 @@ describe("resolvePath", () => {
   it("returns an empty array when nothing matches", () => {
     expect(resolvePath({ a: 1 }, ["missing"])).toEqual([]);
   });
+
+  it("fans out over an object's own values only, not ones it inherits", () => {
+    const users = Object.assign(Object.create({ inherited: { n: 0 } }), {
+      own: { n: 1 },
+    }) as Record<string, unknown>;
+    expect(resolvePath({ users }, ["users", "*", "n"])).toEqual([1]);
+  });
 });
 
 describe("valueAt", () => {

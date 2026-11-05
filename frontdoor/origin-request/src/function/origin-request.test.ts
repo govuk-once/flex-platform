@@ -199,6 +199,21 @@ describe("createOriginRequestHandler", () => {
     expect(forwarded.body).toEqual(body);
   });
 
+  it("signs a body CloudFront gives as text as the text's bytes", async () => {
+    const sign = vi.fn<SignRequest>(SIGN);
+
+    await handlerWith(
+      undefined,
+      sign,
+    )(withBody({ data: '{"name":"value"}', encoding: "text" }));
+
+    expect(sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: new Uint8Array(Buffer.from('{"name":"value"}')),
+      }),
+    );
+  });
+
   it("answers a verified request for a domain it can't route with the app's 404", async () => {
     const event = originRequestEvent();
     event.Records[0].cf.request.uri = "/app/unknown/v1";
@@ -237,6 +252,22 @@ describe("createOriginRequestHandler", () => {
       "a signing header CloudFront would refuse",
       originRequestEvent(),
       () => Promise.resolve({ authorization: "AWS4\nsplit" }),
+    ],
+    [
+      "a header the function doesn't own",
+      originRequestEvent(),
+      () => Promise.resolve({ authorization: "AWS4", "x-unowned": "1" }),
+    ],
+    [
+      "a header it sets that the request repeats and the signature leaves",
+      originRequestEvent({
+        headers: {
+          authorization: `Bearer ${token()}`,
+          "x-amz-security-token": ["a", "b"],
+          "x-correlation-id": TRACE_ID,
+        },
+      }),
+      () => Promise.resolve({ authorization: "AWS4" }),
     ],
   ])("fails closed on %s, forwarding nothing", async (_, event, sign) => {
     const response = await handlerWith(undefined, sign)(event);

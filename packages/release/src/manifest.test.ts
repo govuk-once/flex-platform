@@ -56,4 +56,19 @@ describe("publishedManifest", () => {
       "links @repo/utils, which this repository does not publish.",
     );
   });
+
+  it("refuses dependencies that are not a map of ranges", () => {
+    const built = (dependencies: unknown) => ({
+      name: "@govuk-once/sdk",
+      version: "0.3.0",
+      dependencies,
+    });
+
+    expect(() => publishedManifest(built(["a"]), as())).toThrow(
+      "@govuk-once/sdk's dependencies is not an object.",
+    );
+    expect(() => publishedManifest(built({ a: 1 }), as())).toThrow(
+      "@govuk-once/sdk's dependencies gives a as something other than a range.",
+    );
+  });
 });

@@ -71,7 +71,7 @@ export function sourceDirectories(root: string, source: Source): string[] {
 const execFile = promisify(execFileCb);
 
 // What a command wrote before it failed, from the error execFile rejects with.
-export function outputOf(error: unknown): string {
+function outputOf(error: unknown): string {
   if (!isRecord(error)) return "";
   const { stdout, stderr } = error;
   return [stdout, stderr]

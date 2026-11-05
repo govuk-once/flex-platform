@@ -13,6 +13,8 @@ import {
   buildWorkspace,
   dependencyOrder,
   type Publishable,
+  readManifest,
+  repositoryOf,
   sourceDirectories,
   type Workspace,
 } from "./workspace.ts";
@@ -93,6 +95,26 @@ describe("the workspace's packages", () => {
 
     await expect(buildWorkspace(workspace)).rejects.toThrow(
       "gateways/c has no package in .gen/package/ after its codegen script.",
+    );
+  });
+
+  it("refuses a manifest that names no package and version", async () => {
+    await setFile(workspace.root, "sdk/package.json", `{ "name": "${SDK}" }`);
+
+    await expect(
+      readManifest(`${workspace.root}/sdk/package.json`),
+    ).rejects.toThrow("sdk/package.json names no package and version.");
+  });
+
+  it("are published from the repository the workspace names, and refused without one", async () => {
+    expect(await repositoryOf(workspace.root)).toEqual({
+      type: "git",
+      url: "https://example.com/fixture.git",
+    });
+
+    await setFile(workspace.root, "package.json", '{ "name": "fixture" }');
+    await expect(repositoryOf(workspace.root)).rejects.toThrow(
+      "The workspace's package.json names no repository.",
     );
   });
 });

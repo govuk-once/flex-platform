@@ -26,10 +26,11 @@ export const SIGNED_HEADERS = [
 // carried it, and the origin would refuse the request.
 const UNSIGNABLE_QUERY = "__proto__";
 
+// A role's credentials are temporary, so they always carry a session token.
 export interface Credentials {
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
-  readonly sessionToken?: string;
+  readonly sessionToken: string;
 }
 
 export interface RequestToSign {
@@ -127,12 +128,8 @@ export function credentialsFromEnvironment(): Credentials {
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
   const sessionToken = process.env.AWS_SESSION_TOKEN;
-  if (!accessKeyId || !secretAccessKey) {
+  if (!accessKeyId || !secretAccessKey || !sessionToken) {
     throw new Error("The role's credentials aren't in the environment");
   }
-  return {
-    accessKeyId,
-    secretAccessKey,
-    ...(sessionToken ? { sessionToken } : {}),
-  };
+  return { accessKeyId, secretAccessKey, sessionToken };
 }

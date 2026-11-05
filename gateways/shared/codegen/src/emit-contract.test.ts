@@ -791,4 +791,16 @@ describe("generation errors", () => {
       /get-user/,
     );
   });
+
+  it("says which schema it could not describe", async () => {
+    const unnamed: GatewaySchemas = {
+      operations: {
+        getUser: { input: { $ref: "Missing" }, outcomes: { ok: {} } },
+      },
+    };
+
+    await expect(emitContract(GATEWAY_ID, unnamed, outDir)).rejects.toThrow(
+      'Cannot describe the input of operation "getUser": Schema references shared definition "Missing", which is not declared',
+    );
+  });
 });

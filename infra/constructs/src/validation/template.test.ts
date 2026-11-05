@@ -68,6 +68,25 @@ describe("attachedPolicyStatements", () => {
       ),
     ).toEqual([]);
   });
+
+  it("gives none from a policy whose document lists no statements", () => {
+    const template: TemplateResources = {
+      Store: { Type: "AWS::S3::Bucket" },
+      StorePolicy: {
+        Type: "AWS::S3::BucketPolicy",
+        Properties: { Bucket: { Ref: "Store" }, PolicyDocument: {} },
+      },
+    };
+
+    expect(
+      attachedPolicyStatements(
+        template,
+        "Store",
+        "AWS::S3::BucketPolicy",
+        "Bucket",
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("refersTo", () => {
