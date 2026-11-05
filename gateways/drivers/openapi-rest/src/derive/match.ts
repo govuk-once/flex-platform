@@ -144,21 +144,9 @@ export function fit(path: string, template: string): Fit | string {
       if (index !== offered.length - 1) {
         return `"{${segment.name}+}" takes every segment that is left, so it can only come last`;
       }
-      const rest = asked.slice(index);
-      if (rest.length === 0)
-        return "it has no segment for the template's last parameter";
-      const texts: string[] = [];
-      for (const part of rest) {
-        // A parameter of the path's own here would be a caller choosing where under the
-        // template a request goes, which is what naming the path in full is there to prevent.
-        if (part.kind !== "literal") {
-          const named =
-            part.kind === "mixed" ? "a parameter" : `"{${part.name}}"`;
-          return `what "{${segment.name}+}" takes has to be written out, and ${named} is a parameter`;
-        }
-        texts.push(part.text);
-      }
-      fixed.set(segment.name, texts.join("/"));
+      const taken = takenByGreedy(segment.name, asked.slice(index));
+      if (typeof taken === "string") return taken;
+      fixed.set(segment.name, taken.text);
       return { fixed, carried } satisfies Fit;
     }
 
@@ -185,6 +173,27 @@ export function fit(path: string, template: string): Fit | string {
     : ({ fixed, carried } satisfies Fit);
 }
 
+// What "{name+}" takes from a path: every segment that is left, each written out.
+function takenByGreedy(
+  name: string,
+  rest: readonly Segment[],
+): { readonly text: string } | string {
+  if (rest.length === 0) {
+    return "it has no segment for the template's last parameter";
+  }
+  const texts: string[] = [];
+  for (const part of rest) {
+    // A parameter of the path's own here would be a caller choosing where under the template a
+    // request goes, which is what naming the path in full is there to prevent.
+    if (part.kind !== "literal") {
+      const named = part.kind === "mixed" ? "a parameter" : `"{${part.name}}"`;
+      return `what "{${name}+}" takes has to be written out, and ${named} is a parameter`;
+    }
+    texts.push(part.text);
+  }
+  return { text: texts.join("/") };
+}
+
 // Whether some value of a path's own parameters would produce a path the template takes. A
 // segment the template writes out is reached by a parameter of the path unless something says
 // that parameter cannot be that text: the upstream routes on the value a caller sends, not on
@@ -203,31 +212,36 @@ export function couldReach(
   ) {
     return false;
   }
-  for (const [index, segment] of offered.entries()) {
-    const part = asked[index];
-    // A parameter sharing its segment with text takes only what has that text around it:
-    // "notifications" is not "{file}.json". What a parameter of the path's own could come to
-    // is not something a list of values says of the text around it, so that is taken to fit.
-    if (segment.kind === "mixed") {
-      if (part?.kind === "literal" && !mixedCouldBe(segment.parts, part.text)) {
-        return false;
-      }
-      continue;
-    }
-    // A parameter of the template takes whatever reaches it.
-    if (segment.kind !== "literal") continue;
-    if (part === undefined) return false;
-    if (part.kind === "literal") {
-      if (!sameText(part.text, segment.text)) return false;
-    } else if (part.kind === "mixed") {
+  return offered.every((segment, index) =>
+    segmentCouldReach(segment, asked[index], (text) => excludes(index, text)),
+  );
+}
+
+// Whether a segment of the path could be one the template's segment takes.
+function segmentCouldReach(
+  segment: Segment,
+  part: Segment | undefined,
+  excludes: (text: string) => boolean,
+): boolean {
+  // A parameter sharing its segment with text takes only what has that text around it:
+  // "notifications" is not "{file}.json". What a parameter of the path's own could come to is
+  // not something a list of values says of the text around it, so that is taken to fit.
+  if (segment.kind === "mixed") {
+    return part?.kind !== "literal" || mixedCouldBe(segment.parts, part.text);
+  }
+  // A parameter of the template takes whatever reaches it.
+  if (segment.kind !== "literal") return true;
+  if (part === undefined) return false;
+  switch (part.kind) {
+    case "literal":
+      return sameText(part.text, segment.text);
+    case "mixed":
       // What the parameters in it could come to is not what a list of values says of one of
       // them, so nothing here proves the segment cannot be the template's text.
-      if (!mixedCouldBe(part.parts, segment.text)) return false;
-    } else if (excludes(index, segment.text)) {
-      return false;
-    }
+      return mixedCouldBe(part.parts, segment.text);
+    default:
+      return !excludes(segment.text);
   }
-  return true;
 }
 
 // A segment written out is routed to before one with a parameter in it, and one that is only a

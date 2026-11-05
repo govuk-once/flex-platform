@@ -172,10 +172,11 @@ function checkOnly(
   where: string,
   problems: string[],
 ): void {
+  const expected = allowed.map((name) => `"${name}"`).join(", ");
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
       problems.push(
-        `${where} has an unknown field "${key}"; expected ${allowed.map((name) => `"${name}"`).join(", ")}`,
+        `${where} has an unknown field "${key}"; expected ${expected}`,
       );
     }
   }
