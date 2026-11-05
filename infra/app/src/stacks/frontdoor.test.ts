@@ -82,7 +82,7 @@ describe("FrontdoorStack", () => {
     expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
       "frontdoor-staging-edge-logs-eu-west-2",
       "network-staging-main",
-      "domain-staging-main",
+      "domainaccount-staging-main",
       "domain-staging-domain-a",
       "domain-staging-domain-b",
       "frontdoor-staging",

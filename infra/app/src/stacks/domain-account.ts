@@ -22,11 +22,13 @@ import type {
   EnvironmentConfig,
 } from "../config/types.ts";
 
+// Not domain-, which a domain's stack starts with: names may hold hyphens, so only a different first
+// word keeps an account's stack name from ever being a domain's.
 export function domainAccountStackName(
   environment: EnvironmentConfig,
   domainAccount: DomainAccountConfig,
 ): string {
-  return `domain-${environment.name}-${domainAccount.name}`;
+  return `domainaccount-${environment.name}-${domainAccount.name}`;
 }
 
 interface DomainAccountStackProps {

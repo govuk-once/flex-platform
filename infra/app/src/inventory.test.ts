@@ -89,7 +89,7 @@ function environmentShapes(
 
     return {
       ...stack,
-      name: "domain-{environment}-{account}",
+      name: "domainaccount-{environment}-{account}",
       account: "{domain account}",
       dependencies: stack.dependencies.map((name) =>
         name === network ? "network-{environment}-{account}" : name,
@@ -117,7 +117,7 @@ function environmentShapes(
             : resource,
         ),
         dependencies: stack.dependencies.map((name) =>
-          name === account ? "domain-{environment}-{account}" : name,
+          name === account ? "domainaccount-{environment}-{account}" : name,
         ),
       };
     }),

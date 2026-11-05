@@ -1,60 +1,10 @@
 [
   {
-    "name": "domain-development-domain00",
-    "account": "098640806149",
-    "region": "eu-west-2",
-    "dependencies": [
-      "network-development-domain00"
-    ],
-    "resources": [
-      {
-        "logicalId": "ApiGatewayLoggingAccount6B9E3F2C",
-        "type": "AWS::ApiGateway::Account"
-      },
-      {
-        "logicalId": "ApiGatewayLoggingRoleCE57A8ED",
-        "type": "AWS::IAM::Role"
-      },
-      {
-        "logicalId": "CertificateArn85F1724F",
-        "type": "AWS::SSM::Parameter"
-      },
-      {
-        "logicalId": "DeployRoleFF7E9D15",
-        "type": "AWS::IAM::Role"
-      },
-      {
-        "logicalId": "ExecutionBoundaryC4D3311A",
-        "type": "AWS::IAM::ManagedPolicy"
-      },
-      {
-        "logicalId": "ExecutionRole829ADBFF",
-        "type": "AWS::IAM::Role"
-      },
-      {
-        "logicalId": "FunctionLogsLogGroup6E831F5E",
-        "type": "AWS::Logs::LogGroup"
-      },
-      {
-        "logicalId": "LogGroupKeyD49CF390",
-        "type": "AWS::KMS::Key"
-      },
-      {
-        "logicalId": "ZoneCaaEA820757",
-        "type": "AWS::Route53::RecordSet"
-      },
-      {
-        "logicalId": "ZoneCertificate5B37E146",
-        "type": "AWS::CertificateManager::Certificate"
-      }
-    ]
-  },
-  {
     "name": "domain-development-example",
     "account": "098640806149",
     "region": "eu-west-2",
     "dependencies": [
-      "domain-development-domain00"
+      "domainaccount-development-domain00"
     ],
     "resources": [
       {
@@ -140,6 +90,56 @@
       {
         "logicalId": "LogGroupKeyD49CF390",
         "type": "AWS::KMS::Key"
+      }
+    ]
+  },
+  {
+    "name": "domainaccount-development-domain00",
+    "account": "098640806149",
+    "region": "eu-west-2",
+    "dependencies": [
+      "network-development-domain00"
+    ],
+    "resources": [
+      {
+        "logicalId": "ApiGatewayLoggingAccount6B9E3F2C",
+        "type": "AWS::ApiGateway::Account"
+      },
+      {
+        "logicalId": "ApiGatewayLoggingRoleCE57A8ED",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "CertificateArn85F1724F",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "DeployRoleFF7E9D15",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "ExecutionBoundaryC4D3311A",
+        "type": "AWS::IAM::ManagedPolicy"
+      },
+      {
+        "logicalId": "ExecutionRole829ADBFF",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "FunctionLogsLogGroup6E831F5E",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "ZoneCaaEA820757",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "ZoneCertificate5B37E146",
+        "type": "AWS::CertificateManager::Certificate"
       }
     ]
   },

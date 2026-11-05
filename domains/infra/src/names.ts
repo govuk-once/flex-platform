@@ -1,10 +1,12 @@
 // Names derived from config. The app and the constructs build them with these same functions, so a
 // consumer that needs one never reads it back from the deployed stack.
 //
-// Every name follows one template, and stack names too:
+// Every name follows one template, and a domain's stack name too:
 //
-//   domain-{environment}-{domain}    a domain's function, and its API with -api
+//   domain-{environment}-{domain}    a domain's function and stack, and its API with -api
 //   domain-{environment}-{thing}     what every domain in the environment shares
+//
+// A domain account's stack is domainaccount-{environment}-{account}, so it is never a domain's.
 //
 // A log group's or parameter's name is a path instead: /flex/domain/{environment}/{thing}. A domain
 // answers at {domain}.{zone}. Where AWS sets a name, the name follows it: API Gateway's execution

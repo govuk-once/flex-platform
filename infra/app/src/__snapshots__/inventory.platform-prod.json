@@ -1,6 +1,6 @@
 [
   {
-    "name": "domain-development-domain00",
+    "name": "domainaccount-development-domain00",
     "account": "168789041282",
     "region": "eu-west-2",
     "dependencies": [
@@ -50,7 +50,7 @@
     ]
   },
   {
-    "name": "domain-production-domain00",
+    "name": "domainaccount-production-domain00",
     "account": "105322542531",
     "region": "eu-west-2",
     "dependencies": [
@@ -100,7 +100,7 @@
     ]
   },
   {
-    "name": "domain-staging-domain00",
+    "name": "domainaccount-staging-domain00",
     "account": "187157282680",
     "region": "eu-west-2",
     "dependencies": [

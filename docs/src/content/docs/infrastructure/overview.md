@@ -54,7 +54,7 @@ Each environment has these stacks:
 | `frontdoor-<environment>-edge-logs-eu-west-2` | Frontdoor | eu-west-2 | Environment | Lambda@Edge's log group, and the policy that lets its role write to it |
 | `frontdoor-<environment>` | Frontdoor | us-east-1 | Environment | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
 | `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, interface endpoints, security groups, network ACLs, DNS Firewall, and its flow and query logs: see [Network](/flex-platform/infrastructure/network/) |
-| `domain-<environment>-<account>` | Domain | eu-west-2 | Domain account | What the account's domains share: see [what a domain account provides](/flex-platform/domains/hosting/#what-a-domain-account-provides) |
+| `domainaccount-<environment>-<account>` | Domain | eu-west-2 | Domain account | What the account's domains share: see [what a domain account provides](/flex-platform/domains/hosting/#what-a-domain-account-provides) |
 | `domain-<environment>-<domain>` | Domain | eu-west-2 | Domain | The domain's API and host: see [what a domain provides](/flex-platform/domains/hosting/#what-a-domain-provides) |
 
 The Frontdoor's stacks are in us-east-1 because CloudFront takes its web ACL, its certificate and
@@ -132,8 +132,7 @@ Before building any stage, the app checks every stage's config:
 - every environment trusts at least one issuer, each an `https` URL naming at least one app
   client;
 - every domain's name follows the same rule as the names above, is used once in its environment,
-  across all its domain accounts, and is none of its domain accounts' names, and its function's
-  name is within Lambda's 64 characters. See [checks](/flex-platform/domains/hosting/#checks);
+  across all its domain accounts, and its function's name is within Lambda's 64 characters. See [checks](/flex-platform/domains/hosting/#checks);
 - every domain account's network lists at least two availability zones, each once, and each one
   the network has a layout for;
 - every gateway's id is a name as above, used once in its account, and short enough for its
@@ -151,8 +150,10 @@ Before building any stage, the app checks every stage's config:
 - **Names follow one template.** A name the platform gives a resource or a stack is
   `{section}-{environment}-{thing}`, such as `frontdoor-production-origin-request`, with
   `-{region}` last for one of a set kept once per region. An environment's main stack is
-  `{section}-{environment}` alone. A log group is a path, `/flex/{section}/{environment}/{thing}`.
-  Where AWS requires a prefix, such as WAF's `aws-waf-logs-`, the name follows it. Each section
+  `{section}-{environment}` alone. A domain account's stack starts `domainaccount-`, not `domain-`:
+  names may hold hyphens, so only a different first word keeps it from ever having a domain's
+  stack's name. A log group is a path, `/flex/{section}/{environment}/{thing}`. Where AWS requires
+  a prefix, such as WAF's `aws-waf-logs-`, the name follows it. Each section
   builds its names with functions in one module, such as `frontdoor/infra/src/names.ts`, which
   states the template too.
 - **Construct IDs are a contract.** A resource's logical ID comes from its construct path, so

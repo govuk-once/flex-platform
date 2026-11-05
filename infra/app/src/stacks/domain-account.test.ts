@@ -62,13 +62,13 @@ describe("DomainAccountStack", () => {
   });
 
   it("names its stack from the environment and the domain account", () => {
-    expect(domainAccountStackName(DEV, MAIN)).toBe("domain-dev-main");
+    expect(domainAccountStackName(DEV, MAIN)).toBe("domainaccount-dev-main");
   });
 
   it("is in its domain account, in the network's region, protected from deletion", () => {
     const { stack } = build();
 
-    expect(stack.stackName).toBe("domain-dev-main");
+    expect(stack.stackName).toBe("domainaccount-dev-main");
     expect(stack.account).toBe(MAIN.account);
     expect(stack.region).toBe(NETWORK_REGION);
     expect(stack.terminationProtection).toBe(true);
