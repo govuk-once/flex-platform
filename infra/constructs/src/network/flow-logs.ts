@@ -33,7 +33,7 @@ export interface FlowLogsProps {
  * Athena can read a window without scanning the rest. AWS's default ten-minute aggregation: a
  * connection kept open is one record per direction every ten minutes, not every minute.
  *
- * The rejected flows go to a `PlatformLogGroup` as well, which log forwarding carries to the
+ * The rejected flows go to a `PlatformLogGroup` as well, which log forwarding will carry to the
  * central logs. A rejection is the security signal in a flow log, something misconfigured or
  * probing, and there should be few, so the cost of sending every flow there is avoided.
  */

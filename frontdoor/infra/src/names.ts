@@ -30,7 +30,10 @@ export function viewerRequestLogGroupName(environment: string): string {
   return `/aws/cloudfront/function/${viewerRequestFunctionName(environment)}`;
 }
 
-/** The log group CloudFront's access logs are delivered to, and the delivery's own names. */
+/**
+ * The access log delivery's names: its source, its destination and the account's resource policy
+ * that lets it write. CloudFormation names the log group the logs are delivered to.
+ */
 export function accessLogsName(environment: string): string {
   return `frontdoor-${environment}-access-logs`;
 }

@@ -66,9 +66,10 @@ export interface OpenApiRestClient {
 }
 
 // Branded with this driver's type, which defineHandler applies, so an operation's `handler`
-// must come from this driver. The input and outcome types the author declared are kept, so a
-// generated contract can check them against the operation's schemas. The defaults name the
-// widest handler: `never` input accepts any declared input, and any outcome is a string.
+// must come from this driver. The input and outcome types the author declared are kept in the
+// type, but nothing checks them against the operation's schemas: the runtime validates the input
+// before the handler runs, and its outcome after. The defaults name the widest handler: `never`
+// input accepts any declared input, and any outcome is a string.
 export type OpenApiRestHandler<
   TInput = never,
   TOutcome extends string = string,

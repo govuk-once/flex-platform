@@ -38,7 +38,7 @@ async function loadModule<T>(absPath: string): Promise<T> {
   return mod.default;
 }
 
-// Loads TypeScript via Node's type stripping without a config compilation step. Importing a
+// Loads TypeScript through tsx, which the CLI registers, with no compilation step. Importing a
 // configuration reaches no environment, secret or network by design, so this runs anywhere.
 export async function loadConfig(
   gatewayDir: string,

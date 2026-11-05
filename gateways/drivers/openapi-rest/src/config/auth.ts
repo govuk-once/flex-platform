@@ -54,10 +54,10 @@ export interface OpenApiRestAuthInstance {
   headers(
     request: OpenApiRestAuthRequest,
   ): Promise<Readonly<Record<string, string>>>;
-  // The upstream refused a request this part helped authenticate. Called after the secret has
-  // been read again from the store, and before a GET is sent once more: drop what is held, a
-  // token or an assumed role's credentials, so the next request authenticates afresh. Optional:
-  // a part that holds nothing has nothing to drop.
+  // The upstream refused a request this part helped authenticate. Called before the secret is
+  // read again from the store, so a read that fails leaves nothing held, and before a GET is sent
+  // once more: drop what is held, a token or an assumed role's credentials, so the next request
+  // authenticates afresh. Optional: a part that holds nothing has nothing to drop.
   refused?(): void;
 }
 
