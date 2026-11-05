@@ -114,7 +114,8 @@ security group a domain's function runs in, which may reach only the `lambda` en
 
 The stack reads two of the network's
 [parameters](/flex-platform/infrastructure/network/#ids-other-stacks-read) when it deploys, and
-holds the deploy role to them:
+holds the deploy role to them. The deploy role may read them too, so a release places a function
+from the same values:
 
 | Parameter | Holds |
 |---|---|
@@ -153,7 +154,8 @@ role has none: it runs no one's code, and its denies already hold whatever else 
 Each domain has a deploy role too, `domain-<environment>-<domain>-deploy`. It may be assumed only
 by principals in its own account that are themselves allowed to assume it. It may create,
 configure, release and read only its domain's function, with the function's versions and aliases,
-describe the network Lambda checks a function's placement against, and pass only its domain's
+read the two network parameters above, describe the network Lambda checks a function's placement
+against, and pass only its domain's
 execution role, only to Lambda. So no release can give a function another domain's role, and with
 it another domain's log group. It denies:
 
@@ -223,9 +225,9 @@ sets:
 
 - the name, `domain-<environment>-<name>`;
 - the role, `domain-<environment>-<name>-execution`;
-- the isolated subnets and the `domain` security group, from the network's parameters above. The
-  deploy role refuses a configuration with no VPC, so a release sends them with every configuration
-  update;
+- the isolated subnets and the `domain` security group, read from the network's parameters above
+  as the deploy role. The deploy role refuses a configuration with no VPC, so a release sends them
+  with every configuration update;
 - logging to `/flex/domain/<environment>/<name>/function`;
 - `FLEX_ENVIRONMENT`, the environment's name, which the code uses only to build names, such as a
   gateway's function name, and never to choose what it does;

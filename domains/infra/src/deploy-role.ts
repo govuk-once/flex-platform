@@ -6,6 +6,7 @@ import {
   PolicyStatement,
   Role,
 } from "aws-cdk-lib/aws-iam";
+import { StringListParameter, StringParameter } from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 
 import {
@@ -18,15 +19,19 @@ export interface DeployRoleProps {
   readonly environment: string;
   readonly domain: string;
   readonly gatewayFunctions: string;
-  readonly subnetIds: readonly string[];
-  readonly securityGroupId: string;
+  /** The SSM parameter holding the subnets every function must be in, as a list. */
+  readonly subnetIdsParameterName: string;
+  /** The SSM parameter holding the security group every function must have. */
+  readonly securityGroupIdParameterName: string;
 }
 
 /**
  * The role a release assumes to create, configure and release one domain's function. It may touch
  * only that function, never a gateway, and pass only that domain's execution role, so no release
  * can give a function another domain's role. Every function it creates or configures must be in
- * the subnets and security group named: a deny holds whatever else the role is ever allowed.
+ * the subnets and security group the parameters hold: a deny holds whatever else the role is ever
+ * allowed. A release reads the same parameters as the role, so it places a function as the denies
+ * require.
  */
 export class DeployRole extends Construct {
   constructor(
@@ -36,8 +41,8 @@ export class DeployRole extends Construct {
       environment,
       domain,
       gatewayFunctions,
-      subnetIds,
-      securityGroupId,
+      subnetIdsParameterName,
+      securityGroupIdParameterName,
     }: DeployRoleProps,
   ) {
     super(scope, id);
@@ -69,6 +74,27 @@ export class DeployRole extends Construct {
       resourceName: executionRoleName(environment, domain),
     });
 
+    const subnetIds = StringListParameter.valueForTypedListParameter(
+      this,
+      subnetIdsParameterName,
+    );
+    const securityGroupId = StringParameter.valueForStringParameter(
+      this,
+      securityGroupIdParameterName,
+    );
+
+    // A parameter's name starts with a slash, which its ARN holds once.
+    const placementParameters = [
+      subnetIdsParameterName,
+      securityGroupIdParameterName,
+    ].map((name) =>
+      stack.formatArn({
+        service: "ssm",
+        resource: "parameter",
+        resourceName: name.replace(/^\//, ""),
+      }),
+    );
+
     const placed = [
       "lambda:CreateFunction",
       "lambda:UpdateFunctionConfiguration",
@@ -99,6 +125,11 @@ export class DeployRole extends Construct {
           "ec2:GetSecurityGroupsForVpc",
         ],
         resources: ["*"],
+      }),
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["ssm:GetParameter", "ssm:GetParameters"],
+        resources: placementParameters,
       }),
       new PolicyStatement({
         effect: Effect.ALLOW,

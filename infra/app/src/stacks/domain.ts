@@ -15,7 +15,7 @@ import {
   subnetIdsParameterName,
 } from "@repo/infra-constructs";
 import { Stack } from "aws-cdk-lib";
-import { StringListParameter, StringParameter } from "aws-cdk-lib/aws-ssm";
+import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 
 import type {
@@ -89,13 +89,13 @@ export class DomainStack extends Stack {
       environment: environment.name,
       domain,
       gatewayFunctions,
-      subnetIds: StringListParameter.valueForTypedListParameter(
-        this,
-        subnetIdsParameterName(environment.name, "isolated"),
+      subnetIdsParameterName: subnetIdsParameterName(
+        environment.name,
+        "isolated",
       ),
-      securityGroupId: StringParameter.valueForStringParameter(
-        this,
-        securityGroupIdParameterName(environment.name, "domain"),
+      securityGroupIdParameterName: securityGroupIdParameterName(
+        environment.name,
+        "domain",
       ),
     });
   }
