@@ -16,16 +16,17 @@ import {
 
 export interface DeployRoleProps {
   readonly environment: string;
+  readonly domain: string;
   readonly gatewayFunctions: string;
   readonly subnetIds: readonly string[];
   readonly securityGroupId: string;
 }
 
 /**
- * The role a release assumes to create, configure and release a domain's function. It may touch
- * only domain functions, never a gateway, and pass only the execution role. Every function it
- * creates or configures must be in the subnets and security group named: a deny holds whatever else
- * the role is ever allowed.
+ * The role a release assumes to create, configure and release one domain's function. It may touch
+ * only that function, never a gateway, and pass only that domain's execution role, so no release
+ * can give a function another domain's role. Every function it creates or configures must be in
+ * the subnets and security group named: a deny holds whatever else the role is ever allowed.
  */
 export class DeployRole extends Construct {
   constructor(
@@ -33,6 +34,7 @@ export class DeployRole extends Construct {
     id: string,
     {
       environment,
+      domain,
       gatewayFunctions,
       subnetIds,
       securityGroupId,
@@ -42,12 +44,16 @@ export class DeployRole extends Construct {
 
     const stack = Stack.of(this);
 
-    const domainFunctions = stack.formatArn({
+    const domainFunction = stack.formatArn({
       service: "lambda",
       resource: "function",
-      resourceName: domainFunctionName(environment, "*"),
+      resourceName: domainFunctionName(environment, domain),
       arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
+
+    // The function, and its versions and aliases, such as `:live`. A function's name holds no
+    // colon, so no other function's ARN matches.
+    const domainFunctions = [domainFunction, `${domainFunction}:*`];
 
     const gateways = stack.formatArn({
       service: "lambda",
@@ -60,7 +66,7 @@ export class DeployRole extends Construct {
       service: "iam",
       region: "",
       resource: "role",
-      resourceName: executionRoleName(environment),
+      resourceName: executionRoleName(environment, domain),
     });
 
     const placed = [
@@ -82,7 +88,7 @@ export class DeployRole extends Construct {
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
         ],
-        resources: [domainFunctions],
+        resources: domainFunctions,
       }),
       new PolicyStatement({
         effect: Effect.ALLOW,
@@ -112,13 +118,13 @@ export class DeployRole extends Construct {
       new PolicyStatement({
         effect: Effect.DENY,
         actions: placed,
-        resources: [domainFunctions],
+        resources: domainFunctions,
         conditions: { Null: { "lambda:VpcIds": "true" } },
       }),
       new PolicyStatement({
         effect: Effect.DENY,
         actions: placed,
-        resources: [domainFunctions],
+        resources: domainFunctions,
         conditions: {
           "ForAnyValue:StringNotEquals": { "lambda:SubnetIds": subnetIds },
         },
@@ -126,7 +132,7 @@ export class DeployRole extends Construct {
       new PolicyStatement({
         effect: Effect.DENY,
         actions: placed,
-        resources: [domainFunctions],
+        resources: domainFunctions,
         conditions: {
           "ForAnyValue:StringNotEquals": {
             "lambda:SecurityGroupIds": [securityGroupId],
@@ -136,7 +142,7 @@ export class DeployRole extends Construct {
     ];
 
     const role = new Role(this, "Role", {
-      roleName: deployRoleName(environment),
+      roleName: deployRoleName(environment, domain),
       assumedBy: new AccountRootPrincipal(),
       inlinePolicies: {
         Deploy: new PolicyDocument({ statements }),
@@ -145,9 +151,9 @@ export class DeployRole extends Construct {
 
     Validations.of(role).acknowledge(
       {
-        id: `AwsSolutions-IAM5[Resource::${domainFunctions}]`,
+        id: `AwsSolutions-IAM5[Resource::${domainFunction}:*]`,
         reason:
-          "Each domain's function is created outside CloudFormation under this pattern, by whatever assumes this role.",
+          "A release publishes versions and moves the live alias, which are named after the function's own ARN.",
       },
       {
         id: "AwsSolutions-IAM5[Resource::*]",

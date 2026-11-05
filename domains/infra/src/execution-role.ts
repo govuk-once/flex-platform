@@ -29,22 +29,23 @@ const NETWORK_INTERFACE_ACTIONS = [
 
 export interface ExecutionRoleProps {
   readonly environment: string;
+  readonly domain: string;
   /** The functions a domain may invoke, as a name pattern such as `gateway-dev-*`. */
   readonly gatewayFunctions: string;
-  /** The key the function log group is encrypted with. */
+  /** The key the domain's function log group is encrypted with. */
   readonly logGroupKey: IKey;
 }
 
 /**
- * The role every domain's function in the environment runs as. Every domain has the same
- * permissions, so they share it. Its boundary holds the same limits, in case the role is ever
- * widened by mistake.
+ * The role one domain's function runs as. It may write only to that domain's log group, so a
+ * domain's code can never write into another's. Its boundary holds the same limits, in case the
+ * role is ever widened by mistake.
  */
 export class ExecutionRole extends Construct {
   constructor(
     scope: Construct,
     id: string,
-    { environment, gatewayFunctions, logGroupKey }: ExecutionRoleProps,
+    { environment, domain, gatewayFunctions, logGroupKey }: ExecutionRoleProps,
   ) {
     super(scope, id);
 
@@ -67,7 +68,7 @@ export class ExecutionRole extends Construct {
     const logGroupArn = stack.formatArn({
       service: "logs",
       resource: "log-group",
-      resourceName: functionLogGroupName(environment),
+      resourceName: functionLogGroupName(environment, domain),
       arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
 
@@ -110,7 +111,8 @@ export class ExecutionRole extends Construct {
         resources: ["*"],
       }),
       // The function's code holds the role's credentials too. Lambda's own calls to manage its
-      // network interfaces carry no source function, so this denies only the code's.
+      // network interfaces carry no source function, so this denies only the code's. It names
+      // every domain's function, so it holds even if the role is ever given to another's.
       new PolicyStatement({
         effect: Effect.DENY,
         actions: [...NETWORK_INTERFACE_ACTIONS, "ec2:DetachNetworkInterface"],
@@ -122,12 +124,12 @@ export class ExecutionRole extends Construct {
     ];
 
     const boundary = new ManagedPolicy(this, "Boundary", {
-      description: `The most any domain's function may do in ${environment}`,
+      description: `The most the ${domain} domain's function may do in ${environment}`,
       statements,
     });
 
     const role = new Role(this, "Role", {
-      roleName: executionRoleName(environment),
+      roleName: executionRoleName(environment, domain),
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       permissionsBoundary: boundary,
       inlinePolicies: {
@@ -145,7 +147,7 @@ export class ExecutionRole extends Construct {
         {
           id: `AwsSolutions-IAM5[Resource::${logStreams}]`,
           reason:
-            "Lambda names each log stream itself, so the grant covers every stream in the one log group.",
+            "Lambda names each log stream itself, so the grant covers every stream in the domain's own log group.",
         },
         {
           id: "AwsSolutions-IAM5[Action::kms:GenerateDataKey*]",

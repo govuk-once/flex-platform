@@ -7,7 +7,6 @@ import {
   DomainAccountStack,
   domainAccountStackName,
 } from "./domain-account.ts";
-import { networkStackName } from "./network.ts";
 
 const PROD = FIXTURE_STAGES[2];
 const [DEV] = PROD.environments;
@@ -22,7 +21,7 @@ function build() {
 }
 
 describe("DomainAccountStack", () => {
-  it("is one per domain account, hosting domains or not, deployed after its network", () => {
+  it("is one per domain account, hosting domains or not", () => {
     const assembly = synthesizedStage(PROD);
 
     for (const environment of PROD.environments) {
@@ -35,9 +34,6 @@ describe("DomainAccountStack", () => {
           account: domainAccount.account,
           region: NETWORK_REGION,
         });
-        expect(stack.dependencies.map(({ id }) => id)).toContain(
-          networkStackName(environment, domainAccount),
-        );
       }
     }
   });
@@ -50,12 +46,7 @@ describe("DomainAccountStack", () => {
     expect(resources.toSorted()).toEqual([
       "AWS::ApiGateway::Account",
       "AWS::CertificateManager::Certificate",
-      "AWS::IAM::ManagedPolicy",
       "AWS::IAM::Role",
-      "AWS::IAM::Role",
-      "AWS::IAM::Role",
-      "AWS::KMS::Key",
-      "AWS::Logs::LogGroup",
       "AWS::Route53::RecordSet",
       "AWS::SSM::Parameter",
     ]);
@@ -90,105 +81,14 @@ describe("DomainAccountStack", () => {
     });
   });
 
-  it("reads the network's IDs, and outputs nothing", () => {
+  it("reads nothing, and outputs nothing", () => {
     const { Parameters, Outputs } = build().template.toJSON() as {
-      Parameters: Record<string, { Default: string }>;
+      Parameters: Record<string, unknown>;
       Outputs?: Record<string, unknown>;
     };
 
-    // Besides CDK's bootstrap check, each parameter is an SSM read, named by what it reads, since
-    // CDK gives its ID a hash.
-    const parameters = Object.entries(Parameters).map(([id, { Default }]) =>
-      id === "BootstrapVersion" ? id : Default,
-    );
-
-    expect(parameters.toSorted()).toEqual([
-      "/flex/network/dev/isolated-subnet-ids",
-      "/flex/network/dev/security-group/domain",
-      "BootstrapVersion",
-    ]);
+    // CDK's bootstrap check is the stack's one parameter.
+    expect(Object.keys(Parameters)).toEqual(["BootstrapVersion"]);
     expect(Object.keys(Outputs ?? {})).toEqual([]);
-  });
-
-  it("holds the deploy role to the network's IDs", () => {
-    const { template } = build();
-    const parameters = template.toJSON().Parameters as Record<
-      string,
-      { Default: string }
-    >;
-    const id = (name: string) =>
-      Object.keys(parameters).find((key) => parameters[key]?.Default === name);
-    const deny = (condition: Record<string, unknown>) =>
-      Match.objectLike({ Effect: "Deny", Condition: condition });
-
-    template.hasResourceProperties("AWS::IAM::Role", {
-      RoleName: "domain-dev-deploy",
-      Policies: [
-        {
-          PolicyDocument: {
-            Statement: Match.arrayWith([
-              deny({
-                "ForAnyValue:StringNotEquals": {
-                  "lambda:SubnetIds": {
-                    Ref: id("/flex/network/dev/isolated-subnet-ids"),
-                  },
-                },
-              }),
-              deny({
-                "ForAnyValue:StringNotEquals": {
-                  "lambda:SecurityGroupIds": [
-                    { Ref: id("/flex/network/dev/security-group/domain") },
-                  ],
-                },
-              }),
-            ]),
-          },
-        },
-      ],
-    });
-  });
-
-  it("creates the log group every domain's function logs to, named from config", () => {
-    build().template.hasResourceProperties("AWS::Logs::LogGroup", {
-      LogGroupName: "/flex/domain/dev/function",
-    });
-  });
-
-  it("gives the execution role the log group's key", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
-      RoleName: "domain-dev-execution",
-      Policies: [
-        {
-          PolicyDocument: {
-            Statement: Match.arrayWith([
-              Match.objectLike({
-                Action: ["kms:Encrypt", "kms:GenerateDataKey*"],
-                Resource: {
-                  "Fn::GetAtt": [Match.stringLikeRegexp("^LogGroupKey"), "Arn"],
-                },
-              }),
-            ]),
-          },
-        },
-      ],
-    });
-  });
-
-  it("lets the domains' functions invoke the environment's gateways", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
-      RoleName: "domain-dev-execution",
-      Policies: [
-        {
-          PolicyDocument: {
-            Statement: Match.arrayWith([
-              Match.objectLike({
-                Action: "lambda:InvokeFunction",
-                Resource: `arn:aws:lambda:eu-west-2:${MAIN.account}:function:gateway-dev-*`,
-              }),
-            ]),
-          },
-        },
-      ],
-    });
   });
 });

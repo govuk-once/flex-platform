@@ -1,4 +1,4 @@
-import { domainFunctionName, FUNCTION_NAME_LENGTH } from "@repo/domain-infra";
+import { executionRoleName, ROLE_NAME_LENGTH } from "@repo/domain-infra";
 import { gatewayFunctionName } from "@repo/gateway-core";
 import { dnsAllowlist, networkZones } from "@repo/infra-constructs";
 import { isPlatformName } from "@repo/utils/is-platform-name";
@@ -97,15 +97,15 @@ function domainsOf(environment: EnvironmentConfig): string[] {
   return environment.domainAccounts.flatMap(({ domains }) => domains);
 }
 
-// The environment's and the domain's names are each valid alone, but together can pass Lambda's
-// limit on the function's name.
+// The environment's and the domain's names are each valid alone, but together can pass IAM's limit
+// on the execution role's name, the longest of a domain's names that Lambda or IAM limits.
 function checkDomains(at: string, environment: EnvironmentConfig): void {
   for (const domain of domainsOf(environment)) {
-    const functionName = domainFunctionName(environment.name, domain);
+    const roleName = executionRoleName(environment.name, domain);
 
-    if (functionName.length > FUNCTION_NAME_LENGTH) {
+    if (roleName.length > ROLE_NAME_LENGTH) {
       throw new Error(
-        `${at} ${domain} domain: its function name ${functionName} is longer than Lambda's ${FUNCTION_NAME_LENGTH} characters`,
+        `${at} ${domain} domain: its execution role's name ${roleName} is longer than IAM's ${ROLE_NAME_LENGTH} characters`,
       );
     }
   }

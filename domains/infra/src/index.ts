@@ -7,8 +7,9 @@ export {
   DOMAIN_REGION,
   domainFunctionName,
   domainHost,
-  FUNCTION_NAME_LENGTH,
+  executionRoleName,
   functionLogGroupName,
+  ROLE_NAME_LENGTH,
 } from "./names.ts";
 export { ProxyApi } from "./proxy-api.ts";
 export { WildcardCertificate } from "./wildcard-certificate.ts";

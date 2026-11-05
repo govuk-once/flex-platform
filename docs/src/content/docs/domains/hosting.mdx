@@ -51,23 +51,21 @@ Before building any stage, the app checks every domain:
   ending with a hyphen;
 - its name is used once in its environment, across all of the environment's domain accounts,
   since the Frontdoor routes by name alone;
-- its function's name, `domain-<environment>-<name>`, is within Lambda's 64 characters. Each name
-  is within 32 alone, but the two together can pass it.
+- its execution role's name, `domain-<environment>-<name>-execution`, is within IAM's 64
+  characters. It is the longest of the names Lambda and IAM limit, so the others fit too. Each name
+  is within 32 alone, but the two together can pass it: together they may be 46 at most.
 
 ## What a domain account provides
 
 `DomainAccountStack`, `domainaccount-<environment>-<account>`, holds what every domain in a domain
 account shares in one environment. Nothing in it names a domain, so adding or removing one never
-changes it. It is in eu-west-2, the region the edge signs requests for, and has termination protection:
-deleting it would take the domains' execution and deploy roles and their certificate with it, and
-leave the account's API Gateway logging setting naming a deleted role.
+changes it. It is in eu-west-2, the region the edge signs requests for, and has termination
+protection: deleting it would take the domains' certificate with it, and leave the account's API
+Gateway logging setting naming a deleted role.
 
 | Construct | Builds |
 |---|---|
 | `WildcardCertificate` | A CAA record at the zone's apex, `0 issue "amazon.com"`, so only Amazon may issue certificates for the zone. Then `*.<zone>`, validated through DNS in the account's own zone. |
-| `PlatformLogGroup` | `/flex/domain/<environment>/function`, the log group every domain's function logs to |
-| `ExecutionRole` | `domain-<environment>-execution`, the role every domain's function runs as, and its permission boundary. See [permissions](#permissions). |
-| `DeployRole` | `domain-<environment>-deploy`, the role a release assumes to create and update a domain's function. See [permissions](#permissions). |
 | `ApiGatewayLogging` | API Gateway's logging role, set on the account, so every API in it can write its access and execution logs |
 
 One wildcard certificate serves every domain because ACM limits a certificate's first name to 64
@@ -77,6 +75,33 @@ ACM generates the certificate's ARN, so the stack writes it to SSM, at
 `/flex/domain/<environment>/certificate-arn`, where each domain's stack reads it when it deploys. If
 the certificate is ever replaced, each domain's stack deploys with `--force` to read the new ARN,
 and CloudFormation can't delete the old certificate while a domain's custom domain still uses it.
+
+API Gateway's logging role may write only to the domains' API access log groups,
+`/flex/domain/<environment>/<domain>/api-access`, and to API Gateway's execution log groups. It may
+create none, so it writes only to log groups that already exist, encrypted.
+
+## What a domain provides
+
+`DomainStack`, `domain-<environment>-<domain>`, holds one domain's API and the host it answers at,
+and the log group and roles its function runs and is released with, in the domain account that
+hosts it, in eu-west-2. It holds no function: the API reaches the domain's function by name. It has
+no termination protection, since everything in it but its log groups, which are retained, is built
+again from config. CDK doesn't delete a stack the app no longer builds, so a domain removed from
+config keeps its stack until someone deletes it.
+
+| Construct | Builds |
+|---|---|
+| `ProxyApi` | `domain-<environment>-<domain>-api`, a regional REST API whose `execute-api` address is turned off, with its resource policy, its `ANY` methods, its stage, `default`, its access and execution log groups, the role it invokes the function through, and its gateway responses |
+| `ApiHost` | `<domain>.<zone>`, with the domain account's wildcard certificate, mapped to the stage at its root, and its alias record in the account's zone |
+| `PlatformLogGroup` | `/flex/domain/<environment>/<domain>/function`, the log group the domain's function logs to |
+| `ExecutionRole` | `domain-<environment>-<domain>-execution`, the role the domain's function runs as, and its permission boundary. See [permissions](#permissions). |
+| `DeployRole` | `domain-<environment>-<domain>-deploy`, the role a release assumes to create and update the domain's function. See [permissions](#permissions). |
+
+The stage is traced with X-Ray, logs errors, and never logs request or response bodies. Its access
+logs go to `/flex/domain/<environment>/<domain>/api-access`, one JSON line per request. Its
+execution logs go to `API-Gateway-Execution-Logs_<api id>/default`, which the stack creates, since
+API Gateway's logging role may not, so it is encrypted and kept for a year. The stage has no
+throttling of its own, so it shares the account's limits.
 
 ### Network
 
@@ -100,12 +125,14 @@ If the network is ever replaced, the stack deploys with `--force` to read the ne
 
 ### Permissions
 
-Every domain has the same permissions, so they are in one role. A domain's function may:
+Each domain's function runs as a role of its own, `domain-<environment>-<domain>-execution`. It
+may:
 
 - invoke any function named `gateway-<environment>-*`, with any qualifier, such as `:live`. Any
   domain may call any gateway in its environment, and only gateways have that name. The stack
   takes the pattern from `gatewayFunctionPattern` in `gateways/infra`;
-- write to the domain log group, and use its key for that through CloudWatch Logs;
+- write to its own domain's log group, `/flex/domain/<environment>/<domain>/function`, and use
+  its stack's key for that through CloudWatch Logs;
 - send its traces to X-Ray;
 - create and remove the network interfaces Lambda needs to run it in the VPC.
 
@@ -114,21 +141,21 @@ holds too. So the role denies the network interface actions to any call made fro
 which Lambda marks with the function's ARN. Lambda's own calls carry no function's ARN, so they
 are still allowed.
 
-<Aside type="caution" title="A log stream's name doesn't prove which domain wrote it">
-Every domain's function writes to the same log group. Lambda names each stream after the function
-that wrote it, but a domain's code can write a stream named after another domain's function. So
-when investigating, trust a stream's name only for what Lambda itself writes.
-</Aside>
+No domain's role may write to another's log group, so the log group a line is in shows which
+domain wrote it. A stream's name doesn't: Lambda names each stream, but a domain's code can write
+a stream under any name.
 
 The role runs code that teams outside the platform write, with that code holding its credentials.
 So it has a permission boundary that holds the same statements. Whatever policy is ever attached to
 the role, by mistake or by hand, a domain's code can do no more than the boundary allows. The deploy
 role has none: it runs no one's code, and its denies already hold whatever else it is ever allowed.
 
-The deploy role may be assumed only by principals in its own account that are themselves allowed
-to assume it. It may create, configure, release and read functions named
-`domain-<environment>-*`, describe the network Lambda checks a function's placement against, and
-pass only the execution role, only to Lambda. It denies:
+Each domain has a deploy role too, `domain-<environment>-<domain>-deploy`. It may be assumed only
+by principals in its own account that are themselves allowed to assume it. It may create,
+configure, release and read only its domain's function, with the function's versions and aliases,
+describe the network Lambda checks a function's placement against, and pass only its domain's
+execution role, only to Lambda. So no release can give a function another domain's role, and with
+it another domain's log group. It denies:
 
 - every Lambda action on any function named `gateway-<environment>-*`;
 - creating or configuring a domain's function with no VPC, in any subnet but the isolated ones, or
@@ -136,29 +163,6 @@ pass only the execution role, only to Lambda. It denies:
 
 The denies hold whatever else the role is ever allowed, so a domain's function can only run where
 the platform places it.
-
-API Gateway's logging role may write only to the domains' API access log groups,
-`/flex/domain/<environment>/<domain>/api-access`, and to API Gateway's execution log groups. It may
-create none, so it writes only to log groups that already exist, encrypted.
-
-## What a domain provides
-
-`DomainStack`, `domain-<environment>-<domain>`, holds one domain's API and the host it answers at,
-in the domain account that hosts it, in eu-west-2. It holds no function: the API reaches the
-domain's function by name. It has no termination protection, since everything in it but its log
-groups, which are retained, is built again from config. CDK doesn't delete a stack the app no longer
-builds, so a domain removed from config keeps its stack until someone deletes it.
-
-| Construct | Builds |
-|---|---|
-| `ProxyApi` | `domain-<environment>-<domain>-api`, a regional REST API whose `execute-api` address is turned off, with its resource policy, its `ANY` methods, its stage, `default`, its access and execution log groups, the role it invokes the function through, and its gateway responses |
-| `ApiHost` | `<domain>.<zone>`, with the domain account's wildcard certificate, mapped to the stage at its root, and its alias record in the account's zone |
-
-The stage is traced with X-Ray, logs errors, and never logs request or response bodies. Its access
-logs go to `/flex/domain/<environment>/<domain>/api-access`, one JSON line per request. Its
-execution logs go to `API-Gateway-Execution-Logs_<api id>/default`, which the stack creates, since
-API Gateway's logging role may not, so it is encrypted and kept for a year. The stage has no
-throttling of its own, so it shares the account's limits.
 
 ### Who can call it
 
@@ -214,18 +218,20 @@ The function is named `domain-<environment>-<name>`, built by `domainFunctionNam
 
 ## Releasing a domain's function
 
-A release creates and updates a domain's function as `domain-<environment>-deploy`. It sets:
+A release creates and updates a domain's function as `domain-<environment>-<name>-deploy`. It
+sets:
 
 - the name, `domain-<environment>-<name>`;
-- the role, `domain-<environment>-execution`;
+- the role, `domain-<environment>-<name>-execution`;
 - the isolated subnets and the `domain` security group, from the network's parameters above. The
   deploy role refuses a configuration with no VPC, so a release sends them with every configuration
   update;
-- logging to `/flex/domain/<environment>/function`;
+- logging to `/flex/domain/<environment>/<name>/function`;
 - `FLEX_ENVIRONMENT`, the environment's name, which the code uses only to build names, such as a
   gateway's function name, and never to choose what it does;
 - active tracing, so Lambda sends its traces to X-Ray.
 
 Then it publishes a version and points the `live` alias at it. The deploy role can enforce the
 function's name, role and network, but not its logging, environment or tracing, which only the
-release sets.
+release sets. A release that sets another log group loses the function's logs, since its role may
+write to no other.

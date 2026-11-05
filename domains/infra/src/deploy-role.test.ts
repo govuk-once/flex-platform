@@ -12,6 +12,7 @@ function build(nag = false) {
   const stack = stackIn("eu-west-2", nag);
   new DeployRole(stack, "Deploy", {
     environment: "sandbox",
+    domain: "domain-a",
     gatewayFunctions: "gateway-sandbox-*",
     subnetIds: SUBNETS,
     securityGroupId: SECURITY_GROUP,
@@ -19,7 +20,9 @@ function build(nag = false) {
   return { app: stack.node.root as App, template: Template.fromStack(stack) };
 }
 
-const DOMAIN_FUNCTIONS = `arn:aws:lambda:eu-west-2:${ACCOUNT}:function:domain-sandbox-*`;
+const DOMAIN_FUNCTION = `arn:aws:lambda:eu-west-2:${ACCOUNT}:function:domain-sandbox-domain-a`;
+
+const DOMAIN_FUNCTIONS = [DOMAIN_FUNCTION, `${DOMAIN_FUNCTION}:*`];
 
 const PLACED = ["lambda:CreateFunction", "lambda:UpdateFunctionConfiguration"];
 
@@ -39,7 +42,7 @@ describe("DeployRole", () => {
 
   it("is assumed only by principals in its own account, with a fixed name", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
-      RoleName: "domain-sandbox-deploy",
+      RoleName: "domain-sandbox-domain-a-deploy",
       AssumeRolePolicyDocument: Match.exact({
         Statement: [
           {
@@ -53,7 +56,7 @@ describe("DeployRole", () => {
     });
   });
 
-  it("may release domain functions, pass the execution role to Lambda, never touch a gateway, and place every function in the network named", () => {
+  it("may release its domain's function, pass that domain's execution role to Lambda, never touch a gateway, and place every function in the network named", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
       Policies: Match.exact([
         {
@@ -93,7 +96,7 @@ describe("DeployRole", () => {
                   },
                 },
                 Effect: "Allow",
-                Resource: `arn:aws:iam::${ACCOUNT}:role/domain-sandbox-execution`,
+                Resource: `arn:aws:iam::${ACCOUNT}:role/domain-sandbox-domain-a-execution`,
               },
               {
                 Action: "lambda:*",

@@ -26,14 +26,28 @@ describe("names", () => {
     );
   });
 
-  it("name what every domain in an environment shares from the environment's name", () => {
-    expect(executionRoleName("sandbox")).toBe("domain-sandbox-execution");
-    expect(deployRoleName("sandbox")).toBe("domain-sandbox-deploy");
+  it("name a domain's roles after its function", () => {
+    expect(executionRoleName("sandbox", "domain-a")).toBe(
+      "domain-sandbox-domain-a-execution",
+    );
+    expect(deployRoleName("sandbox", "domain-a")).toBe(
+      "domain-sandbox-domain-a-deploy",
+    );
+  });
+
+  it("give a domain no 64-character-limited name longer than its execution role's", () => {
+    const longest = executionRoleName("e", "d").length;
+    for (const name of [
+      domainFunctionName("e", "d"),
+      deployRoleName("e", "d"),
+    ]) {
+      expect(name.length).toBeLessThanOrEqual(longest);
+    }
   });
 
   it("put the platform's log groups and parameters under /flex/domain", () => {
-    expect(functionLogGroupName("sandbox")).toBe(
-      "/flex/domain/sandbox/function",
+    expect(functionLogGroupName("sandbox", "domain-a")).toBe(
+      "/flex/domain/sandbox/domain-a/function",
     );
     expect(apiAccessLogGroupName("sandbox", "domain-a")).toBe(
       "/flex/domain/sandbox/domain-a/api-access",

@@ -44,11 +44,6 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
         domainAccount,
       });
 
-      account.addStackDependency(
-        network,
-        "The deploy role reads the network's isolated subnets and domain security group from SSM.",
-      );
-
       for (const domain of domainAccount.domains) {
         const domainStack = new DomainStack(app, {
           environment,
@@ -59,6 +54,11 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
         domainStack.addStackDependency(
           account,
           "The domain's host reads the account's certificate ARN from SSM, and its stage logs through the account's API Gateway logging setting.",
+        );
+
+        domainStack.addStackDependency(
+          network,
+          "The domain's deploy role reads the network's isolated subnets and domain security group from SSM.",
         );
 
         frontdoor.addStackDependency(
