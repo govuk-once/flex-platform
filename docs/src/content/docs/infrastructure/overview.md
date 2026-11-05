@@ -42,8 +42,8 @@ pnpm --filter @repo/infra-app diff -c stage=platform-dev
 ```
 
 Without `-c stage`, or with a name the config doesn't have, synth stops and lists the known stages.
-`-c target=<environment>` builds only that environment's stacks, and `-c target=shared` only the
-shared account's. A target selects what to build, never how it's built.
+`-c target=<environment>` builds only that environment's stacks. A target selects what to build,
+never how it's built.
 
 ## Stacks
 
