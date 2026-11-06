@@ -14,7 +14,7 @@ import {
   KidNotFoundInJwksError,
   WaitPeriodNotYetEndedJwkError,
 } from "aws-jwt-verify/error";
-import type { Fetcher } from "aws-jwt-verify/https";
+import { type Fetcher, SimpleFetcher } from "aws-jwt-verify/https";
 import { SimpleJwksCache } from "aws-jwt-verify/jwk";
 import { decomposeUnverifiedJwt } from "aws-jwt-verify/jwt";
 import type { JwtPayload } from "aws-jwt-verify/jwt-model";
@@ -67,9 +67,35 @@ const REJECTIONS: readonly (readonly [
   [JwtNotBeforeError, "not-yet-valid"],
 ];
 
+/** How long after a failed fetch of an issuer's keys they are not fetched again. */
+export const KEYS_BACKOFF_MS = 5_000;
+
+// The library waits before fetching again only for a key ID the keys didn't hold, not after a
+// fetch that failed. So while an issuer can't be reached, every request to an instance without
+// its keys would fetch them again, each waiting out the library's timeouts and its own retry, and
+// adding to the load on the issuer. Inside the wait a fetch fails at once instead, as one that
+// failed would, so the request still fails closed.
+export function backingOff(fetcher: Fetcher): Fetcher {
+  const failedAt = new Map<string, number>();
+  return {
+    fetch: async (uri, requestOptions, data) => {
+      const failed = failedAt.get(uri);
+      if (failed !== undefined && Date.now() - failed < KEYS_BACKOFF_MS) {
+        throw new Error("The issuer's keys failed to fetch moments ago");
+      }
+      try {
+        return await fetcher.fetch(uri, requestOptions, data);
+      } catch (error) {
+        failedAt.set(uri, Date.now());
+        throw error;
+      }
+    },
+  };
+}
+
 // One verifier per issuer, chosen by the token's own `iss`. Each fetches its issuer's keys once,
-// on first use, and again only for a key ID it hasn't seen. `fetcher` replaces the network in
-// tests.
+// on first use, and again only for a key ID it hasn't seen, or once a failed fetch's wait is over.
+// `fetcher` replaces the network in tests.
 export function createTokenVerifier(
   issuers: readonly TrustedIssuer[],
   fetcher?: Fetcher,
@@ -117,7 +143,9 @@ function issuerVerifier(trusted: TrustedIssuer, fetcher: Fetcher | undefined) {
       },
     },
     {
-      jwksCache: new SimpleJwksCache(fetcher === undefined ? {} : { fetcher }),
+      jwksCache: new SimpleJwksCache({
+        fetcher: backingOff(fetcher ?? new SimpleFetcher()),
+      }),
     },
   );
 }

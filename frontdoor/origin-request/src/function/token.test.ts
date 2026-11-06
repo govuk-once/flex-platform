@@ -14,7 +14,7 @@ import {
   OTHER_KEY,
   token,
 } from "../../test/helpers.ts";
-import { createTokenVerifier } from "./token.ts";
+import { createTokenVerifier, KEYS_BACKOFF_MS } from "./token.ts";
 
 const OTHER_ISSUER =
   "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_other";
@@ -155,6 +155,24 @@ describe("createTokenVerifier", () => {
     const { verify } = verifier({});
 
     await expect(verify(token())).rejects.toThrow();
+  });
+
+  it("waits before fetching keys again after a fetch fails, failing closed meanwhile", async () => {
+    const documents: Record<string, unknown> = {};
+    const { verify, fetched } = verifier(documents);
+
+    await expect(verify(token())).rejects.toThrow();
+    await expect(verify(token())).rejects.toThrow();
+    expect(fetched).toEqual([jwksUri(ISSUER)]);
+
+    documents[jwksUri(ISSUER)] = jwks([{ kid: KID, key: ISSUER_KEY }]);
+    vi.advanceTimersByTime(KEYS_BACKOFF_MS - 1);
+    await expect(verify(token())).rejects.toThrow();
+    expect(fetched).toHaveLength(1);
+
+    vi.advanceTimersByTime(1);
+    await expect(verify(token())).resolves.toBeUndefined();
+    expect(fetched).toEqual([jwksUri(ISSUER), jwksUri(ISSUER)]);
   });
 
   it("throws when the issuer's keys aren't a JWKS", async () => {
