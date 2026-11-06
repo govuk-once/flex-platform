@@ -16,6 +16,7 @@ import { DomainStack } from "./stacks/domain.ts";
 import { DomainAccountStack } from "./stacks/domain-account.ts";
 import { FrontdoorStack } from "./stacks/frontdoor.ts";
 import { FrontdoorEdgeLogsStack } from "./stacks/frontdoor-edge-logs.ts";
+import { FrontdoorCallerTokenKeysStack } from "./stacks/frontdoor-keys.ts";
 import { GatewayStack } from "./stacks/gateway.ts";
 import { NetworkStack } from "./stacks/network.ts";
 import { StackTags } from "./tags.ts";
@@ -43,6 +44,8 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
       edgeLogs,
       "The edge's Lambda@Edge role attaches the policy the edge logs stack creates, to write to its log group.",
     );
+
+    new FrontdoorCallerTokenKeysStack(app, environment);
 
     for (const domainAccount of environment.domainAccounts) {
       const network = new NetworkStack(app, { environment, domainAccount });

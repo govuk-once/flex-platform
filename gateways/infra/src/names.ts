@@ -12,7 +12,8 @@
 //
 // The same holds for roles and secrets. The network's `secretsmanager` and `sts` endpoints let any
 // role named `gateway-{environment}-*-execution` through, to any secret named
-// `gateway-{environment}-*` in the account. So no other role or secret may have those names.
+// `gateway-{environment}-*` in the account, and the caller token's public keys bucket lets any role
+// named that way in a domain account read them. So no other role or secret may have those names.
 
 import { gatewayFunctionName, gatewayFunctionPrefix } from "@repo/gateway-core";
 

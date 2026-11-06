@@ -4,11 +4,17 @@ import {
   accessLogsName,
   callerTokenKeysBucketName,
   edgeRoleName,
+  keyRotationFunctionName,
+  keyRotationLogGroupName,
+  keyRotationRoleName,
+  keyRotationStateParameterName,
   originRequestFunctionName,
   originRequestLogGroupName,
   originRequestLogsPolicyName,
   originRequestPolicyName,
   responseHeadersPolicyName,
+  signingKeyAliasName,
+  signingKeyParameterName,
   viewerRequestFunctionName,
   viewerRequestLogGroupName,
   wafLogGroupName,
@@ -40,6 +46,24 @@ describe("names", () => {
     expect(edgeRoleName("sandbox")).toBe("frontdoor-sandbox-edge");
     expect(callerTokenKeysBucketName("sandbox", "100000000002")).toBe(
       "frontdoor-sandbox-keys-100000000002",
+    );
+    expect(keyRotationRoleName("sandbox")).toBe(
+      "frontdoor-sandbox-key-rotation",
+    );
+    expect(keyRotationFunctionName("sandbox")).toBe(
+      "frontdoor-sandbox-key-rotation",
+    );
+    expect(keyRotationLogGroupName("sandbox")).toBe(
+      "/flex/frontdoor/sandbox/key-rotation",
+    );
+    expect(keyRotationStateParameterName("sandbox")).toBe(
+      "/flex/frontdoor/sandbox/caller-token-key-state",
+    );
+    expect(signingKeyAliasName("sandbox")).toBe(
+      "alias/frontdoor-sandbox-caller-token",
+    );
+    expect(signingKeyParameterName("sandbox")).toBe(
+      "/flex/frontdoor/sandbox/caller-token-signing-key",
     );
     expect(originRequestLogGroupName("sandbox")).toBe(
       "/flex/frontdoor/sandbox/origin-request",
