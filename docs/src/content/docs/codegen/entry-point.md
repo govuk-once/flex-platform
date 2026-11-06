@@ -26,8 +26,8 @@ This module is the same for every gateway. The driver comes with the configurati
 own executor, so the entry point names no driver package and no transport. If an entry point would
 need to know about a specific driver or gateway, that is a design error.
 
-`UPSTREAM_TARGET` and `UPSTREAM_SECRET_ARN` are read here, through `readUpstreamOptions`, and
-nowhere else. The handler is built while the module loads, during the Lambda initialisation phase.
+`FLEX_UPSTREAM_TARGET` and `FLEX_UPSTREAM_SECRET_ARN` are read here, through
+`readUpstreamOptions`, and nowhere else. The handler is built while the module loads, during the Lambda initialisation phase.
 So the operations compile, and the secret is retrieved and validated, before the handler can
 process an event. An initialisation failure occurs outside the handler's error envelope; it is
 not a code-generation check of the deployed environment.

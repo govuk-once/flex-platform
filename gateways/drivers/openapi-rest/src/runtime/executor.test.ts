@@ -560,7 +560,7 @@ describe("createExecutor", () => {
 describe("where the upstream is", () => {
   const API_URL = fromSecret("apiUrl");
 
-  it("sends to the address the secret field names, over UPSTREAM_TARGET", async () => {
+  it("sends to the address the secret field names, over FLEX_UPSTREAM_TARGET", async () => {
     const ff = fakeFetch(() => json(200, {}));
     const execute = await buildExecutor(
       gatewayWith([], { target: API_URL }),
@@ -574,7 +574,7 @@ describe("where the upstream is", () => {
     expect(ff.calls[0]?.url).toBe("https://secret.test/prod/x");
   });
 
-  it("needs no UPSTREAM_TARGET where the secret names the address", async () => {
+  it("needs no FLEX_UPSTREAM_TARGET where the secret names the address", async () => {
     const ff = fakeFetch(() => json(200, {}));
     const execute = await buildExecutor(
       gatewayWith([], { target: API_URL }),
@@ -585,7 +585,7 @@ describe("where the upstream is", () => {
     expect(ff.calls[0]?.url).toBe("https://secret.test/x");
   });
 
-  it("falls back to UPSTREAM_TARGET where an optional field is absent", async () => {
+  it("falls back to FLEX_UPSTREAM_TARGET where an optional field is absent", async () => {
     const ff = fakeFetch(() => json(200, {}));
     const execute = await buildExecutor(
       gatewayWith([], { target: fromSecret("apiUrl", { optional: true }) }),
@@ -601,23 +601,23 @@ describe("where the upstream is", () => {
     await expect(
       createExecutor(gatewayWith([]), { secret: secret.provider }),
     ).rejects.toThrow(
-      'Gateway "x" has no upstream: set UPSTREAM_TARGET, or name the secret field that holds it as the driver\'s target',
+      'Gateway "x" has no upstream: set FLEX_UPSTREAM_TARGET, or name the secret field that holds it as the driver\'s target',
     );
     expect(secret.reads()).toBe(0);
   });
 
-  it("refuses to start where an optional field is absent and there is no UPSTREAM_TARGET", async () => {
+  it("refuses to start where an optional field is absent and there is no FLEX_UPSTREAM_TARGET", async () => {
     await expect(
       createExecutor(
         gatewayWith([], { target: fromSecret("apiUrl", { optional: true }) }),
         { secret: emptySecret() },
       ),
     ).rejects.toThrow(
-      'Gateway "x" has no upstream: set UPSTREAM_TARGET, or name the secret field that holds it as the driver\'s target',
+      'Gateway "x" has no upstream: set FLEX_UPSTREAM_TARGET, or name the secret field that holds it as the driver\'s target',
     );
   });
 
-  it("refuses an address from the secret as UPSTREAM_TARGET's is refused, never quoting it", async () => {
+  it("refuses an address from the secret as FLEX_UPSTREAM_TARGET's is refused, never quoting it", async () => {
     const err = await rejection(
       createExecutor(gatewayWith([], { target: API_URL }), {
         secret: fakeSecret({ apiUrl: "http://SYNTHETIC.test" }).provider,

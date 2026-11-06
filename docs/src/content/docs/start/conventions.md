@@ -41,6 +41,10 @@ change you are making.
   what that runtime lacks, and names the packages the code may import. `infra/constructs` uses
   `infraConstructs`, and a section's `infra/` uses `sectionInfra("<section>")`, which hold the
   infrastructure's imports to one direction.
+- Every environment variable the platform defines starts with `FLEX_`, such as
+  `FLEX_UPSTREAM_TARGET` and `FLEX_ENVIRONMENT`, so it reads as the platform's and never collides
+  with one that AWS, a library or a domain's own code defines. A variable AWS sets, such as
+  `AWS_REGION`, keeps its own name.
 - Check installed dependencies and their APIs before using them. Keep dependency versions pinned
   exactly (`savePrefix: ""`).
 - Git ignores generated artifacts, including `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and

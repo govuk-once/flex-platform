@@ -191,6 +191,35 @@ describe("checkGateway", () => {
     ).toThrow(/must return an array/);
   });
 
+  it.each(["", "UDP", "udp gateway", 'udp"; */', "-udp", "udp-"])(
+    "refuses the gateway id %j, which names its function and is written into generated code",
+    (id) => {
+      expect(
+        problemsOf(() =>
+          checkGateway(
+            { ...gateway({ getUser: {} }), id },
+            schemas({ getUser: opSchemas }),
+          ),
+        ),
+      ).toEqual([
+        `The gateway id ${JSON.stringify(id)} must be 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen.`,
+      ]);
+    },
+  );
+
+  it("refuses an operation named then, which would make its client look like a promise", () => {
+    expect(
+      problemsOf(() =>
+        checkGateway(
+          gateway({ getUser: {}, then: {} }),
+          schemas({ getUser: opSchemas, then: opSchemas }),
+        ),
+      ),
+    ).toEqual([
+      'an operation cannot be named "then": its client would be taken for a promise',
+    ]);
+  });
+
   it("puts the gateway id and every problem in the message", () => {
     expect(() => checkGateway(gateway({}), schemas({}))).toThrow(
       /Gateway "test" configuration and schemas do not agree:\n {2}- the configuration declares no operations/,

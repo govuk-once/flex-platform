@@ -122,7 +122,7 @@ handler. See
 
 ## The upstream must use https
 
-The target, from `UPSTREAM_TARGET` or the secret field `target` names, is an absolute base URL.
+The target, from `FLEX_UPSTREAM_TARGET` or the secret field `target` names, is an absolute base URL.
 An http target is accepted only for a loopback host. A local stub, or a sidecar that terminates
 TLS, still works. A remote address cannot be configured without TLS. The same rule applies to
 every request an authentication part makes.

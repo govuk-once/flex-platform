@@ -47,10 +47,6 @@ export function clientFactoryName(gatewayId: string): string {
   return name;
 }
 
-// A promise is anything with a `then` function, so a client holding one would be awaited as one:
-// returned from an async function, it would be called in place of the client being returned.
-const RESERVED_OPERATIONS = new Set(["then"]);
-
 const entryModule = (id: string, operations: readonly string[]) => `
 // The client for gateway ${JSON.stringify(id)}: its call contract, and a client typed by it.
 import { createGatewayClient, type GatewayClient } from "${CLIENT_PACKAGE}";
@@ -75,13 +71,6 @@ export async function emitClient(
   operations: readonly string[],
   clientDir: string,
 ): Promise<void> {
-  for (const operation of operations) {
-    if (RESERVED_OPERATIONS.has(operation)) {
-      throw new Error(
-        `An operation cannot be named ${JSON.stringify(operation)}: its client would be taken for a promise.`,
-      );
-    }
-  }
   await writeGenerated(
     clientDir,
     CLIENT_ENTRY_MODULE,

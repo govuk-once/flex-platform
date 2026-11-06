@@ -75,8 +75,8 @@ of them names a transport or says what the secret holds.
 
 | Option | Purpose |
 |---|---|
-| `target` | `UPSTREAM_TARGET`, if the deployment sets it. The driver decides what it means. A driver may take the location from a field of the secret instead. It refuses to start if it has neither. |
-| `secret` | A `SecretProvider` for the secret `UPSTREAM_SECRET_ARN` names. `get()` returns the parsed JSON object, cached for a bounded age; `get({ fresh: true })` bypasses the cache. |
+| `target` | `FLEX_UPSTREAM_TARGET`, if the deployment sets it. The driver decides what it means. A driver may take the location from a field of the secret instead. It refuses to start if it has neither. |
+| `secret` | A `SecretProvider` for the secret `FLEX_UPSTREAM_SECRET_ARN` names. `get()` returns the parsed JSON object, cached for a bounded age; `get({ fresh: true })` bypasses the cache. |
 | `log` | Where the driver logs while its executor is created. Optional. |
 
 ### `checkSchemas`

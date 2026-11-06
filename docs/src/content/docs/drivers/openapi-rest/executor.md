@@ -12,7 +12,7 @@ Deployment values (the target and the secret) arrive as executor options.
 |---|---|
 | `spec` | Where the OpenAPI document is. This is an https URL, ideally pinned to a release or commit, or a path within the gateway's directory. `gateway-schemas` reads it. Codegen reads it only when it is a path, to check [what the driver derives](/flex-platform/codegen/checks/#what-the-driver-derives), and never fetches a URL. Nothing reads it at runtime. |
 | `auth` | Required. How requests are authenticated, as a list of parts (`[]` for none), and the secret fields each part reads. See [Authentication](/flex-platform/drivers/openapi-rest/authentication/). |
-| `target` | A secret field that holds the upstream's address, such as `fromSecret("apiUrl")`, for an upstream whose secret includes it. It is used instead of `UPSTREAM_TARGET` when both are set, and follows the same rules. If neither is set, the executor refuses to start. It is read when the executor is created. |
+| `target` | A secret field that holds the upstream's address, such as `fromSecret("apiUrl")`, for an upstream whose secret includes it. It is used instead of `FLEX_UPSTREAM_TARGET` when both are set, and follows the same rules. If neither is set, the executor refuses to start. It is read when the executor is created. |
 | `headers` | Static headers sent on every request, such as an API version. |
 | `metadata` | What the gateway reports beside a result, read from response headers. See [Response metadata](/flex-platform/drivers/openapi-rest/metadata/). |
 | `maxResponseBytes` | The largest response body to buffer. Defaults to 1 MiB. |
@@ -25,8 +25,8 @@ and awaits `createExecutor` with the neutral `ExecutorOptions`.
 
 | Option | For this driver |
 |---|---|
-| `target` | `UPSTREAM_TARGET`, when it is set. It must be an absolute https base URL with no query, fragment or credentials. http is accepted only for a loopback host. A path prefix is kept. |
-| `secret` | A provider for the secret that `UPSTREAM_SECRET_ARN` names. The driver reads only the fields its `target` and `auth` name. |
+| `target` | `FLEX_UPSTREAM_TARGET`, when it is set. It must be an absolute https base URL with no query, fragment or credentials. http is accepted only for a loopback host. A path prefix is kept. |
+| `secret` | A provider for the secret that `FLEX_UPSTREAM_SECRET_ARN` names. The driver reads only the fields its `target` and `auth` name. |
 | `log` | Where the driver logs while the executor is created. |
 
 ## Startup
@@ -38,10 +38,10 @@ a request.
 1. **Configuration is checked.** Any of these fails before anything is retrieved: a reserved or
    invalid name in an auth part's header list, a static header the authentication owns, a
    `maxResponseBytes` that is not positive, a `handler` that is not a function, or having neither
-   `UPSTREAM_TARGET` nor a `target` field. Every operation is compiled.
+   `FLEX_UPSTREAM_TARGET` nor a `target` field. Every operation is compiled.
 2. **The secret is retrieved and validated.** A missing, unreadable or invalid secret makes
    creation fail. An optional field that is absent is logged by name. A `target` field's address
-   is read here, and follows the same rules as `UPSTREAM_TARGET`.
+   is read here, and follows the same rules as `FLEX_UPSTREAM_TARGET`.
 3. **Authentication state is built** on it, one instance per part.
 
 A diagnostic about the secret names the field and the rule it broke. It never includes the value

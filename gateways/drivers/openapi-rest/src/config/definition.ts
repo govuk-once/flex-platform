@@ -38,7 +38,7 @@ export interface OpenApiRestDriverConfig {
   readonly auth: readonly OpenApiRestAuth[];
   // Where the upstream is, when a field of the secret says so: an upstream that provides the
   // secret often keeps its address there too. Read when the executor is created, and used in
-  // place of UPSTREAM_TARGET when both are there; with neither, the executor refuses to start.
+  // place of FLEX_UPSTREAM_TARGET when both are there; with neither, the executor refuses to start.
   readonly target?: SecretField;
 }
 

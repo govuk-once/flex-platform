@@ -299,7 +299,7 @@ export async function createExecutor(
   // Configuration first, before anything is retrieved.
   if (options.target === undefined) {
     throw new TypeError(
-      `Gateway "${config.id}" has no upstream: set UPSTREAM_TARGET`,
+      `Gateway "${config.id}" has no upstream: set FLEX_UPSTREAM_TARGET`,
     );
   }
   const target = parseTarget(options.target);
@@ -334,7 +334,7 @@ function parseTarget(value: string): URL {
     url === undefined ||
     !(url.protocol === "https:" || (url.protocol === "http:" && loopback))
   ) {
-    throw new TypeError("UPSTREAM_TARGET must be an https URL");
+    throw new TypeError("FLEX_UPSTREAM_TARGET must be an https URL");
   }
   return url;
 }

@@ -1,7 +1,3 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,7 +5,6 @@ import {
   clientPackageName,
   clientPackageVersion,
   clientPeerRange,
-  emitClient,
 } from "./emit-client.ts";
 
 describe("clientPackageName", () => {
@@ -39,22 +34,6 @@ describe("clientFactoryName", () => {
     ["uns-2", "createUns2Client"],
   ])("names the factory for gateway %j", (id, name) => {
     expect(clientFactoryName(id)).toBe(name);
-  });
-});
-
-describe("emitClient", () => {
-  it("refuses an operation named then, which would make its client look like a promise", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "emit-client-"));
-    try {
-      await expect(
-        emitClient("udp", ["getIdentity", "then"], dir),
-      ).rejects.toThrow(
-        'An operation cannot be named "then": its client would be taken for a promise.',
-      );
-      expect(await readdir(dir)).toEqual([]);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
   });
 });
 

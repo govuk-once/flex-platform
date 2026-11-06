@@ -9,6 +9,11 @@ when the executor is created, or cause an `INTERNAL` failure on a request in pro
 
 ## Generic checks
 
+- The gateway's `id` must be 1 to 32 lowercase letters, digits and hyphens, starting with a letter
+  and not ending with a hyphen, as `assertGatewayId` in `@repo/gateway-core` checks. The id names
+  the gateway's function and its client package, and generated code is written from it.
+- No operation may be named `then`. A client with a `then` function would be taken for a promise,
+  and returning it from an async function would call that operation.
 - The driver must give `deriveSchemasModule` as a `file:` URL, because every gateway's schemas are
   derived. This check reads only the URL. The module is loaded later, to check
   [what the driver derives](/flex-platform/codegen/checks/#what-the-driver-derives).

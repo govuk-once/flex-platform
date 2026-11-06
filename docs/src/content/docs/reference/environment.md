@@ -9,8 +9,8 @@ names a deployed address, a credential or an environment. These belong to the de
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `UPSTREAM_SECRET_ARN` | Yes, for every gateway, including one that sends no credential | The AWS Secrets Manager secret that the driver reads its credentials from. The secret may also hold the target. |
-| `UPSTREAM_TARGET` | Yes, unless the driver takes the target from a field of the secret | Where the upstream is. The driver decides what it means. |
+| `FLEX_UPSTREAM_SECRET_ARN` | Yes, for every gateway, including one that sends no credential | The AWS Secrets Manager secret that the driver reads its credentials from. The secret may also hold the target. |
+| `FLEX_UPSTREAM_TARGET` | Yes, unless the driver takes the target from a field of the secret | Where the upstream is. The driver decides what it means. |
 
 If a driver's configuration names a secret field for the target and both are set, the driver uses
 the secret's field.

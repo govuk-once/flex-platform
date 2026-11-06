@@ -10,8 +10,8 @@ import { createSecretProvider } from "./secret-provider.ts";
 // the driver that refuses to start when neither gives it one. The secret is always a JSON object
 // in AWS Secrets Manager, and every gateway has one; which of its fields are read is declared by
 // the driver's configuration and checked there.
-export const UPSTREAM_TARGET_ENV = "UPSTREAM_TARGET";
-export const UPSTREAM_SECRET_ARN_ENV = "UPSTREAM_SECRET_ARN";
+export const UPSTREAM_TARGET_ENV = "FLEX_UPSTREAM_TARGET";
+export const UPSTREAM_SECRET_ARN_ENV = "FLEX_UPSTREAM_SECRET_ARN";
 // Lambda's own, set on every function: the region the gateway runs in.
 export const GATEWAY_REGION_ENV = "AWS_REGION";
 

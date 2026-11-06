@@ -21,7 +21,8 @@ describe("ERROR_CODES", () => {
   });
 
   // A control's own output is never fed back into it.
-  it("keeps the gateway's own rate limit neutral to upstream health", () => {
+  it("keeps the gateway's own controls, its rate limit and its breaker, neutral to upstream health", () => {
     expect(signalOf("RATE_LIMITED")).toBe("none");
+    expect(signalOf("UPSTREAM_UNAVAILABLE")).toBe("none");
   });
 });
