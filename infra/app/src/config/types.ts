@@ -1,4 +1,5 @@
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
+import type { Placement } from "@repo/infra-constructs";
 
 // Everything that differs between stages and environments is a value here. Constructs receive
 // these values, never a stage or environment name to branch on.
@@ -38,6 +39,29 @@ export interface GatewayConfig {
    * a name read from a secret or a request, unless it is also here.
    */
   readonly hostnames: readonly string[];
+  /**
+   * The subnets it runs in: `private` reaches its upstream through NAT, `isolated` reaches only
+   * the network's endpoints, for an upstream reached privately.
+   */
+  readonly placement: Placement;
+  /**
+   * The secret it reads its credentials from, `FLEX_UPSTREAM_SECRET_ARN`: `"create"` for one its
+   * stack creates, empty, for a person to fill, or an upstream's own, by its full ARN and the
+   * ARN of the key it is encrypted with. Either is in the gateway's region.
+   */
+  readonly secret: "create" | UpstreamSecretConfig;
+  /**
+   * `FLEX_UPSTREAM_TARGET`, or `null` where the driver takes the target from the secret.
+   */
+  readonly target: string | null;
+  /** The roles it assumes to sign as, by ARN, such as an upstream's for `sigV4`. */
+  readonly roleArns: readonly string[];
+}
+
+export interface UpstreamSecretConfig {
+  /** The full ARN, with the six characters Secrets Manager adds to the name. */
+  readonly arn: string;
+  readonly keyArn: string;
 }
 
 /**

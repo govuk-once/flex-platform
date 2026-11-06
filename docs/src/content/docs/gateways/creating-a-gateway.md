@@ -127,14 +127,16 @@ it passes. See [What codegen checks](/flex-platform/codegen/checks/).
 
 The gateway deploys as a Lambda function named `gateway-<environment>-<id>`, by
 `gatewayFunctionName` in `@repo/gateway-core`, with one alias, `live`, which every
-[gateway client](/flex-platform/domains/overview/#calling-gateways) invokes. The
-[network](/flex-platform/infrastructure/network/) it runs in is built. Deploying the function and
-its permissions is planned: see [The platform](/flex-platform/start/platform/).
+[gateway client](/flex-platform/domains/overview/#calling-gateways) invokes.
 
-The network resolves only the names on its DNS allowlist. List the gateway, with every name it
-connects to, its upstream's API and any host it takes a token from, in `gateways` on each domain
-account that runs it, in the [CDK app's config](/flex-platform/infrastructure/overview/#config).
-A name left off doesn't resolve. See [the allowlist](/flex-platform/infrastructure/network/#the-allowlist).
+To deploy it, list it in `gateways` on each domain account that runs it, in the
+[CDK app's config](/flex-platform/infrastructure/overview/#config), and add its package to
+`@repo/infra-app`'s dependencies. The entry names every host it connects to, its upstream's API
+and any host it takes a token from, since the network resolves only the names on its DNS
+allowlist, and a name left off doesn't resolve. See
+[the allowlist](/flex-platform/infrastructure/network/#the-allowlist). It also gives the gateway's
+placement, its secret, its target and the roles it signs as. A secret its stack creates starts
+empty: put its value before the gateway is called, or it fails as it starts.
 
 What the function runs, the variables it reads and what its role needs are in
 [Environment](/flex-platform/reference/environment/). Callers install

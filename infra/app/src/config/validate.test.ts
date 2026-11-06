@@ -472,5 +472,111 @@ describe("validateStages", () => {
         ]),
       ).toThrow("is a wildcard; list each name exactly");
     });
+
+    it("accepts a gateway that creates its own secret", () => {
+      expect(() =>
+        validateStages([
+          withGateways([{ ...UDP, secret: "create", roleArns: [] }]),
+        ]),
+      ).not.toThrow();
+    });
+
+    const SECRET = {
+      arn: "arn:aws:secretsmanager:eu-west-2:200000000001:secret:udp/flex/consumer-AbCdEf",
+      keyArn:
+        "arn:aws:kms:eu-west-2:200000000001:key/00000000-0000-4000-8000-000000000000",
+    };
+
+    it.each([
+      [
+        "arn:aws:secretsmanager:eu-west-2:200000000001:secret:udp/flex/consumer",
+        "without the characters Secrets Manager adds",
+      ],
+      [
+        "arn:aws:secretsmanager:eu-west-1:200000000001:secret:udp/flex/consumer-AbCdEf",
+        "in another region",
+      ],
+      [
+        "arn:aws:secretsmanager:eu-west-2:200000000001:secret:udp/*",
+        "with a wildcard",
+      ],
+    ])("refuses the secret ARN %j, %s", (arn) => {
+      expect(() =>
+        validateStages([
+          withGateways([{ ...UDP, secret: { ...SECRET, arn } }]),
+        ]),
+      ).toThrow(
+        `udp gateway: ${JSON.stringify(arn)} is not a secret's full ARN in eu-west-2`,
+      );
+    });
+
+    it.each([
+      "arn:aws:kms:eu-west-2:200000000001:alias/udp",
+      "arn:aws:kms:eu-west-1:200000000001:key/00000000-0000-4000-8000-000000000000",
+    ])("refuses the key ARN %j", (keyArn) => {
+      expect(() =>
+        validateStages([
+          withGateways([{ ...UDP, secret: { ...SECRET, keyArn } }]),
+        ]),
+      ).toThrow(
+        `udp gateway: ${JSON.stringify(keyArn)} is not a KMS key's ARN`,
+      );
+    });
+
+    it("accepts a multi-region key", () => {
+      const keyArn = `arn:aws:kms:eu-west-2:200000000001:key/mrk-${"0".repeat(32)}`;
+      expect(() =>
+        validateStages([
+          withGateways([{ ...UDP, secret: { ...SECRET, keyArn } }]),
+        ]),
+      ).not.toThrow();
+    });
+
+    it.each([
+      "arn:aws:iam::200000000001:role/*",
+      "arn:aws:iam::200000000001:user/udp",
+      "udp-flex-consumer",
+    ])("refuses the role ARN %j", (arn) => {
+      expect(() =>
+        validateStages([withGateways([{ ...UDP, roleArns: [arn] }])]),
+      ).toThrow(`udp gateway: ${JSON.stringify(arn)} is not a role's ARN`);
+    });
+
+    it("refuses a role listed twice", () => {
+      expect(() =>
+        validateStages([
+          withGateways([
+            { ...UDP, roleArns: [...UDP.roleArns, ...UDP.roleArns] },
+          ]),
+        ]),
+      ).toThrow("udp gateway: a role ARN is listed more than once");
+    });
+
+    it("refuses an empty target, which would read as none", () => {
+      expect(() =>
+        validateStages([withGateways([{ ...UDP, target: "" }])]),
+      ).toThrow("udp gateway: its target is empty; use null for none");
+    });
+
+    it("refuses a gateway whose role name would be too long", () => {
+      const environment = `e${"b".repeat(19)}`;
+      const id = `g${"a".repeat(31)}`;
+      expect(() =>
+        validateStages([
+          {
+            ...STAGE,
+            environments: [
+              {
+                ...ENVIRONMENT,
+                name: environment,
+                domainAccounts: [
+                  { ...MAIN_DOMAIN_ACCOUNT, gateways: [{ ...UDP, id }] },
+                ],
+              },
+            ],
+          },
+        ]),
+      ).toThrow("is longer than IAM's 64 characters.");
+    });
   });
 });

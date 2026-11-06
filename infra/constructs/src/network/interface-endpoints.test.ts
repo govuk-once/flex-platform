@@ -1,8 +1,18 @@
-import { Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { ACCOUNT, buildNetwork, KEYS_OBJECT } from "../../test/network.ts";
-import type { InterfaceEndpoints } from "./interface-endpoints.ts";
+import {
+  ACCOUNT,
+  buildNetwork,
+  KEYS_OBJECT,
+  UPSTREAM_ROLE,
+  UPSTREAM_SECRET,
+  ZonedStack,
+} from "../../test/network.ts";
+import { cdkApp } from "../cdk-app.ts";
+import { InterfaceEndpoints } from "./interface-endpoints.ts";
+import { NatAddresses } from "./nat-addresses.ts";
+import { NetworkVpc } from "./vpc.ts";
 
 function endpoint(
   service: string,
@@ -28,8 +38,6 @@ function endpoint(
           Condition: {
             StringEquals: {
               "aws:PrincipalAccount": ACCOUNT,
-              // An endpoint that names no resource is held to this account's.
-              ...(Resource === "*" && { "aws:ResourceAccount": ACCOUNT }),
               ...(resourceAccount !== undefined && {
                 "aws:ResourceAccount": [resourceAccount],
               }),
@@ -48,8 +56,8 @@ describe("InterfaceEndpoints", () => {
       "lambda:InvokeFunction",
       `arn:aws:lambda:eu-west-2:${ACCOUNT}:function:gateway-sandbox-*`,
     ],
-    ["secretsmanager", "secretsmanager:GetSecretValue", "*"],
-    ["sts", "sts:AssumeRole", "*"],
+    ["secretsmanager", "secretsmanager:GetSecretValue", UPSTREAM_SECRET],
+    ["sts", "sts:AssumeRole", UPSTREAM_ROLE],
     [
       "s3",
       "s3:GetObject",
@@ -58,7 +66,7 @@ describe("InterfaceEndpoints", () => {
       KEYS_OBJECT.account,
     ],
   ])(
-    "has a %s endpoint in the isolated subnets, for this account and one action",
+    "has a %s endpoint in the isolated subnets, for this account, one action and what it names",
     (service, action, resource, resourceAccount?: string) => {
       buildNetwork().template.hasResourceProperties(
         "AWS::EC2::VPCEndpoint",
@@ -107,5 +115,42 @@ describe("InterfaceEndpoints", () => {
       ServiceName: "com.amazonaws.eu-west-2.s3",
       DnsOptions: { PrivateDnsOnlyForInboundResolverEndpoint: "AllResolvers" },
     });
+  });
+
+  it("refuses everything through an endpoint with nothing to name", () => {
+    const zones = ["eu-west-2a", "eu-west-2b"];
+    const stack = new ZonedStack(cdkApp(), zones);
+    const { vpc, subnets } = new NetworkVpc(stack, "Network", {
+      environment: "sandbox",
+      zones,
+      natAddresses: new NatAddresses(stack, "NatAddresses", {
+        environment: "sandbox",
+        zones,
+      }),
+    });
+    new InterfaceEndpoints(stack, "Endpoints", {
+      vpc,
+      subnets: subnets.isolated,
+      invokableFunctions: "gateway-sandbox-*",
+      readableObjects: [],
+      readableSecrets: [],
+      assumableRoles: [],
+    });
+
+    for (const service of ["secretsmanager", "sts", "s3"]) {
+      Template.fromStack(stack).hasResourceProperties("AWS::EC2::VPCEndpoint", {
+        ServiceName: `com.amazonaws.eu-west-2.${service}`,
+        PolicyDocument: {
+          Statement: [
+            {
+              Effect: "Deny",
+              Principal: { AWS: "*" },
+              Action: "*",
+              Resource: "*",
+            },
+          ],
+        },
+      });
+    }
   });
 });

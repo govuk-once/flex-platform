@@ -684,6 +684,9 @@ importers:
       '@repo/gateway-infra':
         specifier: workspace:*
         version: link:../../gateways/infra
+      '@repo/gateway-service-udp':
+        specifier: workspace:*
+        version: link:../../gateways/services/udp
       '@repo/infra-constructs':
         specifier: workspace:*
         version: link:../constructs

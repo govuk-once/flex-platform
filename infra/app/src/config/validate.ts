@@ -1,12 +1,18 @@
 import { executionRoleName, ROLE_NAME_LENGTH } from "@repo/domain-infra";
 import { gatewayFunctionName } from "@repo/gateway-core";
-import { dnsAllowlist, networkZones } from "@repo/infra-constructs";
+import { gatewayRoleName } from "@repo/gateway-infra";
+import {
+  dnsAllowlist,
+  NETWORK_REGION,
+  networkZones,
+} from "@repo/infra-constructs";
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
 import { domainName } from "./domain-name.ts";
 import type {
   DomainAccountConfig,
   EnvironmentConfig,
+  GatewayConfig,
   StageConfig,
   ZoneConfig,
 } from "./types.ts";
@@ -16,6 +22,20 @@ const ACCOUNT_ID = /^\d{12}$/;
 // A DNS name of lowercase labels, with at least one dot, and no trailing dot.
 const DOMAIN_NAME =
   /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+// A secret's full ARN, in the gateways' region, ending in the six characters Secrets Manager adds
+// to its name. A policy naming the secret without them would match nothing.
+const SECRET_ARN = new RegExp(
+  String.raw`^arn:aws:secretsmanager:${NETWORK_REGION}:\d{12}:secret:[\w/+=.@-]+-[A-Za-z0-9]{6}$`,
+);
+
+// A KMS key's ARN in the gateways' region, by its ID, multi-region or not. Never an alias.
+const KEY_ARN = new RegExp(
+  String.raw`^arn:aws:kms:${NETWORK_REGION}:\d{12}:key/(?:mrk-[0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$`,
+);
+
+// A role's ARN, with no wildcard.
+const ROLE_ARN = /^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/;
 
 // A Route 53 hosted zone ID, as the console shows it, without `/hostedzone/`.
 const ZONE_ID = /^Z[0-9A-Z]{1,31}$/;
@@ -136,9 +156,11 @@ function checkGateways(
     `${at} gateway`,
     gateways.map(({ id }) => id),
   );
-  for (const { id, hostnames } of gateways) {
+  for (const gateway of gateways) {
+    const { id, hostnames } = gateway;
     try {
       gatewayFunctionName(environment.name, id);
+      gatewayRoleName(environment.name, id);
     } catch (error) {
       throw new Error(`${at} ${id} gateway: ${(error as Error).message}`, {
         cause: error,
@@ -156,6 +178,40 @@ function checkGateways(
         cause: error,
       });
     }
+    checkUpstreamAccess(`${at} ${id} gateway`, gateway);
+  }
+}
+
+// Each ARN feeds an endpoint's policy and the gateway's role exactly, so one that can't match
+// what it names would leave the gateway refused, with nothing to say why.
+function checkUpstreamAccess(
+  at: string,
+  { secret, target, roleArns }: GatewayConfig,
+): void {
+  if (secret !== "create") {
+    if (!SECRET_ARN.test(secret.arn)) {
+      throw new Error(
+        `${at}: ${JSON.stringify(secret.arn)} is not a secret's full ARN in ${NETWORK_REGION}, ending in the six characters Secrets Manager adds`,
+      );
+    }
+    if (!KEY_ARN.test(secret.keyArn)) {
+      throw new Error(
+        `${at}: ${JSON.stringify(secret.keyArn)} is not a KMS key's ARN in ${NETWORK_REGION}, by its ID`,
+      );
+    }
+  }
+  if (target === "") {
+    throw new Error(`${at}: its target is empty; use null for none`);
+  }
+  for (const arn of roleArns) {
+    if (!ROLE_ARN.test(arn)) {
+      throw new Error(
+        `${at}: ${JSON.stringify(arn)} is not a role's ARN, without a wildcard`,
+      );
+    }
+  }
+  if (new Set(roleArns).size !== roleArns.length) {
+    throw new Error(`${at}: a role ARN is listed more than once`);
   }
 }
 

@@ -16,6 +16,7 @@
     "@repo/frontdoor-shared": "workspace:*",
     "@repo/gateway-core": "workspace:*",
     "@repo/gateway-infra": "workspace:*",
+    "@repo/gateway-service-udp": "workspace:*",
     "@repo/infra-constructs": "workspace:*",
     "@repo/utils": "workspace:*",
     "aws-cdk-lib": "2.275.0",
