@@ -58,8 +58,8 @@ For openapi-rest, `meta` values are read from response headers. See
 
 `ERROR_CODES` in `@repo/gateway-core` defines each code and its health ruling. The table below
 gives what each one means. A code
-being defined does not mean its control is implemented. Authentication, signature verification,
-circuit breaking and gateway-side rate limiting do not currently emit their reserved errors. The
+being defined does not mean its control is implemented. Circuit breaking and gateway-side rate
+limiting do not currently emit their reserved errors. The
 driver decides which upstream responses produce which codes. See
 [openapi-rest outcomes and errors](/flex-platform/drivers/openapi-rest/outcomes/).
 
@@ -67,9 +67,9 @@ driver decides which upstream responses produce which codes. See
 |---|---|---|
 | `INVALID_INPUT` | Envelope parsing or input schema validation failed. | none |
 | `OPERATION_NOT_FOUND` | The gateway does not define the requested operation. | none |
-| `UNAUTHENTICATED` | Authentication failure. | trust |
-| `SECURE_VALUE_MISMATCH` | An input binding is missing or does not match its envelope value. | trust |
-| `SECURE_SIGNATURE_INVALID` | Signature verification failure. | trust |
+| `UNAUTHENTICATED` | The call carries no caller token: the domain didn't pass it on. | trust |
+| `SECURE_VALUE_MISMATCH` | A bound input field is missing or doesn't match the caller token's claim. | trust |
+| `SECURE_SIGNATURE_INVALID` | The caller token fails a check: its form, algorithm, key, signature, audience, times or claims. The log names which. | trust |
 | `NOT_FOUND` | The upstream has no matching record. | upstream success |
 | `UPSTREAM_REJECTED` | The upstream refused the request. | upstream success |
 | `UPSTREAM_ERROR` | The upstream failed to answer for a server or transport reason. | upstream failure |

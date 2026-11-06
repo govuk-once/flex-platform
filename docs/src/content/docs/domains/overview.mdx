@@ -104,9 +104,12 @@ withCallerContext({ deadline, secure }, () => handler(event));
   still waiting then, and does not send one made after it. The caller keeps its own margin for
   answering after a call. The deadline is not yet sent to the gateway, which works out its own
   from its invocation.
-- `secure` holds the values the gateway compares with an operation's secure bindings. Without it
-  the client sends none, and the gateway refuses every call with `INVALID_INPUT`, even for an
-  operation with no secure bindings. The gateway does not verify the signature yet.
+- `secure` is `{ token }`: the [caller token](/flex-platform/frontdoor/caller-token/) from the
+  request's `x-flex-secure` header, passed on unchanged. The gateway verifies it, and compares an
+  operation's [bound fields](/flex-platform/gateways/configuration/#secure-bindings) with its
+  claims. Without it the client sends none, and the gateway refuses every call with
+  `UNAUTHENTICATED`, even for an operation with no bindings. A domain may decode the token to read
+  `pairwiseId`, but never needs to verify it: the gateway does.
 
 A call made outside a caller context is refused before anything is sent: the client throws an
 `Error`, not a `GatewayInvocationError`, because the mistake is in the caller's code.

@@ -66,8 +66,8 @@ The deployed handler receives an envelope:
 ```json
 {
   "operation": "getIdentityExchange",
-  "input": { "requiredService": "app", "requestingService": "flex", "requestingServiceUserId": "u1" },
-  "secure": { "values": { "sub": "u1" }, "signature": "…" }
+  "input": { "requiredService": "app", "requestingService": "app", "requestingServiceUserId": "u1" },
+  "secure": { "token": "eyJhbGciOiJFZERTQSIs…" }
 }
 ```
 
@@ -78,10 +78,10 @@ invocation failures occur outside this flow and must also be handled by a caller
 | Step | What happens | Failure |
 |---|---|---|
 | Envelope | The envelope is parsed and its shape checked. | `INVALID_INPUT` |
-| Token | A hook for verifying the caller's token. It currently verifies nothing. | |
+| Token | The [caller token](/flex-platform/frontdoor/caller-token/) is verified. A call without one is refused, and so is one whose token fails any check. | `UNAUTHENTICATED` without a token, `SECURE_SIGNATURE_INVALID` for one that fails |
 | Routing | The operation name is looked up among the configured operations. | `OPERATION_NOT_FOUND` |
 | Input | The input is checked against the operation's generated validator, before any upstream call. | `INVALID_INPUT` |
-| Bindings | Input fields bound to `secure.values` are compared with those values. | `SECURE_VALUE_MISMATCH` |
+| Bindings | Input fields bound to a claim of the verified token are compared with it. | `SECURE_VALUE_MISMATCH` |
 | Deadline | The request's time budget is worked out from the invocation's remaining time, minus a safety margin. | |
 | Execute | The driver's execute function runs. It makes each upstream call through `ctx.upstream`. Each attempt is limited to `upstreamTimeout` or the budget left, whichever is smaller. | Any `GatewayError` the driver raises, or `UPSTREAM_TIMEOUT` if an attempt timed out or had no budget left |
 | Outcome | The driver's result is checked against the schema for the outcome it named. | `UPSTREAM_CONTRACT_VIOLATION` |

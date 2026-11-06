@@ -1,3 +1,18 @@
+export type {
+  CallerTokenKey,
+  CallerTokenKeys,
+  VerifiedCaller,
+  VerifyCallerToken,
+} from "./caller-token.ts";
+export {
+  CALLER_TOKEN_AUDIENCE_ENV,
+  CALLER_TOKEN_KEYS_ACCOUNT_ENV,
+  CALLER_TOKEN_KEYS_BUCKET_ENV,
+  CALLER_TOKEN_KEYS_OBJECT_ENV,
+  createCallerTokenKeys,
+  createCallerTokenVerifier,
+  readCallerTokenVerifier,
+} from "./caller-token.ts";
 export type { DeadlineProvider } from "./context.ts";
 export { parseDuration } from "./duration.ts";
 export { parseEnvelope } from "./envelope.ts";
@@ -18,11 +33,7 @@ export type { ResolvedPolicy } from "./policy.ts";
 export { resolvePolicy } from "./policy.ts";
 export { asSecretObject, createSecretProvider } from "./secret-provider.ts";
 export type { CompiledBinding } from "./secure.ts";
-export {
-  checkSecureBindings,
-  compileBindings,
-  prepareSecurePayload,
-} from "./secure.ts";
+export { checkSecureBindings, compileBindings } from "./secure.ts";
 export type { UpstreamOptions } from "./upstream-target.ts";
 export {
   readUpstreamOptions,

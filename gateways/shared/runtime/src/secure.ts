@@ -1,77 +1,67 @@
-import type { SecureValue } from "@repo/gateway-core";
-import { sortedEntries } from "@repo/utils/sorted-entries";
+import {
+  SECURE_CLAIMS,
+  type SecureClaim,
+  type SecureClaims,
+} from "@repo/gateway-core";
 
 import { GatewayError } from "./errors.ts";
 import { compilePath, valueAt } from "./field-path.ts";
 
-export function prepareSecurePayload(
-  values: Readonly<Record<string, SecureValue>>,
-): string {
-  return JSON.stringify(Object.fromEntries(sortedEntries(values)));
-}
-
 export interface CompiledBinding {
   readonly inputPath: string;
   readonly segments: readonly string[];
-  readonly secureKey: string;
+  readonly claim: SecureClaim;
 }
+
+const CLAIMS: ReadonlySet<string> = new Set(SECURE_CLAIMS);
 
 export function compileBindings(
   secure: Readonly<Record<string, string>> | undefined,
 ): CompiledBinding[] {
   if (!secure) return [];
 
-  return Object.entries(secure).map(([inputPath, secureKey]) => {
+  return Object.entries(secure).map(([inputPath, claim]) => {
     const compiled = compilePath(inputPath);
-    // A wildcard would bind many input values to one secure value, which has no meaning.
+    // A wildcard would bind many input values to one claim, which has no meaning.
     if (compiled.wildcard) {
       throw new TypeError(
         `Secure binding path must not contain a wildcard: ${JSON.stringify(inputPath)}`,
       );
     }
-    if (typeof secureKey !== "string" || secureKey.length === 0) {
+    // The configuration's type holds it to a claim too, but a configuration written as plain
+    // JavaScript, or cast, would otherwise bind to a value no token carries.
+    if (!CLAIMS.has(claim)) {
       throw new TypeError(
-        `Secure binding for "${inputPath}" must name a non-empty secure value key`,
+        `Secure binding for "${inputPath}" must name a caller token claim: ${SECURE_CLAIMS.join(", ")}`,
       );
     }
-    return { inputPath, segments: compiled.segments, secureKey };
+    return {
+      inputPath,
+      segments: compiled.segments,
+      claim: claim as SecureClaim,
+    };
   });
 }
 
-// Reject absent or unequal bound values. Diagnostics name paths and keys only, never values.
+// Refuse an absent or unequal bound value. The claims come from a verified caller token.
+// Diagnostics name paths and claims only, never values.
 export function checkSecureBindings(
   bindings: readonly CompiledBinding[],
   input: unknown,
-  values: Readonly<Record<string, SecureValue>>,
-  _signature: string,
+  claims: SecureClaims,
 ): void {
-  // The signature is not verified, so these comparisons establish consistency, not
-  // authenticity. The canonical payload is still built on every request to keep that path
-  // exercised; its result is unused until verification exists.
-  prepareSecurePayload(values);
-
   for (const binding of bindings) {
-    if (!Object.hasOwn(values, binding.secureKey)) {
-      throw new GatewayError(
-        "SECURE_VALUE_MISMATCH",
-        `Secure value "${binding.secureKey}" is missing from the envelope`,
-      );
-    }
-
     const actual = valueAt(input, binding.segments);
     if (actual === undefined) {
       throw new GatewayError(
         "SECURE_VALUE_MISMATCH",
-        `Input "${binding.inputPath}" is bound to secure value "${binding.secureKey}" but is absent`,
+        `Input "${binding.inputPath}" is bound to claim "${binding.claim}" but is absent`,
       );
     }
-
-    // Own properties only, so a key naming an inherited member reads as absent.
-    const expected: SecureValue | undefined = values[binding.secureKey];
-    if (actual !== expected) {
+    if (actual !== claims[binding.claim]) {
       throw new GatewayError(
         "SECURE_VALUE_MISMATCH",
-        `Input "${binding.inputPath}" does not match secure value "${binding.secureKey}"`,
+        `Input "${binding.inputPath}" does not match claim "${binding.claim}"`,
       );
     }
   }

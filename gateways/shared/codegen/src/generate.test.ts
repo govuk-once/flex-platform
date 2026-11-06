@@ -1,4 +1,5 @@
 import { execFile as execFileCb } from "node:child_process";
+import { generateKeyPairSync, sign } from "node:crypto";
 import type * as FsPromises from "node:fs/promises";
 import {
   cp,
@@ -59,6 +60,62 @@ const SECRET_ARN =
   "arn:aws:secretsmanager:eu-west-2:000000000000:secret:fixture-SYNTHETIC";
 
 const execFile = promisify(execFileCb);
+
+// The caller token, as the edge signs it, and the public keys a stand-in for S3 serves.
+const TOKEN_KEY = generateKeyPairSync("ed25519");
+const TOKEN_KID = "20261106T120000Z";
+const TOKEN_AUDIENCE = "flex:sandbox:gateways";
+const TOKEN_KEYS_BUCKET = "frontdoor-sandbox-keys-100000000002";
+const TOKEN_KEYS_OBJECT = "caller-token-keys.json";
+const TOKEN_KEYS_ACCOUNT = "100000000002";
+
+function callerToken(): string {
+  const encode = (value: unknown) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  const iat = Math.floor(Date.now() / 1000);
+  const input = `${encode({ alg: "EdDSA", typ: "JWT", kid: TOKEN_KID })}.${encode(
+    {
+      pairwiseId: "pairwise-id",
+      service: "app",
+      aud: TOKEN_AUDIENCE,
+      iat,
+      exp: iat + 60,
+      jti: "request-id",
+    },
+  )}`;
+  return `${input}.${sign(null, Buffer.from(input), TOKEN_KEY.privateKey).toString("base64url")}`;
+}
+
+// S3, answering GetObject with the public keys.
+async function startS3(): Promise<{ url: string; close: () => void }> {
+  const keys = JSON.stringify({
+    keys: [
+      {
+        kty: "OKP",
+        crv: "Ed25519",
+        kid: TOKEN_KID,
+        x: TOKEN_KEY.publicKey.export({ format: "jwk" }).x,
+        signsFrom: 0,
+      },
+    ],
+  });
+  // Refuses a read that names another account as the bucket's owner, as S3 does.
+  const server = createServer((request, response) => {
+    if (request.headers["x-amz-expected-bucket-owner"] !== TOKEN_KEYS_ACCOUNT) {
+      response.statusCode = 403;
+      response.end();
+      return;
+    }
+    response.setHeader("content-type", "application/json");
+    response.end(keys);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${String(port)}`,
+    close: () => server.close(),
+  };
+}
 
 // A write that fails part way through a run, which cannot be arranged from outside the
 // filesystem. Which write fails is the test's to decide.
@@ -337,8 +394,9 @@ describe("the generated gateway", () => {
   const call = (operation: string, input: unknown) => ({
     operation,
     input,
-    secure: { values: {}, signature: "" },
+    secure: { token: callerToken() },
   });
+  let s3: { url: string; close: () => void };
 
   const context: LambdaContext = { getRemainingTimeInMillis: () => 30_000 };
 
@@ -350,6 +408,14 @@ describe("the generated gateway", () => {
     vi.stubEnv("FLEX_UPSTREAM_TARGET", TARGET);
     vi.stubEnv("FLEX_UPSTREAM_SECRET_ARN", SECRET_ARN);
     vi.stubEnv("AWS_REGION", "eu-west-2");
+    s3 = await startS3();
+    vi.stubEnv("FLEX_CALLER_TOKEN_KEYS_BUCKET", TOKEN_KEYS_BUCKET);
+    vi.stubEnv("FLEX_CALLER_TOKEN_KEYS_OBJECT", TOKEN_KEYS_OBJECT);
+    vi.stubEnv("FLEX_CALLER_TOKEN_KEYS_ACCOUNT", TOKEN_KEYS_ACCOUNT);
+    vi.stubEnv("FLEX_CALLER_TOKEN_AUDIENCE", TOKEN_AUDIENCE);
+    vi.stubEnv("AWS_ENDPOINT_URL_S3", s3.url);
+    vi.stubEnv("AWS_ACCESS_KEY_ID", "SYNTHETIC_ACCESS_KEY");
+    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "SYNTHETIC_SECRET");
 
     bundle = await readFile(bundlePath, "utf-8");
     clientModule = await readFile(path.join(packageDir, "index.js"), "utf-8");
@@ -371,6 +437,7 @@ describe("the generated gateway", () => {
 
   afterAll(() => {
     vi.unstubAllEnvs();
+    s3.close();
   });
 
   it("keeps what the gateway runs apart from what a caller imports", async () => {
@@ -445,6 +512,13 @@ describe("the generated gateway", () => {
       process.env.FLEX_UPSTREAM_TARGET = ${JSON.stringify(TARGET)};
       process.env.FLEX_UPSTREAM_SECRET_ARN = ${JSON.stringify(SECRET_ARN)};
       process.env.AWS_REGION = "eu-west-2";
+      process.env.FLEX_CALLER_TOKEN_KEYS_BUCKET = ${JSON.stringify(TOKEN_KEYS_BUCKET)};
+      process.env.FLEX_CALLER_TOKEN_KEYS_OBJECT = ${JSON.stringify(TOKEN_KEYS_OBJECT)};
+      process.env.FLEX_CALLER_TOKEN_KEYS_ACCOUNT = ${JSON.stringify(TOKEN_KEYS_ACCOUNT)};
+      process.env.FLEX_CALLER_TOKEN_AUDIENCE = ${JSON.stringify(TOKEN_AUDIENCE)};
+      process.env.AWS_ENDPOINT_URL_S3 = ${JSON.stringify(s3.url)};
+      process.env.AWS_ACCESS_KEY_ID = "SYNTHETIC_ACCESS_KEY";
+      process.env.AWS_SECRET_ACCESS_KEY = "SYNTHETIC_SECRET";
       const { handler } = await import(${JSON.stringify(pathToFileURL(bundlePath).href)});
       const response = await handler(
         ${JSON.stringify(call("createUser", { payload: { email: "a@b.test" } }))},
@@ -770,7 +844,7 @@ export const named = () => createFixtureClient({ functionName: "other" });
           (error) => error instanceof GatewayInvocationError ? error.reason : "other",
         );
         // The context the SDK sets, reaching a call made through the gateway's package.
-        const secure = { values: { sub: "u-1" }, signature: "sig" };
+        const secure = { token: "a.caller.token" };
         const called = (context) => withCallerContext(
           { deadline: Date.now() + 60_000, ...context },
           () => fixture.createUser(input),
@@ -811,13 +885,13 @@ export const named = () => createFixtureClient({ functionName: "other" });
           operation: "createUser",
           input: { payload: { email: "a@b.test" } },
         };
-        // A context without secure values sends none, and the throttled call was sent once.
+        // A context without a caller token sends none, and the throttled call was sent once.
         expect(sent).toEqual([
           {
             url,
             body: {
               ...body,
-              secure: { values: { sub: "u-1" }, signature: "sig" },
+              secure: { token: "a.caller.token" },
             },
           },
           { url, body },

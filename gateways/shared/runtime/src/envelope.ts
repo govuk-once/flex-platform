@@ -1,14 +1,7 @@
-import type { EnvelopeInbound, SecureValue } from "@repo/gateway-core";
+import type { EnvelopeInbound } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
-import { isScalar } from "@repo/utils/is-scalar";
 
 import { GatewayError } from "./errors.ts";
-
-function isSecureValue(value: unknown): value is SecureValue {
-  // Null is a value a caller may assert; a number that JSON cannot write is not, since it would
-  // reach the signature as null and sign differently than intended.
-  return value === null || isScalar(value);
-}
 
 export function parseEnvelope(event: unknown): EnvelopeInbound {
   if (!isRecord(event)) {
@@ -29,37 +22,24 @@ export function parseEnvelope(event: unknown): EnvelopeInbound {
     );
   }
 
-  if (!isRecord(event.secure)) {
-    throw new GatewayError(
-      "INVALID_INPUT",
-      "Envelope must have a 'secure' object",
-    );
-  }
-
-  if (!isRecord(event.secure.values)) {
-    throw new GatewayError(
-      "INVALID_INPUT",
-      "Envelope 'secure.values' must be an object",
-    );
-  }
-
-  // The keys are the caller's own, and a GatewayError message is logged as written, so the one
-  // that failed is not named: the dictionary would otherwise carry whatever a caller chose into
-  // the logs. Which envelope field was wrong is what the message has to say.
-  for (const value of Object.values(event.secure.values)) {
-    if (!isSecureValue(value)) {
+  // The token may be missing, which the token step refuses as UNAUTHENTICATED: a domain that forgot
+  // it. A `secure` of the wrong shape is a malformed envelope.
+  if (event.secure !== undefined) {
+    if (!isRecord(event.secure)) {
       throw new GatewayError(
         "INVALID_INPUT",
-        "Envelope 'secure.values' must hold strings, finite numbers, booleans or null",
+        "Envelope 'secure' must be an object",
       );
     }
-  }
-
-  if (typeof event.secure.signature !== "string") {
-    throw new GatewayError(
-      "INVALID_INPUT",
-      "Envelope 'secure.signature' must be a string",
-    );
+    if (
+      event.secure.token !== undefined &&
+      typeof event.secure.token !== "string"
+    ) {
+      throw new GatewayError(
+        "INVALID_INPUT",
+        "Envelope 'secure.token' must be a string",
+      );
+    }
   }
 
   return event as unknown as EnvelopeInbound;

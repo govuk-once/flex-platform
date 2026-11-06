@@ -1,14 +1,24 @@
 import type { ErrorCode } from "./errors.ts";
 
-// Scalars avoid nested key-order concerns when preparing the secure payload.
-export type SecureValue = string | number | boolean | null;
+/**
+ * The values the caller token vouches for, which an operation's secure bindings compare its input
+ * with. Each is a string. A name added here is a claim the edge signs.
+ */
+export const SECURE_CLAIMS = ["pairwiseId", "service"] as const;
+
+export type SecureClaim = (typeof SECURE_CLAIMS)[number];
+
+export type SecureClaims = Readonly<Record<SecureClaim, string>>;
 
 export interface EnvelopeInbound {
   readonly operation: string;
   readonly input: unknown;
-  readonly secure: {
-    readonly values: Readonly<Record<string, SecureValue>>;
-    readonly signature: string;
+  /**
+   * The caller token, as the edge signed it and the domain received it. Without it, the gateway
+   * refuses the call as `UNAUTHENTICATED`.
+   */
+  readonly secure?: {
+    readonly token: string;
   };
 }
 

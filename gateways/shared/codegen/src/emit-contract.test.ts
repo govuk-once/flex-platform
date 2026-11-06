@@ -659,7 +659,7 @@ export function describeResponse(response: GetIdentityExchangeResponse): string 
 export const request: GatewayRequest = {
   operation: "createUser",
   input: { payload: { email: "a@b.test" } },
-  secure: { values: {}, signature: "" },
+  secure: { token: "a.caller.token" },
 };
 
 export const named: OperationName = "getIdentityExchange";
