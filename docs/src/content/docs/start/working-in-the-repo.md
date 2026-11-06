@@ -34,7 +34,8 @@ Use pnpm and the existing scripts. When a tool has no package script, use `pnpm 
   `exactOptionalPropertyTypes`. An indexed read may be `undefined`, and an optional property
   cannot be set to `undefined` explicitly.
 - Vitest runs with `globals: false`, so import `describe`, `it` and `expect` in every test file.
-- Dependency versions are pinned exactly. pnpm refuses any release less than seven days old.
+- Dependency versions are pinned exactly (`savePrefix: ""`). pnpm refuses any release less than
+  seven days old.
 
 ## No library build step
 

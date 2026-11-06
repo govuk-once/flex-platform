@@ -31,8 +31,7 @@ change you are making.
   configuration when the tool requires one, with a comment saying why.
 - Every package extends the one TypeScript base, `base.json`: strict, no emit. The documentation
   site is the exception: it extends Astro's strict base, and turns on `noUncheckedIndexedAccess`
-  and `exactOptionalPropertyTypes` as `base.json` does. Packages export their `.ts` sources
-  directly, and Vitest, esbuild and tsx use them as they are.
+  and `exactOptionalPropertyTypes` as `base.json` does.
 - ESLint provides `base`, `driver`, `service`, `cloudfrontFunction`, `infraConstructs` and
   `sectionInfra` presets. Drivers own transport access. `service` is for code that reaches an
   upstream only through a driver: each gateway's package under `gateways/services/`, and the
@@ -46,10 +45,9 @@ change you are making.
   `FLEX_UPSTREAM_TARGET` and `FLEX_ENVIRONMENT`, so it reads as the platform's and never collides
   with one that AWS, a library or a domain's own code defines. A variable AWS sets, such as
   `AWS_REGION`, keeps its own name.
-- Check installed dependencies and their APIs before using them. Keep dependency versions pinned
-  exactly (`savePrefix: ""`).
-- Git ignores generated artifacts, including `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and
-  `coverage/`. Do not commit them.
+- Check installed dependencies and their APIs before using them.
+- Do not commit generated artifacts. Git ignores them: see
+  [No library build step](/flex-platform/start/working-in-the-repo/#no-library-build-step).
 - Infrastructure follows the rules in [Infrastructure](/flex-platform/infrastructure/overview/):
   only config differs between stages, construct IDs are a contract, and stacks are wired together
   by names derived from config.

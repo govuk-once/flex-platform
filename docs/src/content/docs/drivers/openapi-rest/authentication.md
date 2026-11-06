@@ -63,9 +63,8 @@ Diagnostics name the field and the rule, never a value.
 
 ### Reading and rotation
 
-The runtime reads the secret through Powertools Parameters. Powertools serves a retrieved copy
-for five minutes, then reads again on the first call after that. Concurrent calls on a cold or
-expired cache may each read the secret. Nothing coordinates them.
+The runtime caches the secret for five minutes. See
+[The secret](/flex-platform/reference/environment/#the-secret).
 
 Every named field is checked on every read. A secret that fails the checks is never returned.
 The operation fails as `INTERNAL` instead, the same as when a read fails. Rotating the secret
@@ -96,8 +95,9 @@ The credentials STS returns are kept until five minutes before they expire. The 
 assumed again. If the secret is rotated to another role, that role is assumed on the next
 request. Role assumption goes to STS through the AWS SDK. This is the one exception to using the
 driver's transport. Each call to STS allows 2 s to connect and 5 s for the request, with the SDK's
-own retries on, because assuming a role sends nothing to the upstream. STS is called in the gateway's own region, whatever region the upstream signs
-in: credentials from a regional STS endpoint are valid in every region, and the gateway's
+own retries on, because assuming a role sends nothing to the upstream. STS is called in the
+gateway's own region, whatever region the upstream signs in: credentials from a regional STS
+endpoint are valid in every region, and the gateway's
 [network](/flex-platform/infrastructure/network/#endpoints) reaches STS in its own region only.
 
 The signature covers the method, the address, the headers set before it and a hash of the body.

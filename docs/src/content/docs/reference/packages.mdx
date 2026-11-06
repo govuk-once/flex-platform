@@ -6,10 +6,8 @@ description: Every workspace package, where it lives, where its docs are and how
 import DependencyDiagram from "../../../components/DependencyDiagram.astro";
 import PackageTables from "../../../components/PackageTables.astro";
 
-Workspace libraries export their TypeScript sources directly and resolve to each other's sources.
-They need no separate library build. Codegen emits and bundles gateway artifacts, and the docs
-package builds the site with Astro. The gateway client is the exception: domains install it, so
-its `build` script bundles it into `dist/` for a release. See
+How workspace packages resolve to each other's sources, with no build step, and why the gateway
+client is the exception, are in
 [Working in the repo](/flex-platform/start/working-in-the-repo/#no-library-build-step).
 
 ## How they depend on each other

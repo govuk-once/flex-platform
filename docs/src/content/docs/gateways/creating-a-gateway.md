@@ -125,9 +125,8 @@ it passes. See [What codegen checks](/flex-platform/codegen/checks/).
 
 ## 5. Prepare for deployment
 
-The deployment artifact is `.gen/runtime/bundle.mjs`, for a Node 24 Lambda function with handler
-`bundle.handler`. The function is named `gateway-<environment>-<id>`, by `gatewayFunctionName` in
-`@repo/gateway-core`, with one alias, `live`, which every
+The gateway deploys as a Lambda function named `gateway-<environment>-<id>`, by
+`gatewayFunctionName` in `@repo/gateway-core`, with one alias, `live`, which every
 [gateway client](/flex-platform/domains/overview/#calling-gateways) invokes. The
 [network](/flex-platform/infrastructure/network/) it runs in is built. Deploying the function and
 its permissions is planned: see [The platform](/flex-platform/start/platform/).
@@ -137,13 +136,8 @@ connects to, its upstream's API and any host it takes a token from, in `gateways
 account that runs it, in the [CDK app's config](/flex-platform/infrastructure/overview/#config).
 A name left off doesn't resolve. See [the allowlist](/flex-platform/infrastructure/network/#the-allowlist).
 
-Set the [environment](/flex-platform/reference/environment/):
-
-- `FLEX_UPSTREAM_SECRET_ARN`, always
-- `FLEX_UPSTREAM_TARGET`, unless the driver reads the target from the secret
-
-The function's role needs permission to read that secret, plus any permissions its authentication
-requires. See [Environment](/flex-platform/reference/environment/). Callers install
+What the function runs, the variables it reads and what its role needs are in
+[Environment](/flex-platform/reference/environment/). Callers install
 the [client package](/flex-platform/codegen/overview/#the-client-package) in `.gen/client/package/`,
 which holds the [call contract](/flex-platform/codegen/call-contract/) and a function that creates
 a client typed by it.
