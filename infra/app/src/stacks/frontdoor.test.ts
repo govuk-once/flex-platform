@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
 import { buildApp } from "../build-app.ts";
+import { domainName } from "../config/domain-name.ts";
 import { selectTarget } from "../config/select-target.ts";
+import type { DomainConfig, StageConfig } from "../config/types.ts";
+import { domainStackName } from "./domain.ts";
 import {
   domainRoutes,
   FrontdoorStack,
@@ -13,6 +16,24 @@ import {
 
 const PROD = FIXTURE_STAGES[2];
 const [DEV] = PROD.environments;
+
+// PROD, with one domain disabled in every environment that hosts it.
+function disabling(domain: string): StageConfig {
+  return {
+    ...PROD,
+    environments: PROD.environments.map((environment) => ({
+      ...environment,
+      domainAccounts: environment.domainAccounts.map((domainAccount) => ({
+        ...domainAccount,
+        domains: domainAccount.domains.map((entry) =>
+          domainName(entry) === domain
+            ? { name: domain, disabled: true as const }
+            : entry,
+        ),
+      })),
+    })),
+  };
+}
 
 describe("FrontdoorStack", () => {
   it("is one per environment, in its frontdoor account, in us-east-1", () => {
@@ -105,6 +126,52 @@ describe("FrontdoorStack", () => {
       "domain-b": `domain-b.${main.zone.name}`,
     });
     expect(Object.keys(routes)).toEqual(["domain-a", "domain-b"]);
+  });
+
+  it("routes nothing to a disabled domain, and nothing at all when every domain is", () => {
+    const [, , prodEnvironment] = PROD.environments;
+    const [main] = prodEnvironment.domainAccounts;
+    const routesWith = (domains: readonly DomainConfig[]) =>
+      domainRoutes({
+        ...prodEnvironment,
+        domainAccounts: [{ ...main, domains }],
+      });
+    const routes = {
+      "domain-a": `domain-a.${main.zone.name}`,
+      "domain-b": `domain-b.${main.zone.name}`,
+    };
+
+    expect(routesWith(["domain-a", "domain-b"])).toEqual(routes);
+    expect(
+      routesWith(["domain-a", { name: "domain-b", disabled: true }]),
+    ).toEqual({ "domain-a": routes["domain-a"] });
+    expect(
+      routesWith([
+        { name: "domain-a", disabled: true },
+        { name: "domain-b", disabled: true },
+      ]),
+    ).toEqual({});
+  });
+
+  it("keeps a disabled domain's stack and its dependency, unchanged, so enabling it again recreates nothing", () => {
+    const synth = (stage: StageConfig) => {
+      const app = cdkApp();
+      buildApp(app, stage, selectTarget(stage, "staging"));
+      return app.synth();
+    };
+    const [, staging] = PROD.environments;
+    const name = domainStackName(staging, "domain-b");
+    const before = synth(PROD);
+    const after = synth(disabling("domain-b"));
+
+    expect(after.getStackByName(name).template).toEqual(
+      before.getStackByName(name).template,
+    );
+    expect(
+      after
+        .getStackByName(frontdoorStackName(staging))
+        .dependencies.map(({ id }) => id),
+    ).toContain(name);
   });
 
   it("names its stack from the environment alone, so stages compare directly", () => {

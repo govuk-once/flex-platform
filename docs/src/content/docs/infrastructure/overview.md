@@ -78,9 +78,10 @@ take the app's entry point and its domain name with it, deleting the log stack w
 Lambda@Edge's logs nowhere to go, deleting a network would take every workload's network with it,
 and the NAT addresses upstreams allowlist, and deleting a domain account's stack would take the
 certificate every domain in it uses, and leave the account's API Gateway logging setting naming a
-deleted role. So deleting any of them takes a deliberate step first: turning the protection off. A domain's stack has none, since everything in it but its log groups, which are
-retained, is built again from config. CDK doesn't delete a stack the app no longer builds, so
-removing a domain from config leaves its stack to be deleted by hand.
+deleted role. So deleting any of them takes a deliberate step first: turning the protection off. A domain's stack has none. Withdrawing a domain is
+[disabling it](/flex-platform/domains/hosting/#disabling-a-domain), which keeps its stack; removing
+it from config leaves its stack to be deleted by hand, since CDK doesn't delete a stack the app no
+longer builds.
 
 Each account is bootstrapped for CDK in each region it deploys to, so a frontdoor account is
 bootstrapped in us-east-1 and eu-west-2, and a domain account in eu-west-2.
@@ -93,12 +94,14 @@ written out side by side. A value is in config whenever it can be known before d
 never is: config names a secret, never holds one.
 
 ```ts
-StageConfig       { name, shared: { account }, environments }
-EnvironmentConfig { name, frontdoor: { account, zone, issuers }, domainAccounts }
-DomainAccount     { name, account, domains, zone, network: { availabilityZones }, gateways }
+StageConfig         { name, shared: { account }, environments }
+EnvironmentConfig   { name, frontdoor: { account, zone, issuers }, domainAccounts }
+DomainAccountConfig { name, account, domains: [name | { name, disabled: true }], zone,
+                      network: { availabilityZones }, gateways }
 ```
 
-- `domains` lists the names of the domains a domain account hosts in the environment. See
+- `domains` lists the domains a domain account hosts in the environment, each by its name, or
+  as `{ name, disabled: true }` when it is disabled. See
   [Hosting a domain](/flex-platform/domains/hosting/).
 - `zone` is the account's public hosted zone, as `{ name, id }`. The zones aren't the platform's:
   another team creates one in each account, already delegated, named

@@ -3,6 +3,7 @@ import { gatewayFunctionName } from "@repo/gateway-core";
 import { dnsAllowlist, networkZones } from "@repo/infra-constructs";
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
+import { domainName } from "./domain-name.ts";
 import type {
   DomainAccountConfig,
   EnvironmentConfig,
@@ -93,8 +94,12 @@ function checkEnvironment(at: string, environment: EnvironmentConfig): void {
   }
 }
 
+// Every domain's name, disabled ones included: a disabled domain keeps its stack and its name, so
+// no other account in the environment may take it.
 function domainsOf(environment: EnvironmentConfig): string[] {
-  return environment.domainAccounts.flatMap(({ domains }) => domains);
+  return environment.domainAccounts.flatMap(({ domains }) =>
+    domains.map(domainName),
+  );
 }
 
 // The environment's and the domain's names are each valid alone, but together can pass IAM's limit

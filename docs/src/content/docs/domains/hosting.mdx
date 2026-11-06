@@ -14,14 +14,18 @@ The constructs and the names they use are in `domains/infra` (`@repo/domain-infr
 
 ## Declaring a domain
 
-Each domain account in an environment lists the names of the domains it hosts in that environment:
+Each domain account in an environment lists the domains it hosts in that environment, each by its
+name, or as `{ name, disabled: true }` when it is [disabled](#disabling-a-domain):
 
 ```ts
 domainAccounts: [
   {
     name: "domain00",
     account: "098640806149",
-    domains: ["domain-a", "domain-b"],
+    domains: [
+      "domain-a",
+      { name: "domain-b", disabled: true },
+    ],
     zone: {
       name: "development.flex-platform.once.service.gov.uk",
       id: "Z0835542Q6J8ILWJ1RGR",
@@ -43,9 +47,25 @@ domain stack, and the domain team must release the function there before it can 
 The previous account's domain stack and its resources must be removed separately.
 </Aside>
 
+### Disabling a domain
+
+List a domain as `{ name, disabled: true }` to stop routing to it. Its stack stays as it is, with
+its API, its host, its log groups and its name, which no other account in the environment may
+take. The Frontdoor's routes leave it out, so a request for it, once its token is verified, gets
+the 404 an unknown domain gets, and never reaches its API. Listing it by its name again restores
+the route and recreates nothing. Release the function the route will reach before enabling it.
+
+Disabling withdraws the route and nothing else: it doesn't stop an invocation already running, or
+change what the function's role may do. The routes change when the Frontdoor's stack deploys, and
+copies of Lambda@Edge can route to the domain until the new version has replaced them.
+
+Removing a domain from config is different. Its stack leaves the app, and CDK doesn't delete a
+stack the app no longer builds, so it is deleted by hand. Its log groups are retained, so adding
+the domain back later fails until they are imported into its new stack or deleted.
+
 ### Checks
 
-Before building any stage, the app checks every domain:
+Before building any stage, the app checks every domain, disabled ones included:
 
 - its name is 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not
   ending with a hyphen;

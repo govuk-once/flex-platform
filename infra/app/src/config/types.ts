@@ -40,11 +40,23 @@ export interface GatewayConfig {
   readonly hostnames: readonly string[];
 }
 
+/**
+ * A domain the account hosts: its name, or the domain disabled. A disabled domain keeps its stack,
+ * and with it its API, its host, its logs and its name, but the Frontdoor routes nothing to it: a
+ * request for it gets the 404 an unknown domain gets. Enabling it again recreates nothing.
+ */
+export type DomainConfig = string | DisabledDomainConfig;
+
+export interface DisabledDomainConfig {
+  readonly name: string;
+  readonly disabled: true;
+}
+
 export interface DomainAccountConfig {
   readonly name: string;
   readonly account: string;
-  /** The domains the account hosts in this environment. */
-  readonly domains: readonly string[];
+  /** The domains the account hosts in this environment, disabled ones included. */
+  readonly domains: readonly DomainConfig[];
   /** Each domain answers at `<domain>.<zone>`, under one wildcard certificate. */
   readonly zone: ZoneConfig;
   readonly network: NetworkConfig;

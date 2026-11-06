@@ -4,6 +4,7 @@ import type { App } from "aws-cdk-lib";
 import { Aspects, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
 
+import { domainName } from "./config/domain-name.ts";
 import type { Target } from "./config/select-target.ts";
 import type { StageConfig } from "./config/types.ts";
 import { DomainStack } from "./stacks/domain.ts";
@@ -44,11 +45,12 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
         domainAccount,
       });
 
+      // Disabled domains too: a disabled domain keeps its stack, and only loses its route.
       for (const domain of domainAccount.domains) {
         const domainStack = new DomainStack(app, {
           environment,
           domainAccount,
-          domain,
+          domain: domainName(domain),
         });
 
         domainStack.addStackDependency(

@@ -5,6 +5,7 @@ import { buildApp } from "../src/build-app.ts";
 import { selectTarget } from "../src/config/select-target.ts";
 import type {
   DomainAccountConfig,
+  DomainConfig,
   FrontdoorConfig,
   GatewayConfig,
   NetworkConfig,
@@ -54,7 +55,7 @@ export function domainAccount(
   environment: string,
   name: string,
   account: string,
-  domains: readonly string[] = [],
+  domains: readonly DomainConfig[] = [],
   network: NetworkConfig = TWO_ZONES,
 ): DomainAccountConfig {
   return {

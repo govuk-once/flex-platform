@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES, synthesizedStage } from "../test/helpers.ts";
 import { buildApp } from "./build-app.ts";
+import { domainName } from "./config/domain-name.ts";
 import { selectTarget } from "./config/select-target.ts";
 import { STAGES } from "./config/stages.ts";
 import type { EnvironmentConfig, StageConfig } from "./config/types.ts";
@@ -88,7 +89,7 @@ function environmentShapes(
   }));
 
   const domains = environment.domainAccounts.flatMap((domainAccount) =>
-    domainAccount.domains.map((domain) => {
+    domainAccount.domains.map(domainName).map((domain) => {
       const placeholders = new Map([
         [
           networkStackName(environment, domainAccount),
