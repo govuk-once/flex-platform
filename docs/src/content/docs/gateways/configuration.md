@@ -56,7 +56,7 @@ driver field is a type error at `defineGateway` or the driver helper. It is not 
 
 | Gateway field | Purpose |
 |---|---|
-| `id` | Required non-empty gateway identifier. |
+| `id` | Required. 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen. It names the gateway's function and its client package. See [What codegen checks](/flex-platform/codegen/checks/). |
 | `description` | Optional description. |
 | `driver` | Required driver definition. It decides which extra operation fields are available. |
 | `policy` | Optional overrides for `standardPolicy` defaults. |
@@ -80,7 +80,14 @@ from the [environment](/flex-platform/reference/environment/).
 smaller. If the budget has run out, the call is not dispatched.
 
 The configuration also accepts `circuitBreaker.threshold`, `circuitBreaker.duration` and
-`rateLimit.rps`. The current runtime does not enforce these fields.
+`rateLimit.rps`. `defineGateway` fills in `standardPolicy`: a threshold of 5 and a duration of
+`"120s"`, and no rate limit. The current runtime does not enforce these fields, or check their
+values.
+
+A request's budget is the time the Lambda invocation has left, less 500 ms that the gateway keeps
+to answer. Only an upstream call made through `ctx.upstream` is held to the timeout and the budget.
+Work a [custom handler](/flex-platform/drivers/openapi-rest/handlers/) does outside one has no
+timeout of its own, and only the invocation's own time limit stops it.
 
 ## Logging
 

@@ -1,11 +1,27 @@
 ---
 title: What codegen checks
-description: The checks that reject a gateway before anything is generated.
+description: The checks that reject a gateway, in the order codegen runs them, and what fails while it writes.
 ---
 
-Codegen fails a gateway, and writes nothing, when its configuration and schemas disagree. It
-reports every problem it finds in one run. Without these checks, each problem would instead fail
-when the executor is created, or cause an `INTERNAL` failure on a request in production.
+Codegen fails a gateway when its configuration and schemas disagree. Without these checks, each
+problem would instead fail when the executor is created, or cause an `INTERNAL` failure on a
+request in production.
+
+It checks in stages, in this order, and stops at the first stage that finds a problem, reporting
+what that stage found. So fixing one stage's problems can uncover the next stage's.
+
+1. The schema versions are read, by the rules in
+   [Schemas and versions](/flex-platform/gateways/schemas/).
+2. The latest schemas are compiled. See [Generic checks](#generic-checks).
+3. Each version is compared with every one before it, by the
+   [compatibility rules](/flex-platform/gateways/compatibility/).
+4. The configuration is checked against the latest schemas: the generic checks, then the
+   [driver's](#driver-checks).
+5. The latest version is compared with [what the driver derives](#what-the-driver-derives).
+
+Only once every stage has passed is `.gen/` deleted and written again. A failure while writing,
+such as [two types that need one name](#while-writing), fails the command and leaves an incomplete
+`.gen/`, which the next run replaces.
 
 ## Generic checks
 
@@ -17,7 +33,11 @@ when the executor is created, or cause an `INTERNAL` failure on a request in pro
 - The driver must give `deriveSchemasModule` as a `file:` URL, because every gateway's schemas are
   derived. This check reads only the URL. The module is loaded later, to check
   [what the driver derives](/flex-platform/codegen/checks/#what-the-driver-derives).
+- The configuration must declare at least one operation.
 - Each operation must have schemas, and each set of schemas must have an operation.
+- Every name in the schemas, of a shared definition, an operation, an outcome or a `meta` entry,
+  must be a JavaScript identifier, `[A-Za-z_$][A-Za-z0-9_$]*`, because each names an export of
+  the validators.
 - Every operation must declare at least one outcome.
 - Every name in the schemas' `meta` must declare one scalar type: string, number, integer or boolean.
 - Every schema compiles in Ajv's strict mode.
@@ -33,6 +53,14 @@ fixed, which would reject an array that types its first elements by position and
 
 A schema with asynchronous validation is always rejected, because the dispatcher validates
 synchronously.
+
+## While writing
+
+The [call contract](/flex-platform/codegen/call-contract/) gives each shared definition a type of
+its own name, and each operation the types `<Operation>Input`, `<Operation>Result` and
+`<Operation>Response`. Two that need the same name fail the run, and so does a definition named
+like a type the contract or TypeScript declares, such as `OperationResult` or `Record`. Rename one
+of them. A schema the contract cannot describe, such as one nested too deeply, fails the run too.
 
 ## Driver checks
 

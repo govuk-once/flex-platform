@@ -100,13 +100,15 @@ DomainAccountConfig { name, account, domains: [name | { name, disabled: true }],
                       network: { availabilityZones }, gateways }
 ```
 
+- A domain account's `name` goes into its stacks' and resources' names. Every stage names its
+  first `domain00`, which leaves room for more domain accounts in an environment.
 - `domains` lists the domains a domain account hosts in the environment, each by its name, or
   as `{ name, disabled: true }` when it is disabled. See
   [Hosting a domain](/flex-platform/domains/hosting/).
 - `zone` is the account's public hosted zone, as `{ name, id }`. The zones aren't the platform's:
   another team creates one in each account, already delegated, named
   `<environment>.flex-<account role>.once.service.gov.uk`. An account writes records only into
-  its own zone. The Frontdoor answers at its zone's apex, and each domain will answer at
+  its own zone. The Frontdoor answers at its zone's apex, and each domain answers at
   `<domain>.<its domain account's zone>`.
 - `network.availabilityZones` lists the zones the account's network uses, in any order. Each has
   its own NAT gateway. See [availability zones](/flex-platform/infrastructure/network/#availability-zones).
@@ -157,8 +159,9 @@ Before building any stage, the app checks every stage's config:
   names may hold hyphens, so only a different first word keeps it from ever having a domain's
   stack's name. A log group is a path, `/flex/{section}/{environment}/{thing}`. Where AWS requires
   a prefix, such as WAF's `aws-waf-logs-`, the name follows it. Each section
-  builds its names with functions in one module, such as `frontdoor/infra/src/names.ts`, which
-  states the template too.
+  builds its resources' names with functions in one module, such as
+  `frontdoor/infra/src/names.ts`, which states the template too. Stack names are built in
+  `infra/app`, beside each stack.
 - **Construct IDs are a contract.** A resource's logical ID comes from its construct path, so
   moving or renaming a scope replaces the resource. In a loop, build IDs from config keys, never
   positions in a list.

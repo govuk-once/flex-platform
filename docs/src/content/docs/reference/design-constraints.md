@@ -279,9 +279,11 @@ for an integration does not mean that integration is implemented.
 
 14. **Inputs are held to everything, outcomes to their shape.** When deriving:
     - for an input, it closes every object that names its fields and says nothing about the rest,
-      and keeps every constraint and `enum` exactly;
+      except one inside `allOf`, `anyOf` or `oneOf`, which closing would break. It keeps every
+      constraint and `enum` exactly;
     - for an outcome, it opens closed objects, drops bounds, `pattern` and `format`, and turns an
-      `enum` into the known values alongside their type.
+      `enum` of one string, number or integer type into the known values alongside that type. Any
+      other `enum` stays closed, with a note.
 
     The reason is the direction each side can change without breaking a caller. An input can be
     loosened later but never tightened. An upstream adds fields, values and length to what it sends

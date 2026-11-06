@@ -88,12 +88,13 @@ additional properties lets the caller choose the names.
 
 These fail when the executor is created:
 
-- an unsupported method;
+- an `upstream` that codegen would refuse, as [above](#what-codegen-checks);
+- `payload` mapped as a parameter;
 - a template parameter without an entry;
 - an entry naming a path parameter the template does not declare;
 - two fields feeding one upstream name;
-- a reserved header (`content-type`, `content-length`, `host`, `transfer-encoding`,
-  `connection`);
+- a header that is not a valid name, or one the driver sets (`content-type`, `content-length`,
+  `host`, `transfer-encoding`, `connection`);
 - a mapping onto a header the authentication owns;
 - a handler that is not a function.
 
@@ -104,16 +105,25 @@ A misspelled key inside a parameter mapping is a type error at `defineGateway`.
 Codegen passes the configuration and the schemas to the driver's
 [`checkSchemas`](/flex-platform/drivers/contract/#checkschemas), and fails when:
 
+- `upstream` is not `"<METHOD> /<path>"` with a supported method; its path holds a query, a
+  fragment, whitespace, a backslash, a dot segment or an incomplete `%` escape; or a `{param}` in
+  it has an invalid name, appears twice, or has an unmatched brace;
+- the input schema does not describe an object, or its `$ref` resolves to no shared definition,
+  or back to one it is reached from;
 - a `{param}` in the template has no `parameters` entry with `in: "path"` naming it, or an entry
   names a parameter the template does not declare;
 - a mapped field, for a path, query or header parameter, is not a field of the input schema;
 - an input field is neither mapped nor `payload`, so nothing would carry it upstream;
 - a path parameter's input field is not required by the schema, which would leave a segment of
   the path with no value;
-- two fields supply the same path parameter, query parameter or header, so only one would be sent;
-- the input schema declares `payload` for a method that cannot carry a body, or a mapping names a
-  header the gateway's authentication owns;
-- the schemas' `meta` and the driver's `metadata` disagree. See
+- two fields supply the same path parameter, query parameter or header, so only one would be sent.
+  Header names are compared without regard to case;
+- `payload` is mapped as a parameter, or the input schema declares it for a method that cannot
+  carry a body;
+- a mapping names a header that is not a valid name, one the driver sets (`content-type`,
+  `content-length`, `host`, `transfer-encoding`, `connection`), or one the gateway's
+  authentication owns;
+- the driver's `metadata` is malformed, or it and the schemas' `meta` disagree. See
   [Agreement with the schemas](/flex-platform/drivers/openapi-rest/metadata/#agreement-with-the-schemas).
 
 An operation with a custom handler builds its own request, so some of these are left to the

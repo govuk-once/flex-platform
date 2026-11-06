@@ -45,6 +45,11 @@ The handler is built while the function initialises. A missing or invalid secret
 initialisation from completing, before the handler can process an event. This check runs when
 the bundle loads; code generation does not retrieve the secret or test deployment permissions.
 
+Each read of the secret allows 2 s to connect and 5 s for the request, and the AWS SDK's own
+retries stay on, because a read sends nothing to the upstream. So a slow store can hold
+initialisation for several of those, and nothing bounds it as a whole except Lambda's own limit on
+initialising a function.
+
 Initialisation failures occur outside the handler and do not return a gateway error envelope.
 An invalid secret read after startup instead fails the affected call as `INTERNAL`.
 

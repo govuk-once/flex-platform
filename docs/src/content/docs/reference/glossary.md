@@ -43,7 +43,7 @@ around them.
 ## Envelope
 
 What a gateway's handler receives and returns. It receives `{ operation, input, secure }`. It
-returns `{ ok, outcome, data }` or `{ ok, error: { code } }`. See
+returns `{ ok, outcome, data }` or `{ ok, error: { code } }`, either with an optional `meta`. See
 [Responses and errors](/flex-platform/gateways/responses/).
 
 ## Environment
@@ -86,9 +86,10 @@ status code.
 
 ## Placement
 
-Where a gateway's Lambda runs. There are two placements:
+Where a workload's Lambda runs. There are two placements:
 
-- `isolated`: no route to the internet. The gateway reaches its upstream through a VPC endpoint.
+- `isolated`: no route to the internet. A domain's function always runs here, and so does a
+  gateway whose upstream it reaches through a VPC endpoint.
 - `private`: the gateway reaches the internet through a NAT gateway. Egress filtering is planned
   between them.
 

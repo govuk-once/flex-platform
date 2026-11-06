@@ -8,7 +8,9 @@ import PackageTables from "../../../components/PackageTables.astro";
 
 Workspace libraries export their TypeScript sources directly and resolve to each other's sources.
 They need no separate library build. Codegen emits and bundles gateway artifacts, and the docs
-package builds the site with Astro.
+package builds the site with Astro. The gateway client is the exception: domains install it, so
+its `build` script bundles it into `dist/` for a release. See
+[Working in the repo](/flex-platform/start/working-in-the-repo/#no-library-build-step).
 
 ## How they depend on each other
 
@@ -56,7 +58,7 @@ The site draws this diagram from the packages' manifests each time it builds.
 | `@repo/infra-app` | `infra/app` | [Infrastructure](/flex-platform/infrastructure/overview/) |
 | `@repo/infra-constructs` | `infra/constructs` | [Checks](/flex-platform/infrastructure/overview/#checks), [Network](/flex-platform/infrastructure/network/) |
 | `@repo/gateway-infra` | `gateways/infra` | [Endpoints](/flex-platform/infrastructure/network/#endpoints) |
-| `@repo/domain-infra` | `domains/infra` | [What a domain account provides](/flex-platform/domains/hosting/#what-a-domain-account-provides) |
+| `@repo/domain-infra` | `domains/infra` | [Hosting a domain](/flex-platform/domains/hosting/) |
 
 ## Shared tooling
 
@@ -74,5 +76,6 @@ The site draws this diagram from the packages' manifests each time it builds.
 ## Conventions
 
 Where code belongs, and how `@repo/utils` is exported and used for sorting, are in
-[Conventions](/flex-platform/start/conventions/). Which package may depend on which is
-[design constraint 10](/flex-platform/reference/design-constraints/).
+[Conventions](/flex-platform/start/conventions/). What the gateway packages may depend on is
+[design constraint 10](/flex-platform/reference/design-constraints/), and which infrastructure
+package may import which is held by the lint presets in Conventions.

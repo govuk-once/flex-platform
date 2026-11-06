@@ -10,9 +10,9 @@ This page builds a small but complete driver, `json-rpc`, for a JSON-RPC 2.0 ups
 It ends with the rules every driver must keep. Read
 [The driver contract](/flex-platform/drivers/contract/) alongside it.
 
-The example is not a package in the repository. Its code is typechecked against the workspace's
-packages. It leaves out some things a production driver needs, and the page names them as it
-goes.
+The example is not a package in the repository, and no check compiles it, so check it against the
+current packages as you copy it. It leaves out some things a production driver needs, and the
+page names them as it goes.
 
 ## Package layout
 
@@ -38,33 +38,16 @@ gateways/drivers/json-rpc/
 
 `config/` must not use the network, a secret or the environment, because codegen evaluates it
 without any of them. `runtime/` is loaded when the gateway starts. `derive/` is loaded by
-`gateway-schemas`, and by codegen with the network refused, and is never bundled. A lint rule keeps the three apart, as openapi-rest's
-does:
-
-```ts title="eslint.config.ts"
-import { driver } from "@repo/eslint-config";
-
-const RUNTIME = {
-  group: ["**/runtime/**"],
-  allowTypeImports: true,
-  message: "Only createExecutor reaches the runtime, and it imports it dynamically.",
-};
-
-export default [
-  ...driver,
-  {
-    files: ["src/*.ts", "src/config/**/*.ts"],
-    ignores: ["src/**/*.test.ts"],
-    rules: {
-      "@typescript-eslint/no-restricted-imports": ["error", { patterns: [RUNTIME] }],
-    },
-  },
-];
-```
+`gateway-schemas`, and by codegen with the network refused, and is never bundled. Copy
+openapi-rest's `eslint.config.ts` to keep the three apart. It keeps the root and `config/` from
+reaching `runtime/` or `derive/`, the runtime from reaching `derive/`, and `derive/` from reaching
+the runtime. An import of `derive/`, even a dynamic one, would put what it uses into every deployed
+gateway, so the definition names it by URL instead.
 
 ```json title="package.json"
 {
   "name": "@repo/gateway-driver-json-rpc",
+  "private": true,
   "version": "0.0.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
@@ -82,8 +65,8 @@ export default [
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.10.0",
-    "vitest": "5.0.1"
+    "eslint": "10.13.0",
+    "vitest": "5.0.5"
   }
 }
 ```
@@ -189,19 +172,34 @@ of its own.
 
 `gateway-schemas` loads this module and writes what it returns as the gateway's next version,
 once the shape has changed and no caller would break. Here the configuration is the description,
-so deriving copies each operation's declared schemas, in the order they are written:
+so deriving takes each operation's declared schemas, in the order they are written, and converts
+them as [every driver must](/flex-platform/reference/design-constraints/): it closes inputs and
+opens outcomes. The two conversions are left out here. openapi-rest's `src/derive/convert.ts`
+does both, compositions, references and `enum`s included, as
+[Deriving schemas](/flex-platform/drivers/openapi-rest/deriving-schemas/#inputs-and-outcomes-are-converted-differently)
+describes:
 
 ```ts title="src/derive/index.ts"
 import type { DeriveSchemas } from "@repo/gateway-config";
-import type { OperationSchemas } from "@repo/gateway-core";
+import type { JSONSchema, OperationSchemas } from "@repo/gateway-core";
 
 import type { JsonRpcGatewayConfig } from "../config/definition.ts";
+
+// Closes every object that names its fields, and keeps every constraint.
+declare function closeInput(schema: JSONSchema): JSONSchema;
+// Opens every object, and drops bounds, `pattern` and `format`.
+declare function openOutcome(schema: JSONSchema): JSONSchema;
 
 const derive: DeriveSchemas = (config) => {
   const { operations } = config as unknown as JsonRpcGatewayConfig;
   const derived: Record<string, OperationSchemas> = {};
   for (const [name, op] of Object.entries(operations)) {
-    derived[name] = { input: op.input, outcomes: op.outcomes };
+    derived[name] = {
+      input: closeInput(op.input),
+      outcomes: Object.fromEntries(
+        Object.entries(op.outcomes).map(([outcome, schema]) => [outcome, openOutcome(schema)]),
+      ),
+    };
   }
   return Promise.resolve({ schemas: { operations: derived }, notes: [] });
 };
@@ -558,6 +556,10 @@ else. Each rule is stated in full, with its reasoning, in
   such as `ok`, never a status or a header. `meta` names are neutral too.
 - Nothing outside a configuration names a driver package. An entry point that would need to know
   about a specific driver is a design error.
+- Verify an upstream's certificate against the hostname the driver connected to, never a name DNS
+  redirected it to, such as a CNAME's target. Never turn verification off or set `servername`.
+  The network's [allowlist](/flex-platform/infrastructure/network/#the-allowlist) trusts
+  redirection, so the certificate is what proves the driver reached its upstream.
 
 **Upstream calls**
 
@@ -598,6 +600,6 @@ else. Each rule is stated in full, with its reasoning, in
 - Keep the driver's own checks relating configuration to schemas in `checkSchemas`, and type-level
   ones in an `OperationRefinements` augmentation. The generator and config package hold no driver
   vocabulary.
-- If the driver derives schemas, give the module as a `file:` URL and never import it.
+- Derive every gateway's schemas. Give the module as a `file:` URL and never import it.
 - When deriving, close inputs and keep their constraints exactly. Open outcomes and drop their
   bounds.

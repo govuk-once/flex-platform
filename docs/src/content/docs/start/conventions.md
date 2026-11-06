@@ -34,13 +34,14 @@ change you are making.
   and `exactOptionalPropertyTypes` as `base.json` does. Packages export their `.ts` sources
   directly, and Vitest, esbuild and tsx use them as they are.
 - ESLint provides `base`, `driver`, `service`, `cloudfrontFunction`, `infraConstructs` and
-  `sectionInfra` presets. Drivers own
-  transport access. Services must use gateways. The `service` preset blocks common network globals
-  and builtin imports, but it does not fully enforce network isolation, so review transport access
-  too. Code that runs in the CloudFront Functions runtime uses `cloudfrontFunction`, which refuses
+  `sectionInfra` presets. Drivers own transport access. `service` is for code that reaches an
+  upstream only through a driver: each gateway's package under `gateways/services/`, and the
+  runtime. It blocks common network globals and builtin imports, but it does not fully enforce
+  network isolation, so review transport access too. Code that runs in the CloudFront Functions runtime uses `cloudfrontFunction`, which refuses
   what that runtime lacks, and names the packages the code may import. `infra/constructs` uses
-  `infraConstructs`, and a section's `infra/` uses `sectionInfra("<section>")`, which hold the
-  infrastructure's imports to one direction.
+  `infraConstructs`, and a section's `infra/` uses `sectionInfra("<prefix>")`, which hold the
+  infrastructure's imports to one direction. The argument is the prefix of the section's package
+  names, such as `"frontdoor"` for `@repo/frontdoor-*` and `"gateway"` for `@repo/gateway-*`.
 - Every environment variable the platform defines starts with `FLEX_`, such as
   `FLEX_UPSTREAM_TARGET` and `FLEX_ENVIRONMENT`, so it reads as the platform's and never collides
   with one that AWS, a library or a domain's own code defines. A variable AWS sets, such as
@@ -70,7 +71,8 @@ change you are making.
 
 - A change is done when `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm codegen` pass. If it
   changes `docs/`, `pnpm --filter @repo/docs build` must pass too: it is the only check that finds
-  a broken link.
+  a broken link. A pull request also runs a secret scan, SonarQube's quality gate and a dependency
+  review. See [Checks on a pull request](/flex-platform/start/working-in-the-repo/#checks-on-a-pull-request).
 - A pull request's title is `FLEX-<number> <type>(<scope>)?: <description>`, such as
   `FLEX-123 feat: add udp gateway`. The type is one of `feat`, `fix`, `chore`, `docs`, `style`,
   `refactor`, `test`, `perf`, `ci`, `build` or `revert`, with `!` after it for a breaking change.

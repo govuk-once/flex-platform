@@ -80,6 +80,8 @@ gateway's response, typed by the operation: an error envelope or one of its outc
 - the client sends each call only once, with the SDK's retries turned off (`maxAttempts: 1`). A
   retried invoke could repeat an upstream write. Deciding whether to retry needs to know the
   operation and the deadline.
+- the client leaves the invoke's `LogType` unset, so Lambda never returns the end of the gateway's
+  execution log to the domain.
 
 A call's second argument, its options, can carry a `signal` that stops the client waiting.
 

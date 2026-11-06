@@ -63,6 +63,11 @@ An outcome may list the values it knows about next to a type it admits in full:
 `anyOf: [{ "enum": [...] }, { "type": "string" }]`. Those known values can change freely, because
 the outcome already admitted any string.
 
+The check recognises the type admitted in full only when its branch is the type alone, annotations
+aside, in both versions. When the type is behind a `$ref`, or its branch holds anything else, the
+known values are compared as any other branch, and an added value is a break. This errs on the safe
+side.
+
 A new field may be declared with a name that a dictionary already covered, through
 `additionalProperties` or a `patternProperties` entry. That field is compared with what the
 dictionary said. So if an outcome's dictionary values were strings, the new field cannot quietly

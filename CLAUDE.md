@@ -45,4 +45,7 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 | Environment variables and the secret | `reference/environment.md` |
 | Releasing packages, the record, candidates | `start/releasing.md` |
 | The CDK app, stages, config and its rules | `infrastructure/overview.md` |
+| The network, endpoints and DNS allowlist | `infrastructure/network.md` |
+| Adding a gateway | `gateways/creating-a-gateway.md` |
+| CI, secret scanning, SonarQube, Dependabot | `start/working-in-the-repo.md` |
 | Terms | `reference/glossary.md` |

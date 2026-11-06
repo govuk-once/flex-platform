@@ -95,13 +95,17 @@ assume the role the secret names. It passes:
 The credentials STS returns are kept until five minutes before they expire. The role is then
 assumed again. If the secret is rotated to another role, that role is assumed on the next
 request. Role assumption goes to STS through the AWS SDK. This is the one exception to using the
-driver's transport. STS is called in the gateway's own region, whatever region the upstream signs
+driver's transport. Each call to STS allows 2 s to connect and 5 s for the request, with the SDK's
+own retries on, because assuming a role sends nothing to the upstream. STS is called in the gateway's own region, whatever region the upstream signs
 in: credentials from a regional STS endpoint are valid in every region, and the gateway's
 [network](/flex-platform/infrastructure/network/#endpoints) reaches STS in its own region only.
 
 The signature covers the method, the address, the headers set before it and a hash of the body.
-The signer leaves out the few headers a transport may add or change: `user-agent`, `expect`, and
-any `proxy-` or `sec-` header. These are sent unsigned.
+The signer leaves out the headers a transport or a proxy may add or change, and `authorization`,
+which carries the signature: `cache-control`, `connection`, `expect`, `from`, `keep-alive`,
+`max-forwards`, `pragma`, `referer`, `te`, `trailer`, `transfer-encoding`, `upgrade`,
+`user-agent`, `x-amzn-trace-id`, and any `proxy-` or `sec-` header. These are sent unsigned, so a
+mapping that sets one sends a value the upstream cannot tell was changed on the way.
 
 The hash of the body is part of the signature and is not sent as a header. `sigV4` owns
 `X-Amz-Content-Sha256` so that nothing else can supply one. The signer uses a hash already on a
