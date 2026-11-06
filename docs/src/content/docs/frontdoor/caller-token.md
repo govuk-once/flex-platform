@@ -1,11 +1,13 @@
 ---
 title: The caller token
-description: The token that says who a request is for, how the edge signs it, and how key rotation makes, schedules, publishes and removes its keys.
+description: The token that says who a request is for, how the edge signs it, how gateways verify it, and how key rotation makes, schedules, publishes and removes its keys.
 ---
 
 The caller token is the platform's statement of who a request is for. Lambda@Edge signs it and
-sends it as `x-flex-secure`, a domain passes it on to the gateways it calls, and each gateway is
-to verify it before it acts, which is planned.
+sends it as `x-flex-secure`, a domain passes it on to the gateways it calls, and each gateway
+verifies it before it acts. Any domain may call any gateway, so this is what keeps a domain to its
+own caller's records: a gateway compares the fields an operation
+[binds](/flex-platform/gateways/configuration/#secure-bindings) with the token's claims.
 
 ## The token
 
@@ -35,10 +37,60 @@ It signs with the latest key that has started. It already holds the next key, so
 switches at the scheduled moment without a read. It reads the parameter again every five minutes,
 so a [revocation](#revoking-a-key) normally reaches every copy within five minutes, and calls KMS
 only for a key it hasn't seen. A read that fails keeps the keys it has, however old, and isn't tried
-again for 30 seconds. So an edge that can't read goes on signing with a revoked key, which
-gateways are to refuse. With no key that has started, the request is the 500, and the next read waits 30 seconds too, so
+again for 30 seconds. So an edge that can't read goes on signing with a revoked key, and every
+gateway refuses what it signs.
+With no key that has started, the request is the 500, and the next read waits 30 seconds too, so
 SSM isn't asked again by every request while it can't be reached. Requests that arrive while a read
 is under way share it.
+
+## Verifying
+
+A domain passes the token as the envelope's `secure.token`, through the
+[gateway client](/flex-platform/domains/overview/#the-caller-context). A domain may decode it to
+read `pairwiseId`, but has no need to verify it. The gateway verifies it as the second step of
+[a request](/flex-platform/gateways/overview/#a-request), before it routes the call, so a caller
+without a valid token learns nothing of the gateway's operations.
+
+A call without a token is `UNAUTHENTICATED`: the domain didn't pass it on. A token that fails any
+of these checks is `SECURE_SIGNATURE_INVALID`, and the log names the check, never a value from the
+token:
+
+- it is a compact JWS of three base64url parts, each written the one way an encoder writes it, of
+  at most 4,096 characters;
+- `alg` is `EdDSA`, and no `crit` header asks for anything more. The header never chooses how the
+  token is checked;
+- `kid` is a key ID's shape, checked before it is looked up, and names a key the gateway holds;
+- the Ed25519 signature verifies;
+- `aud` is the gateway's own environment's, `FLEX_CALLER_TOKEN_AUDIENCE`;
+- `iat` and `exp` are numbers, the token lives a minute at most, wasn't issued in the future and
+  hasn't expired, allowing the clocks 5 seconds either way;
+- `iat` falls while the key signs: not before it started, and not after it stopped, allowing the
+  same 5 seconds;
+- `jti` has the shape of CloudFront's request IDs;
+- each claim, `pairwiseId` and `service`, is a string that isn't empty. Only the token's own properties are read.
+
+After it, every log line for the call holds `frontdoorRequestId`, the token's `jti`, which joins
+it to the edge's line for the request. The token and its claims are never logged.
+
+The gateway reads the public keys from S3, the object `FLEX_CALLER_TOKEN_KEYS_OBJECT` in the bucket
+`FLEX_CALLER_TOKEN_KEYS_BUCKET`, which the account `FLEX_CALLER_TOKEN_KEYS_ACCOUNT` must own, on the
+first call, and again after a minute, so a revoked key is refused within a minute. A key ID it
+doesn't hold reads them again. It reads at most once every ten seconds, so a caller can't make
+every call read them, and a store that can't be reached isn't asked by every call either.
+
+A read that fails keeps the keys it has, for five minutes from the last read that worked, which is
+time for a failed read to be tried again many times. A key revoked in that time is one the gateway
+can't know of, so after it the gateway refuses every token until a read works: each call is
+`INTERNAL`, since no caller can have caused it. So is a call with no keys at all.
+
+Holding `iat` to the key's times is what lets a key go quickly. A token signed just before a switch
+verifies for the rest of its minute. A token issued after it, by anyone holding the old private key,
+fails, so the old key verifies nothing a little over a minute after the switch, whenever it leaves
+the public keys. A key published ahead of its time verifies nothing before it starts.
+
+Within its minute, a token can be used for any number of gateway calls, but only for its user.
+The verifier is written on Node's `crypto` alone: it accepts one algorithm, so a library's choice
+of algorithms would only be more to keep shut.
 
 ## Keys
 
@@ -57,7 +109,7 @@ A key ID names the time the key was made, such as `20261106T120000Z`, so key IDs
 | `alias/frontdoor-<environment>-caller-token` | KMS, frontdoor account, eu-west-2 | The key that wraps the private keys. Retained, with rotation of its own key material on |
 | `/flex/frontdoor/<environment>/caller-token-signing-key` | SSM, frontdoor account, eu-west-2 | `{ keys: [{ kid, privateKey, signsFrom }] }`: the keys the edge signs with now and next, each private key as KMS encrypted it, and when each starts, in seconds since the epoch |
 | `/flex/frontdoor/<environment>/caller-token-key-state` | SSM, frontdoor account, eu-west-2 | Every key rotation holds, when each starts, and when each stops once its successor is scheduled. The ID of each key revoked in the last day, and when |
-| `caller-token-keys.json` in `frontdoor-<environment>-keys-<account>` | S3, frontdoor account, eu-west-2 | The public keys, as a JWK set, each with `signsFrom` and, once its successor is scheduled, `signsUntil`. Gateways are to read it through their network's [`s3` endpoint](/flex-platform/infrastructure/network/#the-caller-tokens-keys) |
+| `caller-token-keys.json` in `frontdoor-<environment>-keys-<account>` | S3, frontdoor account, eu-west-2 | The public keys, as a JWK set, each with `signsFrom` and, once its successor is scheduled, `signsUntil`. Gateways read it through their network's [`s3` endpoint](/flex-platform/infrastructure/network/#the-caller-tokens-keys) |
 
 Each private key is encrypted with the encryption context `{ purpose: "flex-caller-token", kid }`.
 A ciphertext decrypts only with the same context, so one key's ciphertext can never be passed off
@@ -68,7 +120,7 @@ put back what it last deployed whenever it changed.
 
 ### The public keys' bucket
 
-The public keys are in one place, which every gateway in every domain account is to read, so a key is
+The public keys are in one place, which every gateway in every domain account reads, so a key is
 in every gateway's reach the moment rotation writes it, and adding a domain account adds nothing
 for rotation to write. The bucket's name ends in the frontdoor account's ID, since bucket names are
 global, and both come from config, so every stack derives it.
@@ -106,8 +158,8 @@ A switch from one key to the next is a moment, set when the next key is made:
    to the edge, in the same run. A key is
    never scheduled less than an hour ahead, longer than an edge goes between reads or a gateway
    keeps the public keys, even after the runs have stopped for longer than seven days.
-2. **Signing.** At that moment every edge signs with it, since each already holds it, and every
-   gateway is to accept it, since each will already hold its public key. The key it replaces stops
+2. **Signing.** At that moment every edge signs with it, since each already holds it,
+   and every gateway accepts it, since each already holds its public key. The key it replaces stops
    verifying a little over a minute later, when its last token expires.
 3. **Removed.** Five minutes after a key is replaced, a run takes it out of the public keys. The
    edge's parameter already left it out.
@@ -140,8 +192,11 @@ ID of each key it revokes for a day, so it knows the key, reports it as already 
 whatever is still to be written. A key ID it neither holds nor has revoked fails the run, changing
 nothing.
 
-An edge stops signing with the key at its next read, normally within five minutes. One that can't
-read goes on signing with it.
+Once the run has written the public keys, a gateway refuses the revoked key within a minute. One
+that can't read them refuses every token once five minutes have passed since its last read that
+worked. An edge stops signing with the key at its next read, normally within five minutes. One that
+can't read goes on signing with it, and gateways refuse those tokens, as they refuse tokens signed
+by an edge that hasn't read its new key yet.
 
 ### Permissions
 

@@ -1,4 +1,9 @@
-import { assertGatewayId, type GatewaySchemas } from "@repo/gateway-core";
+import {
+  assertGatewayId,
+  type GatewaySchemas,
+  type JSONSchema,
+  SECURE_CLAIMS,
+} from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 
 import type { AnyGatewayConfig } from "./load-config.ts";
@@ -118,6 +123,63 @@ function metaProblems(schemas: GatewaySchemas): string[] {
   });
 }
 
+const CLAIMS: ReadonlySet<string> = new Set(SECURE_CLAIMS);
+
+// The schema at a path of required properties, each a field the schema declares by name. Anything
+// it can't place, a reference or a combinator among them, is no schema, so the binding is refused.
+function requiredAt(
+  schema: JSONSchema | undefined,
+  segments: readonly string[],
+): JSONSchema | undefined {
+  let node = schema;
+  for (const segment of segments) {
+    const properties = node?.properties;
+    const required = node?.required;
+    if (
+      !isRecord(properties) ||
+      !Object.hasOwn(properties, segment) ||
+      !Array.isArray(required) ||
+      !required.includes(segment)
+    ) {
+      return undefined;
+    }
+    const next: unknown = properties[segment];
+    if (!isRecord(next)) return undefined;
+    node = next;
+  }
+  return node;
+}
+
+// A binding compares a field with a claim of the caller token, which is always a string. A field
+// that may be absent, or isn't a string, would refuse every call that leaves it out or sends
+// another type, so the configuration and its schema disagree.
+function bindingProblems(
+  config: AnyGatewayConfig,
+  schemas: GatewaySchemas,
+): string[] {
+  const problems: string[] = [];
+  for (const [name, operation] of Object.entries(config.operations)) {
+    const input = Object.hasOwn(schemas.operations, name)
+      ? schemas.operations[name]?.input
+      : undefined;
+    for (const [path, claim] of Object.entries(operation.secure ?? {})) {
+      if (!CLAIMS.has(claim)) {
+        problems.push(
+          `operation "${name}" binds "${path}" to ${JSON.stringify(claim)}, which no caller token carries: ${SECURE_CLAIMS.join(", ")}`,
+        );
+        continue;
+      }
+      if (input === undefined) continue;
+      if (requiredAt(input, path.split("."))?.type !== "string") {
+        problems.push(
+          `operation "${name}" binds "${path}", which its input schema doesn't declare as a required string`,
+        );
+      }
+    }
+  }
+  return problems;
+}
+
 // What holds whatever the driver is. Relations between an operation's mappings and its schema
 // are the driver's to read, and it reads them through checkSchemas.
 function neutralProblems(
@@ -128,6 +190,7 @@ function neutralProblems(
     ...identityProblems(config),
     ...operationProblems(config, schemas),
     ...metaProblems(schemas),
+    ...bindingProblems(config, schemas),
   ];
 }
 

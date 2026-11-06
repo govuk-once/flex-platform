@@ -15,6 +15,7 @@ import { ERROR_CODES } from "@repo/gateway-core";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 import { isScalar } from "@repo/utils/is-scalar";
 
+import type { VerifyCallerToken } from "./caller-token.ts";
 import {
   createDriverContext,
   type DeadlineProvider,
@@ -43,6 +44,8 @@ export interface HandlerDeps<TOps extends AnyOperations = AnyOperations> {
   // the name it is reported under. Left out by a gateway that reports nothing.
   readonly meta?: Readonly<Record<string, Validator>>;
   readonly execute: ExecuteFn;
+  // Verifies the caller token, before anything else is done for the call.
+  readonly verifyCallerToken: VerifyCallerToken;
 }
 
 export interface Invocation {
@@ -178,10 +181,6 @@ function acceptedMeta(
   return Object.keys(accepted).length > 0 ? accepted : undefined;
 }
 
-function verifyToken(): void {
-  // No token verification is performed. This hook does not authenticate the caller.
-}
-
 // Where validation failed, as schema locations. Never the instance path: its segments come from
 // the data, so under a dictionary schema they are the caller's own keys, and this message is
 // logged. Payload fields reach a log only through `log.input`. The keywords' own messages are
@@ -247,6 +246,9 @@ export function createHandler<const TOps extends AnyOperations>(
     // The runtime's own record of how far a request got, logged beside the source locations
     // of an undeclared error so the step and the site locate it together.
     let step: DispatchStep = "envelope";
+    let frontdoorRequestId: string | undefined;
+    const traced = () =>
+      frontdoorRequestId === undefined ? {} : { frontdoorRequestId };
     // Outside the attempt, so what a driver reported before it failed is still to hand.
     const reported: ReportedMeta = new Map();
     const metaOf = (): { meta?: EnvelopeMeta } => {
@@ -262,9 +264,11 @@ export function createHandler<const TOps extends AnyOperations>(
       // Step 1: Parse envelope
       const envelope = parseEnvelope(event);
 
-      // Step 2: Verify token (STUB)
+      // Step 2: Verify the caller token
       step = "token";
-      verifyToken();
+      const caller = await deps.verifyCallerToken(envelope.secure?.token);
+      // A verified token's ID is CloudFront's, so every line from here joins the edge's.
+      frontdoorRequestId = caller.tokenId;
 
       // Step 3: Route on operation
       step = "routing";
@@ -286,12 +290,7 @@ export function createHandler<const TOps extends AnyOperations>(
 
       // Step 5: Check secure bindings
       step = "bindings";
-      checkSecureBindings(
-        op.secureBindings,
-        envelope.input,
-        envelope.secure.values,
-        envelope.secure.signature,
-      );
+      checkSecureBindings(op.secureBindings, envelope.input, caller.claims);
 
       // Step 6: Derive deadline
       step = "deadline";
@@ -312,7 +311,7 @@ export function createHandler<const TOps extends AnyOperations>(
         policy,
         requestDeadline,
         reported,
-        logger.child({ operation: envelope.operation }),
+        logger.child({ operation: envelope.operation, ...traced() }),
       );
       const result = await deps.execute(
         ctx,
@@ -345,6 +344,7 @@ export function createHandler<const TOps extends AnyOperations>(
       logger.info(
         {
           operation: envelope.operation,
+          ...traced(),
           outcome: result.outcome,
           ...health,
           input: pickFields(envelope.input, op.logInput),
@@ -372,7 +372,7 @@ export function createHandler<const TOps extends AnyOperations>(
 
         const meta = metaOf();
         logger.warn(
-          { operation, code: err.code, ...health, ...meta },
+          { operation, ...traced(), code: err.code, ...health, ...meta },
           err.message,
         );
         // Detail is logged above, never returned. What the gateway declared it may report is
@@ -390,7 +390,13 @@ export function createHandler<const TOps extends AnyOperations>(
       try {
         meta = metaOf();
         logger.error(
-          { err: describeUnexpectedError(err), step, ...health, ...meta },
+          {
+            err: describeUnexpectedError(err),
+            step,
+            ...traced(),
+            ...health,
+            ...meta,
+          },
           "Unhandled error in dispatcher",
         );
       } catch {

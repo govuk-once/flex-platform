@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aws-lambda-powertools/parameters": "2.36.0",
+    "@aws-sdk/client-s3": "3.1159.0",
     "@aws-sdk/client-secrets-manager": "3.1159.0",
     "@repo/gateway-config": "workspace:*",
     "@repo/gateway-core": "workspace:*",

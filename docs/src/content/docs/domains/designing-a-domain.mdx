@@ -52,10 +52,11 @@ the account has been linked or that every requested record belongs to the user.
 The domain's design must account for a missing link, a missing upstream record and an upstream
 failure separately. These can require different responses in the app.
 
-<Aside type="caution" title="Gateway bindings do not authenticate a user">
-The current gateway runtime compares configured input fields with `secure.values`, but does not
-verify `secure.signature`. These checks prove consistency within an envelope, not the identity
-or permissions of its sender. See [Secure bindings](/flex-platform/gateways/configuration/#secure-bindings).
+<Aside type="caution" title="Bindings hold a call to its user, not to a service's records">
+A gateway verifies the caller token and compares the fields an operation binds with its
+`pairwiseId` and `service`. A field naming the user at another service is not bound, since no claim vouches for
+it: a domain must still check such an ID belongs to its caller, through the link the User Data
+Platform holds. See [Secure bindings](/flex-platform/gateways/configuration/#secure-bindings).
 </Aside>
 
 ## Data and dependencies

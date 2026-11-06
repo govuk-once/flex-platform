@@ -225,4 +225,54 @@ describe("checkGateway", () => {
       /Gateway "test" configuration and schemas do not agree:\n {2}- the configuration declares no operations/,
     );
   });
+
+  describe("secure bindings", () => {
+    const bound = {
+      input: {
+        type: "object",
+        required: ["userId", "payload"],
+        properties: {
+          userId: { type: "string" },
+          optional: { type: "string" },
+          count: { type: "integer" },
+          payload: {
+            type: "object",
+            required: ["appId"],
+            properties: { appId: { type: "string" } },
+          },
+          referenced: { $ref: "#/$defs/id" },
+        },
+      },
+      outcomes: { ok: { type: "object" } },
+    };
+
+    const check = (secure: Record<string, string>) =>
+      problemsOf(() =>
+        checkGateway(gateway({ ping: { secure } }), schemas({ ping: bound })),
+      );
+
+    it("accepts a binding of a required string field, nested or not, to a claim", () => {
+      expect(
+        check({ userId: "pairwiseId", "payload.appId": "pairwiseId" }),
+      ).toEqual([]);
+    });
+
+    it.each([
+      ["optional", "may be absent"],
+      ["count", "isn't a string"],
+      ["missing", "isn't declared"],
+      ["payload.other", "isn't declared, nested"],
+      ["referenced", "can't be placed"],
+    ])("refuses a binding of %j, which %s", (path) => {
+      expect(check({ [path]: "pairwiseId" })).toEqual([
+        `operation "ping" binds "${path}", which its input schema doesn't declare as a required string`,
+      ]);
+    });
+
+    it("refuses a binding to a claim no token carries", () => {
+      expect(check({ userId: "sub" })).toEqual([
+        'operation "ping" binds "userId" to "sub", which no caller token carries: pairwiseId, service',
+      ]);
+    });
+  });
 });

@@ -44,7 +44,7 @@ export function serviceId(response: GetIdentityExchangeResponse): string {
 | `<Operation>Input`, `<Operation>Result`, `<Operation>Response` | Per operation, in PascalCase: its input, the union of its outcomes, and its response. |
 | `Operations` | Each operation name mapped to its input, result and response. The gateway client is typed by it. |
 | `OperationName`, `OperationInput`, `OperationResult`, `OperationResponse` | Generic names over `Operations`. |
-| `GatewayRequest` | One call as the handler receives it: the operation, its input and the envelope's `secure` values. |
+| `GatewayRequest` | One call as the handler receives it: the operation, its input and the envelope's `secure.token`, the caller token. |
 | `ResponseMeta` | What the gateway reports alongside a result: every declared name, each optional. |
 | `ErrorResponse` | The failure envelope. |
 
