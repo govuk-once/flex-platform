@@ -56,7 +56,7 @@ describe("DomainStack", () => {
     }
   });
 
-  it("holds one domain's API, host, log group and roles, and nothing shared", () => {
+  it("holds one domain's API, its alarms, host, log group and roles, and nothing shared", () => {
     const resources = Object.values(
       build().template.toJSON().Resources as Record<string, { Type: string }>,
     ).map(({ Type }) => Type);
@@ -78,6 +78,8 @@ describe("DomainStack", () => {
       "AWS::ApiGateway::Resource",
       "AWS::ApiGateway::RestApi",
       "AWS::ApiGateway::Stage",
+      "AWS::CloudWatch::Alarm",
+      "AWS::CloudWatch::Alarm",
       "AWS::IAM::ManagedPolicy",
       "AWS::IAM::Role",
       "AWS::IAM::Role",
@@ -86,6 +88,8 @@ describe("DomainStack", () => {
       "AWS::Logs::LogGroup",
       "AWS::Logs::LogGroup",
       "AWS::Logs::LogGroup",
+      "AWS::Logs::MetricFilter",
+      "AWS::Logs::MetricFilter",
       "AWS::Route53::RecordSet",
     ]);
   });

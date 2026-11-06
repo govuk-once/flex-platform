@@ -113,7 +113,7 @@ config keeps its stack until someone deletes it.
 
 | Construct | Builds |
 |---|---|
-| `ProxyApi` | `domain-<environment>-<domain>-api`, a regional REST API whose `execute-api` address is turned off, with its resource policy, its `ANY` methods, its stage, `default`, its access and execution log groups, the role it invokes the function through, and its gateway responses |
+| `ProxyApi` | `domain-<environment>-<domain>-api`, a regional REST API whose `execute-api` address is turned off, with its resource policy, its `ANY` methods, its stage, `default`, its access and execution log groups, the role it invokes the function through, its gateway responses, and its [refusal alarms](#watching-refusals) |
 | `ApiHost` | `<domain>.<zone>`, with the domain account's wildcard certificate, mapped to the stage at its root, and its alias record in the account's zone |
 | `PlatformLogGroup` | `/flex/domain/<environment>/<domain>/function`, the log group the domain's function logs to |
 | `ExecutionRole` | `domain-<environment>-<domain>-execution`, the role the domain's function runs as, and its permission boundary. See [permissions](#permissions). |
@@ -190,13 +190,50 @@ the platform places it.
 
 ### Who can call it
 
-Every method uses IAM authorisation. The Frontdoor signs each request with SigV4 as its edge role.
-The resource policy allows the Frontdoor's account only when the caller is that role, and denies
-everyone else, so a principal in the domain account with permission to invoke APIs is refused
-too.
+Every method uses IAM authorisation, and synth fails for any API Gateway method in the app without
+it: see [checks](/flex-platform/infrastructure/overview/#checks). The Frontdoor signs each request
+with SigV4 as its edge role. The resource policy allows the Frontdoor's account only when the
+caller is that role, and denies everyone else, so a principal in the domain account with
+permission to invoke APIs is refused too.
 
 The policy names the role in a condition, never as a principal, because API Gateway refuses a
 policy that names a role that doesn't exist yet.
+
+### Watching refusals
+
+Each API counts IAM authorisation's refusals from its access log's `errorResponseType`, in the
+namespace `flex/domain/<environment>/<domain>/api`, and alarms when they are sustained:
+
+| Metric | Counts | Alarm | Goes off at |
+|---|---|---|---|
+| `bypass-attempts` | `MISSING_AUTHENTICATION_TOKEN` and `ACCESS_DENIED`: a request sent unsigned, or signed by anyone but the edge role | `domain-<environment>-<domain>-api-bypass-attempts` | 10 or more in each of three five-minute periods in a row |
+| `signing-faults` | `INVALID_SIGNATURE` and `EXPIRED_TOKEN`: a signature that doesn't verify | `domain-<environment>-<domain>-api-signing-faults` | 1 or more in each of three five-minute periods in a row |
+
+The host is in a public zone, so scanners find it, and the bypass alarm is set above that
+background. A fault in the edge's signing refuses every request the edge sends, so any sustained
+count of signing faults is one.
+
+The metrics divide refusals by type, not by who sent them. A direct caller can send a signature
+that doesn't verify, which counts as a signing fault, and the edge role refused by a mistake in
+the resource policy counts as a bypass attempt. The alarms have no action until the platform has
+alerting, so they notify no one: someone has to look at them.
+
+### Investigating an origin refusal alarm
+
+1. In Logs Insights, query `/flex/domain/<environment>/<domain>/api-access` for the alarm's
+   `errorResponseType` values in its period. Note when they started and how many there were.
+2. For signing faults, check whether requests through the Frontdoor are failing too: the
+   Frontdoor answers them with `x-rejected-by: api-gateway`, and
+   `/flex/frontdoor/<environment>/origin-request`, in the frontdoor account in eu-west-2, logs
+   `origin_request_forwarded` for them at the same time. If so, the edge's signing is broken. Look
+   for a recent change to the edge function, its role or this API, and roll it back. If Frontdoor
+   traffic is being served, the signatures are someone else's: treat them as bypass attempts.
+3. For bypass attempts, check first whether requests through the Frontdoor are refused too: a 403
+   `auth_error` with `x-rejected-by: api-gateway`, while the edge logs `origin_request_forwarded`.
+   If so, the API's resource policy no longer allows the edge role: check the domain's stack for
+   drift, and deploy it again. Otherwise, judge the volume and pattern. A scanner's requests are
+   few and spread out. A sustained stream of requests, signed especially, is a security incident.
+   Escalate it with the log lines as evidence.
 
 ### Errors
 

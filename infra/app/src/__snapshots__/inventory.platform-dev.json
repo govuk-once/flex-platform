@@ -73,12 +73,28 @@
         "type": "AWS::ApiGateway::Resource"
       },
       {
+        "logicalId": "DomainBypassAttempts06BF4B41",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "DomainBypassAttemptsMetricD38598AD",
+        "type": "AWS::Logs::MetricFilter"
+      },
+      {
         "logicalId": "DomainExecutionLogsLogGroupD8ABA14F",
         "type": "AWS::Logs::LogGroup"
       },
       {
         "logicalId": "DomainIntegrationRoleACB070C2",
         "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "DomainSigningFaults1638463B",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "DomainSigningFaultsMetricB025AEE8",
+        "type": "AWS::Logs::MetricFilter"
       },
       {
         "logicalId": "ExecutionBoundaryC4D3311A",

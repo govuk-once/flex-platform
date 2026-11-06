@@ -7,12 +7,16 @@ import { ProxyApi } from "./proxy-api.ts";
 
 function build(nag = false) {
   const stack = stackIn("eu-west-2", nag);
-  new ProxyApi(stack, "Domain", {
+  const proxyApi = new ProxyApi(stack, "Domain", {
     environment: "sandbox",
     domain: "domain-a",
     edgeRole: EDGE_ROLE,
   });
-  return { app: stack.node.root as App, template: Template.fromStack(stack) };
+  return {
+    app: stack.node.root as App,
+    proxyApi,
+    template: Template.fromStack(stack),
+  };
 }
 
 const EDGE_ROLE_ARN = `arn:aws:iam::${EDGE_ROLE.account}:role/${EDGE_ROLE.name}`;
@@ -210,6 +214,87 @@ describe("ProxyApi", () => {
           "Fn::Join": ["", ["API-Gateway-Execution-Logs_", API, "/default"]],
         },
       });
+    });
+  });
+
+  describe("its refusals", () => {
+    const NAMESPACE = "flex/domain/sandbox/domain-a/api";
+
+    it.each([
+      [
+        "bypass-attempts",
+        '{ ($.errorResponseType = "MISSING_AUTHENTICATION_TOKEN") || ($.errorResponseType = "ACCESS_DENIED") }',
+      ],
+      [
+        "signing-faults",
+        '{ ($.errorResponseType = "INVALID_SIGNATURE") || ($.errorResponseType = "EXPIRED_TOKEN") }',
+      ],
+    ])(
+      "count %s from the access log, in the API's own namespace",
+      (name, pattern) => {
+        build().template.hasResourceProperties("AWS::Logs::MetricFilter", {
+          LogGroupName: { Ref: Match.stringLikeRegexp("^DomainAccessLogs") },
+          FilterPattern: pattern,
+          MetricTransformations: Match.exact([
+            {
+              MetricNamespace: NAMESPACE,
+              MetricName: name,
+              MetricValue: "1",
+            },
+          ]),
+        });
+      },
+    );
+
+    it.each([
+      ["bypass-attempts", 10],
+      ["signing-faults", 1],
+    ])(
+      "alarm on sustained %s, with no action until alerting exists",
+      (name, threshold) => {
+        build().template.hasResourceProperties("AWS::CloudWatch::Alarm", {
+          AlarmName: `domain-sandbox-domain-a-api-${name}`,
+          AlarmDescription: Match.stringLikeRegexp(
+            "Investigating an origin refusal alarm",
+          ),
+          Namespace: NAMESPACE,
+          MetricName: name,
+          Dimensions: Match.absent(),
+          Statistic: "Sum",
+          Period: 300,
+          Threshold: threshold,
+          EvaluationPeriods: 3,
+          DatapointsToAlarm: Match.absent(),
+          ComparisonOperator: "GreaterThanOrEqualToThreshold",
+          TreatMissingData: "notBreaching",
+          AlarmActions: Match.absent(),
+          OKActions: Match.absent(),
+          InsufficientDataActions: Match.absent(),
+        });
+      },
+    );
+
+    it("exposes each alarm by its kind of refusal", () => {
+      const { proxyApi } = build();
+
+      expect(
+        Object.fromEntries(
+          Object.entries(proxyApi.alarms).map(([kind, alarm]) => [
+            kind,
+            alarm.node.id,
+          ]),
+        ),
+      ).toEqual({
+        bypassAttempts: "BypassAttempts",
+        signingFaults: "SigningFaults",
+      });
+    });
+
+    it("has no other metric filter or alarm", () => {
+      const { template } = build();
+
+      template.resourceCountIs("AWS::Logs::MetricFilter", 2);
+      template.resourceCountIs("AWS::CloudWatch::Alarm", 2);
     });
   });
 

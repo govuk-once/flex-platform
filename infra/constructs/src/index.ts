@@ -11,8 +11,8 @@ export {
   NETWORK_REGION,
   networkZones,
 } from "./network/layout.ts";
+export type { Placement } from "./network/names.ts";
 export {
-  type Placement,
   securityGroupIdParameterName,
   subnetIdsParameterName,
   vpcIdParameterName,
@@ -22,6 +22,7 @@ export { NetworkAcls } from "./network/network-acls.ts";
 export { NetworkParameters } from "./network/network-parameters.ts";
 export { NetworkVpc } from "./network/vpc.ts";
 export { WorkloadSecurityGroup } from "./network/workload-security-group.ts";
+export { API_IAM_RULE, ApiIamCheck } from "./validation/api-iam-check.ts";
 export {
   BUCKET_HTTPS_RULE,
   BucketHttpsCheck,
