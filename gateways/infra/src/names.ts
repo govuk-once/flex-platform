@@ -4,8 +4,8 @@
 //
 //   gateway-{environment}-{id}    a gateway's function
 //
-// The prefix is a boundary: the domain account's network and its domains' role let a domain invoke
-// any function whose name starts with `gateway-{environment}-`. So no other function the gateways
+// The prefix is a boundary: the Lambda endpoint in the domain account's network, and each domain's
+// execution role, let a domain invoke any function whose name starts with `gateway-{environment}-`. So no other function the gateways
 // section creates may have it.
 
 import { gatewayFunctionPrefix } from "@repo/gateway-core";

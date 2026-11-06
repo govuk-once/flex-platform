@@ -68,8 +68,8 @@ export class NetworkVpc extends Construct {
   /** Each tier's subnets, one per zone, in zone order. */
   public readonly subnets: Readonly<Record<Tier, readonly Subnet[]>>;
   /**
-   * Each NAT gateway's alarms, with no actions: the stack adds them. A NAT gateway that can't
-   * open a connection, or drops packets, fails the private gateways' calls in its zone.
+   * Each NAT gateway's alarms. They have no actions, so they notify no one. A NAT gateway that
+   * can't open a connection, or drops packets, fails the private gateways' calls in its zone.
    */
   public readonly natGatewayAlarms: readonly Alarm[];
 

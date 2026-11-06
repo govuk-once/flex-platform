@@ -31,8 +31,7 @@ export default defineConfig({
             "start/releasing",
           ],
         },
-        // Grouped by the platform's sections. Egress is built, the Frontdoor partly, and domains are
-        // planned. Each page says which.
+        // Grouped by the platform's sections. Each page says what is built and what is planned.
         {
           label: "Frontdoor",
           items: [

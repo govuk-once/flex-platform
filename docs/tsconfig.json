@@ -1,6 +1,7 @@
 {
   "extends": "astro/tsconfigs/strict",
-  // The flags the repository's own base adds to strict, so the site's code is held to the same.
+  // The two flags in the repository's own base that change what strict code may assume about a
+  // value, so the site's code is held to the same.
   "compilerOptions": {
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true
