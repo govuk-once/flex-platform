@@ -1,5 +1,9 @@
 import { ORIGIN_REQUEST_LOG_REGION } from "@repo/frontdoor-infra";
-import { BucketHttpsCheck, LogGroupCheck } from "@repo/infra-constructs";
+import {
+  ApiIamCheck,
+  BucketHttpsCheck,
+  LogGroupCheck,
+} from "@repo/infra-constructs";
 import type { App } from "aws-cdk-lib";
 import { Aspects, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
@@ -21,6 +25,7 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
     new AwsSolutionsChecks(app, { verbose: true }),
     new LogGroupCheck(),
     new BucketHttpsCheck(),
+    new ApiIamCheck(),
   );
   Aspects.of(app).add(new StackTags(stage));
 

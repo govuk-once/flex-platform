@@ -1,5 +1,5 @@
 import { PlatformLogGroup } from "@repo/infra-constructs";
-import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
+import { ArnFormat, Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   AccessLogField,
   AccessLogFormat,
@@ -13,6 +13,11 @@ import {
   RestApi,
 } from "aws-cdk-lib/aws-apigateway";
 import {
+  Alarm,
+  ComparisonOperator,
+  TreatMissingData,
+} from "aws-cdk-lib/aws-cloudwatch";
+import {
   AccountPrincipal,
   AnyPrincipal,
   Effect,
@@ -21,11 +26,15 @@ import {
   Role,
   ServicePrincipal,
 } from "aws-cdk-lib/aws-iam";
+import type { ILogGroup } from "aws-cdk-lib/aws-logs";
+import { FilterPattern, MetricFilter } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
 import {
   apiAccessLogGroupName,
+  apiAlarmName,
   apiExecutionLogGroupName,
+  apiMetricNamespace,
   apiName,
   domainFunctionName,
   LIVE_ALIAS,
@@ -56,6 +65,67 @@ const GATEWAY_RESPONSES = [
   [ResponseType.DEFAULT_5XX, JSON.stringify(SERVER_ERROR)],
 ] as const;
 
+// One metric and one alarm on the refusals IAM authorisation makes, read from the access log's
+// `errorResponseType`.
+interface RefusalMonitor {
+  /** The construct ID its filter and alarm are built from. */
+  readonly id: string;
+  /** The metric's name, and what follows the API's name in the alarm's name. */
+  readonly name: string;
+  /**
+   * The refusals it counts, named by the same constants as the gateway responses above, so a
+   * misspelt type can't leave a filter that never matches.
+   */
+  readonly types: readonly ResponseType[];
+  /** A period breaches when it has at least this many refusals. */
+  readonly threshold: number;
+  /** What the alarm going off most likely means, as the first sentence of its description. */
+  readonly describe: (names: {
+    readonly environment: string;
+    readonly domain: string;
+  }) => string;
+}
+
+// Grouped by what each refusal most likely means.
+const REFUSALS = {
+  // No signature, or a valid one from anyone but the edge role: someone calling the API directly.
+  bypassAttempts: {
+    id: "BypassAttempts",
+    name: "bypass-attempts",
+    types: [
+      ResponseType.MISSING_AUTHENTICATION_TOKEN,
+      ResponseType.ACCESS_DENIED,
+    ],
+    // The host is in a public zone, so scanners find it. This alarm is for a sustained effort, not
+    // that background.
+    threshold: 10,
+    describe: ({ environment, domain }) =>
+      `Requests reached the ${domain} domain's API in ${environment} unsigned, or signed by someone other than the Frontdoor's edge role.`,
+  },
+  // A signature that doesn't verify: most likely the edge's own, gone wrong, though a direct caller
+  // can send one too.
+  signingFaults: {
+    id: "SigningFaults",
+    name: "signing-faults",
+    types: [ResponseType.INVALID_SIGNATURE, ResponseType.EXPIRED_TOKEN],
+    // A fault in the edge's signing refuses every request it sends, so any sustained count is one.
+    threshold: 1,
+    describe: ({ environment, domain }) =>
+      `Requests reached the ${domain} domain's API in ${environment} with a signature that didn't verify, as the Frontdoor's would if its signing failed.`,
+  },
+} as const satisfies Record<string, RefusalMonitor>;
+
+/** The API's alarms, one for each kind of refusal. */
+export type ProxyApiAlarms = Readonly<Record<keyof typeof REFUSALS, Alarm>>;
+
+const ALARM_PERIOD = Duration.minutes(5);
+
+// An alarm needs this many periods in a row at its threshold, so one stray refusal never sets it
+// off.
+const ALARM_EVALUATION_PERIODS = 3;
+
+const INVESTIGATING = `See the hosting page of the platform's docs, "Investigating an origin refusal alarm".`;
+
 export interface ProxyApiProps {
   readonly environment: string;
   readonly domain: string;
@@ -67,10 +137,13 @@ export interface ProxyApiProps {
 
 /**
  * One domain's API: every path and method, passed to the `live` alias of a function created
- * outside CloudFormation. The domain's own code routes each request.
+ * outside CloudFormation. The domain's own code routes each request. Its refusals are counted from
+ * its access log, with an alarm on each kind.
  */
 export class ProxyApi extends Construct {
   public readonly api: RestApi;
+  /** An alarm on each kind of refusal, with no action until the platform has alerting. */
+  public readonly alarms: ProxyApiAlarms;
 
   constructor(
     scope: Construct,
@@ -178,6 +251,52 @@ export class ProxyApi extends Construct {
     this.addGatewayResponses(api);
 
     this.api = api;
+
+    this.alarms = {
+      bypassAttempts: this.monitorRefusals(REFUSALS.bypassAttempts, {
+        logGroup: accessLogs.logGroup,
+        environment,
+        domain,
+      }),
+      signingFaults: this.monitorRefusals(REFUSALS.signingFaults, {
+        logGroup: accessLogs.logGroup,
+        environment,
+        domain,
+      }),
+    };
+  }
+
+  // Counts the access log's lines with one of the monitor's refusal types, and alarms on the count.
+  private monitorRefusals(
+    { id, name, types, threshold, describe }: RefusalMonitor,
+    {
+      logGroup,
+      environment,
+      domain,
+    }: { logGroup: ILogGroup; environment: string; domain: string },
+  ): Alarm {
+    const filter = new MetricFilter(this, `${id}Metric`, {
+      logGroup,
+      filterPattern: FilterPattern.any(
+        ...types.map(({ responseType }) =>
+          FilterPattern.stringValue("$.errorResponseType", "=", responseType),
+        ),
+      ),
+      metricNamespace: apiMetricNamespace(environment, domain),
+      metricName: name,
+      metricValue: "1",
+    });
+
+    return new Alarm(this, id, {
+      alarmName: apiAlarmName(environment, domain, name),
+      alarmDescription: `${describe({ environment, domain })} ${INVESTIGATING}`,
+      metric: filter.metric({ statistic: "Sum", period: ALARM_PERIOD }),
+      threshold,
+      comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      evaluationPeriods: ALARM_EVALUATION_PERIODS,
+      // The filter publishes nothing for a period with no refusals.
+      treatMissingData: TreatMissingData.NOT_BREACHING,
+    });
   }
 
   // The function isn't in any template, so the integration names its `live` alias by ARN and

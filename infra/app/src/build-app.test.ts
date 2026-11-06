@@ -1,10 +1,12 @@
 import {
+  API_IAM_RULE,
   BUCKET_HTTPS_RULE,
   cdkApp,
   LOG_GROUP_RULE,
 } from "@repo/infra-constructs";
 import type { App } from "aws-cdk-lib";
 import { Stack, Validations } from "aws-cdk-lib";
+import { AuthorizationType, CfnMethod } from "aws-cdk-lib/aws-apigateway";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import {
   BlockPublicAccess,
@@ -32,7 +34,7 @@ function appWithProbe(): { app: App; stack: Stack; queue: Queue } {
 }
 
 function acknowledge(
-  scope: Stack | Queue | Bucket,
+  scope: Stack | Queue | Bucket | CfnMethod,
   ids: readonly string[] = PROBE_FINDINGS,
 ): void {
   for (const id of ids) {
@@ -117,6 +119,22 @@ describe("buildApp", () => {
       acknowledge(bucket, ["AwsSolutions-S1", "AwsSolutions-S10"]);
 
       expect(() => app.synth()).toThrow(BUCKET_HTTPS_RULE);
+    });
+
+    it("fails synth on an API Gateway method cdk-nag accepts, authorised other than by IAM", () => {
+      const { app, stack, queue } = appWithProbe();
+      acknowledge(queue);
+      const method = new CfnMethod(stack, "Method", {
+        restApiId: "api",
+        resourceId: "resource",
+        httpMethod: "GET",
+        authorizationType: AuthorizationType.CUSTOM,
+        authorizerId: "authorizer",
+      });
+      // cdk-nag asks only for a Cognito authoriser here; it already refuses a method with none.
+      acknowledge(method, ["AwsSolutions-COG4"]);
+
+      expect(() => app.synth()).toThrow(API_IAM_RULE);
     });
   });
 });

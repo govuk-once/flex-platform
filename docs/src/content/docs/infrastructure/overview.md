@@ -157,9 +157,10 @@ Before building any stage, the app checks every stage's config:
   `-{region}` last for one of a set kept once per region. An environment's main stack is
   `{section}-{environment}` alone. A domain account's stack starts `domainaccount-`, not `domain-`:
   names may hold hyphens, so only a different first word keeps it from ever having a domain's
-  stack's name. A log group is a path, `/flex/{section}/{environment}/{thing}`. Where AWS requires
-  a prefix, such as WAF's `aws-waf-logs-`, the name follows it. Each section
-  builds its resources' names with functions in one module, such as
+  stack's name. A log group is a path, `/flex/{section}/{environment}/{thing}`. A custom metric's
+  namespace has the same form without the leading slash, `flex/{section}/{environment}/{thing}`,
+  and its name is kebab-case. Where AWS requires a prefix, such as WAF's `aws-waf-logs-`, the name
+  follows it. Each section builds its resources' names with functions in one module, such as
   `frontdoor/infra/src/names.ts`, which states the template too. Stack names are built in
   `infra/app`, beside each stack.
 - **Construct IDs are a contract.** A resource's logical ID comes from its construct path, so
@@ -198,6 +199,7 @@ construct creates for itself, and each rule has a construct that meets it:
 |---|---|---|---|
 | `LogGroupCheck` | `Flex-LogGroup` | `PlatformLogGroup` | Keep its logs for a year, be encrypted with a KMS key, be protected from deletion, and be retained when its stack is deleted |
 | `BucketHttpsCheck` | `Flex-BucketHttps` | `PlatformBucket` | Have a policy that denies, to anyone, every request to the bucket and its objects over plain HTTP, and over TLS older than 1.2, each in a statement with no other condition |
+| `ApiIamCheck` | `Flex-ApiIam` | `ProxyApi`, in `@repo/domain-infra` | Be an API Gateway method with IAM authorisation, so API Gateway verifies each request's SigV4 signature and holds the signer to the API's resource policy, which for a domain admits the Frontdoor's edge role alone |
 
 A new rule is a `ResourceCheck`: the type it applies to, and the locations at fault in a resource
 of that type.

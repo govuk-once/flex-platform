@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   apiAccessLogGroupName,
+  apiAlarmName,
   apiExecutionLogGroupName,
+  apiMetricNamespace,
   apiName,
   certificateParameterName,
   deployRoleName,
@@ -18,6 +20,15 @@ describe("names", () => {
       "domain-sandbox-domain-a",
     );
     expect(apiName("sandbox", "domain-a")).toBe("domain-sandbox-domain-a-api");
+  });
+
+  it("name a domain's API alarms after its API, and give its metrics a namespace of their own", () => {
+    expect(apiAlarmName("sandbox", "domain-a", "signing-faults")).toBe(
+      "domain-sandbox-domain-a-api-signing-faults",
+    );
+    expect(apiMetricNamespace("sandbox", "domain-a")).toBe(
+      "flex/domain/sandbox/domain-a/api",
+    );
   });
 
   it("put a domain's host under its account's zone", () => {
