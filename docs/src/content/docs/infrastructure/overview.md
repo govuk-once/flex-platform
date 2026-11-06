@@ -224,8 +224,8 @@ can be tagged. Every stack carries the platform's tags, defined once in
 `infra/app/src/tags.ts`:
 `Product`, `System`, `Owner`, `ResourceOwner` and `Source`, plus `Stage` and the prune marker,
 `flex:managed-by: flex-platform`. A stack that sets one of these keys itself keeps its own value, so a
-domain's stack can name its own `Owner`. The prune step finds the stacks this app owns by the
-marker, so it stays the same through any change to the tag set.
+domain's stack can name its own `Owner`. A planned prune step will find the stacks this app owns
+by the marker, so it stays the same through any change to the tag set.
 
 No tag changes on every deploy, such as a commit or a version. A stack tag propagates to the
 stack's resources, so it would update all of those each time.
@@ -235,7 +235,7 @@ Tag keys follow two styles:
 | Kind | Key | Example | Read by |
 |---|---|---|---|
 | Organisation and reporting | GDS UpperCamelCase | `Product`, `Owner`, `Source` | People and cost reports |
-| Platform | `flex:` and lowercase kebab-case | `flex:managed-by` | The platform's own tooling, such as pruning |
+| Platform | `flex:` and lowercase kebab-case | `flex:managed-by` | The platform's own tooling, such as the planned prune step |
 
 The `flex:` prefix keeps the platform's keys apart from keys other teams and tools set, such as a
 plain `ManagedBy`. Values are lowercase identifiers that stay the same from one deploy to the

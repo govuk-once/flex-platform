@@ -9,7 +9,8 @@ a person reviews it, and once it is merged the pipeline publishes it:
 
 - **The client:** its final, as the release merges.
 - **Each gateway's package:** a release candidate as the release merges, so it can be tried, and
-  its final once production serves the gateway's schema.
+  its final once production serves the gateway's schema. Publishing that final is
+  [planned](#publishing): until then, a gateway's package has candidates only.
 
 Nothing is published from a laptop. `@repo/release`, in `packages/release`, does all of it.
 `src/sources.ts` lists what is published:
@@ -17,7 +18,7 @@ Nothing is published from a laptop. `@repo/release`, in `packages/release`, does
 | Package | Built by | Versioned | Final published |
 |---|---|---|---|
 | `@govuk-once/flex-gateway-client` | its `build` script, into `dist/` | declared | as the release merges |
-| Each gateway's [client package](/flex-platform/codegen/overview/#the-client-package) | `codegen`, into `.gen/client/package/` | derived | at production |
+| Each gateway's [client package](/flex-platform/codegen/overview/#the-client-package) | `codegen`, into `.gen/client/package/` | derived | at production (planned) |
 
 A gateway's package is listed by being in `gateways/services/`, with nothing to add.
 
@@ -81,7 +82,7 @@ chosen, and choosing a group's name chooses every such package in it. Choosing a
 what the release then needs too, in yellow rather than green, with the reason beside it:
 
 - every package that depends on one released, since it names the new version once built again.
-  Choosing the client ticks every gateway package and every SDK that depends on it;
+  Choosing the client ticks every gateway package;
 - every package with unreleased changes that one released depends on, since those changes were
   built into it.
 

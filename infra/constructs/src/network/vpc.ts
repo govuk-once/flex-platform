@@ -59,8 +59,7 @@ export interface NetworkVpcProps {
  * construct IDs and ranges whatever other zones config lists.
  *
  * - isolated: only the local route. Reaches AWS through the interface endpoints.
- * - private: a default route to its zone's NAT gateway. AWS Network Firewall is planned between
- *   them, replacing that route.
+ * - private: a default route to its zone's NAT gateway. Egress filtering is planned between them.
  * - public: a default route to the internet gateway, and the zone's NAT gateway. Nothing else.
  */
 export class NetworkVpc extends Construct {

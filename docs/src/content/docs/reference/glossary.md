@@ -26,9 +26,9 @@ The logic behind a personalised feature of the GOV.UK app. Developers outside th
 write domains, and the Frontdoor routes requests to them. Each domain is an API Gateway with a
 Lambda proxy integration, in isolated subnets. See [Domains](/flex-platform/domains/overview/).
 
-## Domain library
+## Domain SDK
 
-A library, with examples, that domain developers install to build a domain. Planned.
+The package, with examples, that domain developers install to build a domain. Planned.
 
 ## Driver
 
@@ -89,8 +89,8 @@ status code.
 Where a gateway's Lambda runs. There are two placements:
 
 - `isolated`: no route to the internet. The gateway reaches its upstream through a VPC endpoint.
-- `private`: the gateway reaches the internet through a NAT gateway. AWS Network Firewall is
-  planned between them.
+- `private`: the gateway reaches the internet through a NAT gateway. Egress filtering is planned
+  between them.
 
 Each is a tier of subnets in the domain account's
 [network](/flex-platform/infrastructure/network/#tiers).

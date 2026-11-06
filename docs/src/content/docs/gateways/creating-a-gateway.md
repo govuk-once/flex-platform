@@ -127,9 +127,9 @@ one run. Fix each one. See [What codegen checks](/flex-platform/codegen/checks/)
 The deployment artifact is `.gen/runtime/bundle.mjs`, for a Node 24 Lambda function with handler
 `bundle.handler`. The function is named `gateway-<environment>-<id>`, by `gatewayFunctionName` in
 `@repo/gateway-core`, with one alias, `live`, which every
-[gateway client](/flex-platform/domains/overview/#calling-gateways) invokes. This repository does
-not yet provision the function, its permissions or its network. See
-[The platform](/flex-platform/start/platform/) for the planned hosting model.
+[gateway client](/flex-platform/domains/overview/#calling-gateways) invokes. The
+[network](/flex-platform/infrastructure/network/) it runs in is built. Deploying the function and
+its permissions is planned: see [The platform](/flex-platform/start/platform/).
 
 Set the [environment](/flex-platform/reference/environment/):
 

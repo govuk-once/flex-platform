@@ -15,7 +15,7 @@ interface ZoneLayout {
   readonly isolated: string;
   readonly private: string;
   readonly public: string;
-  /** Reserved for AWS Network Firewall's endpoints. Nothing is created in it yet. */
+  /** Reserved for egress filtering. Nothing is created in it yet. */
   readonly firewall: string;
 }
 
@@ -27,7 +27,7 @@ interface ZoneLayout {
  *   10.0.0.0/18     isolated, a /20 per zone, one spare
  *   10.0.64.0/18    private, a /20 per zone, one spare
  *   10.0.128.0/22   public, a /24 per zone, NAT gateways only
- *   10.0.132.0/24   firewall, a /28 per zone, reserved
+ *   10.0.132.0/24   firewall, a /28 per zone, reserved for egress filtering
  */
 export const ZONE_LAYOUT: Readonly<Record<string, ZoneLayout>> = {
   "eu-west-2a": {

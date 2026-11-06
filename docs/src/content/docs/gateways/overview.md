@@ -47,8 +47,9 @@ A gateway goes through two commands and then a deployment.
    - a typed call contract for callers
 
    See [Code generation](/flex-platform/codegen/overview/).
-3. **The bundle** is deployed as a Lambda function in the egress section. It is placed `isolated`
-   or `private` depending on how its upstream is reached. When it loads, the entry point:
+3. **The bundle** runs as a Lambda function in the egress section. Deploying it is planned. It
+   will be placed `isolated` or `private` depending on how its upstream is reached. When it loads,
+   the entry point:
    - reads the environment
    - asks the driver for its executor, which retrieves and validates the gateway's secret
    - compiles the handler

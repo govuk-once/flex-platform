@@ -22,8 +22,8 @@ and the boundary between domain logic and gateway code.
 
 ## Where a domain's code lives
 
-Domain code will live with the team that writes it and use libraries published by the platform.
-This repository does not yet include a domain skeleton or domain libraries. How a domain is
+Domain code will live with the team that writes it and use the domain SDK the platform publishes.
+This repository does not yet include a domain skeleton or the SDK. How a domain is
 declared, and where it runs, is in [Hosting a domain](/flex-platform/domains/hosting/).
 
 ## Releasing a domain
@@ -58,14 +58,15 @@ const response = await udp.getIdentity({ serviceName, identifier });
 
 The client takes no settings, so a domain is never given a function name or an ARN. It invokes the
 function `gateway-<environment>-<id>`, through its one alias, `live`, in the domain's own account
-and region. It takes the environment from the `FLEX_ENVIRONMENT` variable, which the platform sets
-on every domain's function, and refuses to be created without it. The name follows the
+and region. It takes the environment from the `FLEX_ENVIRONMENT` variable, which the planned
+[release](/flex-platform/domains/hosting/#releasing-a-domains-function) sets on every domain's
+function, and refuses to be created without it. The name follows the
 [template every resource name follows](/flex-platform/infrastructure/overview/#rules-for-stacks-and-constructs),
 so a domain's permissions can name its own environment's gateways and no other's. The Lambda
 client takes the region and credentials from the function it runs in. Gateways and domains share
-an account in the planned hosting model, and the planned gateway stack deploys each function under
-this name. In a test, set `FLEX_ENVIRONMENT`, and the SDK's own `AWS_ENDPOINT_URL_LAMBDA` variable
-points the client at a stand-in for Lambda's API.
+an account, and the planned gateway stack will deploy each function under this name. In a test,
+set `FLEX_ENVIRONMENT`, and the SDK's own `AWS_ENDPOINT_URL_LAMBDA` variable points the client at
+a stand-in for Lambda's API.
 
 The client has a function for each of the gateway's operations, named for it and taking its input,
 and nothing else. An editor shows each with the description the configuration gives its
@@ -141,11 +142,11 @@ changes [compatibly](/flex-platform/gateways/compatibility/), so a domain compil
 earlier version still understands every answer. What an upstream changes without warning, the
 gateway refuses as `UPSTREAM_CONTRACT_VIOLATION`.
 
-## Domain libraries
+## Domain SDK
 
 <Aside type="note" title="To do">
-The platform will publish libraries, with examples, that domain developers install to build a
-domain. They are not written yet. This section will describe them when they are.
+The platform will publish a domain SDK, one package with examples, that domain developers install
+to build a domain. It is not written yet. This section will describe it when it is.
 </Aside>
 
 ## API specifications

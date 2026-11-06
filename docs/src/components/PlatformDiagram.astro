@@ -17,7 +17,7 @@
         goes to the API Gateway of one domain. The domain's Lambda runs in isolated
         subnets. It invokes as many gateway Lambdas as it needs, one per upstream. An isolated
         gateway reaches its upstream through a VPC endpoint. A private gateway reaches the
-        internet through a NAT gateway and AWS Network Firewall.
+        internet through a NAT gateway.
       </desc>
       <defs>
         <marker
@@ -91,7 +91,7 @@
       <text class="label small" x="300" y="811">VPC endpoint</text>
 
       <rect class="box" x="395" y="782" width="150" height="46" rx="6"></rect>
-      <text class="label small" x="470" y="811">NAT + Firewall</text>
+      <text class="label small" x="470" y="811">NAT gateway</text>
 
       <!-- Upstreams -->
       <rect class="external" x="55" y="900" width="150" height="40" rx="6"></rect>
