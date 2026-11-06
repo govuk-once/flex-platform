@@ -708,7 +708,9 @@ export const named = () => createFixtureClient({ functionName: "other" });
         );
 
       expect(problems).toEqual([]);
-    }, 60_000);
+      // Checking the SDK's declarations takes seconds alone, and over a minute on a CI runner busy
+      // with every package's tests.
+    }, 120_000);
 
     it("calls the gateway's function under plain Node", async () => {
       // Lambda's API, answering each invocation in turn.
