@@ -38,8 +38,7 @@ const THREE_ZONES: NetworkConfig = {
   availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
 };
 
-// A gateway with an upstream, a token host and a CDN behind both, the same in every environment so
-// environments stay alike.
+// A gateway with an upstream, a token host and a CDN behind both.
 export const GATEWAYS: readonly GatewayConfig[] = [
   {
     id: "udp",
@@ -68,7 +67,6 @@ export function domainAccount(
   };
 }
 
-// The same in every environment, so environments stay alike.
 const FIXTURE_DOMAINS = ["domain-a", "domain-b"];
 
 // The real stages' shape: two stages with one environment, one with three, and one environment

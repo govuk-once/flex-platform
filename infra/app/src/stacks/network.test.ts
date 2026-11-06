@@ -3,7 +3,6 @@ import { Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
-import { STAGES } from "../config/stages.ts";
 import type { DomainAccountConfig } from "../config/types.ts";
 import { NetworkStack, networkStackName } from "./network.ts";
 
@@ -108,71 +107,49 @@ describe("NetworkStack", () => {
   });
 
   describe("DNS Firewall", () => {
-    // Every environment of every stage, fixtures and committed alike.
-    const NETWORKS = [...FIXTURE_STAGES, ...STAGES].flatMap((stage) =>
-      stage.environments.flatMap((environment) =>
-        environment.domainAccounts.map(
-          (domainAccount) =>
-            [
-              `${stage.name}/${environment.name}/${domainAccount.name}`,
-              stage,
-              environment,
-              domainAccount,
-            ] as const,
+    it("filters, fails closed and logs queries", () => {
+      const network = template();
+      const rules = Object.values(
+        network.findResources("AWS::Route53Resolver::FirewallRuleGroup"),
+      ).map(
+        ({ Properties }) =>
+          (Properties as { FirewallRules: Record<string, unknown>[] })
+            .FirewallRules,
+      );
+      const associations = Object.values(
+        network.findResources(
+          "AWS::Route53Resolver::FirewallRuleGroupAssociation",
         ),
-      ),
-    );
+      ).map(({ Properties }) => Properties as Record<string, unknown>);
+      const priority = (name: string) =>
+        associations.find(({ Name }) => Name === name)?.Priority as number;
 
-    it.each(NETWORKS)(
-      "filters, fails closed and logs queries in %s",
-      (_, stage, environment, domainAccount) => {
-        const network = Template.fromJSON(
-          synthesizedStage(stage).getStackByName(
-            networkStackName(environment, domainAccount),
-          ).template as Record<string, unknown>,
-        );
-        const rules = Object.values(
-          network.findResources("AWS::Route53Resolver::FirewallRuleGroup"),
-        ).map(
-          ({ Properties }) =>
-            (Properties as { FirewallRules: Record<string, unknown>[] })
-              .FirewallRules,
-        );
-        const associations = Object.values(
-          network.findResources(
-            "AWS::Route53Resolver::FirewallRuleGroupAssociation",
-          ),
-        ).map(({ Properties }) => Properties as Record<string, unknown>);
-        const priority = (name: string) =>
-          associations.find(({ Name }) => Name === name)?.Priority as number;
-
-        expect(rules).toContainEqual([
-          expect.objectContaining({ Action: "ALLOW" }),
-        ]);
-        expect(rules).toContainEqual([
-          expect.objectContaining({
-            Action: "BLOCK",
-            BlockResponse: "NXDOMAIN",
-          }),
-        ]);
-        expect(priority(`network-${environment.name}-dns-allow`)).toBeLessThan(
-          priority(`network-${environment.name}-dns-block`),
-        );
-        network.hasResourceProperties(
-          "AWS::Route53Resolver::FirewallDomainList",
-          {
-            Domains: ["*"],
-          },
-        );
-        network.hasResourceProperties("AWS::Route53Resolver::FirewallConfig", {
-          FirewallFailOpen: "DISABLED",
-        });
-        network.resourceCountIs(
-          "AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation",
-          1,
-        );
-      },
-    );
+      expect(rules).toContainEqual([
+        expect.objectContaining({ Action: "ALLOW" }),
+      ]);
+      expect(rules).toContainEqual([
+        expect.objectContaining({
+          Action: "BLOCK",
+          BlockResponse: "NXDOMAIN",
+        }),
+      ]);
+      expect(priority("network-prod-dns-allow")).toBeLessThan(
+        priority("network-prod-dns-block"),
+      );
+      network.hasResourceProperties(
+        "AWS::Route53Resolver::FirewallDomainList",
+        {
+          Domains: ["*"],
+        },
+      );
+      network.hasResourceProperties("AWS::Route53Resolver::FirewallConfig", {
+        FirewallFailOpen: "DISABLED",
+      });
+      network.resourceCountIs(
+        "AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation",
+        1,
+      );
+    });
 
     it("allows the endpoints' names and every name its account's gateways declare", () => {
       template().hasResourceProperties(

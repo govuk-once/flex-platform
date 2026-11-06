@@ -122,8 +122,10 @@ export class Edge extends Construct {
       defaultBehavior: {
         // CDK declares Bucket's `isWebsite` as possibly undefined and IBucket's as optional, which
         // `exactOptionalPropertyTypes` won't match.
+        // Named, since CDK's default ID is built from the stack's name.
         origin: S3BucketOrigin.withBucketDefaults(
           this.defaultOrigin as IBucket,
+          { originId: "default" },
         ),
         viewerProtocolPolicy: ViewerProtocolPolicy.HTTPS_ONLY,
         allowedMethods: AllowedMethods.ALLOW_ALL,

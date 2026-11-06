@@ -257,9 +257,11 @@ change reruns every task, rather than leaving a cached result that used the old 
 `infra/app` builds its fixture stages, in `test/helpers.ts`, and the committed stages, and checks
 that:
 
-- each kind of stack, the Frontdoor's and the networks, has the same resources in every
-  environment of every stage once names, accounts and availability zones are set aside, so nothing
-  in a stack depends on which environment it is. This runs on both sets of stages;
+- each committed environment's config, built again under a name, accounts and zones no
+  environment has, gives the same templates, every property of every resource, once those are set
+  aside. So nothing in a stack depends on which environment it is: a construct that branches on
+  an environment's name or an account fails here. Only the hashes of what holds the identity, such
+  as Lambda@Edge's code, which holds the routes, are set aside with it;
 - synthesizing any stage asks for no lookup in an account;
 - reversing every list in the fixtures' config, availability zones included, changes no logical
   ID;
