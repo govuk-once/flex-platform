@@ -1,3 +1,8 @@
+import {
+  CALLER_TOKEN_KEYS_OBJECT,
+  callerTokenKeysBucketName,
+} from "@repo/frontdoor-infra";
+import { callerTokenAudience } from "@repo/frontdoor-shared";
 import { gatewayFunctionName } from "@repo/gateway-core";
 import {
   GatewayFunction,
@@ -16,6 +21,7 @@ import {
   subnetIdsParameterName,
 } from "@repo/infra-constructs";
 import { Stack } from "aws-cdk-lib";
+import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
 
@@ -103,6 +109,11 @@ export class GatewayStack extends Stack {
           }).secret.secretArn
         : gateway.secret.arn;
 
+    const keysBucket = callerTokenKeysBucketName(
+      environment.name,
+      environment.frontdoor.account,
+    );
+
     const endpointIds = ["secretsmanager", "sts"].map((service) =>
       StringParameter.valueForStringParameter(
         this,
@@ -120,14 +131,34 @@ export class GatewayStack extends Stack {
         ...(gateway.target !== null && {
           FLEX_UPSTREAM_TARGET: gateway.target,
         }),
+        FLEX_CALLER_TOKEN_KEYS_BUCKET: keysBucket,
+        FLEX_CALLER_TOKEN_KEYS_OBJECT: CALLER_TOKEN_KEYS_OBJECT,
+        FLEX_CALLER_TOKEN_KEYS_ACCOUNT: environment.frontdoor.account,
+        FLEX_CALLER_TOKEN_AUDIENCE: callerTokenAudience(environment.name),
       },
-      statements: upstreamAccess({
-        secretArn: gatewaySecretArn(environment, domainAccount, gateway),
-        secretKeyArn:
-          gateway.secret === "create" ? null : gateway.secret.keyArn,
-        roleArns: gateway.roleArns,
-        endpointIds,
-      }),
+      statements: [
+        ...upstreamAccess({
+          secretArn: gatewaySecretArn(environment, domainAccount, gateway),
+          secretKeyArn:
+            gateway.secret === "create" ? null : gateway.secret.keyArn,
+          roleArns: gateway.roleArns,
+          endpointIds,
+        }),
+        // The edge's public keys, in the frontdoor account's bucket, whose policy lets this
+        // role read them too. Bucket names are global, so it is held to that account's.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["s3:GetObject"],
+          resources: [
+            `arn:${this.partition}:s3:::${keysBucket}/${CALLER_TOKEN_KEYS_OBJECT}`,
+          ],
+          conditions: {
+            StringEquals: {
+              "aws:ResourceAccount": environment.frontdoor.account,
+            },
+          },
+        }),
+      ],
       subnetIdsParameterName: subnetIdsParameterName(
         environment.name,
         gateway.placement,
