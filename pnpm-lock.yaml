@@ -433,6 +433,15 @@ importers:
       '@repo/gateway-core':
         specifier: workspace:*
         version: link:../shared/core
+      '@repo/infra-constructs':
+        specifier: workspace:*
+        version: link:../../infra/constructs
+      aws-cdk-lib:
+        specifier: 2.275.0
+        version: 2.275.0(constructs@10.8.1)
+      constructs:
+        specifier: 10.8.1
+        version: 10.8.1
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -443,6 +452,9 @@ importers:
       '@repo/vitest-config':
         specifier: workspace:*
         version: link:../../packages/vitest-config
+      cdk-nag:
+        specifier: 3.0.2
+        version: 3.0.2(aws-cdk-lib@2.275.0(constructs@10.8.1))(constructs@10.8.1)
       eslint:
         specifier: 10.13.0
         version: 10.13.0(jiti@2.7.0)(supports-color@7.2.0)
