@@ -225,8 +225,48 @@ describe("GatewayStack", () => {
     ) as {
       Properties: { Environment: { Variables: Record<string, unknown> } };
     }[];
-    expect(Object.keys(fn?.Properties.Environment.Variables ?? {})).toEqual([
+    expect(
+      Object.keys(fn?.Properties.Environment.Variables ?? {}).sort(),
+    ).toEqual([
+      "FLEX_CALLER_TOKEN_AUDIENCE",
+      "FLEX_CALLER_TOKEN_KEYS_ACCOUNT",
+      "FLEX_CALLER_TOKEN_KEYS_BUCKET",
+      "FLEX_CALLER_TOKEN_KEYS_OBJECT",
       "FLEX_UPSTREAM_SECRET_ARN",
     ]);
+  });
+
+  it("verifies the caller token with the edge's public keys, for its environment's audience", () => {
+    const { template } = build();
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      Environment: {
+        Variables: {
+          FLEX_CALLER_TOKEN_KEYS_BUCKET: `frontdoor-dev-keys-${DEV.frontdoor.account}`,
+          FLEX_CALLER_TOKEN_KEYS_OBJECT: "caller-token-keys.json",
+          FLEX_CALLER_TOKEN_KEYS_ACCOUNT: DEV.frontdoor.account,
+          FLEX_CALLER_TOKEN_AUDIENCE: "flex:dev:gateways",
+        },
+      },
+    });
+    template.hasResourceProperties("AWS::IAM::Role", {
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: "s3:GetObject",
+                Resource: `arn:aws:s3:::frontdoor-dev-keys-${DEV.frontdoor.account}/caller-token-keys.json`,
+                Condition: {
+                  StringEquals: {
+                    "aws:ResourceAccount": DEV.frontdoor.account,
+                  },
+                },
+              },
+            ]),
+          },
+        },
+      ],
+    });
   });
 });
