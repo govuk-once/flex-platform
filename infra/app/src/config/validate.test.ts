@@ -8,6 +8,7 @@ import {
 } from "../../test/helpers.ts";
 import type {
   DomainAccountConfig,
+  DomainConfig,
   EnvironmentConfig,
   FrontdoorConfig,
   StageConfig,
@@ -219,8 +220,8 @@ describe("validateStages", () => {
 
   describe("domains", () => {
     function withDomains(
-      domains: readonly string[],
-      second: readonly string[] = [],
+      domains: readonly DomainConfig[],
+      second: readonly DomainConfig[] = [],
     ): StageConfig {
       return withEnvironment({
         domainAccounts: [
@@ -251,7 +252,23 @@ describe("validateStages", () => {
       );
     });
 
-    it("keeps the domain's execution role's name within IAM's limit", () => {
+    it("refuses a name a disabled domain holds, since it keeps its stack", () => {
+      expect(() =>
+        validateStages([
+          withDomains(["domain-a"], [{ name: "domain-a", disabled: true }]),
+        ]),
+      ).toThrow(
+        "The platform-dev/sandbox domain name domain-a is used more than once",
+      );
+    });
+
+    it("checks a disabled domain's name as any other", () => {
+      expect(() =>
+        validateStages([withDomains([{ name: "Domain-A", disabled: true }])]),
+      ).toThrow('The platform-dev/sandbox domain name "Domain-A" must be');
+    });
+
+    it("keeps the domain's execution role's name within IAM's limit, disabled or not", () => {
       const environment = "e".repeat(32);
       const fits = "d".repeat(64 - 32 - "domain---execution".length);
 
@@ -261,7 +278,9 @@ describe("validateStages", () => {
           {
             ...ENVIRONMENT,
             name: environment,
-            domainAccounts: [{ ...MAIN_DOMAIN_ACCOUNT, domains: [name] }],
+            domainAccounts: [
+              { ...MAIN_DOMAIN_ACCOUNT, domains: [{ name, disabled: true }] },
+            ],
           },
         ],
       });

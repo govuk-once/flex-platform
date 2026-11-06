@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { ACCOUNT, stackIn } from "../test/helpers.ts";
 import { DeployRole } from "./deploy-role.ts";
 
-const SUBNETS = ["subnet-0a1b2c3d", "subnet-4e5f6a7b"];
-const SECURITY_GROUP = "sg-0a1b2c3d";
+const SUBNETS_PARAMETER = "/flex/network/sandbox/isolated-subnet-ids";
+const SECURITY_GROUP_PARAMETER = "/flex/network/sandbox/security-group/domain";
 
 function build(nag = false) {
   const stack = stackIn("eu-west-2", nag);
@@ -14,10 +14,25 @@ function build(nag = false) {
     environment: "sandbox",
     domain: "domain-a",
     gatewayFunctions: "gateway-sandbox-*",
-    subnetIds: SUBNETS,
-    securityGroupId: SECURITY_GROUP,
+    subnetIdsParameterName: SUBNETS_PARAMETER,
+    securityGroupIdParameterName: SECURITY_GROUP_PARAMETER,
   });
   return { app: stack.node.root as App, template: Template.fromStack(stack) };
+}
+
+// The template parameter CDK adds to read an SSM parameter at deploy.
+function parameterReading(template: Template, name: string): { Ref: string } {
+  const parameters = template.toJSON().Parameters as Record<
+    string,
+    { Type: string; Default: string }
+  >;
+  const id = Object.keys(parameters).find(
+    (key) => parameters[key]?.Default === name,
+  );
+  if (id === undefined) {
+    throw new Error(`nothing reads ${name}`);
+  }
+  return { Ref: id };
 }
 
 const DOMAIN_FUNCTION = `arn:aws:lambda:eu-west-2:${ACCOUNT}:function:domain-sandbox-domain-a`;
@@ -56,8 +71,29 @@ describe("DeployRole", () => {
     });
   });
 
-  it("may release its domain's function, pass that domain's execution role to Lambda, never touch a gateway, and place every function in the network named", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+  it("reads its placement from SSM at deploy, as the parameters' types", () => {
+    const parameters = build().template.toJSON().Parameters as Record<
+      string,
+      { Type: string; Default: string }
+    >;
+    const reads = Object.fromEntries(
+      Object.values(parameters)
+        .filter(({ Default }) => Default.startsWith("/flex/"))
+        .map(({ Type, Default }) => [Default, Type]),
+    );
+
+    expect(reads).toEqual({
+      [SUBNETS_PARAMETER]: "AWS::SSM::Parameter::Value<List<String>>",
+      [SECURITY_GROUP_PARAMETER]: "AWS::SSM::Parameter::Value<String>",
+    });
+  });
+
+  it("may release its domain's function, read its placement, pass that domain's execution role to Lambda, never touch a gateway, and place every function as the parameters it reads say", () => {
+    const { template } = build();
+    const subnets = parameterReading(template, SUBNETS_PARAMETER);
+    const securityGroup = parameterReading(template, SECURITY_GROUP_PARAMETER);
+
+    template.hasResourceProperties("AWS::IAM::Role", {
       Policies: Match.exact([
         {
           PolicyName: "Deploy",
@@ -89,6 +125,14 @@ describe("DeployRole", () => {
                 Resource: "*",
               },
               {
+                Action: ["ssm:GetParameter", "ssm:GetParameters"],
+                Effect: "Allow",
+                Resource: [
+                  `arn:aws:ssm:eu-west-2:${ACCOUNT}:parameter${SUBNETS_PARAMETER}`,
+                  `arn:aws:ssm:eu-west-2:${ACCOUNT}:parameter${SECURITY_GROUP_PARAMETER}`,
+                ],
+              },
+              {
                 Action: "iam:PassRole",
                 Condition: {
                   StringEquals: {
@@ -105,11 +149,11 @@ describe("DeployRole", () => {
               },
               placement({ Null: { "lambda:VpcIds": "true" } }),
               placement({
-                "ForAnyValue:StringNotEquals": { "lambda:SubnetIds": SUBNETS },
+                "ForAnyValue:StringNotEquals": { "lambda:SubnetIds": subnets },
               }),
               placement({
                 "ForAnyValue:StringNotEquals": {
-                  "lambda:SecurityGroupIds": [SECURITY_GROUP],
+                  "lambda:SecurityGroupIds": [securityGroup],
                 },
               }),
             ],

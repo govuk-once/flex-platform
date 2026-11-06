@@ -4,6 +4,7 @@ import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
+import { domainName } from "../config/domain-name.ts";
 import { DomainStack, domainStackName } from "./domain.ts";
 import { domainAccountStackName } from "./domain-account.ts";
 import { frontdoorStackName } from "./frontdoor.ts";
@@ -34,7 +35,7 @@ describe("DomainStack", () => {
         .dependencies.map(({ id }) => id);
 
       for (const domainAccount of environment.domainAccounts) {
-        for (const domain of domainAccount.domains) {
+        for (const domain of domainAccount.domains.map(domainName)) {
           const stack = assembly.getStackByName(
             domainStackName(environment, domain),
           );

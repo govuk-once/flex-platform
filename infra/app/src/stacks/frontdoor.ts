@@ -61,14 +61,17 @@ export class FrontdoorStack extends Stack {
   }
 }
 
-// Each domain's host, by domain name. Sorted, so the bundle the routes are baked into is the same
-// whatever order config lists them in.
+// Each enabled domain's host, by domain name. Only a domain listed by its name is enabled. A
+// disabled domain has no route, so the edge answers a request for it as it answers an unknown domain. Sorted, so the bundle the routes are baked into
+// is the same whatever order config lists them in.
 export function domainRoutes(
   environment: EnvironmentConfig,
 ): Record<string, string> {
   const hosts = Object.fromEntries(
     environment.domainAccounts.flatMap(({ domains, zone }) =>
-      domains.map((domain) => [domain, domainHost(domain, zone.name)] as const),
+      domains
+        .filter((domain) => typeof domain === "string")
+        .map((name) => [name, domainHost(name, zone.name)] as const),
     ),
   );
 
