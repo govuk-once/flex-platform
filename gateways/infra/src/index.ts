@@ -4,6 +4,8 @@ export {
   gatewayFunctionPattern,
   gatewayLogGroupName,
   gatewayRoleName,
+  gatewayRolePattern,
   gatewaySecretName,
+  gatewaySecretPattern,
 } from "./names.ts";
 export { upstreamAccess } from "./upstream-access.ts";

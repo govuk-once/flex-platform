@@ -9,6 +9,10 @@
 // The prefix is a boundary: the Lambda endpoint in the domain account's network, and each domain's
 // execution role, let a domain invoke any function whose name starts with `gateway-{environment}-`.
 // So no other function the gateways section creates may have it.
+//
+// The same holds for roles and secrets. The network's `secretsmanager` and `sts` endpoints let any
+// role named `gateway-{environment}-*-execution` through, to any secret named
+// `gateway-{environment}-*` in the account. So no other role or secret may have those names.
 
 import { gatewayFunctionName, gatewayFunctionPrefix } from "@repo/gateway-core";
 
@@ -17,6 +21,19 @@ const ROLE_NAME_LENGTH = 64;
 
 /** Every gateway's function in the environment, and each one's versions and aliases. */
 export function gatewayFunctionPattern(environment: string): string {
+  return `${gatewayFunctionPrefix(environment)}*`;
+}
+
+/** The role every gateway's function in the environment runs as. */
+export function gatewayRolePattern(environment: string): string {
+  return `${gatewayFunctionPrefix(environment)}*-execution`;
+}
+
+/**
+ * Every secret a gateway's stack creates in the environment, with the six characters Secrets
+ * Manager adds to each one's ARN.
+ */
+export function gatewaySecretPattern(environment: string): string {
   return `${gatewayFunctionPrefix(environment)}*`;
 }
 
@@ -45,8 +62,7 @@ export function gatewayLogGroupName(
 
 /**
  * The secret a gateway's stack creates, for a gateway whose upstream doesn't hold one. Secrets
- * Manager adds six characters of its own to the ARN, so a policy names it by
- * `gatewaySecretArnPattern`.
+ * Manager adds six characters of its own to the ARN, so a policy names it by a pattern.
  */
 export function gatewaySecretName(
   environment: string,

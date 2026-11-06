@@ -38,13 +38,30 @@ const THREE_ZONES: NetworkConfig = {
   availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
 };
 
-// A gateway with an upstream, a token host and a CDN behind both.
-export const GATEWAYS: readonly GatewayConfig[] = [
-  {
-    id: "udp",
-    hostnames: ["api.udp.example", "auth.udp.example"],
+// A gateway with an upstream, a token host and a CDN behind both, whose upstream holds its secret
+// and the role it signs as.
+export const UDP = {
+  id: "udp",
+  hostnames: ["api.udp.example", "auth.udp.example"],
+  placement: "private",
+  secret: {
+    arn: "arn:aws:secretsmanager:eu-west-2:200000000001:secret:udp/flex/consumer-AbCdEf",
+    keyArn:
+      "arn:aws:kms:eu-west-2:200000000001:key/00000000-0000-4000-8000-000000000000",
   },
-];
+  target: null,
+  roleArns: ["arn:aws:iam::200000000001:role/udp-flex-consumer"],
+} as const satisfies GatewayConfig;
+
+// The same gateway with a secret its stack creates, so it assumes no upstream role, and its target
+// in config, since its secret holds only what a person puts. Only `udp` has a package with a
+// bundle, so this varies it rather than naming another gateway, and the stages don't deploy it.
+export const OWN_SECRET_GATEWAY = {
+  ...UDP,
+  secret: "create",
+  roleArns: [],
+  target: "https://api.udp.example",
+} as const satisfies GatewayConfig;
 
 function frontdoor(environment: string, account: string): FrontdoorConfig {
   return { ...FRONTDOOR, account, zone: zone(environment, account) };
@@ -63,7 +80,7 @@ export function domainAccount(
     domains,
     zone: zone(environment, account),
     network,
-    gateways: GATEWAYS,
+    gateways: [UDP],
   };
 }
 

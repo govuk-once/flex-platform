@@ -5,7 +5,9 @@ import {
   gatewayFunctionPattern,
   gatewayLogGroupName,
   gatewayRoleName,
+  gatewayRolePattern,
   gatewaySecretName,
+  gatewaySecretPattern,
 } from "./names.ts";
 
 describe("gateway names", () => {
@@ -14,6 +16,20 @@ describe("gateway names", () => {
     expect(gatewayFunctionName("production", "udp")).toMatch(
       /^gateway-production-/,
     );
+  });
+
+  it("matches every gateway's role and created secret in the environment, and nothing else of theirs", () => {
+    const role = gatewayRolePattern("production");
+    const secret = gatewaySecretPattern("production");
+    expect(role).toBe("gateway-production-*-execution");
+    expect(secret).toBe("gateway-production-*");
+
+    const glob = (pattern: string) =>
+      new RegExp(`^${pattern.replaceAll("*", ".*")}$`);
+    expect(gatewayRoleName("production", "udp")).toMatch(glob(role));
+    expect(gatewaySecretName("production", "udp")).toMatch(glob(secret));
+    expect("gateway-staging-udp-execution").not.toMatch(glob(role));
+    expect("domain-production-udp-execution").not.toMatch(glob(role));
   });
 
   it("refuses an environment that cannot name a function", () => {

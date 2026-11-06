@@ -7,7 +7,7 @@ import {
   SecurityGroup,
   VpcEndpointPrivateDnsOnlyForInboundResolverEndpoint,
 } from "aws-cdk-lib/aws-ec2";
-import { AnyPrincipal, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 /** An S3 object, by its bucket's name, its key, and the account that owns the bucket. */
@@ -25,19 +25,31 @@ export interface InterfaceEndpointsProps {
   readonly invokableFunctions: string;
   /** The objects the `s3` endpoint may read, which may be in another account's bucket. */
   readonly readableObjects: readonly S3Object[];
+  /**
+   * The secrets the `secretsmanager` endpoint may read, by ARN, or by a pattern for those Secrets
+   * Manager names. An upstream may hold a gateway's secret in its own account.
+   */
+  readonly readableSecrets: readonly string[];
+  /** The roles the `sts` endpoint may assume, by ARN, which may be in an upstream's account. */
+  readonly assumableRoles: readonly string[];
+  /**
+   * The roles in this account that may call the `secretsmanager` and `sts` endpoints, as a name
+   * pattern such as `gateway-dev-*-execution`.
+   */
+  readonly gatewayRoles: string;
 }
 
 /**
  * The AWS APIs the isolated subnets reach, each through an endpoint with private DNS, so the
  * SDK's usual hostname resolves to it. No endpoint lets anything in until a workload's security
  * group is let in with `WorkloadSecurityGroup`, and each refuses any principal outside this account,
- * and any action but the ones named here. One that names no resource refuses any outside this
- * account too.
+ * any resource it doesn't name, and any action but its own. One with no resource to name refuses
+ * everything.
  *
- * - `lambda`: invoking the functions named, and nothing else.
- * - `secretsmanager`: reading a secret.
- * - `sts`: assuming a role.
- * - `s3`: reading the objects named, and nothing else.
+ * - `lambda`: invoking the functions named.
+ * - `secretsmanager`: reading the secrets named, as a gateway's role.
+ * - `sts`: assuming the roles named, as a gateway's role.
+ * - `s3`: reading the objects named.
  *
  * An endpoint costs the same whether it's used or not, so one is added when something calls its
  * API. Traces need none: Lambda's X-Ray daemon sends from outside the VPC.
@@ -62,6 +74,12 @@ export class InterfaceEndpoints extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
+    const gatewayRoles = stack.formatArn({
+      service: "iam",
+      region: "",
+      resource: "role",
+      resourceName: props.gatewayRoles,
+    });
     const functions = stack.formatArn({
       service: "lambda",
       resource: "function",
@@ -83,11 +101,16 @@ export class InterfaceEndpoints extends Construct {
       props,
       "SecretsManager",
       InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
-      { actions: ["secretsmanager:GetSecretValue"], resources: ["*"] },
+      {
+        actions: ["secretsmanager:GetSecretValue"],
+        resources: [...props.readableSecrets],
+        principals: gatewayRoles,
+      },
     );
     this.sts = this.endpoint(props, "Sts", InterfaceVpcEndpointAwsService.STS, {
       actions: ["sts:AssumeRole"],
-      resources: ["*"],
+      resources: [...props.assumableRoles],
+      principals: gatewayRoles,
     });
     this.s3 = this.endpoint(props, "S3", InterfaceVpcEndpointAwsService.S3, {
       actions: ["s3:GetObject"],
@@ -120,12 +143,15 @@ export class InterfaceEndpoints extends Construct {
         `${service.shortName}.${Stack.of(this).region}.amazonaws.com`,
       ],
       resourceAccounts,
+      principals,
     }: {
       actions: string[];
       resources: string[];
       hostnames?: string[];
       /** The accounts the resources must be in, where their names don't say. */
       resourceAccounts?: string[];
+      /** The roles that may call it, by ARN pattern, where not every one in the account may. */
+      principals?: string;
     },
   ): InterfaceVpcEndpoint {
     // An endpoint only answers, so its group lets nothing out, and nothing in until a workload's
@@ -149,26 +175,31 @@ export class InterfaceEndpoints extends Construct {
       securityGroups: [securityGroup],
       open: false,
     });
+    // A policy with no statement would leave the endpoint's default, which allows everything.
     endpoint.addToPolicy(
-      new PolicyStatement({
-        principals: [new AnyPrincipal()], // NOSONAR: the conditions hold it to this account
-        actions,
-        resources,
-        conditions: {
-          StringEquals: {
-            "aws:PrincipalAccount": Stack.of(this).account,
-            // A resource an endpoint names may be in another account, as the caller token's
-            // public keys are, and is held to the accounts given for it. One that names none is
-            // held to this account's.
-            ...(resourceAccounts !== undefined && {
-              "aws:ResourceAccount": resourceAccounts,
-            }),
-            ...(resources.includes("*") && {
-              "aws:ResourceAccount": Stack.of(this).account,
-            }),
-          },
-        },
-      }),
+      resources.length === 0
+        ? new PolicyStatement({
+            effect: Effect.DENY,
+            principals: [new AnyPrincipal()],
+            actions: ["*"],
+            resources: ["*"],
+          })
+        : new PolicyStatement({
+            principals: [new AnyPrincipal()], // NOSONAR: the condition holds it to this account
+            actions,
+            resources,
+            conditions: {
+              StringEquals: {
+                "aws:PrincipalAccount": Stack.of(this).account,
+                ...(resourceAccounts !== undefined && {
+                  "aws:ResourceAccount": resourceAccounts,
+                }),
+              },
+              ...(principals !== undefined && {
+                ArnLike: { "aws:PrincipalArn": principals },
+              }),
+            },
+          }),
     );
     this.#byService[service.shortName] = endpoint;
     this.#hostnames.push(...hostnames);
