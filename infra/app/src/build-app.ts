@@ -16,6 +16,11 @@ import { DomainStack } from "./stacks/domain.ts";
 import { DomainAccountStack } from "./stacks/domain-account.ts";
 import { FrontdoorStack } from "./stacks/frontdoor.ts";
 import { FrontdoorEdgeLogsStack } from "./stacks/frontdoor-edge-logs.ts";
+import {
+  FrontdoorCallerTokenKeysStack,
+  FrontdoorKeyRotationStack,
+  FrontdoorSigningKeyStack,
+} from "./stacks/frontdoor-keys.ts";
 import { GatewayStack } from "./stacks/gateway.ts";
 import { NetworkStack } from "./stacks/network.ts";
 import { StackTags } from "./tags.ts";
@@ -42,6 +47,16 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
     frontdoor.addStackDependency(
       edgeLogs,
       "The edge's Lambda@Edge role attaches the policy the edge logs stack creates, to write to its log group.",
+    );
+
+    const keyRotation = new FrontdoorKeyRotationStack(app, environment);
+    keyRotation.addStackDependency(
+      new FrontdoorSigningKeyStack(app, environment),
+      "Key rotation makes key pairs under the signing key, by its alias.",
+    );
+    keyRotation.addStackDependency(
+      new FrontdoorCallerTokenKeysStack(app, environment),
+      "Key rotation writes the public keys to the bucket the gateways read them from.",
     );
 
     for (const domainAccount of environment.domainAccounts) {

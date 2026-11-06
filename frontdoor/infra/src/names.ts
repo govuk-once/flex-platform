@@ -91,3 +91,33 @@ export function callerTokenKeysBucketName(
 
 /** The public keys' object in that bucket, a JWK set. Key rotation writes it; no stack does. */
 export const CALLER_TOKEN_KEYS_OBJECT = "caller-token-keys.json";
+
+/** Key rotation's own role, in the frontdoor account. */
+export function keyRotationRoleName(environment: string): string {
+  return `frontdoor-${environment}-key-rotation`;
+}
+
+/** The alias of the key that wraps the caller token's signing keys. */
+export function signingKeyAliasName(environment: string): string {
+  return `alias/frontdoor-${environment}-caller-token`;
+}
+
+/** Where the edge reads the keys it signs with. Key rotation writes it. */
+export function signingKeyParameterName(environment: string): string {
+  return `/flex/frontdoor/${environment}/caller-token-signing-key`;
+}
+
+/** Where key rotation keeps its state. Key rotation writes it. */
+export function keyRotationStateParameterName(environment: string): string {
+  return `/flex/frontdoor/${environment}/caller-token-key-state`;
+}
+
+/** Key rotation's function, and the schedule that runs it. */
+export function keyRotationFunctionName(environment: string): string {
+  return `frontdoor-${environment}-key-rotation`;
+}
+
+/** Key rotation's log group. */
+export function keyRotationLogGroupName(environment: string): string {
+  return `/flex/frontdoor/${environment}/key-rotation`;
+}

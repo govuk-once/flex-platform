@@ -52,14 +52,18 @@ Each environment has these stacks:
 | Stack | Account | Region | One per | Holds |
 |---|---|---|---|---|
 | `frontdoor-<environment>-edge-logs-eu-west-2` | Frontdoor | eu-west-2 | Environment | Lambda@Edge's log group, and the policy that lets its role write to it |
+| `frontdoor-<environment>-signing-key` | Frontdoor | eu-west-2 | Environment | The KMS key that wraps the caller token's signing keys: see [the caller token](/flex-platform/frontdoor/caller-token/#stacks) |
+| `frontdoor-<environment>-caller-token-keys` | Frontdoor | eu-west-2 | Environment | The bucket every gateway reads the caller token's public keys from |
+| `frontdoor-<environment>-key-rotation` | Frontdoor | eu-west-2 | Environment | Key rotation's function, role, log group and schedule |
 | `frontdoor-<environment>` | Frontdoor | us-east-1 | Environment | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
 | `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, interface endpoints, security groups, network ACLs, DNS Firewall, and its flow and query logs: see [Network](/flex-platform/infrastructure/network/) |
 | `domainaccount-<environment>-<account>` | Domain | eu-west-2 | Domain account | What the account's domains share: see [what a domain account provides](/flex-platform/domains/hosting/#what-a-domain-account-provides) |
 | `domain-<environment>-<domain>` | Domain | eu-west-2 | Domain | The domain's API and host, and its function's log group and roles: see [what a domain provides](/flex-platform/domains/hosting/#what-a-domain-provides) |
 | `gateway-<environment>-<account>-<id>` | Domain | eu-west-2 | Gateway in a domain account | The gateway's function, its version and `live` alias, its role and log group, and its secret if it has its own: see [Environment](/flex-platform/reference/environment/#the-lambda-function) |
 
-The Frontdoor's stacks are in us-east-1 because CloudFront takes its web ACL, its certificate and
-its Lambda@Edge functions from there. Lambda@Edge's log group is in a stack of its own, in the one
+`frontdoor-<environment>` is in us-east-1 because CloudFront takes its web ACL, its certificate and
+its Lambda@Edge functions from there. The caller token's stacks are in eu-west-2, where its keys are
+made and kept, and the gateways read them: see [the caller token](/flex-platform/frontdoor/caller-token/#keys). Lambda@Edge's log group is in a stack of its own, in the one
 region its logs are kept: see [the Frontdoor's logs](/flex-platform/frontdoor/overview/#logs). The
 region is in the stack's name, so keeping logs in another region later is another stack beside it.
 `frontdoor-<environment>` depends on it, so it deploys first.
@@ -68,9 +72,11 @@ A domain's stack depends on its account's, whose certificate ARN it reads and wh
 logging setting its stage logs through, and on its network's, whose subnet and security group IDs
 its deploy role reads. A gateway's stack depends on its network's, whose subnet, security group
 and endpoint IDs it reads. `frontdoor-<environment>` depends on every domain stack in its environment,
-across accounts and regions, so it never routes to a host before the host exists. So an
-environment deploys in that order: the networks and the domain accounts' stacks, the domains'
-stacks, then the Frontdoor's.
+across accounts and regions, so it never routes to a host before the host exists. Key rotation's
+stack depends on the signing key's stack and the public keys' bucket, which it writes to. So an
+environment deploys in that order: the networks, the domain accounts' stacks, the signing key and
+the public keys' bucket, then the domains', the gateways' and key rotation's stacks, then the
+Frontdoor's.
 
 Every domain account has its stack, whether or not it hosts a domain, so adding a domain deploys
 only the domain's own stack and the Frontdoor's, whose routing map gains it.

@@ -292,11 +292,11 @@ somewhere unseen.
 
 ## The caller token's keys
 
-Gateways will verify the planned [caller token](/flex-platform/frontdoor/lambda-edge/#the-caller-token)
-with the edge's public keys, which will be in one bucket in the environment's frontdoor account. A
-gateway reads them through the `s3` endpoint, whose policy names that one object, and the frontdoor
-account as its bucket's owner: bucket names are global, so a bucket of the same name in another
-account is refused.
+Gateways will verify the [caller token](/flex-platform/frontdoor/caller-token/) with the edge's
+public keys, which are in [one bucket](/flex-platform/frontdoor/caller-token/#the-public-keys-bucket)
+in the environment's frontdoor account. A gateway reads them through the `s3` endpoint, whose policy
+names that one object, and the frontdoor account as its bucket's owner: bucket names are global, so
+a bucket of the same name in another account is refused.
 
 S3 offers both a gateway endpoint and an interface endpoint. The network uses the interface
 endpoint, as it does for every other service, so its traffic stays inside the VPC, to an address
