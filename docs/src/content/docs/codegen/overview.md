@@ -25,7 +25,7 @@ the gateway runs. `client/` is what a service that calls the gateway imports.
 | Path | Contents |
 |---|---|
 | `.gen/runtime/entry.js` | The handler. It combines the configuration, the validators and the executor the driver builds. It reads the environment and exports `handler`. See [The entry point](/flex-platform/codegen/entry-point/). |
-| `.gen/runtime/validators/` | Standalone Ajv validators: one for each operation's input and one for each declared outcome. Self-contained JavaScript with no package imports. |
+| `.gen/runtime/validators/` | Standalone Ajv validators: one for each operation's input, each declared outcome and each `meta` name. `schemas.js` holds them, as self-contained JavaScript with no package imports. `index.js` maps each operation, and each `meta` name, to its validators. |
 | `.gen/runtime/bundle.mjs` | `entry.js` and everything it imports, bundled by esbuild as ESM for Node 24. Only Node's builtins are left for the platform to resolve. This is the deployed artifact, and its handler is `bundle.handler`. |
 | `.gen/client/rpc.ts` | The call contract as types: each operation's input and the union of its outcomes. See [The call contract](/flex-platform/codegen/call-contract/). |
 | `.gen/client/index.ts` | The contract, and a function named for the gateway, such as `createUdpClient`, that creates a [gateway client](/flex-platform/domains/overview/#calling-gateways) typed by it. The client package is built from it. |

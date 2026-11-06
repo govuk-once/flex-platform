@@ -3,7 +3,7 @@ title: Hosting a domain
 description: How a domain is declared in config, what each domain account and domain provides, and what the platform provides around a domain's function.
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Badge } from "@astrojs/starlight/components";
 
 A domain is hosted from a line of the platform's config. Domain teams write the domain's code and
 never write CDK. The platform provides everything the code runs with and behind.
@@ -30,6 +30,8 @@ domainAccounts: [
       name: "development.flex-platform.once.service.gov.uk",
       id: "Z0835542Q6J8ILWJ1RGR",
     },
+    network: { availabilityZones: ["eu-west-2a", "eu-west-2b"] },
+    gateways: [],
   },
 ],
 ```
@@ -240,8 +242,10 @@ The function is named `domain-<environment>-<name>`, built by `domainFunctionNam
 
 ## Releasing a domain's function
 
-A release creates and updates a domain's function as `domain-<environment>-<name>-deploy`. It
-sets:
+<Badge text="Planned" variant="caution" />
+
+A release will create and update a domain's function as `domain-<environment>-<name>-deploy`. It
+will set:
 
 - the name, `domain-<environment>-<name>`;
 - the role, `domain-<environment>-<name>-execution`;
@@ -253,7 +257,7 @@ sets:
   gateway's function name, and never to choose what it does;
 - active tracing, so Lambda sends its traces to X-Ray.
 
-Then it publishes a version and points the `live` alias at it. The deploy role can enforce the
+Then it will publish a version and point the `live` alias at it. The deploy role can enforce the
 function's name, role and network, but not its logging, environment or tracing, which only the
-release sets. A release that sets another log group loses the function's logs, since its role may
-write to no other.
+release will set. A release that sets another log group loses the function's logs, since its role
+may write to no other.

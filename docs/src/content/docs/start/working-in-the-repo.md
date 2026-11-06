@@ -34,7 +34,8 @@ Use pnpm and the existing scripts. When a tool has no package script, use `pnpm 
   `exactOptionalPropertyTypes`. An indexed read may be `undefined`, and an optional property
   cannot be set to `undefined` explicitly.
 - Vitest runs with `globals: false`, so import `describe`, `it` and `expect` in every test file.
-- Dependency versions are pinned exactly. pnpm refuses any release less than seven days old.
+- Dependency versions are pinned exactly (`savePrefix: ""`). pnpm refuses any release less than
+  seven days old.
 
 ## No library build step
 
@@ -63,6 +64,32 @@ pnpm --filter @repo/docs build    # build to docs/dist/, failing on a broken int
 
 Internal links include the site's base path, `/flex-platform/`. A pull request that changes
 `docs/` builds the site. A merge to `main` publishes it to GitHub Pages.
+
+## Checks on a pull request
+
+Each pull request to `main` runs these, in `.github/workflows/`:
+
+| Check | What it does |
+|---|---|
+| Quality Checks: Hygiene | Scans the whole history for secrets with gitleaks, then runs `pnpm lint`, `pnpm typecheck`, `pnpm codegen` and `pnpm test`. |
+| Quality Checks: SonarQube | Runs the tests with coverage and scans the code, and fails on the quality gate. |
+| Dependency Review | Fails on a dependency the pull request adds or changes with a known advisory of high severity or above. |
+| Validate PR Title | Holds the title to the [format](/flex-platform/start/conventions/#finishing-a-change). |
+| Schema History | Refuses a change to a merged schema version. See [Schemas and versions](/flex-platform/gateways/schemas/). |
+| Release | Checks the release record. See [Checking a release](/flex-platform/start/releasing/#checking-a-release). |
+| Documentation | Builds the site, when the pull request changes `docs/`. |
+
+gitleaks uses its default rules. `.gitleaks.toml` allows one kind of value through: `SYNTHETIC`,
+alone or followed by groups of capitals and digits joined with `_`, such as `SYNTHETIC_API_KEY`. A
+test that needs a stand-in secret, such as one that proves a payload log leaves it out, uses a
+value of that form, and any other value that looks like a secret fails the check.
+
+SonarQube's settings are in `sonar-project.properties`: what counts as source and as test, what is
+left out of coverage, and each rule ignored, with the reason beside it. A line it flags that is
+right as written carries `// NOSONAR` and the reason.
+
+Dependabot proposes updates weekly, for npm packages and GitHub Actions, once a release is seven
+days old, the same age pnpm requires. Patch and minor updates come grouped in one pull request.
 
 ## Rules for changing the code
 

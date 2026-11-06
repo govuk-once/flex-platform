@@ -35,14 +35,28 @@ Creation is asynchronous. If its configuration or initial secret checks fail, th
 not start. Later secret reads, authentication exchanges and upstream calls can still fail during
 a request.
 
-1. **Configuration is checked.** Any of these fails before anything is retrieved: a reserved or
-   invalid name in an auth part's header list, a static header the authentication owns, a
-   `maxResponseBytes` that is not positive, a `handler` that is not a function, or having neither
-   `FLEX_UPSTREAM_TARGET` nor a `target` field. Every operation is compiled.
-2. **The secret is retrieved and validated.** A missing, unreadable or invalid secret makes
-   creation fail. An optional field that is absent is logged by name. A `target` field's address
-   is read here, and follows the same rules as `FLEX_UPSTREAM_TARGET`.
-3. **Authentication state is built** on it, one instance per part.
+1. **Configuration is checked.** Any of these fails before anything is retrieved:
+   - an `auth` part that is not a definition, a reserved or invalid name in a part's header list,
+     or a header two parts own;
+   - a static header with an invalid name or value, one the driver sets, or one the
+     authentication owns;
+   - `metadata` the driver cannot read, or a `target` that is not a `fromSecret` field;
+   - a `maxResponseBytes` that is not a positive integer;
+   - `FLEX_UPSTREAM_TARGET`, when it is set, that is not an absolute https URL, or http to a
+     loopback host, or that holds a query, a fragment or credentials. It is checked even when a
+     `target` field will replace it;
+   - having neither `FLEX_UPSTREAM_TARGET` nor a `target` field.
+
+   Every operation is compiled, and fails on the
+   [configuration errors](/flex-platform/drivers/openapi-rest/overview/#configuration-errors).
+2. **The secret is retrieved and validated.** Creation fails on a secret that is missing,
+   unreadable or not a JSON object, or a field the configuration names that is missing, if it is
+   required, or is not a non-empty string without control characters or surrounding spaces. An
+   optional field that is absent is logged by name. A `target` field's address is read here, and
+   follows the same rules as `FLEX_UPSTREAM_TARGET`. If the field is optional and absent, and
+   `FLEX_UPSTREAM_TARGET` is not set, creation fails here.
+3. **Authentication state is built** on it, one instance per part. Each part's `create` must
+   return an instance with a `headers` function.
 
 A diagnostic about the secret names the field and the rule it broke. It never includes the value
 or a path into it. A failed read is reported as a fixed message that includes nothing from the

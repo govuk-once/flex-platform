@@ -23,12 +23,14 @@ serves that region only. An upstream that keeps its secret in another region rep
 gateway's. A secret in another region stops the gateway as it starts.
 
 The runtime retrieves the secret as a JSON object through Powertools Parameters. It caches the
-secret for five minutes, then reads it again on the first call after that. The runtime does not
+secret for five minutes, then reads it again on the first call after that. Concurrent calls on a
+cold or expired cache may each read the secret: nothing coordinates them. The runtime does not
 know what fields the secret has.
 
-The driver reads only the fields its configuration names with `fromSecret`. It checks each of
-these fields on every read, and ignores the rest. This means the secret can be the gateway's own,
-or one that an upstream provides in its own shape.
+The driver reads only the fields its configuration names, checks each of them on every read, and
+ignores the rest. So the secret can be the gateway's own, or one that an upstream provides in its
+own shape. For openapi-rest, see
+[Authentication](/flex-platform/drivers/openapi-rest/authentication/).
 
 The function's execution role needs permission to read the secret, and any permissions the
 driver's authentication needs.
@@ -44,6 +46,11 @@ driver's authentication needs.
 The handler is built while the function initialises. A missing or invalid secret prevents
 initialisation from completing, before the handler can process an event. This check runs when
 the bundle loads; code generation does not retrieve the secret or test deployment permissions.
+
+Each read of the secret allows 2 s to connect and 5 s for the request, and the AWS SDK's own
+retries stay on, because a read sends nothing to the upstream. So a slow store can hold
+initialisation for several of those, and nothing bounds it as a whole except Lambda's own limit on
+initialising a function.
 
 Initialisation failures occur outside the handler and do not return a gateway error envelope.
 An invalid secret read after startup instead fails the affected call as `INTERNAL`.

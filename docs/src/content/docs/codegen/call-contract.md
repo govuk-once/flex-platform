@@ -108,6 +108,8 @@ An object's type has only the fields its schema declares, unless the schema says
 
 - `additionalProperties: true`, or a schema for the other fields, gives the type an index
   signature. Leaving `additionalProperties` out does not.
+- An object that names no field, and says nothing about the rest, is an object of any shape:
+  `Record<string, unknown>`. Beside a `$ref`, it adds nothing, and is typed as the reference.
 - `patternProperties` types the names its patterns match. When `additionalProperties` says what
   the other names carry, these types are added to the index signature.
 - When `additionalProperties` is left out, the pattern-matched names are left out of the type too,
@@ -160,8 +162,8 @@ The generator does not follow a definition that also admits null, or one that is
 reference or a composition. The editor then does not suggest the values, but nothing is typed
 wrongly.
 
-The compatibility check recognises the union in the same way when the type is written inside it.
-When the type is behind a `$ref`, the check rejects an added value. This errs on the safe side.
+The [compatibility check](/flex-platform/gateways/compatibility/#open-enumerations) recognises the
+union only when the type is written inside it.
 
 :::caution
 This type does not narrow to a single value by itself. After `if (status === "Valid")`, the type

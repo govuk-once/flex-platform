@@ -4,8 +4,10 @@ description: The VPC in each domain account that domains and gateways run in, it
 ---
 
 Each domain account has one network in each environment, in its own stack,
-`network-<environment>-<account>`, in eu-west-2. It is built for domains and gateways to run in,
-and deploying either is planned. Its constructs are in `infra/constructs/src/network/`, and
+`network-<environment>-<account>`, in eu-west-2. It is built for domains and gateways to run in.
+A domain's stack holds its function to the network's
+[placement](/flex-platform/domains/hosting/#network). Releasing a domain's function, and deploying
+gateways, are planned. Its constructs are in `infra/constructs/src/network/`, and
 `infra/app/src/stacks/network.ts` puts them together.
 
 The network decides where a workload may send traffic. It doesn't create any workload. Each will
@@ -23,7 +25,7 @@ Each availability zone has three subnets, one per tier:
 | `public` | Only the NAT gateways | The internet gateway |
 
 A workload's tier is its [placement](/flex-platform/reference/glossary/#placement). No subnet gives
-anything in it a public IP address. AWS Network Firewall is planned for the private tier.
+anything in it a public IP address. Filtering the private tier's traffic beyond DNS is planned.
 
 ### Availability zones
 
@@ -39,7 +41,7 @@ Every subnet's range is fixed by its zone, not its position in the list:
 | `10.0.0.0/18` | `isolated`, a `/20` per zone, one spare |
 | `10.0.64.0/18` | `private`, a `/20` per zone, one spare |
 | `10.0.128.0/22` | `public`, a `/24` per zone |
-| `10.0.132.0/24` | Reserved for AWS Network Firewall, a `/28` per zone. Nothing is created in it yet |
+| `10.0.132.0/24` | Reserved for egress filtering, a `/28` per zone. Nothing is created in it yet |
 
 So adding or removing a zone never changes another zone's subnets, and the order config lists them
 in changes nothing. A subnet whose range changed would be replaced, and so would everything in it.

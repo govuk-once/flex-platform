@@ -3,7 +3,8 @@
 Flex is the platform behind the GOV.UK app. It connects what GOV.UK knows about a user with the
 government services the app is built to work with.
 
-This repository holds the Flex gateways: the libraries, drivers and code generation that give
+This repository holds the Flex platform: the Frontdoor every request comes in through, the hosting
+domains run in, and the gateways, with the libraries, drivers and code generation that give
 domains a typed, validated way to reach the upstreams they depend on.
 
 **Documentation: <https://govuk-once.github.io/flex-platform/>**, built from [`docs/`](docs/).

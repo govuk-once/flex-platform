@@ -1,8 +1,9 @@
 # CLAUDE.md
 
-Flex is the platform behind the GOV.UK app. This repository holds its egress section: the gateway
-libraries and shared development tooling. The rest of the platform is planned, and
-`docs/src/content/docs/start/platform.mdx` describes it.
+Flex is the platform behind the GOV.UK app. This repository holds the platform: the Frontdoor,
+domain hosting, the gateways and their libraries, the CDK app that deploys them, and shared
+development tooling. `docs/src/content/docs/start/platform.mdx` says what is built and what is
+planned.
 
 The documentation site in `docs/src/content/docs/` is the source of truth for how the platform
 works and the rules for changing it. The pages below hold the rules every change follows, and are
@@ -44,4 +45,7 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 | Environment variables and the secret | `reference/environment.md` |
 | Releasing packages, the record, candidates | `start/releasing.md` |
 | The CDK app, stages, config and its rules | `infrastructure/overview.md` |
+| The network, endpoints and DNS allowlist | `infrastructure/network.md` |
+| Adding a gateway | `gateways/creating-a-gateway.md` |
+| CI, secret scanning, SonarQube, Dependabot | `start/working-in-the-repo.md` |
 | Terms | `reference/glossary.md` |

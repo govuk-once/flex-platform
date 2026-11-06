@@ -26,8 +26,8 @@ Any other status becomes an error code.
 | transport failure | `UPSTREAM_ERROR` |
 | 2xx body that is not JSON | `UPSTREAM_CONTRACT_VIOLATION` |
 
-A [custom handler](/flex-platform/drivers/openapi-rest/handlers/) can turn a status into an
-outcome of its own. For example, it can turn a 404 into `unlinked`.
+A [custom handler](/flex-platform/drivers/openapi-rest/handlers/) can report a status as another
+of these outcomes or codes, but not as an outcome of its own.
 
 ## Attempts, timeouts and bodies
 

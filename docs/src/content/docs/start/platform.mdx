@@ -31,7 +31,7 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 | Domains   | What it is                                              | Status                                     |
 | --------- | ------------------------------------------------------- | ------------------------------------------ |
 | Hosting   | One API Gateway per domain, running code written by external developers | <Badge text="Built" variant="success" /> |
-| Libraries | Libraries and examples for building a domain            | <Badge text="Planned" variant="caution" /> |
+| SDK       | The package and examples for building a domain          | <Badge text="Planned" variant="caution" /> |
 
 | Egress           | What it is                                                    | Status                                     |
 | ---------------- | ------------------------------------------------------------- | ------------------------------------------ |
@@ -39,14 +39,14 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 | Gateway client   | The typed client a domain uses to call gateways               | <Badge text="Built" variant="success" />   |
 | Network          | The VPC, subnet placement, VPC endpoints and NAT              | <Badge text="Built" variant="success" />   |
 | DNS filtering    | Route 53 Resolver DNS Firewall: only allowlisted names resolve | <Badge text="Built" variant="success" />   |
-| Egress filtering | AWS Network Firewall on the private placement                 | <Badge text="Planned" variant="caution" /> |
+| Egress filtering | Filtering the private placement's traffic beyond DNS          | <Badge text="Planned" variant="caution" /> |
 
 </StatusTables>
 
 ## Egress
 
 The gateway libraries, and the [network](/flex-platform/infrastructure/network/) gateways will run
-in, are implemented. Deploying gateways is planned, and so is AWS Network Firewall.
+in, are implemented. Deploying gateways is planned, and so is egress filtering.
 
 A gateway is a Lambda function that sits in front of one upstream. It exposes that upstream's
 operations to domains. Each gateway is generated from a configuration and versioned schemas in
@@ -58,7 +58,7 @@ A gateway runs in one of two placements. The placement depends on how its upstre
 | Placement  | Upstream                                             | Route out                              |
 | ---------- | ---------------------------------------------------- | -------------------------------------- |
 | `isolated` | Reached privately, such as another AWS account's API | A VPC endpoint                         |
-| `private`  | Reached over the internet                            | A NAT gateway, and AWS Network Firewall once it is built |
+| `private`  | Reached over the internet                            | A NAT gateway, and egress filtering once it is built |
 
 The gateway's code is the same in both placements. Placement is part of its deployment, not its
 configuration. The upstream's address and the secret the gateway uses to authenticate to it are
@@ -75,8 +75,8 @@ This is the intended flow once the planned sections are in place.
 4. API Gateway passes the request to the domain's Lambda function.
 5. The domain's code calls each upstream it needs through the gateway client, which invokes that
    upstream's gateway Lambda with an envelope.
-6. The gateway validates the input. It calls the upstream through a VPC endpoint, or through NAT
-   and the firewall. It then validates the outcome and returns it.
+6. The gateway validates the input. It calls the upstream through a VPC endpoint, or through a NAT
+   gateway and egress filtering. It then validates the outcome and returns it.
 7. The domain's code responds. The response goes back through API Gateway and CloudFront.
 
 ## Two meanings of "gateway"

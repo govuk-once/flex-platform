@@ -11,7 +11,7 @@ export const PLATFORM_TAGS = {
   Source: "https://github.com/govuk-once/flex-platform",
 } as const;
 
-// The prune step finds the stacks this app owns by this tag.
+// What a planned prune step will find the stacks this app owns by.
 const PRUNE_MARKER = { "flex:managed-by": "flex-platform" } as const;
 
 /**

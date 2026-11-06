@@ -6,8 +6,9 @@ description: How openapi-rest turns an OpenAPI document into a gateway's schemas
 The driver derives a gateway's schemas from the OpenAPI document that its `spec` names. This
 happens when someone runs
 [`gateway-schemas`](/flex-platform/gateways/schemas/#bringing-a-gateways-schemas-up-to-date).
-`spec` is an https URL (ideally pinned to a release) or a path within the gateway's directory. The
-document itself is never committed. Only what is derived from it is committed.
+`spec` is an https URL (ideally pinned to a release) or a path within the gateway's directory. A
+document at a URL is never committed, only what is derived from it. A path names a document
+committed with the gateway.
 
 `@scalar/openapi-parser` parses the JSON or YAML and checks the document. It also rewrites
 OpenAPI 3.0's dialect as 3.1's, which is JSON Schema 2020-12. The code that does this is in
@@ -28,7 +29,7 @@ one, and when it does, it may not be usable as a name.
 | A request body | `payload`, always required, because a body an operation declares is one its upstream expects. Only `application/json`, because that is all the driver sends. A response is parsed as JSON regardless of its content type, so any type in the `+json` family works for a response. |
 | 200, 201, 202, 204 | The outcome the driver [maps that status to](/flex-platform/drivers/openapi-rest/outcomes/). A 204, or a success with no body, is `null`. |
 | 4xx, 5xx, `default` | Nothing. These reach a caller as error codes. |
-| `#/components/schemas/Name` | The shared definition `Name`. Only definitions that an input or an outcome reaches are kept, in the order the document declares them. Parameters, request bodies and responses written as references are resolved. |
+| `#/components/schemas/Name` | The shared definition `Name`. Only definitions that an input or an outcome reaches are kept, in the order the document declares them. Parameters, request bodies and responses written as references are resolved. A reference is read as written: a `~0` or `~1` in it is not unescaped, so one to a name holding `~` or `/` is refused. |
 | `security` | Nothing. How a gateway authenticates is set in its configuration. |
 
 ## Inputs and outcomes are converted differently
@@ -44,7 +45,7 @@ production. If an input were made looser, that could not be undone.
 | | Input: what a caller sends | Outcome: what an upstream sends |
 |---|---|---|
 | An object that says nothing of other fields | Closed, so a field can be allowed later and never has to be disallowed. An object inside `allOf`, `anyOf` or `oneOf` is left open, with a note, because closing one part would refuse the fields the other parts declare. An object that names no field at all is an object of any shape. It is left open, with a note, and the contract types it as `Record<string, unknown>` until an operation's `narrow` states its shape. | Left open. An object the document closes is opened, so an upstream that adds a field does not fail its responses. Any field it adds reaches a caller undeclared. |
-| `enum` | Kept exactly. | Becomes the known values alongside the type that admits the rest: `anyOf: [{ "enum": [...] }, { "type": "string" }]`. A value the upstream adds then breaks no caller. A single listed value on a field of a union's branch stays as it is, because it tells the branches apart. `const` is never opened. |
+| `enum` | Kept exactly. | Becomes the known values alongside the type that admits the rest: `anyOf: [{ "enum": [...] }, { "type": "string" }]`. A value the upstream adds then breaks no caller. This needs one declared type, a string, number or integer, which every listed value has, besides `null`. Any other `enum` stays closed, with a note: a list of booleans, of mixed types, or beside an `anyOf` of its own. A value the upstream adds to it fails the response. A single listed value on a field of a union's branch stays as it is, because it tells the branches apart. `const` is never opened. |
 | Bounds, `pattern`, `format` | Kept exactly. | Dropped. An outcome is held only to its shape: the types, the fields and which fields are required. `minContains: 0` is kept, with the `maxContains` a validator needs beside it. Without `minContains: 0`, `minContains` defaults to one, so dropping it would add a bound. |
 | A definition both sides use | Gets its own name, `NameInput`, where the two sides treat it differently. So does anything in an input that refers to it. Renaming only changes places that hold a schema. A `const`, `enum`, `default` or `examples` that holds an object keeps every key it was written with, including one called `$ref`, because that is a value the caller sends and not a reference. | Keeps the document's name. |
 

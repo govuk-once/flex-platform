@@ -15,11 +15,18 @@ that line. `defineHandler` also lets the author name the input type.
 Handlers and the automatic mapping use the same client. Every upstream call still goes through
 `ctx.upstream` once, and transport errors are mapped the same way.
 
-For example, a handler for an identity lookup might turn the upstream's 404 into an `unlinked`
-outcome. The operation's schemas then declare `unlinked` alongside `ok`:
+A handler returns only outcomes the operation's schemas declare, and the driver derives those from
+the [success statuses](/flex-platform/drivers/openapi-rest/outcomes/) alone. Anything else it
+reports as an error code, by throwing a `GatewayError`. An outcome of its own, such as `unlinked`,
+fails outcome validation as `UPSTREAM_CONTRACT_VIOLATION`.
+
+For example, an identity lookup's upstream might answer a user it holds no link for with a 409,
+which the status mapping reports as `UPSTREAM_REJECTED`. To a caller, that means there is no such
+record, so a handler reports it as `NOT_FOUND`:
 
 ```ts
 import { defineHandler } from "@repo/gateway-driver-openapi-rest";
+import { GatewayError } from "@repo/gateway-runtime";
 
 interface IdentityExchangeInput {
   requiredService: string;
@@ -29,8 +36,8 @@ interface IdentityExchangeInput {
 
 export default defineHandler(async (input: IdentityExchangeInput, client) => {
   const response = await client.request(client.prepare(input));
-  if (response.status === 404) {
-    return { outcome: "unlinked", data: null };
+  if (response.status === 409) {
+    throw new GatewayError("NOT_FOUND", "identity exchange: no link for the user");
   }
   return client.mapResponse(response);
 });

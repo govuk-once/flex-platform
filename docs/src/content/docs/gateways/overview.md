@@ -16,7 +16,7 @@ generator only see an opaque driver definition and an execution function.
 ```txt
 gateways/
   shared/
-    types/         Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
+    core/          Envelope shapes, error codes, Validator, driver contract, schema and secret shapes
     config/        defineGateway, driver definition and executor contract, policy presets
     runtime/       Envelope parsing, dispatch, timeouts, bindings, logging and secret retrieval
     client/        The gateway client, which domains install to call a gateway
@@ -25,6 +25,7 @@ gateways/
     openapi-rest/  HTTP request construction, status mapping, authentication and custom handlers
   services/
     udp/           The User Data Platform gateway: configuration and schemas
+  infra/           The names the CDK app gives gateways, such as the functions a domain may invoke
 packages/          Shared TypeScript, ESLint and Vitest tooling, and generic utilities
 ```
 
@@ -36,8 +37,8 @@ packages/          Shared TypeScript, ESLint and Vitest tooling, and generic uti
 A gateway goes through two commands and then a deployment.
 
 1. **`gateway-schemas`** is run by a person. It uses the gateway's driver to derive schemas from
-   the upstream's own description, or from schemas the configuration declares. It compares them with the latest committed version. If the
-   shape changed safely, it writes the next version. See
+   the upstream's own description, or from schemas the configuration declares. It compares them
+   with the latest committed version. If the shape changed safely, it writes the next version. See
    [Schemas and versions](/flex-platform/gateways/schemas/).
 2. **`gateway-codegen`** runs locally and in CI. It loads the configuration and the latest schema
    version. It checks that each version is compatible with every version before it, and that the
@@ -45,10 +46,12 @@ A gateway goes through two commands and then a deployment.
    - standalone validators
    - an entry point and its esbuild bundle for the gateway
    - a typed call contract for callers
+   - the client package a domain installs
 
    See [Code generation](/flex-platform/codegen/overview/).
-3. **The bundle** is deployed as a Lambda function in the egress section. It is placed `isolated`
-   or `private` depending on how its upstream is reached. When it loads, the entry point:
+3. **The bundle** runs as a Lambda function in the egress section. Deploying it is planned. It
+   will be placed `isolated` or `private` depending on how its upstream is reached. When it loads,
+   the entry point:
    - reads the environment
    - asks the driver for its executor, which retrieves and validates the gateway's secret
    - compiles the handler
@@ -97,6 +100,7 @@ code.
 |---|---|---|
 | Methods, paths, status codes, headers | The driver | The runtime, the generator, a caller's types |
 | Operation names, schemas, log allowlists | The gateway's configuration and `schemas/` | The driver |
-| Upstream address and secret ARN | The deployment's environment | Any gateway code |
+| Upstream address | The deployment's environment, or a field of the secret the configuration names | Any gateway code |
+| Secret ARN | The deployment's environment | Any gateway code |
 | Which fields of the secret mean what | The driver definition in the configuration | The runtime |
 | Retry behaviour | Nowhere yet | A driver |

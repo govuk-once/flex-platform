@@ -56,7 +56,8 @@ For openapi-rest, `meta` values are read from response headers. See
 
 ## Error codes
 
-`ERROR_CODES` in `@repo/gateway-core` defines each code's meaning and its health ruling. A code
+`ERROR_CODES` in `@repo/gateway-core` defines each code and its health ruling. The table below
+gives what each one means. A code
 being defined does not mean its control is implemented. Authentication, signature verification,
 circuit breaking and gateway-side rate limiting do not currently emit their reserved errors. The
 driver decides which upstream responses produce which codes. See

@@ -32,7 +32,7 @@ gateways/services/example/
   "scripts": {
     "codegen": "gateway-codegen",
     "schemas": "gateway-schemas",
-    "lint": "eslint .",
+    "lint": "eslint gateway.config.ts config/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -45,7 +45,7 @@ gateways/services/example/
     "@repo/gateway-codegen": "workspace:*",
     "@repo/gateway-core": "workspace:*",
     "@repo/tsconfig": "workspace:*",
-    "eslint": "10.10.0"
+    "eslint": "10.13.0"
   }
 }
 ```
@@ -119,25 +119,25 @@ Read the file before you commit it. It is the contract that callers will compile
 pnpm --filter @repo/gateway-service-example codegen
 ```
 
-This checks the configuration against the schemas and writes `.gen/`. It lists every problem in
-one run. Fix each one. See [What codegen checks](/flex-platform/codegen/checks/).
+This checks the configuration against the schemas and writes `.gen/`. It checks in stages, and
+lists every problem the first failing stage finds, so fixing those can uncover more. Run it until
+it passes. See [What codegen checks](/flex-platform/codegen/checks/).
 
 ## 5. Prepare for deployment
 
-The deployment artifact is `.gen/runtime/bundle.mjs`, for a Node 24 Lambda function with handler
-`bundle.handler`. The function is named `gateway-<environment>-<id>`, by `gatewayFunctionName` in
-`@repo/gateway-core`, with one alias, `live`, which every
-[gateway client](/flex-platform/domains/overview/#calling-gateways) invokes. This repository does
-not yet provision the function, its permissions or its network. See
-[The platform](/flex-platform/start/platform/) for the planned hosting model.
+The gateway deploys as a Lambda function named `gateway-<environment>-<id>`, by
+`gatewayFunctionName` in `@repo/gateway-core`, with one alias, `live`, which every
+[gateway client](/flex-platform/domains/overview/#calling-gateways) invokes. The
+[network](/flex-platform/infrastructure/network/) it runs in is built. Deploying the function and
+its permissions is planned: see [The platform](/flex-platform/start/platform/).
 
-Set the [environment](/flex-platform/reference/environment/):
+The network resolves only the names on its DNS allowlist. List the gateway, with every name it
+connects to, its upstream's API and any host it takes a token from, in `gateways` on each domain
+account that runs it, in the [CDK app's config](/flex-platform/infrastructure/overview/#config).
+A name left off doesn't resolve. See [the allowlist](/flex-platform/infrastructure/network/#the-allowlist).
 
-- `FLEX_UPSTREAM_SECRET_ARN`, always
-- `FLEX_UPSTREAM_TARGET`, unless the driver reads the target from the secret
-
-The function's role needs permission to read that secret, plus any permissions its authentication
-requires. See [Environment](/flex-platform/reference/environment/). Callers install
+What the function runs, the variables it reads and what its role needs are in
+[Environment](/flex-platform/reference/environment/). Callers install
 the [client package](/flex-platform/codegen/overview/#the-client-package) in `.gen/client/package/`,
 which holds the [call contract](/flex-platform/codegen/call-contract/) and a function that creates
 a client typed by it.
