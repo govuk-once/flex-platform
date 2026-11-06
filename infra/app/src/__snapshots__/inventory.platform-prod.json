@@ -532,6 +532,14 @@
         "type": "AWS::EC2::SecurityGroup"
       },
       {
+        "logicalId": "EndpointsS332DF97CF",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsS3SecurityGroup19D2FA2A",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsSecretsManager54961936",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -576,6 +584,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoS33F4809B8",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoSecretsManager1AE43854",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -586,6 +598,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToS31C21682F",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToSecretsManagerC7457DFC",
@@ -932,12 +948,32 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "ParameterslambdaEndpointId3B5B4B05",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
         "logicalId": "ParametersprivateSubnetIdsC61CB220",
         "type": "AWS::SSM::Parameter"
       },
       {
         "logicalId": "ParametersprivategatewaySecurityGroupId489911C0",
         "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "Parameterss3EndpointIdA13B27D2",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParameterssecretsmanagerEndpointIdE6C2AA1A",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersstsEndpointId0A3E4618",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadIntoS38AD340EC",
+        "type": "AWS::EC2::SecurityGroupIngress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadIntoSecretsManager42512261",
@@ -950,6 +986,10 @@
       {
         "logicalId": "PrivateGatewayWorkloadSecurityGroup94165728",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadToS3B753CC02",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadToSecretsManagerB865B384",
@@ -1044,6 +1084,14 @@
         "type": "AWS::EC2::SecurityGroup"
       },
       {
+        "logicalId": "EndpointsS332DF97CF",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsS3SecurityGroup19D2FA2A",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsSecretsManager54961936",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -1088,6 +1136,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoS33F4809B8",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoSecretsManager1AE43854",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -1098,6 +1150,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToS31C21682F",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToSecretsManagerC7457DFC",
@@ -1444,12 +1500,32 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "ParameterslambdaEndpointId3B5B4B05",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
         "logicalId": "ParametersprivateSubnetIdsC61CB220",
         "type": "AWS::SSM::Parameter"
       },
       {
         "logicalId": "ParametersprivategatewaySecurityGroupId489911C0",
         "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "Parameterss3EndpointIdA13B27D2",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParameterssecretsmanagerEndpointIdE6C2AA1A",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersstsEndpointId0A3E4618",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadIntoS38AD340EC",
+        "type": "AWS::EC2::SecurityGroupIngress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadIntoSecretsManager42512261",
@@ -1462,6 +1538,10 @@
       {
         "logicalId": "PrivateGatewayWorkloadSecurityGroup94165728",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadToS3B753CC02",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadToSecretsManagerB865B384",
@@ -1556,6 +1636,14 @@
         "type": "AWS::EC2::SecurityGroup"
       },
       {
+        "logicalId": "EndpointsS332DF97CF",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsS3SecurityGroup19D2FA2A",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsSecretsManager54961936",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -1600,6 +1688,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoS33F4809B8",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoSecretsManager1AE43854",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -1610,6 +1702,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToS31C21682F",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToSecretsManagerC7457DFC",
@@ -1956,12 +2052,32 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "ParameterslambdaEndpointId3B5B4B05",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
         "logicalId": "ParametersprivateSubnetIdsC61CB220",
         "type": "AWS::SSM::Parameter"
       },
       {
         "logicalId": "ParametersprivategatewaySecurityGroupId489911C0",
         "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "Parameterss3EndpointIdA13B27D2",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParameterssecretsmanagerEndpointIdE6C2AA1A",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersstsEndpointId0A3E4618",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadIntoS38AD340EC",
+        "type": "AWS::EC2::SecurityGroupIngress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadIntoSecretsManager42512261",
@@ -1974,6 +2090,10 @@
       {
         "logicalId": "PrivateGatewayWorkloadSecurityGroup94165728",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadToS3B753CC02",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadToSecretsManagerB865B384",

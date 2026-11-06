@@ -61,12 +61,13 @@ only on TCP port 443:
 | Workload | Tier | May reach |
 |---|---|---|
 | `domain` | `isolated` | The `lambda` endpoint |
-| `isolated-gateway` | `isolated` | The `secretsmanager` and `sts` endpoints |
-| `private-gateway` | `private` | The `secretsmanager` and `sts` endpoints, and its zone's NAT gateway |
+| `isolated-gateway` | `isolated` | The `secretsmanager`, `sts` and `s3` endpoints |
+| `private-gateway` | `private` | The `secretsmanager`, `sts` and `s3` endpoints, and its zone's NAT gateway |
 
 A domain uses the `lambda` endpoint to invoke gateways. A gateway uses `secretsmanager` to read its
-secret, and `sts` to assume an upstream's role for
-[`sigV4`](/flex-platform/drivers/openapi-rest/authentication/). Each endpoint's own security group
+secret, `sts` to assume an upstream's role for
+[`sigV4`](/flex-platform/drivers/openapi-rest/authentication/), and `s3` to read the
+[caller token's keys](#the-caller-tokens-keys). Each endpoint's own security group
 lets in only the workloads that may reach it, and lets nothing out. What a workload may call is its
 role's to decide: an endpoint's policy applies to the requests sent through that endpoint.
 
@@ -78,14 +79,16 @@ off a group with no other.
 ### Endpoints
 
 The isolated subnets reach AWS through interface endpoints, each with private DNS, so the SDK's
-usual hostname resolves to the endpoint. Each endpoint's policy refuses any principal or resource
-outside the account, and any action but its own:
+usual hostname resolves to the endpoint. Each endpoint's policy refuses any principal outside the
+account, and any action but its own. One that names no resource refuses any resource outside the
+account too:
 
 | Endpoint | Allows |
 |---|---|
 | `lambda` | `lambda:InvokeFunction` on `gateway-<environment>-*`, any qualifier included |
 | `secretsmanager` | `secretsmanager:GetSecretValue` |
 | `sts` | `sts:AssumeRole` |
+| `s3` | `s3:GetObject` on the caller token's public keys alone, in a bucket the frontdoor account owns |
 
 The `lambda` endpoint's pattern comes from `gatewayFunctionPattern` in `gateways/infra`. It is
 built from `gatewayFunctionPrefix` in `@repo/gateway-core`, which also names each gateway's
@@ -185,6 +188,9 @@ gateway in the domain account declares:
   `sts.eu-west-2.amazonaws.com`, which private DNS answers with the endpoints' addresses. Another
   AWS name is added only when a workload is shown to need it. A suffix such as `*.amazonaws.com`
   never is.
+- `<bucket>.s3.eu-west-2.amazonaws.com` for each bucket the `s3` endpoint names: the SDK calls S3
+  at the bucket's own name, which private DNS answers too. `s3.eu-west-2.amazonaws.com` itself
+  isn't listed, since nothing calls it.
 - Each gateway's names, from its entry in `gateways` on its domain account in
   [config](/flex-platform/infrastructure/overview/#config): the names it connects to, its
   upstream's API and any host it takes a token from.
@@ -276,6 +282,21 @@ when it first writes. `NetworkVpc` points that function's logging at a `Platform
 its construct path, so a CDK upgrade that moves it fails synth rather than leaving it to log
 somewhere unseen.
 
+## The caller token's keys
+
+Gateways will verify the planned [caller token](/flex-platform/frontdoor/lambda-edge/#the-caller-token)
+with the edge's public keys, which will be in one bucket in the environment's frontdoor account. A
+gateway reads them through the `s3` endpoint, whose policy names that one object, and the frontdoor
+account as its bucket's owner: bucket names are global, so a bucket of the same name in another
+account is refused.
+
+S3 offers both a gateway endpoint and an interface endpoint. The network uses the interface
+endpoint, as it does for every other service, so its traffic stays inside the VPC, to an address
+the security groups and network ACLs already allow. A gateway endpoint would send it to S3's public
+ranges, which the network ACLs would have to let out. With no gateway endpoint beside it, the
+interface endpoint's private DNS answers every resolver in the VPC, not only inbound ones, so it
+sets `PrivateDnsOnlyForInboundResolverEndpoint` to `AllResolvers`.
+
 ## IDs other stacks read
 
 AWS generates the network's IDs, so the network writes the ones a workload needs to SSM, under
@@ -287,6 +308,7 @@ names derived from config:
 | `/flex/network/<environment>/isolated-subnet-ids` | The isolated subnets' IDs, as a list |
 | `/flex/network/<environment>/private-subnet-ids` | The private subnets' IDs, as a list |
 | `/flex/network/<environment>/security-group/<workload>` | A workload's security group |
+| `/flex/network/<environment>/endpoint/<service>` | An interface endpoint's ID, such as `secretsmanager`'s, for a role's `aws:SourceVpce` condition |
 
 Each account has its own parameters, so the names need no account. A stack reads one with
 `StringParameter.valueForStringParameter` or `StringListParameter.valueForTypedListParameter`.

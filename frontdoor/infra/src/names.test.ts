@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   accessLogsName,
+  callerTokenKeysBucketName,
   edgeRoleName,
   originRequestFunctionName,
   originRequestLogGroupName,
@@ -37,11 +38,20 @@ describe("names", () => {
       "frontdoor-sandbox-response-headers",
     );
     expect(edgeRoleName("sandbox")).toBe("frontdoor-sandbox-edge");
+    expect(callerTokenKeysBucketName("sandbox", "100000000002")).toBe(
+      "frontdoor-sandbox-keys-100000000002",
+    );
     expect(originRequestLogGroupName("sandbox")).toBe(
       "/flex/frontdoor/sandbox/origin-request",
     );
     expect(originRequestLogsPolicyName("sandbox", "eu-west-2")).toBe(
       "frontdoor-sandbox-origin-request-logs-eu-west-2",
     );
+  });
+
+  it("keeps the public keys' bucket within S3's 63 characters for the longest environment name", () => {
+    expect(
+      callerTokenKeysBucketName("e".repeat(32), "100000000002").length,
+    ).toBeLessThanOrEqual(63);
   });
 });

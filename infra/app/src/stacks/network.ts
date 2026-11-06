@@ -1,3 +1,7 @@
+import {
+  CALLER_TOKEN_KEYS_OBJECT,
+  callerTokenKeysBucketName,
+} from "@repo/frontdoor-infra";
 import { gatewayFunctionPattern } from "@repo/gateway-infra";
 import {
   DnsFirewall,
@@ -37,7 +41,7 @@ interface Workload {
 }
 
 // What runs in the network, and the endpoints each may reach: a domain's to invoke gateways, a
-// gateway's to read its secret and assume an upstream's role.
+// gateway's to read its secret, assume an upstream's role and read the caller token's public keys.
 const WORKLOADS: readonly Workload[] = [
   {
     id: "DomainWorkload",
@@ -49,13 +53,13 @@ const WORKLOADS: readonly Workload[] = [
     id: "IsolatedGatewayWorkload",
     workload: "isolated-gateway",
     placement: "isolated",
-    reaches: ({ secretsManager, sts }) => [secretsManager, sts],
+    reaches: ({ secretsManager, sts, s3 }) => [secretsManager, sts, s3],
   },
   {
     id: "PrivateGatewayWorkload",
     workload: "private-gateway",
     placement: "private",
-    reaches: ({ secretsManager, sts }) => [secretsManager, sts],
+    reaches: ({ secretsManager, sts, s3 }) => [secretsManager, sts, s3],
   },
 ];
 
@@ -102,6 +106,17 @@ export class NetworkStack extends Stack {
       subnets: subnets.isolated,
       // Any domain may invoke any of its environment's gateways.
       invokableFunctions: gatewayFunctionPattern(environment.name),
+      // In the frontdoor account, where key rotation writes them.
+      readableObjects: [
+        {
+          bucket: callerTokenKeysBucketName(
+            environment.name,
+            environment.frontdoor.account,
+          ),
+          key: CALLER_TOKEN_KEYS_OBJECT,
+          account: environment.frontdoor.account,
+        },
+      ],
     });
     // The names the SDK calls the endpoints at, and every name the account's gateways resolve.
     const { gateways } = domainAccount;
@@ -130,6 +145,7 @@ export class NetworkStack extends Stack {
       vpc,
       subnets: { isolated: subnets.isolated, private: subnets.private },
       securityGroups,
+      endpoints: endpoints.byService,
     });
 
     // The one value nothing can derive, and the one upstreams need: the address a private

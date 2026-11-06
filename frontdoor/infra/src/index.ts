@@ -1,5 +1,7 @@
 export { Edge } from "./edge.ts";
 export {
+  CALLER_TOKEN_KEYS_OBJECT,
+  callerTokenKeysBucketName,
   edgeRoleName,
   ORIGIN_REQUEST_LOG_REGION,
   originRequestLogGroupName,

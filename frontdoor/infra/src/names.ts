@@ -76,3 +76,18 @@ export function originRequestLogsPolicyName(
 
 /** The one region whose copy of the origin request function's log group exists. */
 export const ORIGIN_REQUEST_LOG_REGION = "eu-west-2";
+
+/**
+ * The bucket, in the frontdoor account, that every gateway reads the caller token's public keys
+ * from. Bucket names are global, so it ends in the account's ID. At most 60 characters, within
+ * S3's 63, whatever the environment's name.
+ */
+export function callerTokenKeysBucketName(
+  environment: string,
+  account: string,
+): string {
+  return `frontdoor-${environment}-keys-${account}`;
+}
+
+/** The public keys' object in that bucket, a JWK set. Key rotation writes it; no stack does. */
+export const CALLER_TOKEN_KEYS_OBJECT = "caller-token-keys.json";
