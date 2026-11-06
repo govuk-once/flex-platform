@@ -1,10 +1,11 @@
-import { Names } from "aws-cdk-lib";
 import {
   CfnOriginRequestPolicy,
   type IOriginRequestPolicy,
   OriginRequestPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
 import { Construct } from "constructs";
+
+import { originRequestPolicyName } from "./names.ts";
 
 /**
  * The only viewer headers the origin sees, and so the only ones Lambda@Edge's origin request event
@@ -28,15 +29,23 @@ export const FORWARDED_HEADERS = [
  * because CDK's header allowlist refuses `authorization`, which CloudFront accepts
  * (aws-cdk#28883). Caching stays off in the cache policy, which this doesn't touch.
  */
+export interface EdgeOriginRequestPolicyProps {
+  readonly environment: string;
+}
+
 export class EdgeOriginRequestPolicy extends Construct {
   public readonly policy: IOriginRequestPolicy;
 
-  constructor(scope: Construct, id: string) {
+  constructor(
+    scope: Construct,
+    id: string,
+    props: EdgeOriginRequestPolicyProps,
+  ) {
     super(scope, id);
 
     const policy = new CfnOriginRequestPolicy(this, "Resource", {
       originRequestPolicyConfig: {
-        name: Names.uniqueId(this),
+        name: originRequestPolicyName(props.environment),
         headersConfig: {
           headerBehavior: "whitelist",
           headers: [...FORWARDED_HEADERS],

@@ -6,6 +6,8 @@ import {
 } from "aws-cdk-lib/aws-cloudfront";
 import { Construct } from "constructs";
 
+import { responseHeadersPolicyName } from "./names.ts";
+
 /** An API's responses are never documents, so nothing may be embedded or loaded from them. */
 export const CONTENT_SECURITY_POLICY =
   "default-src 'none'; frame-ancestors 'none'";
@@ -31,13 +33,22 @@ export const REMOVED_HEADERS = [
  * Every header overrides the origin's, so a domain cannot weaken them; `no-store` keeps API
  * responses, which may be personal, out of every cache between the edge and the caller.
  */
+export interface EdgeResponseHeadersPolicyProps {
+  readonly environment: string;
+}
+
 export class EdgeResponseHeadersPolicy extends Construct {
   public readonly policy: ResponseHeadersPolicy;
 
-  constructor(scope: Construct, id: string) {
+  constructor(
+    scope: Construct,
+    id: string,
+    props: EdgeResponseHeadersPolicyProps,
+  ) {
     super(scope, id);
 
     this.policy = new ResponseHeadersPolicy(this, "Policy", {
+      responseHeadersPolicyName: responseHeadersPolicyName(props.environment),
       securityHeadersBehavior: {
         contentTypeOptions: { override: true },
         frameOptions: { frameOption: HeadersFrameOption.DENY, override: true },

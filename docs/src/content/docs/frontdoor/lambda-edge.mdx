@@ -54,7 +54,9 @@ verification runs on. It then verifies the token with `aws-jwt-verify`:
 
 Nothing relies on `scope` or `aud`. Each issuer's keys are fetched by the first request that needs
 them, and kept. A key ID it hasn't seen fetches them again, in case the issuer rotated its keys,
-then not again for 10 seconds.
+then not again for 10 seconds. A fetch that fails isn't tried again for 5 seconds, and a request
+that needs the keys meanwhile gets its 500 at once, so an issuer that can't be reached isn't asked
+again by every request.
 
 ## Responses
 

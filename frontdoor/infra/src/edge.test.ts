@@ -170,7 +170,7 @@ describe("Edge", () => {
     template.resourceCountIs("AWS::CloudFront::OriginRequestPolicy", 1);
     template.hasResourceProperties("AWS::CloudFront::OriginRequestPolicy", {
       OriginRequestPolicyConfig: {
-        Name: Match.stringLikeRegexp("OriginRequest"),
+        Name: "frontdoor-sandbox-forwarded-headers",
         HeadersConfig: {
           HeaderBehavior: "whitelist",
           Headers: [
@@ -276,6 +276,7 @@ describe("Edge", () => {
 
     template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
       ResponseHeadersPolicyConfig: {
+        Name: "frontdoor-sandbox-response-headers",
         SecurityHeadersConfig: {
           ContentSecurityPolicy: {
             ContentSecurityPolicy: CONTENT_SECURITY_POLICY,

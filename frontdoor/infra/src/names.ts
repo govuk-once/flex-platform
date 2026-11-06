@@ -35,6 +35,16 @@ export function accessLogsName(environment: string): string {
   return `frontdoor-${environment}-access-logs`;
 }
 
+/** The origin request policy, which names the viewer headers the origin sees. */
+export function originRequestPolicyName(environment: string): string {
+  return `frontdoor-${environment}-forwarded-headers`;
+}
+
+/** The response headers policy, which sets the security headers on every response. */
+export function responseHeadersPolicyName(environment: string): string {
+  return `frontdoor-${environment}-response-headers`;
+}
+
 /** The Lambda@Edge function's name. */
 export function originRequestFunctionName(environment: string): string {
   return `frontdoor-${environment}-origin-request`;

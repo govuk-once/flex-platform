@@ -128,11 +128,17 @@ export class Edge extends Construct {
         viewerProtocolPolicy: ViewerProtocolPolicy.HTTPS_ONLY,
         allowedMethods: AllowedMethods.ALLOW_ALL,
         cachePolicy: CachePolicy.CACHING_DISABLED,
-        originRequestPolicy: new EdgeOriginRequestPolicy(this, "OriginRequest")
-          .policy,
+        originRequestPolicy: new EdgeOriginRequestPolicy(
+          this,
+          "OriginRequest",
+          {
+            environment: props.environment,
+          },
+        ).policy,
         responseHeadersPolicy: new EdgeResponseHeadersPolicy(
           this,
           "ResponseHeaders",
+          { environment: props.environment },
         ).policy,
         functionAssociations: [
           {

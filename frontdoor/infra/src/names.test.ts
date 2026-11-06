@@ -6,6 +6,8 @@ import {
   originRequestFunctionName,
   originRequestLogGroupName,
   originRequestLogsPolicyName,
+  originRequestPolicyName,
+  responseHeadersPolicyName,
   viewerRequestFunctionName,
   viewerRequestLogGroupName,
   wafLogGroupName,
@@ -27,6 +29,12 @@ describe("names", () => {
     );
     expect(originRequestFunctionName("sandbox")).toBe(
       "frontdoor-sandbox-origin-request",
+    );
+    expect(originRequestPolicyName("sandbox")).toBe(
+      "frontdoor-sandbox-forwarded-headers",
+    );
+    expect(responseHeadersPolicyName("sandbox")).toBe(
+      "frontdoor-sandbox-response-headers",
     );
     expect(edgeRoleName("sandbox")).toBe("frontdoor-sandbox-edge");
     expect(originRequestLogGroupName("sandbox")).toBe(
