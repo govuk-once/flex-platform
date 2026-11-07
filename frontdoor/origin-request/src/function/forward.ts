@@ -23,11 +23,8 @@ function customOrigin(host: string): CloudFrontCustomOrigin {
   };
 }
 
-/** The header that will carry the platform's signed caller token, which a domain passes on. */
+/** The header that carries the platform's signed caller token, which a domain passes on. */
 export const CALLER_TOKEN_HEADER = "x-flex-secure";
-
-// Until the signed caller token is built: fixed, and holding nothing about the caller.
-const CALLER_TOKEN_PLACEHOLDER = "placeholder";
 
 // The headers the function sets. Every other header on the result is one CloudFront gave it.
 //
@@ -64,6 +61,7 @@ export async function forward(
   request: CloudFrontRequest,
   route: Route,
   sign: SignRequest,
+  callerToken: string,
 ): Promise<CloudFrontRequest> {
   if (request.body.inputTruncated) throw new TruncatedBody();
   const encoding = request.body.encoding === "base64" ? "base64" : "utf8";
@@ -75,9 +73,7 @@ export async function forward(
   delete headers.authorization;
   // Set before signing, so the signature covers it. The CloudFront Function has already removed
   // any copy a caller sent.
-  headers[CALLER_TOKEN_HEADER] = [
-    { key: "X-Flex-Secure", value: CALLER_TOKEN_PLACEHOLDER },
-  ];
+  headers[CALLER_TOKEN_HEADER] = [{ key: "X-Flex-Secure", value: callerToken }];
 
   const signing = await sign({
     method: request.method,

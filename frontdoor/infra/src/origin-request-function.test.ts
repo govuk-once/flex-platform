@@ -24,6 +24,28 @@ function build(region = "us-east-1", apiAccounts = API_ACCOUNTS) {
   };
 }
 
+// The signing key's parameter, and decrypting with its key, by alias, for the caller token's
+// purpose alone.
+const SIGNING_KEY_GRANTS = [
+  {
+    Action: "ssm:GetParameter",
+    Effect: "Allow",
+    Resource:
+      "arn:aws:ssm:eu-west-2:123456789012:parameter/flex/frontdoor/sandbox/caller-token-signing-key",
+  },
+  {
+    Action: "kms:Decrypt",
+    Effect: "Allow",
+    Resource: "arn:aws:kms:eu-west-2:123456789012:key/*",
+    Condition: {
+      "ForAnyValue:StringEquals": {
+        "kms:ResourceAliases": "alias/frontdoor-sandbox-caller-token",
+      },
+      StringEquals: { "kms:EncryptionContext:purpose": "flex-caller-token" },
+    },
+  },
+];
+
 describe("OriginRequestFunction", () => {
   it("refuses any region but us-east-1", () => {
     expect(() => build("eu-west-2")).toThrow("us-east-1");
@@ -90,7 +112,12 @@ describe("OriginRequestFunction", () => {
     );
 
     expect(code).toBe(
-      buildOriginRequestFunction({ issuers: ISSUERS, routes: ROUTES }),
+      buildOriginRequestFunction({
+        issuers: ISSUERS,
+        routes: ROUTES,
+        callerTokenAudience: "flex:sandbox:gateways",
+        signingKeyParameter: "/flex/frontdoor/sandbox/caller-token-signing-key",
+      }),
     );
   });
 
@@ -122,9 +149,10 @@ describe("OriginRequestFunction", () => {
     template.hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
-          PolicyName: "InvokeDomainApis",
+          PolicyName: "Edge",
           PolicyDocument: {
             Statement: [
+              ...SIGNING_KEY_GRANTS,
               {
                 Action: "execute-api:Invoke",
                 Effect: "Allow",
@@ -142,11 +170,14 @@ describe("OriginRequestFunction", () => {
     );
   });
 
-  it("can call no API when the environment has no domain accounts", () => {
-    const [role] = Object.values(
-      build("us-east-1", []).template.findResources("AWS::IAM::Role"),
-    );
-
-    expect(role?.Properties).not.toHaveProperty("Policies");
+  it("can call no API when the environment has no domain accounts, but still reads its signing key", () => {
+    build("us-east-1", []).template.hasResourceProperties("AWS::IAM::Role", {
+      Policies: [
+        {
+          PolicyName: "Edge",
+          PolicyDocument: { Statement: SIGNING_KEY_GRANTS },
+        },
+      ],
+    });
   });
 });

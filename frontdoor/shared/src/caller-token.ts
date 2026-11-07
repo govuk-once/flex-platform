@@ -12,6 +12,14 @@ export const SIGNING_KEY_REGION = "eu-west-2";
  */
 export const SIGNING_KEY_PURPOSE = "flex-caller-token";
 
+/**
+ * Who the token is for: the environment's gateways, which each check it. Each environment's keys
+ * are its own as well, so a token from one is refused by another's gateways twice over.
+ */
+export function callerTokenAudience(environment: string): string {
+  return `flex:${environment}:gateways`;
+}
+
 /** How long a token is valid for, in seconds. */
 export const CALLER_TOKEN_TTL_SECONDS = 60;
 

@@ -32,7 +32,8 @@
     "account": "224399154937",
     "region": "us-east-1",
     "dependencies": [
-      "frontdoor-staging-edge-logs-eu-west-2"
+      "frontdoor-staging-edge-logs-eu-west-2",
+      "frontdoor-staging-key-rotation"
     ],
     "resources": [
       {

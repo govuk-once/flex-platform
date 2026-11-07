@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { isKeyId, keyIdFor, parseSigningKeys } from "./caller-token.ts";
+import {
+  callerTokenAudience,
+  isKeyId,
+  keyIdFor,
+  parseSigningKeys,
+} from "./caller-token.ts";
+
+describe("callerTokenAudience", () => {
+  it("names the environment's gateways", () => {
+    expect(callerTokenAudience("production")).toBe("flex:production:gateways");
+  });
+});
 
 describe("keyIdFor", () => {
   it("names the time, so IDs sort by age", () => {
