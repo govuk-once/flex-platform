@@ -16,6 +16,7 @@ import {
   type Placement,
   WorkloadSecurityGroup,
 } from "@repo/infra-constructs";
+import { sortedNames } from "@repo/utils/sorted-names";
 import { CfnOutput, Stack } from "aws-cdk-lib";
 import type { InterfaceVpcEndpoint, ISecurityGroup } from "aws-cdk-lib/aws-ec2";
 import type { Construct } from "constructs";
@@ -24,6 +25,7 @@ import type {
   DomainAccountConfig,
   EnvironmentConfig,
 } from "../config/types.ts";
+import { gatewaySecretArn } from "./gateway.ts";
 
 export function networkStackName(
   environment: EnvironmentConfig,
@@ -117,6 +119,14 @@ export class NetworkStack extends Stack {
           account: environment.frontdoor.account,
         },
       ],
+      readableSecrets: sortedNames(
+        domainAccount.gateways.map((gateway) =>
+          gatewaySecretArn(environment, domainAccount, gateway),
+        ),
+      ),
+      assumableRoles: sortedNames(
+        new Set(domainAccount.gateways.flatMap(({ roleArns }) => roleArns)),
+      ),
     });
     // The names the SDK calls the endpoints at, and every name the account's gateways resolve.
     const { gateways } = domainAccount;

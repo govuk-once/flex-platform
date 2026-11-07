@@ -6,8 +6,8 @@ description: The VPC in each domain account that domains and gateways run in, it
 Each domain account has one network in each environment, in its own stack,
 `network-<environment>-<account>`, in eu-west-2. It is built for domains and gateways to run in.
 A domain's stack holds its function to the network's
-[placement](/flex-platform/domains/hosting/#network). Releasing a domain's function, and deploying
-gateways, are planned. Its constructs are in `infra/constructs/src/network/`, and
+[placement](/flex-platform/domains/hosting/#network), and a gateway's stack runs its function in
+its placement. Releasing a domain's function is planned. Its constructs are in `infra/constructs/src/network/`, and
 `infra/app/src/stacks/network.ts` puts them together.
 
 The network decides where a workload may send traffic. It doesn't create any workload. Each will
@@ -80,15 +80,23 @@ off a group with no other.
 
 The isolated subnets reach AWS through interface endpoints, each with private DNS, so the SDK's
 usual hostname resolves to the endpoint. Each endpoint's policy refuses any principal outside the
-account, and any action but its own. One that names no resource refuses any resource outside the
-account too:
+account, any resource it doesn't name, and any action but its own. An endpoint with nothing to name
+refuses everything, since one with no policy would allow everything:
 
 | Endpoint | Allows |
 |---|---|
 | `lambda` | `lambda:InvokeFunction` on `gateway-<environment>-*`, any qualifier included |
-| `secretsmanager` | `secretsmanager:GetSecretValue` |
-| `sts` | `sts:AssumeRole` |
+| `secretsmanager` | `secretsmanager:GetSecretValue` on each of the account's gateways' secrets |
+| `sts` | `sts:AssumeRole` on each role the account's gateways sign as |
 | `s3` | `s3:GetObject` on the caller token's public keys alone, in a bucket the frontdoor account owns |
+
+The secrets and roles come from each gateway's entry in the
+[config](/flex-platform/infrastructure/overview/#config), exactly, so a gateway whose upstream
+holds its secret or role in its own account is let through to that one alone. A call through an
+endpoint is logged in the account of the resource it names, so a wider policy would let a workload
+signal out to an account someone else controls, through a secret's name or a role's session name.
+A secret a gateway's stack creates is named by a pattern that ends in `-??????`, the six characters
+Secrets Manager adds to its ARN.
 
 The `lambda` endpoint's pattern comes from `gatewayFunctionPattern` in `gateways/infra`. It is
 built from `gatewayFunctionPrefix` in `@repo/gateway-core`, which also names each gateway's

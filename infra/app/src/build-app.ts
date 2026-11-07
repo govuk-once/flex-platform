@@ -11,10 +11,12 @@ import { AwsSolutionsChecks } from "cdk-nag";
 import { domainName } from "./config/domain-name.ts";
 import type { Target } from "./config/select-target.ts";
 import type { StageConfig } from "./config/types.ts";
+import { gatewayBundle } from "./gateway-bundle.ts";
 import { DomainStack } from "./stacks/domain.ts";
 import { DomainAccountStack } from "./stacks/domain-account.ts";
 import { FrontdoorStack } from "./stacks/frontdoor.ts";
 import { FrontdoorEdgeLogsStack } from "./stacks/frontdoor-edge-logs.ts";
+import { GatewayStack } from "./stacks/gateway.ts";
 import { NetworkStack } from "./stacks/network.ts";
 import { StackTags } from "./tags.ts";
 
@@ -44,6 +46,20 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
 
     for (const domainAccount of environment.domainAccounts) {
       const network = new NetworkStack(app, { environment, domainAccount });
+
+      for (const gateway of domainAccount.gateways) {
+        const gatewayStack = new GatewayStack(app, {
+          environment,
+          domainAccount,
+          gateway,
+          bundle: gatewayBundle(gateway.id),
+        });
+
+        gatewayStack.addStackDependency(
+          network,
+          "The gateway reads its placement's subnets and security group, and the endpoints' IDs, from SSM.",
+        );
+      }
 
       const account = new DomainAccountStack(app, {
         environment,

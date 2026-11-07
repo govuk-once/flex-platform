@@ -106,6 +106,7 @@ describe("FrontdoorStack", () => {
       "network-staging-main",
       "domain-staging-domain-a",
       "domain-staging-domain-b",
+      "gateway-staging-main-udp",
       "frontdoor-staging",
     ]);
   });

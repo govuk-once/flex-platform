@@ -46,6 +46,7 @@ describe("synthStage", () => {
       "network-dev-main",
       "domain-dev-domain-a",
       "domain-dev-domain-b",
+      "gateway-dev-main-udp",
       "frontdoor-dev",
     ]);
 

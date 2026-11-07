@@ -2,7 +2,11 @@ import { cdkApp as cdkAppForTest } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
+import {
+  FIXTURE_STAGES,
+  GATEWAYS,
+  synthesizedStage,
+} from "../../test/helpers.ts";
 import type { DomainAccountConfig } from "../config/types.ts";
 import { NetworkStack, networkStackName } from "./network.ts";
 
@@ -65,6 +69,30 @@ describe("NetworkStack", () => {
             Resource: `arn:aws:lambda:eu-west-2:${PROD_ENVIRONMENT.domainAccounts[0].account}:function:gateway-prod-*`,
           },
         ],
+      },
+    });
+  });
+
+  it("lets gateways read only their own secrets, and assume only their upstreams' roles, through the endpoints", () => {
+    const [udp] = PROD_ENVIRONMENT.domainAccounts[0].gateways;
+    if (udp === undefined || udp.secret === "create") {
+      throw new Error("The fixture's gateway holds an upstream's secret");
+    }
+    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.secretsmanager",
+      PolicyDocument: {
+        Statement: [
+          {
+            Action: "secretsmanager:GetSecretValue",
+            Resource: udp.secret.arn,
+          },
+        ],
+      },
+    });
+    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.sts",
+      PolicyDocument: {
+        Statement: [{ Action: "sts:AssumeRole", Resource: udp.roleArns[0] }],
       },
     });
   });
@@ -217,10 +245,11 @@ describe("NetworkStack", () => {
         return list?.Properties.Domains;
       };
       const udp = {
-        id: "udp",
+        ...GATEWAYS[0]!,
         hostnames: ["api.udp.example", "auth.shared.example"],
       };
       const uns = {
+        ...GATEWAYS[0]!,
         id: "uns",
         hostnames: ["api.uns.example", "auth.shared.example"],
       };
