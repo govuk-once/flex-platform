@@ -88,6 +88,7 @@
     "account": "991575850800",
     "region": "us-east-1",
     "dependencies": [
+      "frontdoor-development-caller-token-keys",
       "frontdoor-development-edge-logs-eu-west-2"
     ],
     "resources": [
@@ -258,6 +259,7 @@
     "account": "367273783987",
     "region": "us-east-1",
     "dependencies": [
+      "frontdoor-production-caller-token-keys",
       "frontdoor-production-edge-logs-eu-west-2"
     ],
     "resources": [
@@ -428,6 +430,7 @@
     "account": "792037778504",
     "region": "us-east-1",
     "dependencies": [
+      "frontdoor-staging-caller-token-keys",
       "frontdoor-staging-edge-logs-eu-west-2"
     ],
     "resources": [

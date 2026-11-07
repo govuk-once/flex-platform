@@ -1,22 +1,54 @@
 ---
 title: The caller token
-description: The keys the edge will sign the caller token with, how key rotation makes, schedules, publishes and removes them, and where each is kept.
+description: The token that says who a request is for, how the edge signs it, and how key rotation makes, schedules, publishes and removes its keys.
 ---
 
-The caller token is the platform's statement of who a request is for. Lambda@Edge is to sign it
-and send it as `x-flex-secure`, a domain is to pass it on to the gateways it calls, and each
-gateway is to verify it before it acts. Signing and verifying are planned. The keys they will use,
-and the rotation that keeps them, are built.
+The caller token is the platform's statement of who a request is for. Lambda@Edge signs it and
+sends it as `x-flex-secure`, a domain passes it on to the gateways it calls, and each gateway is
+to verify it before it acts, which is planned.
+
+## The token
+
+A compact JWS, signed with EdDSA over Ed25519:
+
+| Part | Holds |
+|---|---|
+| Header | `alg: "EdDSA"`, `typ: "JWT"`, and `kid`, the [key](#keys) it was signed with |
+| `pairwiseId` | The verified access token's `username` |
+| `service` | The service the caller uses, whose namespace `pairwiseId` is in: One Login gives each service its own pairwise IDs. `"app"`, the one service the Frontdoor serves |
+| `aud` | `flex:<environment>:gateways`, the environment's gateways |
+| `iat`, `exp` | When it was signed, and a minute later |
+| `jti` | CloudFront's ID for the request, so each gateway call traces to the request that made it |
+
+It holds nothing of the request itself, its method, path or host: the gateway never sees the
+request, only what the domain sends it. Within its minute, a domain can use it for any number of
+gateway calls, but only for that user.
+
+## Signing
+
+Lambda@Edge reads its signing keys from eu-west-2, wherever the copy runs. It reads the signing key
+parameter from SSM: the key signing now and the one scheduled next, each with the moment it starts.
+It decrypts each private key it doesn't already hold with KMS, with the key's encryption context.
+Each call is signed with the function's own role and has 1.5 seconds.
+
+It signs with the latest key that has started. It already holds the next key, so every copy
+switches at the scheduled moment without a read. It reads the parameter again every five minutes,
+so a [revocation](#revoking-a-key) normally reaches every copy within five minutes, and calls KMS
+only for a key it hasn't seen. A read that fails keeps the keys it has, however old, and isn't tried
+again for 30 seconds. So an edge that can't read goes on signing with a revoked key, which
+gateways are to refuse. With no key that has started, the request is the 500, and the next read waits 30 seconds too, so
+SSM isn't asked again by every request while it can't be reached. Requests that arrive while a read
+is under way share it.
 
 ## Keys
 
 The token is signed with an Ed25519 key pair, made by KMS's `GenerateDataKeyPairWithoutPlaintext`.
 KMS returns the public key, and the private key encrypted under a KMS key of the platform's. No
-plaintext private key leaves KMS except to the edge, which is to decrypt it to sign.
+plaintext private key leaves KMS except to the edge that decrypts it to sign.
 
 The keys are made and kept in eu-west-2, nearest to most requests, so a cold start in London
-never waits on a call across the Atlantic to sign. Every copy of the edge, wherever it runs, is to
-read them there.
+never waits on a call across the Atlantic to [sign](#signing). Every copy of the edge, wherever it
+runs, reads them there.
 
 A key ID names the time the key was made, such as `20261106T120000Z`, so key IDs sort by age.
 
@@ -77,9 +109,9 @@ A switch from one key to the next is a moment, set when the next key is made:
    to the edge, in the same run. A key is
    never scheduled less than an hour ahead, longer than an edge goes between reads or a gateway
    keeps the public keys, even after the runs have stopped for longer than seven days.
-2. **Signing.** At that moment every edge is to sign with it, since each will already hold it,
-   and every gateway to accept it, since each will already hold its public key. The key it replaces
-   stops verifying a little over a minute later, when its last token expires.
+2. **Signing.** At that moment every edge signs with it, since each already holds it, and every
+   gateway is to accept it, since each will already hold its public key. The key it replaces stops
+   verifying a little over a minute later, when its last token expires.
 3. **Removed.** Five minutes after a key is replaced, a run takes it out of the public keys. The
    edge's parameter already left it out.
 
@@ -93,9 +125,10 @@ of runs to do it in. Each run writes what each reader should hold, and only what
 is there, so a run with nothing due adds no version.
 
 On an environment's first run, the first key is made to start at once, since no edge has signed
-anything yet. The second run, 15 minutes later, schedules the next key. The schedule starts the
-first run within 15 minutes of the caller token's stack deploying. Nothing else starts a run, so the
-schedule is the one place keys are made.
+anything yet. The second run, 15 minutes later, schedules the next key. Until the
+first run, which the schedule starts within 15 minutes of the caller token's stack deploying, every
+signed request is the edge's 500. Nothing else starts a run, so the schedule is the one place keys
+are made.
 
 ### Revoking a key
 
@@ -109,6 +142,9 @@ A revocation whose writes fail part way can be run again with the same request. 
 ID of each key it revokes for a day, so it knows the key, reports it as already revoked, and writes
 whatever is still to be written. A key ID it neither holds nor has revoked fails the run, changing
 nothing.
+
+An edge stops signing with the key at its next read, normally within five minutes. One that can't
+read goes on signing with it.
 
 ### Permissions
 

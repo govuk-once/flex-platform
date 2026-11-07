@@ -39,9 +39,14 @@ export interface TokenRejection {
   readonly reason: TokenRejectionReason;
 }
 
+/** Who a verified token is for: its `username`, which the platform calls the pairwise ID. */
+export interface VerifiedCaller {
+  readonly pairwiseId: string;
+}
+
 export type VerifyToken = (
   token: string,
-) => Promise<TokenRejection | undefined>;
+) => Promise<TokenRejection | VerifiedCaller>;
 
 // Thrown by the claim checks below, so a refusal keeps its own code.
 class ClaimRejected extends Error {
@@ -120,8 +125,10 @@ export function createTokenVerifier(
       const verifier =
         payload.iss === undefined ? undefined : verifiers.get(payload.iss);
       if (!verifier) return { reason: "issuer" };
-      await verifier.verify(token);
-      return undefined;
+      const { username } = await verifier.verify(token);
+      // The claim checks have already held it to a string that isn't empty.
+      if (typeof username !== "string") return { reason: "username" };
+      return { pairwiseId: username };
     } catch (error) {
       const reason = rejectionReason(error);
       if (reason === undefined) throw error;

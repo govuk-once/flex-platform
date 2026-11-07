@@ -1,6 +1,7 @@
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
 import { authorizationToken } from "./authorization.ts";
+import type { SignCallerToken } from "./caller-token.ts";
 import { forward } from "./forward.ts";
 import { internalError, notFound, unauthorized } from "./responses.ts";
 import { routeFor, type Routes } from "./route.ts";
@@ -19,9 +20,10 @@ export interface OriginRequestOptions {
   readonly verifyToken: VerifyToken;
   readonly routes: Routes;
   readonly sign: SignRequest;
+  readonly signCallerToken: SignCallerToken;
 }
 
-// Verify the token, route the request to its domain, and sign it. Every error after reading the
+// Verify the token, route the request to its domain, sign the caller token, and sign the request. Every error after reading the
 // IDs is answered with a 500, so the runtime never prints an error, whose text can hold a claim,
 // and nothing unsigned is ever forwarded. If reading the IDs failed, CloudFront would answer the
 // request itself and forward nothing.
@@ -49,13 +51,13 @@ export function createOriginRequestHandler(options: OriginRequestOptions) {
         return unauthorized(ids.traceId);
       }
 
-      const rejection = await options.verifyToken(bearer.token);
-      if (rejection !== undefined) {
+      const verified = await options.verifyToken(bearer.token);
+      if ("reason" in verified) {
         const event =
-          rejection.reason === "expired"
+          verified.reason === "expired"
             ? "origin_request_token_expired"
             : "origin_request_token_invalid";
-        logOutcome(event, ids, { reason: rejection.reason });
+        logOutcome(event, ids, { reason: verified.reason });
         return unauthorized(ids.traceId);
       }
 
@@ -66,7 +68,18 @@ export function createOriginRequestHandler(options: OriginRequestOptions) {
         return notFound(ids.traceId);
       }
 
-      const forwarded = await forward(request, route, options.sign);
+      // No key to sign with fails the request, as anything else here does: nothing is forwarded
+      // without the token.
+      const callerToken = await options.signCallerToken({
+        pairwiseId: verified.pairwiseId,
+        jti: config.requestId,
+      });
+      const forwarded = await forward(
+        request,
+        route,
+        options.sign,
+        callerToken,
+      );
       logOutcome("origin_request_forwarded", ids, { domain: route.domain });
       return forwarded;
     } catch (error) {

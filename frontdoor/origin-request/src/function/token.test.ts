@@ -38,7 +38,9 @@ describe("createTokenVerifier", () => {
   it("accepts a token the issuer signed", async () => {
     const { verify } = verifier();
 
-    await expect(verify(token())).resolves.toBeUndefined();
+    await expect(verify(token())).resolves.toEqual({
+      pairwiseId: "pairwise-id",
+    });
   });
 
   it("fetches each issuer's keys once, from its well-known address", async () => {
@@ -63,7 +65,7 @@ describe("createTokenVerifier", () => {
 
     await expect(
       verify(token({ payload: other, key: OTHER_KEY })),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ pairwiseId: "pairwise-id" });
     await expect(verify(token({ payload: other }))).resolves.toEqual({
       reason: "signature",
     });
@@ -132,7 +134,9 @@ describe("createTokenVerifier", () => {
       Buffer.from(value.split(".")[2]!, "base64url");
     expect(signature(variant)).toEqual(signature(signed));
 
-    await expect(verify(signed)).resolves.toBeUndefined();
+    await expect(verify(signed)).resolves.toEqual({
+      pairwiseId: "pairwise-id",
+    });
     await expect(verify(variant)).resolves.toEqual({ reason: "malformed" });
   });
 
@@ -171,7 +175,9 @@ describe("createTokenVerifier", () => {
     expect(fetched).toHaveLength(1);
 
     vi.advanceTimersByTime(1);
-    await expect(verify(token())).resolves.toBeUndefined();
+    await expect(verify(token())).resolves.toEqual({
+      pairwiseId: "pairwise-id",
+    });
     expect(fetched).toEqual([jwksUri(ISSUER), jwksUri(ISSUER)]);
   });
 

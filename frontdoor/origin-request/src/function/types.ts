@@ -78,4 +78,8 @@ export interface OriginRequestConfig {
   readonly issuers: readonly TrustedIssuer[];
   /** Each domain's API host, by domain name. A domain with no entry is a 404. */
   readonly routes: Readonly<Record<string, string>>;
+  /** The caller token's audience, which the environment's gateways check. */
+  readonly callerTokenAudience: string;
+  /** Where the edge reads the keys it signs with, in the signing region. */
+  readonly signingKeyParameter: string;
 }
