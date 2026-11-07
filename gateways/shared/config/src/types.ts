@@ -1,3 +1,5 @@
+import type { SecureClaim } from "@repo/gateway-core";
+
 import type { DriverDefinition, HandlerOf, OperationFields } from "./driver.ts";
 
 export type FieldPath = string; // NOSONAR: names what a log selection's strings are
@@ -25,8 +27,8 @@ export interface PolicyConfig {
 // on that to take its own configuration type.
 export type BaseOperationConfig = {
   readonly log?: LogConfig;
-  // Input path -> secure value key. Requires equal values; does not authenticate their origin.
-  readonly secure?: Readonly<Record<FieldPath, string>>;
+  // Input path -> the caller token's claim it must equal. The gateway verifies the token first.
+  readonly secure?: Readonly<Record<FieldPath, SecureClaim>>;
   readonly description?: string;
 };
 

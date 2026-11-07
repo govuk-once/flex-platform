@@ -678,6 +678,9 @@ importers:
       '@aws-lambda-powertools/parameters':
         specifier: 2.36.0
         version: 2.36.0(@aws-sdk/client-secrets-manager@3.1159.0)(@aws-sdk/client-ssm@3.1159.0)
+      '@aws-sdk/client-s3':
+        specifier: 3.1159.0
+        version: 3.1159.0
       '@aws-sdk/client-secrets-manager':
         specifier: 3.1159.0
         version: 3.1159.0

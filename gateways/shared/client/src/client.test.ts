@@ -152,7 +152,7 @@ describe("connect", () => {
     const { client, sent } = stubbed(
       answered({ ok: true, outcome: "ok", data: { name: "Ada" } }),
     );
-    const secure = { values: { sub: "u1" }, signature: "sig" };
+    const secure = { token: "a.caller.token" };
     await withCallerContext({ deadline: Date.now() + 60_000, secure }, () =>
       // Reached after an await, as a handler's calls are.
       Promise.resolve().then(() => client.getUser({ id: "u1" })),

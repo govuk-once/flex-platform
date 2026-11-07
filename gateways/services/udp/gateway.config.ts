@@ -9,7 +9,12 @@ import {
 import { DATA_STORE, stored } from "./config/data-store.ts";
 import { GROUP_SUBSCRIPTIONS } from "./config/groups.ts";
 import { NOTIFICATION_PREFERENCES } from "./config/notifications.ts";
-import { REQUESTING } from "./config/requesting.ts";
+import {
+  FOR_CALLER,
+  FOR_CALLER_BY_APP_ID,
+  FOR_CALLER_BY_IDENTIFIER,
+  REQUESTING,
+} from "./config/requesting.ts";
 
 export default defineGateway({
   id: "udp",
@@ -47,6 +52,7 @@ export default defineGateway({
     createUser: {
       description: "Create User Record",
       upstream: "POST /v1/user",
+      secure: FOR_CALLER_BY_APP_ID,
     },
     getIdentityExchange: {
       description: "Look up a linked identity record for a different service",
@@ -55,6 +61,7 @@ export default defineGateway({
         requiredService: { in: "query" },
         ...REQUESTING,
       },
+      secure: FOR_CALLER,
     },
     getIdentity: {
       description: "Read Identity Record",
@@ -63,7 +70,9 @@ export default defineGateway({
         serviceName: { in: "path" },
         identifier: { in: "path" },
       },
+      secure: FOR_CALLER_BY_IDENTIFIER,
     },
+    // `identifier` is the user's ID at the other service, which no claim vouches for.
     createIdentity: {
       description: "Create Identity Record",
       upstream: "POST /v1/identity/{serviceName}/{identifier}",
@@ -71,7 +80,10 @@ export default defineGateway({
         serviceName: { in: "path" },
         identifier: { in: "path" },
       },
+      secure: FOR_CALLER_BY_APP_ID,
     },
+    // Binds nothing yet: `identifier` is the user's ID at the other service, which no claim vouches
+    // for.
     deleteIdentity: {
       description: "Delete Identity Record",
       upstream: "DELETE /v1/identity/{serviceName}/{identifier}",
@@ -87,22 +99,26 @@ export default defineGateway({
         serviceName: { in: "path" },
         identifier: { in: "path" },
       },
+      secure: FOR_CALLER_BY_IDENTIFIER,
     },
     startDsar: {
       description: "Start a DSAR Request",
       upstream: "POST /v1/dsar",
       parameters: REQUESTING,
+      secure: FOR_CALLER,
     },
     startSar: {
       description: "Start a SAR Request",
       upstream: "POST /v1/sar",
       parameters: REQUESTING,
+      secure: FOR_CALLER,
     },
     getNotificationPreferences: {
       description: "Read a user's notification preferences",
       upstream: "GET /v1/notifications",
       matches: DATA_STORE,
       parameters: REQUESTING,
+      secure: FOR_CALLER,
       narrow: { outcomes: { ok: stored(NOTIFICATION_PREFERENCES) } },
     },
     updateNotificationPreferences: {
@@ -110,6 +126,7 @@ export default defineGateway({
       upstream: "POST /v1/notifications",
       matches: DATA_STORE,
       parameters: REQUESTING,
+      secure: FOR_CALLER,
       narrow: {
         payload: stored(NOTIFICATION_PREFERENCES),
         outcomes: { ok: stored(NOTIFICATION_PREFERENCES) },
@@ -120,12 +137,14 @@ export default defineGateway({
       upstream: "DELETE /v1/notifications",
       matches: DATA_STORE,
       parameters: REQUESTING,
+      secure: FOR_CALLER,
     },
     getGroupSubscriptions: {
       description: "Read the groups a user is subscribed to",
       upstream: "GET /v1/groups",
       matches: DATA_STORE,
       parameters: REQUESTING,
+      secure: FOR_CALLER,
       narrow: { outcomes: { ok: stored(GROUP_SUBSCRIPTIONS) } },
     },
     updateGroupSubscriptions: {
@@ -133,6 +152,7 @@ export default defineGateway({
       upstream: "POST /v1/groups",
       matches: DATA_STORE,
       parameters: REQUESTING,
+      secure: FOR_CALLER,
       narrow: {
         payload: stored(GROUP_SUBSCRIPTIONS),
         outcomes: { ok: stored(GROUP_SUBSCRIPTIONS) },
@@ -145,6 +165,7 @@ export default defineGateway({
         sarId: { in: "path" },
         ...REQUESTING,
       },
+      secure: FOR_CALLER,
     },
   },
 });

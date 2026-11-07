@@ -1279,7 +1279,16 @@ describe("through the runtime handler", () => {
       { target: TARGET, secret: options.secret ?? emptySecret() },
       { fetch: options.fetch ?? fakeFetch(respond).fetch },
     );
-    const handle = createHandler(config, { validators, execute });
+    // The caller token's own tests are the runtime's; every call here is for one verified user.
+    const handle = createHandler(config, {
+      validators,
+      execute,
+      verifyCallerToken: () =>
+        Promise.resolve({
+          claims: { pairwiseId: "pairwise-id", service: "app" },
+          tokenId: "request-id",
+        }),
+    });
     return (event: unknown) =>
       handle(event, { deadline: { remainingMs: () => 5_000 } });
   }
@@ -1287,7 +1296,7 @@ describe("through the runtime handler", () => {
   const envelope = (operation: string, input: unknown) => ({
     operation,
     input,
-    secure: { values: {}, signature: "" },
+    secure: { token: "a.caller.token" },
   });
 
   const never = () => new Promise<never>(() => undefined);
