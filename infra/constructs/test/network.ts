@@ -36,6 +36,13 @@ export interface UpstreamNames {
   readonly hostnames: readonly string[];
 }
 
+/** The caller token's public keys, in the frontdoor account's bucket. */
+export const KEYS_OBJECT = {
+  bucket: "frontdoor-sandbox-keys-100000000002",
+  key: "caller-token-keys.json",
+  account: "100000000002",
+};
+
 export const UPSTREAM: UpstreamNames = {
   hostnames: ["api.upstream.example", "auth.upstream.example"],
 };
@@ -77,6 +84,7 @@ export function buildNetwork(
     vpc,
     subnets: subnets.isolated,
     invokableFunctions: "gateway-sandbox-*",
+    readableObjects: [KEYS_OBJECT],
   });
   new DnsFirewall(stack, "DnsFirewall", {
     environment: "sandbox",
@@ -93,7 +101,7 @@ export function buildNetwork(
     vpc,
     workload: "private-gateway",
     placement: "private",
-    endpoints: [endpoints.secretsManager, endpoints.sts],
+    endpoints: [endpoints.secretsManager, endpoints.sts, endpoints.s3],
   });
   new NetworkParameters(stack, "Parameters", {
     environment: "sandbox",
@@ -103,6 +111,7 @@ export function buildNetwork(
       domain: domain.securityGroup,
       "private-gateway": gateway.securityGroup,
     },
+    endpoints: endpoints.byService,
   });
 
   return { app, stack, template: Template.fromStack(stack) };

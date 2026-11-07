@@ -1,9 +1,15 @@
 import { sortedEntries } from "@repo/utils/sorted-entries";
-import type { ISecurityGroup, ISubnet, IVpc } from "aws-cdk-lib/aws-ec2";
+import type {
+  IInterfaceVpcEndpoint,
+  ISecurityGroup,
+  ISubnet,
+  IVpc,
+} from "aws-cdk-lib/aws-ec2";
 import { StringListParameter, StringParameter } from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 
 import {
+  endpointIdParameterName,
   type Placement,
   securityGroupIdParameterName,
   subnetIdsParameterName,
@@ -16,6 +22,8 @@ export interface NetworkParametersProps {
   readonly subnets: Readonly<Record<Placement, readonly ISubnet[]>>;
   /** Each workload's group, by workload. */
   readonly securityGroups: Readonly<Record<string, ISecurityGroup>>;
+  /** Each interface endpoint, by the short name of its service. */
+  readonly endpoints: Readonly<Record<string, IInterfaceVpcEndpoint>>;
 }
 
 /**
@@ -51,6 +59,13 @@ export class NetworkParameters extends Construct {
       new StringParameter(this, `${workload}SecurityGroupId`, {
         parameterName: securityGroupIdParameterName(environment, workload),
         stringValue: securityGroup.securityGroupId,
+      });
+    }
+
+    for (const [service, endpoint] of sortedEntries(props.endpoints)) {
+      new StringParameter(this, `${service}EndpointId`, {
+        parameterName: endpointIdParameterName(environment, service),
+        stringValue: endpoint.vpcEndpointId,
       });
     }
   }
