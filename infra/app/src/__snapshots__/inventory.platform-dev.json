@@ -258,6 +258,22 @@
     ]
   },
   {
+    "name": "frontdoor-development-caller-token-keys",
+    "account": "553915472156",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "CallerTokenKeysStoreBucket07D88136",
+        "type": "AWS::S3::Bucket"
+      },
+      {
+        "logicalId": "CallerTokenKeysStoreBucketPolicyD54C97C5",
+        "type": "AWS::S3::BucketPolicy"
+      }
+    ]
+  },
+  {
     "name": "frontdoor-development-edge-logs-eu-west-2",
     "account": "553915472156",
     "region": "eu-west-2",
@@ -274,6 +290,57 @@
       {
         "logicalId": "OriginRequestLogsWritePolicy70FDC122",
         "type": "AWS::IAM::ManagedPolicy"
+      }
+    ]
+  },
+  {
+    "name": "frontdoor-development-key-rotation",
+    "account": "553915472156",
+    "region": "eu-west-2",
+    "dependencies": [
+      "frontdoor-development-caller-token-keys",
+      "frontdoor-development-signing-key"
+    ],
+    "resources": [
+      {
+        "logicalId": "KeyRotationFunction96F96846",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "KeyRotationFunctionScheduleE037CEEA",
+        "type": "AWS::Lambda::Permission"
+      },
+      {
+        "logicalId": "KeyRotationLogsLogGroupA2DE2F3C",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "KeyRotationRole0EC452CC",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "KeyRotationScheduleECEBC9DE",
+        "type": "AWS::Events::Rule"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      }
+    ]
+  },
+  {
+    "name": "frontdoor-development-signing-key",
+    "account": "553915472156",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "SigningKey49B95470",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "SigningKeyAliasFA392759",
+        "type": "AWS::KMS::Alias"
       }
     ]
   },
