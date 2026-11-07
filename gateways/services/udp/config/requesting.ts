@@ -8,3 +8,20 @@ export const REQUESTING = {
     name: "requesting-service-user-id",
   },
 } as const;
+
+// The user a call is for must be the one the caller token names, so a domain can only ever ask
+// for its own caller's records. A user's ID is one in a service's namespace, so the service is
+// held to the token's too: an ID read in another service's would name someone else, or no one.
+export const FOR_CALLER = {
+  requestingService: "service",
+  requestingServiceUserId: "pairwiseId",
+} as const;
+
+// The same, for an operation that names the user by `identifier` under `serviceName`.
+export const FOR_CALLER_BY_IDENTIFIER = {
+  serviceName: "service",
+  identifier: "pairwiseId",
+} as const;
+
+// The same, for an operation that names the user by the app ID it sends in its body.
+export const FOR_CALLER_BY_APP_ID = { "payload.appId": "pairwiseId" } as const;
