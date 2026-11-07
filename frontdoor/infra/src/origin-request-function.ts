@@ -8,7 +8,12 @@ import {
   type OriginRequestConfig,
   SIGNING_REGION,
 } from "@repo/frontdoor-origin-request";
-import type { TrustedIssuer } from "@repo/frontdoor-shared";
+import {
+  callerTokenAudience,
+  SIGNING_KEY_PURPOSE,
+  SIGNING_KEY_REGION,
+  type TrustedIssuer,
+} from "@repo/frontdoor-shared";
 import { Duration, RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
 import {
   CompositePrincipal,
@@ -35,6 +40,8 @@ import {
   originRequestFunctionName,
   originRequestLogGroupName,
   originRequestLogsPolicyName,
+  signingKeyAliasName,
+  signingKeyParameterName,
 } from "./names.ts";
 
 /**
@@ -94,6 +101,54 @@ export class OriginRequestFunction extends Construct {
         resource: "*",
       }),
     );
+    // The caller token's signing key: its parameter, and its KMS key, found by alias, since KMS
+    // generates the key's ID, and only for the caller token's purpose.
+    const environment = props.environment;
+    const signingKey = stack.formatArn({
+      service: "kms",
+      region: SIGNING_KEY_REGION,
+      resource: "key",
+      resourceName: "*",
+    });
+    const statements = [
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["ssm:GetParameter"],
+        resources: [
+          stack.formatArn({
+            service: "ssm",
+            region: SIGNING_KEY_REGION,
+            resource: "parameter",
+            resourceName: signingKeyParameterName(environment).replace(
+              /^\//,
+              "",
+            ),
+          }),
+        ],
+      }),
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["kms:Decrypt"],
+        resources: [signingKey],
+        conditions: {
+          "ForAnyValue:StringEquals": {
+            "kms:ResourceAliases": signingKeyAliasName(environment),
+          },
+          StringEquals: {
+            "kms:EncryptionContext:purpose": SIGNING_KEY_PURPOSE,
+          },
+        },
+      }),
+      ...(apis.length === 0
+        ? []
+        : [
+            new PolicyStatement({
+              effect: Effect.ALLOW,
+              actions: ["execute-api:Invoke"],
+              resources: apis,
+            }),
+          ]),
+    ];
     this.role = new Role(this, "Role", {
       roleName: edgeRoleName(props.environment),
       assumedBy: new CompositePrincipal(
@@ -110,21 +165,12 @@ export class OriginRequestFunction extends Construct {
           ),
         ),
       ],
-      ...(apis.length === 0
-        ? {}
-        : {
-            inlinePolicies: {
-              InvokeDomainApis: new PolicyDocument({
-                statements: [
-                  new PolicyStatement({
-                    effect: Effect.ALLOW,
-                    actions: ["execute-api:Invoke"],
-                    resources: apis,
-                  }),
-                ],
-              }),
-            },
-          }),
+      inlinePolicies: { Edge: new PolicyDocument({ statements }) },
+    });
+    Validations.of(this.role).acknowledge({
+      id: `AwsSolutions-IAM5[Resource::${signingKey}]`,
+      reason:
+        "KMS generates the signing key's ID, so the grant names its alias by condition, which holds it to the one key.",
     });
     for (const api of apis) {
       Validations.of(this.role).acknowledge({
@@ -140,7 +186,12 @@ export class OriginRequestFunction extends Construct {
       architecture: Architecture.X86_64,
       handler: HANDLER,
       code: Code.fromAsset(
-        bundleDirectory({ issuers: props.issuers, routes: props.routes }),
+        bundleDirectory({
+          issuers: props.issuers,
+          routes: props.routes,
+          callerTokenAudience: callerTokenAudience(environment),
+          signingKeyParameter: signingKeyParameterName(environment),
+        }),
       ),
       memorySize: ORIGIN_REQUEST_MEMORY_MB,
       timeout: ORIGIN_REQUEST_TIMEOUT,

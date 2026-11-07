@@ -16,6 +16,7 @@ import {
   token,
   TRACE_ID,
 } from "../../test/helpers.ts";
+import type { SignCallerToken } from "./caller-token.ts";
 import { createOriginRequestHandler } from "./origin-request.ts";
 import { createRequestSigner, type SignRequest } from "./sign.ts";
 import type { VerifyToken } from "./token.ts";
@@ -47,7 +48,16 @@ const UNAUTHORIZED = {
   bodyEncoding: "text",
 };
 
-function handlerWith(verifyToken?: VerifyToken, sign: SignRequest = SIGN) {
+// Stands in for the caller token's signer, which its own tests cover: the claims, as a token.
+const signCallerToken = vi.fn<SignCallerToken>(({ pairwiseId, jti }) =>
+  Promise.resolve(`caller-token.${pairwiseId}.${jti}`),
+);
+
+function handlerWith(
+  verifyToken?: VerifyToken,
+  sign: SignRequest = SIGN,
+  signToken: SignCallerToken = signCallerToken,
+) {
   const { fetcher } = fakeFetcher({
     [jwksUri(ISSUER)]: jwks([{ kid: KID, key: ISSUER_KEY }]),
   });
@@ -55,6 +65,7 @@ function handlerWith(verifyToken?: VerifyToken, sign: SignRequest = SIGN) {
     verifyToken: verifyToken ?? createTokenVerifier(ISSUERS, fetcher),
     routes: ROUTES,
     sign,
+    signCallerToken: signToken,
   });
 }
 
@@ -158,9 +169,12 @@ describe("createOriginRequestHandler", () => {
     expect(forwarded.headers["x-amz-security-token"]).toEqual([
       { key: "X-Amz-Security-Token", value: "session-token" },
     ]);
-    // Until the signed caller token is built: a fixed value, signed, holding nothing of the caller.
+    // The caller token, for the verified token's user and this request, which the signature covers.
     expect(forwarded.headers["x-flex-secure"]).toEqual([
-      { key: "X-Flex-Secure", value: "placeholder" },
+      {
+        key: "X-Flex-Secure",
+        value: `caller-token.pairwise-id.${REQUEST_ID}`,
+      },
     ]);
     // What CloudFront gave it stays, unsigned.
     for (const name of [
@@ -337,12 +351,31 @@ describe("createOriginRequestHandler", () => {
     ]);
   });
 
+  it("forwards nothing when there's no key to sign the caller token with", async () => {
+    const handler = handlerWith(undefined, SIGN, () =>
+      Promise.reject(new Error("No signing key: the last read failed")),
+    );
+
+    const response = await handler(originRequestEvent());
+
+    expect(response).toEqual(INTERNAL_ERROR);
+    expect(loggedLines()).toEqual([
+      expect.objectContaining({
+        level: "ERROR",
+        telemetry: expect.objectContaining({
+          event: "origin_request_failed",
+        }) as unknown,
+      }),
+    ]);
+  });
+
   it("fails closed when the issuer's keys can't be fetched", async () => {
     const { fetcher } = fakeFetcher({});
     const handler = createOriginRequestHandler({
       verifyToken: createTokenVerifier(ISSUERS, fetcher),
       routes: ROUTES,
       sign: SIGN,
+      signCallerToken,
     });
 
     const response = await handler(originRequestEvent());
@@ -397,6 +430,8 @@ describe("createOriginRequestHandler", () => {
 
     it.each([verifiedToken, ...refused])("for %#", async (value) => {
       const response = await handlerWith()(withToken(value));
+      // The caller token carries the user's ID to the domain, which is what it is for.
+      if (!("status" in response)) delete response.headers["x-flex-secure"];
 
       const output = [
         JSON.stringify(response),

@@ -25,6 +25,13 @@ const execFile = promisify(execFileCb);
 // Nothing listens here, so fetching an issuer's keys from it fails at once.
 const UNREACHABLE_ISSUER = "https://127.0.0.1:9/eu-west-2_unreachable";
 
+const CONFIG: OriginRequestConfig = {
+  issuers: ISSUERS,
+  routes: {},
+  callerTokenAudience: "flex:sandbox:gateways",
+  signingKeyParameter: "/flex/frontdoor/sandbox/caller-token-signing-key",
+};
+
 const directories: string[] = [];
 
 afterEach(() => {
@@ -76,7 +83,7 @@ function withToken(value: string): OriginRequestEvent {
 
 describe("buildOriginRequestFunction", () => {
   it("needs nothing but Node's builtins", () => {
-    const code = buildOriginRequestFunction({ issuers: ISSUERS, routes: {} });
+    const code = buildOriginRequestFunction({ ...CONFIG, routes: {} });
 
     const required = [...code.matchAll(/\brequire\("([^"]+)"\)/g)].map(
       ([, name]) => name,
@@ -88,7 +95,7 @@ describe("buildOriginRequestFunction", () => {
   });
 
   it("runs on its own, answering a request without a token", async () => {
-    const code = buildOriginRequestFunction({ issuers: ISSUERS, routes: {} });
+    const code = buildOriginRequestFunction({ ...CONFIG, routes: {} });
 
     const { responses, logs } = await invoke(code, [
       originRequestEvent({ headers: {} }),
@@ -111,8 +118,8 @@ describe("buildOriginRequestFunction", () => {
 
   it("bakes in the issuers it was built with, and fails closed without their keys", async () => {
     const config: OriginRequestConfig = {
+      ...CONFIG,
       issuers: [{ issuer: UNREACHABLE_ISSUER, clientIds: [CLIENT_ID] }],
-      routes: {},
     };
     const code = buildOriginRequestFunction(config);
 
@@ -146,9 +153,18 @@ describe("buildOriginRequestFunction", () => {
     ]);
   });
 
+  it("bakes in the caller token's audience and where its key is", () => {
+    const code = buildOriginRequestFunction(CONFIG);
+
+    expect(code).toContain('"flex:sandbox:gateways"');
+    expect(code).toContain(
+      '"/flex/frontdoor/sandbox/caller-token-signing-key"',
+    );
+  });
+
   it("bakes in the routes it was built with", () => {
     const code = buildOriginRequestFunction({
-      issuers: ISSUERS,
+      ...CONFIG,
       routes: { udp: "udp.development.flex-domain00.once.service.gov.uk" },
     });
 
@@ -165,8 +181,8 @@ describe("buildOriginRequestFunction", () => {
     ["a host that isn't a DNS name", { udp: "https://a.example" }],
     ["a host with one label", { udp: "localhost" }],
   ])("refuses %s", (_, routes) => {
-    expect(() =>
-      buildOriginRequestFunction({ issuers: ISSUERS, routes }),
-    ).toThrow(/route/);
+    expect(() => buildOriginRequestFunction({ ...CONFIG, routes })).toThrow(
+      /route/,
+    );
   });
 });

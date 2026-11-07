@@ -59,6 +59,11 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
       "Key rotation writes the public keys to the bucket the gateways read them from.",
     );
 
+    frontdoor.addStackDependency(
+      keyRotation,
+      "The edge signs the caller token with the key key rotation makes, and decrypts it with the signing key.",
+    );
+
     for (const domainAccount of environment.domainAccounts) {
       const network = new NetworkStack(app, { environment, domainAccount });
 

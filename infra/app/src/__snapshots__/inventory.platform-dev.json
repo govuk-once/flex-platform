@@ -160,7 +160,8 @@
     "region": "us-east-1",
     "dependencies": [
       "domain-development-example",
-      "frontdoor-development-edge-logs-eu-west-2"
+      "frontdoor-development-edge-logs-eu-west-2",
+      "frontdoor-development-key-rotation"
     ],
     "resources": [
       {
