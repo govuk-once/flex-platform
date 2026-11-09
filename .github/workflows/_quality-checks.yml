@@ -67,7 +67,10 @@ jobs:
         run: pnpm run codegen
 
       - name: Test
-        run: pnpm run test
+        # Two packages at a time, two test workers each, to match the runner's 4 vCPUs. Turborepo's
+        # 10 tasks with a worker per core each slowed single tests past their timeouts, in the same
+        # total time.
+        run: pnpm run test --concurrency=2 -- --maxWorkers=2
 
   sonarScan:
     name: SonarQube
@@ -98,7 +101,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Unit tests with coverage
-        run: pnpm run test -- --coverage
+        # Capped as the hygiene job's Test step is, and for the same reason.
+        run: pnpm run test --concurrency=2 -- --coverage --maxWorkers=2
 
       - name: Cache SonarQube scanner
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
