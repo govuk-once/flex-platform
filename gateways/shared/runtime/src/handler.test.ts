@@ -8,7 +8,15 @@ import type {
   SecureClaim,
   Validator,
 } from "@repo/gateway-core";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { GatewayError } from "./errors.ts";
 import type { AnyGatewayConfig, HandlerDeps } from "./handler.ts";
@@ -572,7 +580,9 @@ describe("createHandler", () => {
       expect(resp.ok).toBe(true);
       expect((resp as EnvelopeSuccess).data).toEqual({ id: "456" });
       expect(execute).toHaveBeenCalledOnce();
-      const [ctx, operation, input] = vi.mocked(execute).mock.calls[0]!;
+      const [call] = vi.mocked(execute).mock.calls;
+      assert(call);
+      const [ctx, operation, input] = call;
       expect(ctx).toHaveProperty("upstream");
       expect(operation).toBe("ping");
       expect(input).toEqual({});
@@ -584,7 +594,9 @@ describe("createHandler", () => {
 
       await handler(envelope({ input: { key: "value" } }));
       expect(execute).toHaveBeenCalledOnce();
-      const [, operation, input] = vi.mocked(execute).mock.calls[0]!;
+      const [call] = vi.mocked(execute).mock.calls;
+      assert(call);
+      const [, operation, input] = call;
       expect(operation).toBe("ping");
       expect(input).toEqual({ key: "value" });
     });

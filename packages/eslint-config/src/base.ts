@@ -34,6 +34,7 @@ export const base = defineConfig(
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-deprecated": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
     },

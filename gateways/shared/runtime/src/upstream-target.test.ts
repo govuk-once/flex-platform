@@ -80,7 +80,7 @@ describe("readUpstreamOptions", () => {
     // Reading the environment retrieves nothing; the executor does that when created.
     expect(send).not.toHaveBeenCalled();
     await expect(options.secret.get()).resolves.toEqual({});
-    const [command] = send.mock.calls[0]!;
+    const command = send.mock.calls[0]?.[0];
     expect(command).toBeInstanceOf(GetSecretValueCommand);
     expect((command as GetSecretValueCommand).input.SecretId).toBe(ARN);
   });

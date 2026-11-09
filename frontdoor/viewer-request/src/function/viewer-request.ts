@@ -49,17 +49,15 @@ export function viewerRequest(
 
   const requestId = event.context.requestId;
   const traceId = traceIdFor(requestId, nowSeconds);
-  const names = Object.keys(headers);
-  // Index loops throughout: the runtime has no for...of, and esbuild can't rewrite one for it.
-  for (let i = 0; i < names.length; i++) {
-    const name = names[i]!;
+  // forEach, not for...of, which the runtime lacks and esbuild can't rewrite for it.
+  Object.keys(headers).forEach((name) => {
     if (
       name.startsWith(PLATFORM_HEADER_PREFIX) ||
       CALLER_TRACE_HEADERS.includes(name)
     ) {
       delete headers[name];
     }
-  }
+  });
   // The edge's ID for the request, which the app reads and every later hop logs. The edge sends
   // no X-Amzn-Trace-Id: API Gateway rewrites that header before it checks a signature, so the
   // X-Ray trace starts there.

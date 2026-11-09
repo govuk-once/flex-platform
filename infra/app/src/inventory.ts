@@ -1,3 +1,4 @@
+import { sortedEntries } from "@repo/utils/sorted-entries";
 import { sortedNames } from "@repo/utils/sorted-names";
 import type { CloudAssembly } from "aws-cdk-lib/cx-api";
 
@@ -25,11 +26,10 @@ export function inventory(assembly: CloudAssembly): StackInventory[] {
   const names = new Map(
     assembly.stacks.map((stack) => [stack.id, stack.stackName]),
   );
-  const stacks = new Map(
+  const stacks = Object.fromEntries(
     assembly.stacks.map((stack) => [stack.stackName, stack]),
   );
-  return sortedNames(stacks.keys()).map((name) => {
-    const stack = stacks.get(name)!;
+  return sortedEntries(stacks).map(([name, stack]) => {
     const { Resources: resources = {} } = stack.template as {
       Resources?: Record<string, { Type: string }>;
     };
@@ -43,10 +43,12 @@ export function inventory(assembly: CloudAssembly): StackInventory[] {
           return dependencyName === undefined ? [] : [dependencyName];
         }),
       ),
-      resources: sortedNames(Object.keys(resources)).map((logicalId) => ({
-        logicalId,
-        type: resources[logicalId]!.Type,
-      })),
+      resources: sortedEntries(resources).map(
+        ([logicalId, { Type: type }]) => ({
+          logicalId,
+          type,
+        }),
+      ),
     };
   });
 }

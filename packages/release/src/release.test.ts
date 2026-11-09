@@ -3,7 +3,7 @@ import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 
 import {
   CLIENT,
@@ -310,27 +310,30 @@ function memoryRegistry(out: string) {
 
 // The package and version a tarball's name gives, as the fixture's packages are named.
 function specOf(file: string): { name: string; version: string } {
-  const match = /^govuk-once-(.+?)-(\d+\.\d+\.\d+(?:-rc\.\d+)?)\.tgz$/.exec(
-    file,
-  );
-  if (match === null) throw new Error(`${file} is not a tarball's name.`);
-  return { name: `@govuk-once/${match[1]!}`, version: match[2]! };
+  const [, name, version] =
+    /^govuk-once-(.+?)-(\d+\.\d+\.\d+(?:-rc\.\d+)?)\.tgz$/.exec(file) ?? [];
+  if (name === undefined || version === undefined) {
+    throw new Error(`${file} is not a tarball's name.`);
+  }
+  return { name: `@govuk-once/${name}`, version };
 }
 
 describe("packRelease", () => {
   const out = () => path.join(workspace.root, "release-out");
   const options = () => ({ out: out(), candidate: 7 });
   const execFile = promisify(execFileCb);
-  const manifestIn = async (file: string) =>
-    JSON.parse(
+  const manifestIn = async (packed: { file: string } | undefined) => {
+    assert(packed, "Nothing was packed there");
+    return JSON.parse(
       (
         await execFile("tar", [
           "-xzOf",
-          path.join(out(), file),
+          path.join(out(), packed.file),
           "package/package.json",
         ])
       ).stdout,
     ) as Record<string, unknown>;
+  };
   const specs = (
     packed: readonly { name: string; version: string; tag?: string }[],
   ) => packed.map((p) => `${p.name}@${p.version}${p.tag ? ` ${p.tag}` : ""}`);
@@ -363,14 +366,14 @@ describe("packRelease", () => {
     expect(await readJson(out(), PLAN_FILE)).toEqual(plan);
 
     // A gateway's candidate names the client's final, published before it.
-    expect(await manifestIn(plan.merge[1]!.file)).toMatchObject({
+    expect(await manifestIn(plan.merge[1])).toMatchObject({
       version: "0.1.0-rc.7",
       peerDependencies: { [CLIENT]: ">=0.1.0 <1.0.0" },
     });
-    expect(await manifestIn(plan.merge[3]!.file)).toMatchObject({
+    expect(await manifestIn(plan.merge[3])).toMatchObject({
       dependencies: { [CLIENT]: "^0.1.0" },
     });
-    expect(await manifestIn(plan.production[0]!.file)).toMatchObject({
+    expect(await manifestIn(plan.production[0])).toMatchObject({
       version: "0.1.0",
       peerDependencies: { [CLIENT]: ">=0.1.0 <1.0.0" },
       repository: {
@@ -416,10 +419,10 @@ describe("packRelease", () => {
     expect(await released()).toMatchObject({ [gateway("a")]: "0.1.1" });
     expect(specs(plan.merge)).toEqual([`${gateway("a")}@0.1.1-rc.7 rc`]);
     expect(specs(plan.production)).toEqual([`${gateway("a")}@0.1.1 latest`]);
-    expect(await manifestIn(plan.merge[0]!.file)).toMatchObject({
+    expect(await manifestIn(plan.merge[0])).toMatchObject({
       version: "0.1.1-rc.7",
     });
-    expect(await manifestIn(plan.production[0]!.file)).toMatchObject({
+    expect(await manifestIn(plan.production[0])).toMatchObject({
       version: "0.1.1",
     });
   });

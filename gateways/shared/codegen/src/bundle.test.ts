@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import type { GatewaySchemas, Validator } from "@repo/gateway-core";
 import esbuild from "esbuild";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 
 import { emitValidators } from "./emit-validators.ts";
 
@@ -84,8 +84,8 @@ describe("bundle verification", () => {
     const bundlePath = path.join(tmp, "bundle.mjs");
     const output = result.outputFiles[0];
 
-    expect(output).toBeDefined();
-    await writeFile(bundlePath, output!.text);
+    assert(output);
+    await writeFile(bundlePath, output.text);
 
     const mod = (await import(pathToFileURL(bundlePath).href)) as {
       validators: {

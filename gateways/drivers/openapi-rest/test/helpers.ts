@@ -4,6 +4,7 @@ import type {
   SecretObject,
   SecretProvider,
 } from "@repo/gateway-core";
+import { assert } from "vitest";
 
 export interface CapturedRequest {
   readonly url: string;
@@ -75,7 +76,11 @@ export function passthroughContext(): DriverContext & {
   return ctx;
 }
 
-export function headerOf(req: CapturedRequest, name: string): string | null {
+export function headerOf(
+  req: CapturedRequest | undefined,
+  name: string,
+): string | null {
+  assert(req, "No request was sent");
   return new Headers(req.init.headers).get(name);
 }
 

@@ -107,7 +107,7 @@ describe("createSecretProvider", () => {
       token: "t1",
     });
     expect(send).toHaveBeenCalledTimes(1);
-    const [command] = send.mock.calls[0]!;
+    const command = send.mock.calls[0]?.[0];
     expect(command).toBeInstanceOf(GetSecretValueCommand);
     expect((command as GetSecretValueCommand).input.SecretId).toBe(ARN);
     expect(region).toBe("eu-west-2");

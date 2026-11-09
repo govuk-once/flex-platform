@@ -44,8 +44,8 @@ describe("createAuthTransport", () => {
     expect(req?.init.signal).toBe(signal);
     expect(req?.init.redirect).toBe("manual");
     expect(req?.init.body).toBe('{"a":1}');
-    expect(headerOf(req!, "content-type")).toBe("application/json");
-    expect(headerOf(req!, "accept")).toBe("application/json");
+    expect(headerOf(req, "content-type")).toBe("application/json");
+    expect(headerOf(req, "accept")).toBe("application/json");
   });
 
   it("resolves a path against the upstream target", async () => {
@@ -83,10 +83,10 @@ describe("createAuthTransport", () => {
     expect(req?.init.body).toBe(
       "grant_type=client_credentials&client_secret=a+b%26c",
     );
-    expect(headerOf(req!, "content-type")).toBe(
+    expect(headerOf(req, "content-type")).toBe(
       "application/x-www-form-urlencoded",
     );
-    expect(headerOf(req!, "x-client")).toBe("gw");
+    expect(headerOf(req, "x-client")).toBe("gw");
   });
 
   it.each([

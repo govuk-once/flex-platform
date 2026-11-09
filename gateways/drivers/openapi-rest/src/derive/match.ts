@@ -213,9 +213,13 @@ export function couldReach(
     return false;
   }
   // The lengths are held above, so every segment offered has one of the path's to meet it.
-  return offered.every((segment, index) =>
-    segmentCouldReach(segment, asked[index]!, (text) => excludes(index, text)),
-  );
+  return offered.every((segment, index) => {
+    const meeting = asked[index];
+    return (
+      meeting !== undefined &&
+      segmentCouldReach(segment, meeting, (text) => excludes(index, text))
+    );
+  });
 }
 
 // Whether a segment of the path could be one the template's segment takes.

@@ -37,7 +37,8 @@ export function exactHostname(entry: string): string {
       refuse(`${JSON.stringify(label)} is not a valid label`);
   }
   // A top-level domain always has a letter, so a name ending in digits is an address.
-  if (!/[a-z]/.test(labels.at(-1)!)) refuse("it is an IP address");
+  const topLevel = name.slice(name.lastIndexOf(".") + 1);
+  if (!/[a-z]/.test(topLevel)) refuse("it is an IP address");
   return name;
 }
 

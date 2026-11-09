@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 
 import {
   CLIENT,
@@ -31,7 +31,9 @@ afterEach(async () => {
 
 describe("the workspace's packages", () => {
   it("are found in each source's directories, in order", () => {
-    expect(sourceDirectories(workspace.root, workspace.sources[1]!)).toEqual([
+    const [, gateways] = workspace.sources;
+    assert(gateways);
+    expect(sourceDirectories(workspace.root, gateways)).toEqual([
       "gateways/a",
       "gateways/b",
     ]);

@@ -89,13 +89,14 @@ describe("an environment", () => {
     ),
   )("%s builds the same under another identity", (_, stage, environment) => {
     const app = cdkApp();
+    const twinnedEnvironment = twin(environment);
     const twinned: StageConfig = {
       ...stage,
-      environments: [twin(environment)],
+      environments: [twinnedEnvironment],
     };
     buildApp(app, twinned, selectTarget(twinned, undefined));
 
-    expect(templates(app.synth(), twinned.environments[0]!)).toEqual(
+    expect(templates(app.synth(), twinnedEnvironment)).toEqual(
       templates(synthesizedStage(stage), environment),
     );
   });

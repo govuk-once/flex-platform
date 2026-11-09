@@ -165,8 +165,8 @@ describe("client.request", () => {
     expect(req?.init.method).toBe("GET");
     expect(req?.init.redirect).toBe("manual");
     expect(req?.init.signal).toBeInstanceOf(AbortSignal);
-    expect(headerOf(req!, "accept")).toBe("application/json");
-    expect(headerOf(req!, "content-type")).toBeNull();
+    expect(headerOf(req, "accept")).toBe("application/json");
+    expect(headerOf(req, "content-type")).toBeNull();
     expect(req?.init.body).toBeUndefined();
   });
 
@@ -179,7 +179,7 @@ describe("client.request", () => {
     await c.request({ method: "POST", path: "/users", body: { a: 1 } });
     const [req] = ff.calls;
     expect(req?.init.body).toBe('{"a":1}');
-    expect(headerOf(req!, "content-type")).toBe("application/json");
+    expect(headerOf(req, "content-type")).toBe("application/json");
   });
 
   it("layers static, call and authentication headers in that order", async () => {
@@ -196,10 +196,10 @@ describe("client.request", () => {
       headers: { "X-B": "call", "X-D": "call" },
     });
     const [req] = ff.calls;
-    expect(headerOf(req!, "x-a")).toBe("static");
-    expect(headerOf(req!, "x-b")).toBe("auth");
-    expect(headerOf(req!, "x-c")).toBe("auth");
-    expect(headerOf(req!, "x-d")).toBe("call");
+    expect(headerOf(req, "x-a")).toBe("static");
+    expect(headerOf(req, "x-b")).toBe("auth");
+    expect(headerOf(req, "x-c")).toBe("auth");
+    expect(headerOf(req, "x-d")).toBe("call");
     expect(auth).toHaveBeenCalledWith(
       expect.objectContaining({
         operation: "getUser",
@@ -258,8 +258,8 @@ describe("client.request", () => {
     await c.request({ method: "GET", path: "/users/1" });
 
     const [sent] = ff.calls;
-    expect(headerOf(sent!, "x-smuggled")).toBeNull();
-    expect(String(sent!.url)).toBe("https://api.test/prod/users/1");
+    expect(headerOf(sent, "x-smuggled")).toBeNull();
+    expect(String(sent?.url)).toBe("https://api.test/prod/users/1");
   });
 
   it("keeps the body's content type whatever authentication returns", async () => {
@@ -274,7 +274,7 @@ describe("client.request", () => {
 
     await c.request({ method: "POST", path: "/users/u1", body: {} });
 
-    expect(headerOf(ff.calls[0]!, "content-type")).toBe("application/json");
+    expect(headerOf(ff.calls[0], "content-type")).toBe("application/json");
   });
 
   it("runs authentication inside the timed attempt", async () => {

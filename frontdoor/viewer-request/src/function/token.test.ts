@@ -23,9 +23,9 @@ describe("checkToken", () => {
   });
 
   it("accepts a token of exactly 4,096 characters", () => {
-    const [header, payload] = token().split(".");
-    const signature = "A".repeat(4096 - header!.length - payload!.length - 2);
-    const exact = `${header}.${payload}.${signature}`;
+    const signed = token();
+    const unsigned = signed.slice(0, signed.lastIndexOf("."));
+    const exact = `${unsigned}.${"A".repeat(4096 - unsigned.length - 1)}`;
     expect(exact).toHaveLength(4096);
 
     expect(check(`Bearer ${exact}`)).toBeUndefined();

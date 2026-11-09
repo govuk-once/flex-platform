@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { heldValue } from "@repo/utils/held-value";
 import { isRecord } from "@repo/utils/is-record";
 
 import { publishedManifest } from "./manifest.ts";
@@ -127,10 +128,10 @@ export async function packRelease(
   // neither, and what names it waits for its next release.
   const unpublished = (pkg: Publishable) =>
     dependenciesOf(pkg, finalOnly)
-      .map((dep) => statuses.get(dep)!.pkg.built)
+      .map((dep) => heldValue(statuses, dep).pkg.built)
       .find(
         (dep) =>
-          !published.get(dep.name)!.has(dep.version) &&
+          !heldValue(published, dep.name).has(dep.version) &&
           !plan.merge.some(
             (p) => p.name === dep.name && p.version === dep.version,
           ),
@@ -140,7 +141,7 @@ export async function packRelease(
   const withheld = (pkg: Publishable): string | undefined => {
     // A release is checked as it merges, so main building it differently means later changes
     // replaced it. It is passed over, and the next release takes the next version.
-    if (!buildsAsRecorded(statuses.get(nameOf(pkg))!)) {
+    if (!buildsAsRecorded(heldValue(statuses, nameOf(pkg)))) {
       return "main has changed it since its release, so a later release replaces it";
     }
     const dep = unpublished(pkg);
@@ -174,7 +175,7 @@ export async function packRelease(
     const release = record.get(name);
     if (release === undefined) continue;
     const { version } = release;
-    const versions = published.get(name)!;
+    const versions = heldValue(published, name);
     if (versions.has(version)) continue;
     const reason = withheld(pkg);
     if (reason === undefined) await packReleased(pkg, version, versions);

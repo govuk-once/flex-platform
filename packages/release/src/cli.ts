@@ -123,7 +123,9 @@ async function publishCommand(root: string, args: string[]): Promise<string> {
     options: { stage: { type: "string" } },
   });
   const stage = values.stage;
+  const [dir] = positionals;
   if (
+    dir === undefined ||
     positionals.length !== 1 ||
     (stage !== "merge" && stage !== "production")
   ) {
@@ -132,7 +134,7 @@ async function publishCommand(root: string, args: string[]): Promise<string> {
     );
   }
   const { published, skipped } = await publishRelease(
-    path.resolve(root, positionals[0]!),
+    path.resolve(root, dir),
     stage satisfies Stage,
     pnpmRegistry(root),
   );

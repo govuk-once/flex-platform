@@ -1,6 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { heldValue } from "@repo/utils/held-value";
+
 import { readRecord, writeRecord } from "./record.ts";
 import { nextVersion, type Status, statusesOf } from "./status.ts";
 import { type Bump, bumped, nextDerivedVersion } from "./versions.ts";
@@ -80,7 +82,7 @@ export async function prepare(
   const reasons = new Map(
     releasing.map((pkg) => [
       nameOf(pkg),
-      statuses.get(nameOf(pkg))!.reason ?? locked.get(nameOf(pkg))!,
+      heldValue(statuses, nameOf(pkg)).reason ?? heldValue(locked, nameOf(pkg)),
     ]),
   );
 
@@ -89,7 +91,7 @@ export async function prepare(
   const raised = new Map<string, string>();
   for (const pkg of releasing) {
     if (pkg.source.versioning !== "declared") continue;
-    const choice = choices.get(nameOf(pkg))!;
+    const choice = heldValue(choices, nameOf(pkg));
     const { released, next } = choice;
     // Its first release, or one a person set ahead: the manifest holds it already.
     if (released === undefined || next !== undefined) continue;
@@ -114,7 +116,7 @@ export async function prepare(
 
     const planned: Planned[] = [];
     for (const { built } of releasing) {
-      const { pkg, released, digest } = statuses.get(built.name)!;
+      const { pkg, released, digest } = heldValue(statuses, built.name);
       // Built again, a declared package's manifest holds its new version.
       const version =
         pkg.source.versioning === "declared"
@@ -125,7 +127,7 @@ export async function prepare(
         name: built.name,
         from: released?.version,
         to: version,
-        reason: reasons.get(built.name)!,
+        reason: heldValue(reasons, built.name),
       });
     }
     await writeRecord(root, record);
