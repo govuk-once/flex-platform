@@ -13,6 +13,7 @@ function resources(template: Template, type: string): Resources {
 }
 
 const BASELINE = [
+  "frontdoor-sandbox-keys-100000000002.s3.eu-west-2.amazonaws.com",
   "lambda.eu-west-2.amazonaws.com",
   "secretsmanager.eu-west-2.amazonaws.com",
   "sts.eu-west-2.amazonaws.com",

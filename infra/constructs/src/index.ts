@@ -4,7 +4,10 @@ export { PlatformLogGroup } from "./log-group.ts";
 export { DnsFirewall } from "./network/dns-firewall.ts";
 export { dnsAllowlist } from "./network/dns-names.ts";
 export { FlowLogs } from "./network/flow-logs.ts";
-export { InterfaceEndpoints } from "./network/interface-endpoints.ts";
+export {
+  InterfaceEndpoints,
+  type S3Object,
+} from "./network/interface-endpoints.ts";
 export {
   AVAILABILITY_ZONES,
   MINIMUM_AVAILABILITY_ZONES,
@@ -13,6 +16,7 @@ export {
 } from "./network/layout.ts";
 export type { Placement } from "./network/names.ts";
 export {
+  endpointIdParameterName,
   securityGroupIdParameterName,
   subnetIdsParameterName,
   vpcIdParameterName,

@@ -42,7 +42,21 @@ describe("NetworkParameters", () => {
         },
       });
     }
-    template.resourceCountIs("AWS::SSM::Parameter", 5);
+    for (const [service, endpoint] of [
+      ["lambda", "Lambda"],
+      ["s3", "S3"],
+      ["secretsmanager", "SecretsManager"],
+      ["sts", "Sts"],
+    ]) {
+      template.hasResourceProperties("AWS::SSM::Parameter", {
+        Name: `/flex/network/sandbox/endpoint/${service}`,
+        Type: "String",
+        Value: {
+          Ref: Match.stringLikeRegexp(`^Endpoints${endpoint}[0-9A-F]{8}$`),
+        },
+      });
+    }
+    template.resourceCountIs("AWS::SSM::Parameter", 9);
   });
 });
 

@@ -46,6 +46,17 @@ export function securityGroupIdParameterName(
   return `/flex/network/${environment}/security-group/${workload}`;
 }
 
+/**
+ * An interface endpoint's ID, by its service's short name, such as `secretsmanager`. A role's
+ * policy names it in `aws:SourceVpce`, to refuse calls that come any other way.
+ */
+export function endpointIdParameterName(
+  environment: string,
+  service: string,
+): string {
+  return `/flex/network/${environment}/endpoint/${service}`;
+}
+
 /** Where CDK's function that empties the VPC's default security group logs. */
 export function restrictDefaultSecurityGroupLogGroupName(
   environment: string,
