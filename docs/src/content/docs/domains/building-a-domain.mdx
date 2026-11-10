@@ -125,7 +125,7 @@ A module the handler calls can reach the request without being handed it. `route
 /v1/todos/:id">()` returns the handler's context, `currentCaller()` the caller, and the exported
 `log` writes to the request's logger. Each is backed by Node's `AsyncLocalStorage`, so it works
 however many awaits deep; outside a request, `routeContext` and `currentCaller` throw, and `log`
-writes to a logger named for the SDK.
+writes to the domain's logger, with its name, level and redaction.
 
 <Aside type="caution" title="Planned: the function">
 How a domain's route handlers are mounted into one Lambda function, which routes each request to

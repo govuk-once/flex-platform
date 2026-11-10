@@ -10,6 +10,7 @@ import type { ZodType } from "zod";
 
 import type { RouteFailureCode } from "./errors.ts";
 import type { HttpMethod } from "./http.ts";
+import { setFallbackLogger } from "./logging/log.ts";
 import type { LoggingOptions } from "./logging/logger.ts";
 import { createLogger } from "./logging/logger.ts";
 import { createRouteContextReader, createRouteFactory } from "./route.ts";
@@ -69,6 +70,7 @@ export function domain<const Config extends DomainConfig>(
   config: Config,
 ): Domain<Config> {
   const logger = createLogger(config.name, config.common?.logging);
+  setFallbackLogger(logger);
   return {
     config,
     route: createRouteFactory(config, logger),
