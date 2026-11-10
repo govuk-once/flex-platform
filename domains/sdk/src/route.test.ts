@@ -523,6 +523,95 @@ describe("route", () => {
     );
   });
 
+  describe("with a declaration that misbehaves", () => {
+    const leak = () => {
+      throw new Error("holds SYNTHETIC_API_KEY");
+    };
+    const awkward = {
+      name: "awkward",
+      routes: {
+        v1: {
+          "/throws": {
+            GET: {
+              query: z.object({ q: z.string().refine(leak) }),
+              responses: { 204: null },
+            },
+          },
+          "/answers": {
+            GET: {
+              responses: {
+                200: z.bigint(),
+                201: z.string().optional(),
+                202: z.string().transform(leak),
+              },
+            },
+          },
+        },
+      },
+    } as const satisfies DomainConfig;
+
+    it("answers 500 for a request schema that throws, and the handler is not called", async () => {
+      const { lines, logger } = capture();
+      const route = createRouteFactory(awkward, logger);
+      const spy = vi.fn(() => ({ status: 204 }) as const);
+      const handler = route("GET /v1/throws", spy);
+      const response = await handler.run(request({ query: { q: "x" } }));
+      expect(response.status).toBe(500);
+      expect(body(response)).toMatchObject({ code: "internal" });
+      expect(response.headers).toMatchObject({ "x-correlation-id": "corr-1" });
+      expect(spy).not.toHaveBeenCalled();
+      expect(lines.at(-1)).toMatchObject({
+        level: "error",
+        msg: "route failed",
+        error: { frames: expect.any(Array) as unknown },
+      });
+      expect(JSON.stringify(lines)).not.toContain("SYNTHETIC_API_KEY");
+    });
+
+    it("answers 500 for a response schema that throws", async () => {
+      const { lines, logger } = capture();
+      const route = createRouteFactory(awkward, logger);
+      const handler = route("GET /v1/answers", () => ({
+        status: 202,
+        body: "x",
+      }));
+      expect((await handler.run(request())).status).toBe(500);
+      expect(lines.at(-1)).toMatchObject({ msg: "route failed" });
+      expect(JSON.stringify(lines)).not.toContain("SYNTHETIC_API_KEY");
+    });
+
+    it("answers 500 for a body JSON cannot write", async () => {
+      const { lines, logger } = capture();
+      const route = createRouteFactory(awkward, logger);
+      const big = route("GET /v1/answers", () => ({ status: 200, body: 1n }));
+      expect((await big.run(request())).status).toBe(500);
+      expect(lines.at(-1)).toMatchObject({
+        msg: "response body cannot be written as JSON",
+        status: 200,
+      });
+      const none = route("GET /v1/answers", () => ({
+        status: 201,
+        body: undefined,
+      }));
+      const response = await none.run(request());
+      expect(response.status).toBe(500);
+      expect(body(response)).toMatchObject({ code: "internal" });
+    });
+  });
+
+  it("waits for a deadline further off than a timer can be set for", async () => {
+    const { logger } = capture();
+    const route = createRouteFactory(config, logger);
+    const handler = route("DELETE /v1/todos/:id", ({ signal }) => {
+      expect(signal.aborted).toBe(false);
+      return { status: 204 };
+    });
+    const response = await handler.run(
+      request({ deadline: Date.now() + 2 ** 33 }),
+    );
+    expect(response.status).toBe(204);
+  });
+
   it("is built by domain()", () => {
     const todos = domain(config);
     expect(todos.config).toBe(config);

@@ -150,7 +150,10 @@ id. The steps run in this order, each owning the status it answers, and nothing 
 | Build the context; set the gateway client's caller context | never fails |
 | Run the handler, raced against the deadline | 504 if the deadline passes first, or the handler fails once it has passed; 500 for any other error the handler lets out |
 | Check the status is one the route declares, and validate the body against that status's schema | 500, the failing status logged and never the body |
-| Serialise; set `Content-Type` and echo `x-correlation-id` | never fails |
+| Serialise; set `Content-Type` and echo `x-correlation-id` | 500 for a body JSON cannot write, the status logged |
+
+Anything else that throws along the way, such as a schema whose refinement throws, is answered
+500 and logged as where it was thrown.
 
 The body sent is the schema's validated output, not the handler's value, so a handler that
 spreads an upstream's object into its reply cannot leak a field the contract does not declare.

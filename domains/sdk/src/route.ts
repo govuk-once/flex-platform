@@ -114,6 +114,25 @@ function parseJson(text: string): Validated<unknown> {
   }
 }
 
+// The body's text, or undefined for a value JSON cannot write: `undefined` itself, a BigInt, or
+// an object that holds itself.
+function toJson(value: unknown): string | undefined {
+  try {
+    const text: unknown = JSON.stringify(value);
+    return typeof text === "string" ? text : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The longest a timer can be set for. Past it, `setTimeout` fires at once and
+// `AbortSignal.timeout` throws, so a deadline further off than this is waited for this long.
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
+function remaining(deadline: number): number {
+  return Math.min(MAX_TIMER_MS, Math.max(0, deadline - Date.now()));
+}
+
 const TIMED_OUT: unique symbol = Symbol("timed out");
 
 // The handler's result, or the sentinel if the deadline passes first. The handler's work is not
@@ -126,10 +145,7 @@ async function raceDeadline<T>(
 ): Promise<T | typeof TIMED_OUT> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
-    timer = setTimeout(
-      () => resolve(TIMED_OUT),
-      Math.max(0, deadline - Date.now()),
-    );
+    timer = setTimeout(() => resolve(TIMED_OUT), remaining(deadline));
   });
   try {
     return await Promise.race([Promise.resolve().then(run), timeout]);
@@ -147,6 +163,15 @@ function isHandlerResponse(value: unknown): value is HandlerResponse {
     value !== null &&
     typeof (value as { status?: unknown }).status === "number"
   );
+}
+
+// What every step of one request answers and logs with.
+interface Exchange {
+  readonly headers: Readonly<Record<string, string>>;
+  readonly correlationId: string | undefined;
+  readonly log: Logger;
+  readonly respond: (status: number, body: string) => RouteResponse;
+  readonly failWith: (code: FailureCode) => RouteResponse;
 }
 
 export function createRouteFactory<const Config extends DomainConfig>(
@@ -180,7 +205,7 @@ export function createRouteFactory<const Config extends DomainConfig>(
     const declaredFailures = new Set<FailureCode>(declaration.errors ?? []);
     const routeFailures = new Set<FailureCode>(ROUTE_FAILURE_CODES);
 
-    const run = async (request: RouteRequest): Promise<RouteResponse> => {
+    const open = (request: RouteRequest): Exchange => {
       const headers = lowerCaseHeaders(request.headers);
       const correlationId = headers[CORRELATION_HEADER];
       const log = logger.child({
@@ -211,7 +236,13 @@ export function createRouteFactory<const Config extends DomainConfig>(
       });
       const failWith = (code: FailureCode): RouteResponse =>
         respond(statusOf(code), JSON.stringify(errorBody(code)));
+      return { headers, correlationId, log, respond, failWith };
+    };
 
+    const answer = async (
+      request: RouteRequest,
+      { headers, correlationId, log, respond, failWith }: Exchange,
+    ): Promise<RouteResponse> => {
       if (!Number.isFinite(request.deadline)) {
         log.error("request has no deadline");
         return failWith("internal");
@@ -265,7 +296,7 @@ export function createRouteFactory<const Config extends DomainConfig>(
         caller: identity.caller,
         log,
         correlationId,
-        signal: AbortSignal.timeout(Math.max(0, deadline - Date.now())),
+        signal: AbortSignal.timeout(remaining(deadline)),
       };
       const context = {
         ...base,
@@ -347,7 +378,26 @@ export function createRouteFactory<const Config extends DomainConfig>(
         });
         return failWith("internal");
       }
-      return respond(result.status, JSON.stringify(validated.data));
+      const text = toJson(validated.data);
+      if (text === undefined) {
+        log.error("response body cannot be written as JSON", {
+          status: result.status,
+        });
+        return failWith("internal");
+      }
+      return respond(result.status, text);
+    };
+
+    // The steps above answer for every failure they expect. This answers for the rest, such as
+    // a schema whose refinement or transform throws, so that nothing leaves `run` but a response.
+    const run = async (request: RouteRequest): Promise<RouteResponse> => {
+      const exchange = open(request);
+      try {
+        return await answer(request, exchange);
+      } catch (error) {
+        exchange.log.error("route failed", { error });
+        return exchange.failWith("internal");
+      }
     };
 
     const route: RouteHandler<typeof key> = {
