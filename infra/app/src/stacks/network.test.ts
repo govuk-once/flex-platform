@@ -67,7 +67,7 @@ describe("NetworkStack", () => {
         Statement: [
           {
             Action: "lambda:InvokeFunction",
-            Resource: `arn:aws:lambda:eu-west-2:${PROD_ENVIRONMENT.domainAccounts[0].account}:function:gateway-prod-*`,
+            Resource: `arn:aws:lambda:eu-west-2:${PROD_ENVIRONMENT.domainAccounts[0].account}:function:gateway-prod-*:live`,
           },
         ],
       },

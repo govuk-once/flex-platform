@@ -11,7 +11,7 @@ function build(nag = false) {
   new ExecutionRole(stack, "Execution", {
     environment: "sandbox",
     domain: "domain-a",
-    gatewayFunctions: "gateway-sandbox-*",
+    gatewayAliases: "gateway-sandbox-*:live",
     lambdaEndpointId: "vpce-0lambda",
     logGroupKey: new Key(stack, "LogGroupKey", { enableKeyRotation: true }),
   });
@@ -28,7 +28,7 @@ const STATEMENTS = [
   {
     Action: "lambda:InvokeFunction",
     Effect: "Allow",
-    Resource: `arn:aws:lambda:${ARN}:function:gateway-sandbox-*`,
+    Resource: `arn:aws:lambda:${ARN}:function:gateway-sandbox-*:live`,
   },
   {
     Action: "lambda:InvokeFunction",

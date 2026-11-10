@@ -173,9 +173,10 @@ If the network is ever replaced, the stack deploys with `--force` to read the ne
 Each domain's function runs as a role of its own, `domain-<environment>-<domain>-execution`. It
 may:
 
-- invoke any function named `gateway-<environment>-*`, with any qualifier, such as `:live`. Any
-  domain may call any gateway in its environment, and only gateways have that name. The stack
-  takes the pattern from `gatewayFunctionPattern` in `gateways/infra`;
+- invoke any function named `gateway-<environment>-*`, through its `live` alias and no other way.
+  Any domain may call any gateway in its environment, and only gateways have that name. The stack
+  takes the pattern from `gatewayAliasPattern` in `gateways/infra`, as the network's
+  [`lambda` endpoint](/flex-platform/infrastructure/network/#endpoints) does;
 - write to its own domain's log group, `/flex/domain/<environment>/<domain>/function`, and use
   its stack's key for that through CloudWatch Logs;
 - send its traces to X-Ray;

@@ -2,6 +2,7 @@ import { gatewayFunctionName } from "@repo/gateway-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  gatewayAliasPattern,
   gatewayFunctionPattern,
   gatewayLogGroupName,
   gatewayRoleName,
@@ -16,6 +17,18 @@ describe("gateway names", () => {
     expect(gatewayFunctionName("production", "udp")).toMatch(
       /^gateway-production-/,
     );
+  });
+
+  it("matches every gateway's function by its live alias, and by nothing else", () => {
+    const alias = gatewayAliasPattern("production");
+    expect(alias).toBe("gateway-production-*:live");
+
+    const glob = new RegExp(`^${alias.replaceAll("*", ".*")}$`);
+    const name = gatewayFunctionName("production", "udp");
+    expect(`${name}:live`).toMatch(glob);
+    expect(name).not.toMatch(glob);
+    expect(`${name}:1`).not.toMatch(glob);
+    expect(`${name}:$LATEST`).not.toMatch(glob);
   });
 
   it("matches every gateway's role and created secret in the environment, and nothing else of theirs", () => {
@@ -34,6 +47,9 @@ describe("gateway names", () => {
 
   it("refuses an environment that cannot name a function", () => {
     expect(() => gatewayFunctionPattern("Production")).toThrow(
+      /The environment .* must be/,
+    );
+    expect(() => gatewayAliasPattern("Production")).toThrow(
       /The environment .* must be/,
     );
     expect(() => gatewayRolePattern("Production")).toThrow(

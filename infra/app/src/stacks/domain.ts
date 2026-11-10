@@ -8,7 +8,10 @@ import {
   ProxyApi,
 } from "@repo/domain-infra";
 import { edgeRoleName } from "@repo/frontdoor-infra";
-import { gatewayFunctionPattern } from "@repo/gateway-infra";
+import {
+  gatewayAliasPattern,
+  gatewayFunctionPattern,
+} from "@repo/gateway-infra";
 import {
   endpointIdParameterName,
   PlatformLogGroup,
@@ -77,12 +80,10 @@ export class DomainStack extends Stack {
       logGroupName: functionLogGroupName(environment.name, domain),
     });
 
-    const gatewayFunctions = gatewayFunctionPattern(environment.name);
-
     new ExecutionRole(this, "Execution", {
       environment: environment.name,
       domain,
-      gatewayFunctions,
+      gatewayAliases: gatewayAliasPattern(environment.name),
       lambdaEndpointId: StringParameter.valueForStringParameter(
         this,
         endpointIdParameterName(environment.name, "lambda"),
@@ -93,7 +94,7 @@ export class DomainStack extends Stack {
     new DeployRole(this, "Deploy", {
       environment: environment.name,
       domain,
-      gatewayFunctions,
+      gatewayFunctions: gatewayFunctionPattern(environment.name),
       subnetIdsParameterName: subnetIdsParameterName(
         environment.name,
         "isolated",

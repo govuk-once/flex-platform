@@ -21,7 +21,10 @@ export interface InterfaceEndpointsProps {
   readonly vpc: IVpc;
   /** The isolated subnets: the endpoints are how they reach AWS. */
   readonly subnets: readonly ISubnet[];
-  /** The functions the `lambda` endpoint may invoke, as a name pattern such as `gateway-dev-*`. */
+  /**
+   * The functions the `lambda` endpoint may invoke, as a name pattern, with the alias each is
+   * invoked by, such as `gateway-dev-*:live`.
+   */
   readonly invokableFunctions: string;
   /** The objects the `s3` endpoint may read, which may be in another account's bucket. */
   readonly readableObjects: readonly S3Object[];
@@ -93,7 +96,8 @@ export class InterfaceEndpoints extends Construct {
       InterfaceVpcEndpointAwsService.LAMBDA,
       {
         actions: ["lambda:InvokeFunction"],
-        // The pattern ends in `*`, so it covers a qualifier, such as `:live`, too.
+        // The pattern names an alias, so a function is reached by that alone: not without a
+        // qualifier, and not by a version's number.
         resources: [functions],
       },
     );

@@ -228,7 +228,7 @@ describe("DomainStack", () => {
     });
   });
 
-  it("lets the domain's function invoke the environment's gateways, through the network's lambda endpoint alone", () => {
+  it("lets the domain's function invoke the environment's gateways, by their live alias and through the network's lambda endpoint alone", () => {
     const { template } = build();
     const parameters = template.toJSON().Parameters as Record<
       string,
@@ -247,7 +247,7 @@ describe("DomainStack", () => {
               Match.objectLike({
                 Action: "lambda:InvokeFunction",
                 Effect: "Allow",
-                Resource: `arn:aws:lambda:eu-west-2:${MAIN.account}:function:gateway-dev-*`,
+                Resource: `arn:aws:lambda:eu-west-2:${MAIN.account}:function:gateway-dev-*:live`,
               }),
               Match.objectLike({
                 Action: "lambda:InvokeFunction",
