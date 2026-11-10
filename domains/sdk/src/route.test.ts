@@ -457,7 +457,21 @@ describe("route", () => {
     expect(lines.at(-1)).toMatchObject({
       level: "error",
       msg: "handler failed",
-      error: { frames: expect.any(Array) as unknown },
+      error: {
+        frames: expect.arrayContaining([
+          expect.stringContaining("route.test.ts"),
+        ]) as unknown,
+      },
+    });
+    expect(JSON.stringify(lines)).not.toContain("SYNTHETIC_API_KEY");
+
+    const thrower = route("DELETE /v1/todos/:id", () => {
+      throw "holds SYNTHETIC_API_KEY" as unknown as Error;
+    });
+    expect((await thrower.run(request())).status).toBe(500);
+    expect(lines.at(-1)).toMatchObject({
+      msg: "handler failed",
+      error: { frames: [] },
     });
     expect(JSON.stringify(lines)).not.toContain("SYNTHETIC_API_KEY");
   });

@@ -7,7 +7,6 @@
 
 import { GatewayInvocationError } from "@govuk-once/flex-gateway-client";
 import { withCallerContext } from "@govuk-once/flex-gateway-client/caller";
-import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 import { ownValue } from "@repo/utils/own-value";
 import type { ZodType } from "zod";
 
@@ -297,9 +296,8 @@ export function createRouteFactory<const Config extends DomainConfig>(
           log.warn("gateway call failed", { reason: error.reason });
           result = fromInvocationFailure(error.reason);
         } else {
-          log.error("handler failed", {
-            error: describeUnexpectedError(error),
-          });
+          // As it was thrown: the logger reduces it to where it was created.
+          log.error("handler failed", { error });
           return failWith("internal");
         }
       }
