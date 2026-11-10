@@ -86,7 +86,8 @@ AWS with the role's credentials.
 
 A secret the stack creates, `gateway-<environment>-<id>`, starts with no value, for a person to
 put, and the stack keeps it when it is deleted. Its resource policy refuses every reader but the
-gateway's role, whatever any other policy allows. Its rotation is planned.
+gateway's role, and every read that does not come through the network's `secretsmanager` endpoint,
+whatever any other policy allows. Its rotation is planned.
 
 The handler is built while the function initialises. A missing or invalid secret prevents
 initialisation from completing, before the handler can process an event. This check runs when

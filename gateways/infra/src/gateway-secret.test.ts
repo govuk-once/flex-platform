@@ -11,6 +11,7 @@ function build(nag = false) {
   new GatewaySecret(scope, "Upstream", {
     secretName: "gateway-sandbox-dvla",
     readerArn: READER,
+    endpointId: "vpce-0secretsmanager",
   });
   return { scope, template: Template.fromStack(scope) };
 }
@@ -29,7 +30,7 @@ describe("GatewaySecret", () => {
     expect(secret?.DeletionPolicy).toBe("Retain");
   });
 
-  it("can be read by its gateway's role alone", () => {
+  it("can be read by its gateway's role alone, through the endpoint alone", () => {
     build().template.hasResourceProperties(
       "AWS::SecretsManager::ResourcePolicy",
       {
@@ -41,6 +42,15 @@ describe("GatewaySecret", () => {
               Action: "secretsmanager:GetSecretValue",
               Resource: "*",
               Condition: { StringNotEquals: { "aws:PrincipalArn": READER } },
+            },
+            {
+              Effect: "Deny",
+              Principal: { AWS: "*" },
+              Action: "secretsmanager:GetSecretValue",
+              Resource: "*",
+              Condition: {
+                StringNotEquals: { "aws:SourceVpce": "vpce-0secretsmanager" },
+              },
             },
           ],
         },

@@ -96,6 +96,13 @@ export class GatewayStack extends Stack {
 
     const roleName = gatewayRoleName(environment.name, gateway.id);
 
+    const endpointId = (service: string) =>
+      StringParameter.valueForStringParameter(
+        this,
+        endpointIdParameterName(environment.name, service),
+      );
+    const secretsEndpointId = endpointId("secretsmanager");
+
     const secretArn =
       gateway.secret === "create"
         ? new GatewaySecret(this, "Secret", {
@@ -106,19 +113,13 @@ export class GatewayStack extends Stack {
               resource: "role",
               resourceName: roleName,
             }),
+            endpointId: secretsEndpointId,
           }).secret.secretArn
         : gateway.secret.arn;
 
     const keysBucket = callerTokenKeysBucketName(
       environment.name,
       environment.frontdoor.account,
-    );
-
-    const endpointIds = ["secretsmanager", "sts"].map((service) =>
-      StringParameter.valueForStringParameter(
-        this,
-        endpointIdParameterName(environment.name, service),
-      ),
     );
 
     new GatewayFunction(this, "Gateway", {
@@ -142,7 +143,7 @@ export class GatewayStack extends Stack {
           secretKeyArn:
             gateway.secret === "create" ? null : gateway.secret.keyArn,
           roleArns: gateway.roleArns,
-          endpointIds,
+          endpointIds: [secretsEndpointId, endpointId("sts")],
         }),
         // The edge's public keys, in the frontdoor account's bucket, whose policy lets this
         // role read them too. Bucket names are global, so it is held to that account's.

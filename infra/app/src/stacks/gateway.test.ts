@@ -166,7 +166,7 @@ describe("GatewayStack", () => {
     });
   });
 
-  it("creates a secret of its own, which its role alone may read, when config says to", () => {
+  it("creates a secret of its own, which its role alone may read, through the endpoint alone, when config says to", () => {
     const { template } = build(OWN_SECRET_GATEWAY);
 
     template.hasResourceProperties("AWS::SecretsManager::Secret", {
@@ -203,6 +203,19 @@ describe("GatewayStack", () => {
             Condition: {
               StringNotEquals: {
                 "aws:PrincipalArn": `arn:aws:iam::${MAIN.account}:role/gateway-dev-udp-execution`,
+              },
+            },
+          }),
+          Match.objectLike({
+            Effect: "Deny",
+            Condition: {
+              StringNotEquals: {
+                "aws:SourceVpce": {
+                  Ref: ssmParameter(
+                    template,
+                    "/flex/network/dev/endpoint/secretsmanager",
+                  ),
+                },
               },
             },
           }),
