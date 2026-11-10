@@ -1,14 +1,27 @@
-import { Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { ACCOUNT, buildNetwork, KEYS_OBJECT } from "../../test/network.ts";
-import type { InterfaceEndpoints } from "./interface-endpoints.ts";
+import {
+  ACCOUNT,
+  buildNetwork,
+  KEYS_OBJECT,
+  UPSTREAM_ROLE,
+  UPSTREAM_SECRET,
+  ZonedStack,
+} from "../../test/network.ts";
+import { cdkApp } from "../cdk-app.ts";
+import { InterfaceEndpoints } from "./interface-endpoints.ts";
+import { NatAddresses } from "./nat-addresses.ts";
+import { NetworkVpc } from "./vpc.ts";
+
+const GATEWAY_ROLES = `arn:aws:iam::${ACCOUNT}:role/gateway-sandbox-*-execution`;
 
 function endpoint(
   service: string,
   Action: string,
   Resource: unknown,
   resourceAccount?: string,
+  principals?: string,
 ) {
   return {
     ServiceName: `com.amazonaws.eu-west-2.${service}`,
@@ -28,12 +41,13 @@ function endpoint(
           Condition: {
             StringEquals: {
               "aws:PrincipalAccount": ACCOUNT,
-              // An endpoint that names no resource is held to this account's.
-              ...(Resource === "*" && { "aws:ResourceAccount": ACCOUNT }),
               ...(resourceAccount !== undefined && {
                 "aws:ResourceAccount": [resourceAccount],
               }),
             },
+            ...(principals !== undefined && {
+              ArnLike: { "aws:PrincipalArn": principals },
+            }),
           },
         },
       ],
@@ -48,8 +62,15 @@ describe("InterfaceEndpoints", () => {
       "lambda:InvokeFunction",
       `arn:aws:lambda:eu-west-2:${ACCOUNT}:function:gateway-sandbox-*`,
     ],
-    ["secretsmanager", "secretsmanager:GetSecretValue", "*"],
-    ["sts", "sts:AssumeRole", "*"],
+    [
+      "secretsmanager",
+      "secretsmanager:GetSecretValue",
+      UPSTREAM_SECRET,
+      undefined,
+      // Only gateways read secrets and assume roles, so nothing else in the account may.
+      GATEWAY_ROLES,
+    ],
+    ["sts", "sts:AssumeRole", UPSTREAM_ROLE, undefined, GATEWAY_ROLES],
     [
       "s3",
       "s3:GetObject",
@@ -58,11 +79,17 @@ describe("InterfaceEndpoints", () => {
       KEYS_OBJECT.account,
     ],
   ])(
-    "has a %s endpoint in the isolated subnets, for this account and one action",
-    (service, action, resource, resourceAccount?: string) => {
+    "has a %s endpoint in the isolated subnets, for this account, one action and what it names",
+    (
+      service,
+      action,
+      resource,
+      resourceAccount?: string,
+      principals?: string,
+    ) => {
       buildNetwork().template.hasResourceProperties(
         "AWS::EC2::VPCEndpoint",
-        endpoint(service, action, resource, resourceAccount),
+        endpoint(service, action, resource, resourceAccount, principals),
       );
     },
   );
@@ -107,5 +134,43 @@ describe("InterfaceEndpoints", () => {
       ServiceName: "com.amazonaws.eu-west-2.s3",
       DnsOptions: { PrivateDnsOnlyForInboundResolverEndpoint: "AllResolvers" },
     });
+  });
+
+  it("refuses everything through an endpoint with nothing to name", () => {
+    const zones = ["eu-west-2a", "eu-west-2b"];
+    const stack = new ZonedStack(cdkApp(), zones);
+    const { vpc, subnets } = new NetworkVpc(stack, "Network", {
+      environment: "sandbox",
+      zones,
+      natAddresses: new NatAddresses(stack, "NatAddresses", {
+        environment: "sandbox",
+        zones,
+      }),
+    });
+    new InterfaceEndpoints(stack, "Endpoints", {
+      vpc,
+      subnets: subnets.isolated,
+      invokableFunctions: "gateway-sandbox-*",
+      readableObjects: [],
+      readableSecrets: [],
+      assumableRoles: [],
+      gatewayRoles: "gateway-sandbox-*-execution",
+    });
+
+    for (const service of ["secretsmanager", "sts", "s3"]) {
+      Template.fromStack(stack).hasResourceProperties("AWS::EC2::VPCEndpoint", {
+        ServiceName: `com.amazonaws.eu-west-2.${service}`,
+        PolicyDocument: {
+          Statement: [
+            {
+              Effect: "Deny",
+              Principal: { AWS: "*" },
+              Action: "*",
+              Resource: "*",
+            },
+          ],
+        },
+      });
+    }
   });
 });

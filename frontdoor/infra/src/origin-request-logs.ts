@@ -1,6 +1,9 @@
-import { PlatformLogGroup } from "@repo/infra-constructs";
-import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
-import { Effect, ManagedPolicy, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import {
+  logGroupWriteStatements,
+  PlatformLogGroup,
+} from "@repo/infra-constructs";
+import { Stack, Validations } from "aws-cdk-lib";
+import { ManagedPolicy } from "aws-cdk-lib/aws-iam";
 import type { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
@@ -32,49 +35,18 @@ export class OriginRequestLogs extends Construct {
     });
     this.logGroup = logGroup;
 
-    const logGroupArn = stack.formatArn({
-      service: "logs",
-      resource: "log-group",
-      resourceName: logGroupName,
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+    const { statements, acknowledgements } = logGroupWriteStatements(this, {
+      logGroupName,
+      logGroupKey: key,
     });
-    const logStreams = `${logGroupArn}:*`;
 
     this.policy = new ManagedPolicy(this, "WritePolicy", {
       managedPolicyName: originRequestLogsPolicyName(
         props.environment,
         stack.region,
       ),
-      statements: [
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
-          resources: [logStreams],
-        }),
-        // Writing to a log group encrypted with a customer managed key takes the key too, through
-        // CloudWatch Logs, for this log group alone.
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: ["kms:Encrypt", "kms:GenerateDataKey*"],
-          resources: [key.keyArn],
-          conditions: {
-            StringEquals: {
-              "kms:ViaService": `logs.${stack.region}.amazonaws.com`,
-            },
-            ArnEquals: { "kms:EncryptionContext:aws:logs:arn": logGroupArn },
-          },
-        }),
-      ],
+      statements,
     });
-    Validations.of(this.policy).acknowledge({
-      id: `AwsSolutions-IAM5[Resource::${logStreams}]`,
-      reason:
-        "Lambda names each log stream itself, so the grant covers every stream in the one log group.",
-    });
-    Validations.of(this.policy).acknowledge({
-      id: "AwsSolutions-IAM5[Action::kms:GenerateDataKey*]",
-      reason:
-        "CloudWatch Logs chooses which GenerateDataKey call it makes; the grant holds only for the one key and log group.",
-    });
+    Validations.of(this.policy).acknowledge(...acknowledgements);
   }
 }

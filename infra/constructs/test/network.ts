@@ -36,6 +36,11 @@ export interface UpstreamNames {
   readonly hostnames: readonly string[];
 }
 
+/** An upstream's secret and the role its gateway signs as, both in the upstream's account. */
+export const UPSTREAM_SECRET =
+  "arn:aws:secretsmanager:eu-west-2:200000000001:secret:udp/consumer-AbCdEf";
+export const UPSTREAM_ROLE = "arn:aws:iam::200000000001:role/udp-consumer";
+
 /** The caller token's public keys, in the frontdoor account's bucket. */
 export const KEYS_OBJECT = {
   bucket: "frontdoor-sandbox-keys-100000000002",
@@ -85,6 +90,9 @@ export function buildNetwork(
     subnets: subnets.isolated,
     invokableFunctions: "gateway-sandbox-*",
     readableObjects: [KEYS_OBJECT],
+    readableSecrets: [UPSTREAM_SECRET],
+    assumableRoles: [UPSTREAM_ROLE],
+    gatewayRoles: "gateway-sandbox-*-execution",
   });
   new DnsFirewall(stack, "DnsFirewall", {
     environment: "sandbox",

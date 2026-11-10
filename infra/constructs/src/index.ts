@@ -1,5 +1,12 @@
 export { PlatformBucket } from "./bucket.ts";
 export { cdkApp } from "./cdk-app.ts";
+export {
+  functionRoleStatements,
+  type FunctionRoleStatementsProps,
+  logGroupWriteStatements,
+  type LogGroupWriteStatementsProps,
+  type RoleStatements,
+} from "./function-role.ts";
 export { PlatformLogGroup } from "./log-group.ts";
 export { DnsFirewall } from "./network/dns-firewall.ts";
 export { dnsAllowlist } from "./network/dns-names.ts";

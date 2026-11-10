@@ -2,7 +2,12 @@ import { cdkApp as cdkAppForTest } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
+import {
+  FIXTURE_STAGES,
+  OWN_SECRET_GATEWAY,
+  synthesizedStage,
+  UDP,
+} from "../../test/helpers.ts";
 import type { DomainAccountConfig } from "../config/types.ts";
 import { NetworkStack, networkStackName } from "./network.ts";
 
@@ -65,6 +70,71 @@ describe("NetworkStack", () => {
             Resource: `arn:aws:lambda:eu-west-2:${PROD_ENVIRONMENT.domainAccounts[0].account}:function:gateway-prod-*`,
           },
         ],
+      },
+    });
+  });
+
+  it("lets only the account's gateways read their upstreams' secrets and assume their roles, through the endpoints", () => {
+    const gatewayRoles = {
+      ArnLike: {
+        "aws:PrincipalArn": `arn:aws:iam::${PROD_ENVIRONMENT.domainAccounts[0].account}:role/gateway-prod-*-execution`,
+      },
+    };
+    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.secretsmanager",
+      PolicyDocument: {
+        Statement: [
+          {
+            Action: "secretsmanager:GetSecretValue",
+            Resource: UDP.secret.arn,
+            Condition: gatewayRoles,
+          },
+        ],
+      },
+    });
+    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.sts",
+      PolicyDocument: {
+        Statement: [
+          {
+            Action: "sts:AssumeRole",
+            Resource: UDP.roleArns[0],
+            Condition: gatewayRoles,
+          },
+        ],
+      },
+    });
+  });
+
+  it("names every secret a gateway's stack creates in the account by one pattern, and refuses every role when none is assumed", () => {
+    const [main] = PROD_ENVIRONMENT.domainAccounts;
+    const stack = new NetworkStack(cdkAppForTest(), {
+      environment: PROD_ENVIRONMENT,
+      domainAccount: {
+        ...main,
+        gateways: [
+          OWN_SECRET_GATEWAY,
+          { ...OWN_SECRET_GATEWAY, id: "uns", hostnames: ["api.uns.example"] },
+        ],
+      },
+    });
+    const own = Template.fromStack(stack);
+
+    own.hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.secretsmanager",
+      PolicyDocument: {
+        Statement: [
+          {
+            Action: "secretsmanager:GetSecretValue",
+            Resource: `arn:aws:secretsmanager:eu-west-2:${main.account}:secret:gateway-prod-*`,
+          },
+        ],
+      },
+    });
+    own.hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.sts",
+      PolicyDocument: {
+        Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }],
       },
     });
   });
@@ -217,10 +287,11 @@ describe("NetworkStack", () => {
         return list?.Properties.Domains;
       };
       const udp = {
-        id: "udp",
+        ...UDP,
         hostnames: ["api.udp.example", "auth.shared.example"],
       };
       const uns = {
+        ...UDP,
         id: "uns",
         hostnames: ["api.uns.example", "auth.shared.example"],
       };

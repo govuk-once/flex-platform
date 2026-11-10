@@ -29,6 +29,11 @@
     },
     "test": {
       "dependsOn": ["transit"]
+    },
+    // The app's tests synthesize gateway stacks, which deploy the bundles codegen writes in each
+    // gateway package the app depends on. The first task that waits on another package's.
+    "@repo/infra-app#test": {
+      "dependsOn": ["transit", "^codegen"]
     }
   }
 }
