@@ -32,6 +32,7 @@
     "account": "224399154937",
     "region": "us-east-1",
     "dependencies": [
+      "frontdoor-staging-caller-token-keys",
       "frontdoor-staging-edge-logs-eu-west-2"
     ],
     "resources": [

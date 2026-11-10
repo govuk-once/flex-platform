@@ -70,9 +70,10 @@ A domain's stack depends on its account's, whose certificate ARN it reads and wh
 logging setting its stage logs through, and on its network's, whose subnet and security group IDs
 its deploy role reads. A gateway's stack depends on its network's, whose subnet, security group
 and endpoint IDs it reads. `frontdoor-<environment>` depends on every domain stack in its environment,
-across accounts and regions, so it never routes to a host before the host exists. So an
-environment deploys in that order: the networks and the domain accounts' stacks, then the domains'
-and the gateways' stacks, then the Frontdoor's. The caller token's stack depends on nothing.
+across accounts and regions, so it never routes to a host before the host exists. It also depends on the caller token's stack,
+whose keys the edge signs with. So an environment deploys in that order: the networks, the domain
+accounts' stacks and the caller token's, then the domains' and the gateways' stacks, then the
+Frontdoor's.
 
 Every domain account has its stack, whether or not it hosts a domain, so adding a domain deploys
 only the domain's own stack and the Frontdoor's, whose routing map gains it.

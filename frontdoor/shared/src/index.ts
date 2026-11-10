@@ -5,6 +5,7 @@ export { bearerToken } from "./bearer-token.ts";
 export type { SigningKey } from "./caller-token.ts";
 export {
   CALLER_TOKEN_TTL_SECONDS,
+  callerTokenAudience,
   isKeyId,
   keyIdFor,
   parseSigningKeys,

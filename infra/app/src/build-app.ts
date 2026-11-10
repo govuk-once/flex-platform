@@ -45,7 +45,10 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
       "The edge's Lambda@Edge role attaches the policy the edge logs stack creates, to write to its log group.",
     );
 
-    new FrontdoorCallerTokenKeysStack(app, environment);
+    frontdoor.addStackDependency(
+      new FrontdoorCallerTokenKeysStack(app, environment),
+      "The edge signs the caller token with the key key rotation makes, and decrypts it with the signing key.",
+    );
 
     for (const domainAccount of environment.domainAccounts) {
       const network = new NetworkStack(app, { environment, domainAccount });
