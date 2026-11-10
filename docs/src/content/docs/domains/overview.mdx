@@ -88,8 +88,9 @@ A call's second argument, its options, can carry a `signal` that stops the clien
 What a call sends on its caller's behalf comes from the caller context, not from the call. It is
 set once for the whole of a domain's invocation, by running the handler inside `withCallerContext`
 from `@govuk-once/flex-gateway-client/caller`. Every call made from the handler, however many
-`await`s deep, then carries it. The planned domain SDK will do this for every handler, so a domain
-developer does not. The entry is kept apart from the client's main one so that an editor does not
+`await`s deep, then carries it. The domain SDK's
+[`route()`](/flex-platform/domains/building-a-domain/#the-caller) does this for every handler, so a
+domain developer does not. The entry is kept apart from the client's main one so that an editor does not
 offer it, and nothing exports a way to read the context back.
 
 ```ts
