@@ -36,6 +36,9 @@ describe("gateway names", () => {
     expect(() => gatewayFunctionPattern("Production")).toThrow(
       /The environment .* must be/,
     );
+    expect(() => gatewayRolePattern("Production")).toThrow(
+      /The environment .* must be/,
+    );
   });
 
   it("derives each of a gateway's names from its environment and id", () => {

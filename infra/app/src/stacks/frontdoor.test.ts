@@ -102,6 +102,7 @@ describe("FrontdoorStack", () => {
 
     expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
       "domainaccount-staging-main",
+      "frontdoor-staging-caller-token-keys",
       "frontdoor-staging-edge-logs-eu-west-2",
       "network-staging-main",
       "domain-staging-domain-a",

@@ -38,6 +38,7 @@ export default defineConfig({
             "frontdoor/overview",
             "frontdoor/cloudfront-function",
             "frontdoor/lambda-edge",
+            "frontdoor/caller-token",
           ],
         },
         {

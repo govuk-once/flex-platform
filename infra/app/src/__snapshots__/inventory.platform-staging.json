@@ -130,6 +130,54 @@
     ]
   },
   {
+    "name": "frontdoor-staging-caller-token-keys",
+    "account": "224399154937",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "CallerTokenKeysStoreBucket07D88136",
+        "type": "AWS::S3::Bucket"
+      },
+      {
+        "logicalId": "CallerTokenKeysStoreBucketPolicyD54C97C5",
+        "type": "AWS::S3::BucketPolicy"
+      },
+      {
+        "logicalId": "KeyRotationFunction96F96846",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "KeyRotationFunctionScheduleE037CEEA",
+        "type": "AWS::Lambda::Permission"
+      },
+      {
+        "logicalId": "KeyRotationLogsLogGroupA2DE2F3C",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "KeyRotationRole0EC452CC",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "KeyRotationScheduleECEBC9DE",
+        "type": "AWS::Events::Rule"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "SigningKey49B95470",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "SigningKeyAliasFA392759",
+        "type": "AWS::KMS::Alias"
+      }
+    ]
+  },
+  {
     "name": "frontdoor-staging-edge-logs-eu-west-2",
     "account": "224399154937",
     "region": "eu-west-2",

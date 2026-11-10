@@ -165,7 +165,7 @@ actions that user may access. See [Identity and linked accounts](/flex-platform/
 
 <Badge text="Planned" variant="caution" />
 
-`x-flex-secure` will carry the platform's signed caller token: the user's values, signed by
-Lambda@Edge, which a domain passes on to the gateways it calls. Until then, Lambda@Edge sets it to
-a fixed `placeholder`, holding nothing about the caller, and signs it, so the header reaches every
-domain already.
+`x-flex-secure` will carry the platform's signed [caller token](/flex-platform/frontdoor/caller-token/):
+the user's values, signed by Lambda@Edge, which a domain passes on to the gateways it calls. Until
+then, Lambda@Edge sets it to a fixed `placeholder`, holding nothing about the caller, and signs it,
+so the header reaches every domain already.
