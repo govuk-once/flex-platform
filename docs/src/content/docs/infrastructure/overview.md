@@ -89,17 +89,20 @@ Frontdoor's.
 Every domain account has its stack, whether or not it hosts a domain, so adding a domain deploys
 only the domain's own stack and the Frontdoor's, whose routing map gains it.
 
-Every stack but a domain's has termination protection. Deleting `frontdoor-<environment>` would
-take the app's entry point and its domain name with it, deleting the log stack would leave
-Lambda@Edge's logs nowhere to go, deleting a network would take every workload's network with it,
-and the NAT addresses upstreams allowlist, and deleting a domain account's stack would take the
-certificate every domain in it uses, and leave the account's API Gateway logging setting naming a
-deleted role. Deleting `shared-identity` would leave the test user pool, which is retained, out of
-the app's hands. So deleting any of them takes a deliberate step first: turning the protection
-off. A domain's stack has none. Withdrawing a domain is
-[disabling it](/flex-platform/domains/hosting/#disabling-a-domain), which keeps its stack; removing
-it from config leaves its stack to be deleted by hand, since CDK doesn't delete a stack the app no
-longer builds.
+Every stack has termination protection. Deleting `frontdoor-<environment>` would take the app's
+entry point and its domain name with it, deleting the log stack would leave Lambda@Edge's logs
+nowhere to go, deleting a network would take every workload's network with it, and the NAT
+addresses upstreams allowlist, and deleting a domain account's stack would take the certificate
+every domain in it uses, and leave the account's API Gateway logging setting naming a deleted
+role. Deleting `shared-identity` would leave the test user pool, which is retained, out of the
+app's hands. Deleting a gateway's stack would stop every domain's calls to its upstream, and
+deleting a domain's would take the role its function runs as, and the API and host it answers at.
+So deleting any of them takes a deliberate step first: turning the protection off.
+
+Nothing deletes a stack for the app. CDK doesn't delete a stack the app no longer builds, so a
+gateway or a domain removed from config keeps its stack until someone turns its protection off
+and deletes it. Withdrawing a domain is
+[disabling it](/flex-platform/domains/hosting/#disabling-a-domain), which keeps its stack.
 
 ## Deploying
 
@@ -386,10 +389,11 @@ Tags go on stacks, every stack in the app, whoever creates it. CloudFormation pr
 tags to the resources in it that support stack-tag propagation, which is not every resource that
 can be tagged. Every stack carries the platform's tags, defined once in
 `infra/app/src/tags.ts`:
-`Product`, `System`, `Owner`, `ResourceOwner` and `Source`, plus `Stage` and the prune marker,
-`flex:managed-by: flex-platform`. A stack that sets one of these keys itself keeps its own value, so a
-domain's stack can name its own `Owner`. A planned prune step will find the stacks this app owns
-by the marker, so it stays the same through any change to the tag set.
+`Product`, `System`, `Owner`, `ResourceOwner` and `Source`, plus `Stage` and
+`flex:managed-by: flex-platform`, which marks a stack as one this app owns. A stack that sets one
+of these keys itself keeps its own value, so a domain's stack can name its own `Owner`. The mark
+is how the stacks the app has built are listed in an account, one that has left config included,
+so it stays the same through any change to the tag set.
 
 No tag changes on every deploy, such as a commit or a version. A stack tag propagates to the
 stack's resources, so it would update all of those each time.
@@ -399,7 +403,7 @@ Tag keys follow two styles:
 | Kind | Key | Example | Read by |
 |---|---|---|---|
 | Organisation and reporting | GDS UpperCamelCase | `Product`, `Owner`, `Source` | People and cost reports |
-| Platform | `flex:` and lowercase kebab-case | `flex:managed-by` | The platform's own tooling, such as the planned prune step |
+| Platform | `flex:` and lowercase kebab-case | `flex:managed-by` | The platform's own tooling |
 
 The `flex:` prefix keeps the platform's keys apart from keys other teams and tools set, such as a
 plain `ManagedBy`. Values are lowercase identifiers that stay the same from one deploy to the

@@ -78,8 +78,10 @@ change what the function's role may do. The routes change when the Frontdoor's s
 copies of Lambda@Edge can route to the domain until the new version has replaced them.
 
 Removing a domain from config is different. Its stack leaves the app, and CDK doesn't delete a
-stack the app no longer builds, so it is deleted by hand. Its log groups are retained, so adding
-the domain back later fails until they are imported into its new stack or deleted.
+stack the app no longer builds, so it is deleted by hand, once its
+[termination protection](/flex-platform/infrastructure/overview/#stacks) is turned off. Its log
+groups are retained, so adding the domain back later fails until they are imported into its new
+stack or deleted.
 
 ### Checks
 
@@ -127,10 +129,8 @@ own stack instead, before its stage, so API Gateway never creates one.
 
 `DomainStack`, `domain-<environment>-<domain>`, holds one domain's API and the host it answers at,
 and the log group and roles its function runs and is released with, in the domain account that
-hosts it, in eu-west-2. It holds no function: the API reaches the domain's function by name. It has
-no termination protection, since everything in it but its log groups, which are retained, is built
-again from config. CDK doesn't delete a stack the app no longer builds, so a domain removed from
-config keeps its stack until someone deletes it.
+hosts it, in eu-west-2. It holds no function: the API reaches the domain's function by name. A
+domain [removed from config](#disabling-a-domain) keeps its stack until someone deletes it.
 
 | Construct | Builds |
 |---|---|

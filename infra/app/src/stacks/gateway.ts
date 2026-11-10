@@ -92,6 +92,8 @@ export class GatewayStack extends Stack {
     super(scope, gatewayStackName(environment, domainAccount, gateway), {
       description: `Flex gateway ${gateway.id} in the ${environment.name} environment`,
       env: { account: domainAccount.account, region: NETWORK_REGION },
+      // Deleting it would stop every domain's calls to the gateway's upstream.
+      terminationProtection: true,
     });
 
     const roleName = gatewayRoleName(environment.name, gateway.id);

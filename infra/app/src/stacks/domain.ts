@@ -52,6 +52,9 @@ export class DomainStack extends Stack {
     super(scope, domainStackName(environment, domain), {
       description: `Flex domain ${domain} in the ${environment.name} environment`,
       env: { account: domainAccount.account, region: DOMAIN_REGION },
+      // Deleting it would take the role the domain's function runs as, and the API and host it
+      // answers at. A domain is withdrawn by disabling it, which keeps its stack.
+      terminationProtection: true,
     });
 
     const { api } = new ProxyApi(this, "Domain", {

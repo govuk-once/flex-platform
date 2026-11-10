@@ -49,7 +49,7 @@ function acknowledge(
 
 describe("buildApp", () => {
   describe("tags", () => {
-    it("tags each stack with the platform's tags, its stage and the prune marker", () => {
+    it("tags each stack with the platform's tags, its stage and the mark of a stack the app owns", () => {
       const { app, queue } = appWithProbe();
       acknowledge(queue);
 

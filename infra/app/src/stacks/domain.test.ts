@@ -98,13 +98,13 @@ describe("DomainStack", () => {
     expect(domainStackName(DEV, DOMAIN)).toBe("domain-dev-domain-a");
   });
 
-  it("is in the domain's account, in the region the edge signs requests for, and can be removed with the domain", () => {
+  it("is in the domain's account, in the region the edge signs requests for, protected from deletion", () => {
     const { stack } = build();
 
     expect(stack.stackName).toBe("domain-dev-domain-a");
     expect(stack.account).toBe(MAIN.account);
     expect(stack.region).toBe(SIGNING_REGION);
-    expect(stack.terminationProtection).toBe(false);
+    expect(stack.terminationProtection).toBe(true);
   });
 
   it("reads the account's certificate and the network's IDs, and outputs nothing", () => {
