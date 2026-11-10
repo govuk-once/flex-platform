@@ -148,6 +148,14 @@ function compileMeta(
   return compiled;
 }
 
+// Whether a validator passed a value: only if it answered `true`, there and then. One that
+// answered with a promise would be truthy before it settled, and so pass every value. Codegen
+// refuses a schema that compiles to one, and this holds whatever validator a handler is given.
+function passes(validator: Validator, data: unknown): boolean {
+  const result: unknown = validator(data);
+  return result === true;
+}
+
 // What of a driver's report a caller and a log may see: what the gateway declared, where it is
 // the scalar its schema says. The rest is left out and nothing is said of its value, only of
 // where its schema refused it. A report is never a reason to fail a call: what it describes has
@@ -164,7 +172,7 @@ function acceptedMeta(
     try {
       if (!isScalar(value)) {
         refused(name, "not a string, a finite number or a boolean");
-      } else if (validator(value)) {
+      } else if (passes(validator, value)) {
         accepted[name] = value;
       } else {
         refused(name, formatValidationErrors(validator.errors));
@@ -281,7 +289,7 @@ export function createHandler<const TOps extends AnyOperations>(
 
       // Step 4: Validate input
       step = "input";
-      if (!op.input(envelope.input)) {
+      if (!passes(op.input, envelope.input)) {
         throw new GatewayError(
           "INVALID_INPUT",
           formatValidationErrors(op.input.errors),
@@ -328,7 +336,7 @@ export function createHandler<const TOps extends AnyOperations>(
           `Unknown outcome "${result.outcome}" for operation "${envelope.operation}"`,
         );
       }
-      if (!outcomeValidator(result.data)) {
+      if (!passes(outcomeValidator, result.data)) {
         throw new GatewayError(
           "UPSTREAM_CONTRACT_VIOLATION",
           `Outcome "${result.outcome}" data failed validation for operation "${envelope.operation}"`,

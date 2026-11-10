@@ -64,6 +64,12 @@ const alwaysInvalid: Validator = Object.assign(
   },
 );
 
+// What a schema with asynchronous validation compiles to: it answers with a promise, which is
+// truthy whatever it settles to. No Validator is typed that way, so the cast is the point.
+const answersLater = Object.assign(() => Promise.resolve(true), {
+  errors: null,
+}) as unknown as Validator;
+
 const stubExecute: HandlerDeps["execute"] = () =>
   Promise.resolve({ outcome: "success", data: { id: "123" } });
 
@@ -330,6 +336,27 @@ describe("createHandler", () => {
       );
 
       await handler(envelope());
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it("refuses an input its validator answered with a promise, without calling execute", async () => {
+      const execute = vi.fn(stubExecute);
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          validators: {
+            ping: {
+              input: answersLater,
+              outcomes: { success: alwaysValid },
+            },
+          },
+          execute,
+        }),
+      );
+      const resp = await handler(envelope());
+
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("INVALID_INPUT");
       expect(execute).not.toHaveBeenCalled();
     });
   });
@@ -621,6 +648,24 @@ describe("createHandler", () => {
             ping: {
               input: alwaysValid,
               outcomes: { success: alwaysInvalid },
+            },
+          },
+        }),
+      );
+      const resp = await handler(envelope());
+
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("UPSTREAM_CONTRACT_VIOLATION");
+    });
+
+    it("returns UPSTREAM_CONTRACT_VIOLATION when the outcome's validator answered with a promise", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          validators: {
+            ping: {
+              input: alwaysValid,
+              outcomes: { success: answersLater },
             },
           },
         }),
@@ -1374,6 +1419,25 @@ describe("createHandler, on what a driver reports beside its result", () => {
       { upstreamRequestId: OTHER_ID },
       { upstreamRequestId: REQUEST_ID },
     ]);
+  });
+
+  it("leaves out a value its validator answered with a promise", async () => {
+    const handler = createHandler(
+      testConfig(),
+      testDeps({
+        meta: { upstreamRequestId: answersLater, remaining: alwaysValid },
+        execute: reporting({ upstreamRequestId: REQUEST_ID, remaining: 7 }),
+      }),
+    );
+
+    await expect(handler(envelope())).resolves.toMatchObject({
+      meta: { remaining: 7 },
+    });
+    expect(
+      capturedRecords().find(
+        (record) => record.metadata === "upstreamRequestId",
+      ),
+    ).toBeDefined();
   });
 
   it("leaves out what the gateway did not declare, naming it and never its value", async () => {
