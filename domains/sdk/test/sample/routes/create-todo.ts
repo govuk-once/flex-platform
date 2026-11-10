@@ -9,7 +9,7 @@ export const createTodo = route(
     }
 
     if (store.hasTitle(caller.pairwiseId, body.title)) return fail("conflict");
-    
+
     return { status: 201, body: store.create(caller.pairwiseId, body.title) };
   },
 );

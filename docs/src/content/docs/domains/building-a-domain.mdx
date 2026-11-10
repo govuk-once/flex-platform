@@ -263,11 +263,9 @@ tests in `domains/sdk/src/route.test.ts` show each step. A testing library with 
 domains is planned.
 
 A sample domain lives in `domains/sdk/test/sample/`: a configuration, a route for each method
-above and a store scoped to the caller. It calls no gateway. Its test compiles it
-against the built package, with the package name resolving to `dist/` and nothing else, so what a
-domain installs is what is checked, and shows the compiler refusing a handler that reads an
-undeclared parameter, answers an undeclared status or names an undeclared route. It then drives
-each route through `run`.
+above and a store scoped to the caller. It calls no gateway. Its test drives each route through
+`run`, and holds the compiler to refusing a handler that reads an undeclared parameter, answers
+an undeclared status or names an undeclared route.
 
 ## Differences from the previous platform's SDK
 

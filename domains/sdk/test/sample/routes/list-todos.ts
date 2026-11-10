@@ -5,7 +5,7 @@ const PAGE_SIZE = 20;
 
 export const listTodos = route("GET /v1/todos", ({ caller, query }) => {
   const start = (query.page - 1) * PAGE_SIZE;
-  
+
   return {
     status: 200,
     body: {
