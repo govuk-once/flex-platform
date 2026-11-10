@@ -121,6 +121,7 @@ describe("DomainStack", () => {
 
     expect(parameters.toSorted()).toEqual([
       "/flex/domain/dev/certificate-arn",
+      "/flex/network/dev/endpoint/lambda",
       "/flex/network/dev/isolated-subnet-ids",
       "/flex/network/dev/security-group/domain",
       "BootstrapVersion",
@@ -227,8 +228,17 @@ describe("DomainStack", () => {
     });
   });
 
-  it("lets the domain's function invoke the environment's gateways", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+  it("lets the domain's function invoke the environment's gateways, through the network's lambda endpoint alone", () => {
+    const { template } = build();
+    const parameters = template.toJSON().Parameters as Record<
+      string,
+      { Default: string }
+    >;
+    const endpoint = Object.keys(parameters).find(
+      (key) => parameters[key]?.Default === "/flex/network/dev/endpoint/lambda",
+    );
+
+    template.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "domain-dev-domain-a-execution",
       Policies: [
         {
@@ -236,7 +246,16 @@ describe("DomainStack", () => {
             Statement: Match.arrayWith([
               Match.objectLike({
                 Action: "lambda:InvokeFunction",
+                Effect: "Allow",
                 Resource: `arn:aws:lambda:eu-west-2:${MAIN.account}:function:gateway-dev-*`,
+              }),
+              Match.objectLike({
+                Action: "lambda:InvokeFunction",
+                Effect: "Deny",
+                Resource: "*",
+                Condition: {
+                  StringNotEquals: { "aws:SourceVpce": { Ref: endpoint } },
+                },
               }),
             ]),
           },

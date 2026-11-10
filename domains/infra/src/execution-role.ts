@@ -22,20 +22,29 @@ export interface ExecutionRoleProps {
   readonly domain: string;
   /** The functions a domain may invoke, as a name pattern such as `gateway-dev-*`. */
   readonly gatewayFunctions: string;
+  /** The network's `lambda` endpoint, by ID. */
+  readonly lambdaEndpointId: string;
   /** The key the domain's function log group is encrypted with. */
   readonly logGroupKey: IKey;
 }
 
 /**
  * The role one domain's function runs as. It may write only to that domain's log group, so a
- * domain's code can never write into another's. Its boundary holds the same limits, in case the
- * role is ever widened by mistake.
+ * domain's code can never write into another's. It may invoke a gateway only through the
+ * network's endpoint, so its credentials invoke nothing from anywhere else. Its boundary holds the
+ * same limits, in case the role is ever widened by mistake.
  */
 export class ExecutionRole extends Construct {
   constructor(
     scope: Construct,
     id: string,
-    { environment, domain, gatewayFunctions, logGroupKey }: ExecutionRoleProps,
+    {
+      environment,
+      domain,
+      gatewayFunctions,
+      lambdaEndpointId,
+      logGroupKey,
+    }: ExecutionRoleProps,
   ) {
     super(scope, id);
 
@@ -60,6 +69,17 @@ export class ExecutionRole extends Construct {
         effect: Effect.ALLOW,
         actions: ["lambda:InvokeFunction"],
         resources: [gateways],
+      }),
+      // A domain's code holds the role's credentials, and could give them away. The deny refuses
+      // an invoke made with them by any other way than the endpoint, so no other grant can open
+      // one from outside the network, past the Frontdoor and the domain's API.
+      new PolicyStatement({
+        effect: Effect.DENY,
+        actions: ["lambda:InvokeFunction"],
+        resources: ["*"],
+        conditions: {
+          StringNotEquals: { "aws:SourceVpce": lambdaEndpointId },
+        },
       }),
       ...execution.statements,
       // Lambda sends a function's traces as its role when tracing is active.

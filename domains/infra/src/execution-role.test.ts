@@ -12,6 +12,7 @@ function build(nag = false) {
     environment: "sandbox",
     domain: "domain-a",
     gatewayFunctions: "gateway-sandbox-*",
+    lambdaEndpointId: "vpce-0lambda",
     logGroupKey: new Key(stack, "LogGroupKey", { enableKeyRotation: true }),
   });
   const app = stack.node.root;
@@ -28,6 +29,12 @@ const STATEMENTS = [
     Action: "lambda:InvokeFunction",
     Effect: "Allow",
     Resource: `arn:aws:lambda:${ARN}:function:gateway-sandbox-*`,
+  },
+  {
+    Action: "lambda:InvokeFunction",
+    Effect: "Deny",
+    Resource: "*",
+    Condition: { StringNotEquals: { "aws:SourceVpce": "vpce-0lambda" } },
   },
   {
     Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
@@ -100,7 +107,7 @@ describe("ExecutionRole", () => {
     });
   });
 
-  it("may invoke the gateways named, write its own domain's logs and its traces and run in a VPC, and denies the network to its code", () => {
+  it("may invoke the gateways named through the endpoint alone, write its own domain's logs and its traces and run in a VPC, and denies the network to its code", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
       Policies: Match.exact([
         {

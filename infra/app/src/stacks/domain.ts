@@ -10,6 +10,7 @@ import {
 import { edgeRoleName } from "@repo/frontdoor-infra";
 import { gatewayFunctionPattern } from "@repo/gateway-infra";
 import {
+  endpointIdParameterName,
   PlatformLogGroup,
   securityGroupIdParameterName,
   subnetIdsParameterName,
@@ -82,6 +83,10 @@ export class DomainStack extends Stack {
       environment: environment.name,
       domain,
       gatewayFunctions,
+      lambdaEndpointId: StringParameter.valueForStringParameter(
+        this,
+        endpointIdParameterName(environment.name, "lambda"),
+      ),
       logGroupKey: key,
     });
 

@@ -155,15 +155,16 @@ reaches an upstream through a gateway, and a gateway that needs the internet has
 security group a domain's function runs in, which may reach only the `lambda` endpoint: see
 [what a workload may reach](/flex-platform/infrastructure/network/#what-a-workload-may-reach).
 
-The stack reads two of the network's
-[parameters](/flex-platform/infrastructure/network/#ids-other-stacks-read) when it deploys, and
-holds the deploy role to them. The deploy role may read them too, so a release places a function
-from the same values:
+The stack reads three of the network's
+[parameters](/flex-platform/infrastructure/network/#ids-other-stacks-read) when it deploys. It
+holds the deploy role to the first two, which the deploy role may read too, so a release places a
+function from the same values. It holds the execution role to the third:
 
 | Parameter | Holds |
 |---|---|
 | `/flex/network/<environment>/isolated-subnet-ids` | The isolated subnets' IDs |
 | `/flex/network/<environment>/security-group/domain` | The `domain` security group's ID |
+| `/flex/network/<environment>/endpoint/lambda` | The `lambda` endpoint's ID |
 
 If the network is ever replaced, the stack deploys with `--force` to read the new IDs.
 
@@ -179,6 +180,11 @@ may:
   its stack's key for that through CloudWatch Logs;
 - send its traces to X-Ray;
 - create and remove the network interfaces Lambda needs to run it in the VPC.
+
+It may invoke a gateway only through the network's `lambda` endpoint. A domain's code holds the
+role's credentials, and could give them away in a response or a log line. So the role denies
+invoking any function by any other way, and the credentials invoke nothing from outside the
+network.
 
 Lambda manages those network interfaces with the role's credentials, which the function's code
 holds too. So the role denies the network interface actions to any call made from a domain's code,
