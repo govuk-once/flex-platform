@@ -235,23 +235,29 @@ root) and `requestId` (Lambda's invocation id), under the domain's `name`. The l
 The route's own lines are fixed messages with no payload: a missing caller as a category, a
 validation failure by its part (`params`, `query`, `headers`, `body`), a response failure by its
 status and the codes of the schema's issues, and an error the handler let out as the summary
-`@repo/utils` builds, its name and source locations, never its message, because a library's
-message can hold payload data. An error a handler logs under `err` or `error` is reduced the same
-way.
+`@repo/utils` builds: its source locations, never its name or message, because a library's
+message can hold payload data. An error a handler logs is reduced the same way, under any name and
+at any depth, and so is anything else logged under `err` or `error`.
 
-Redaction runs over every field and every message, at any depth, and is the previous platform's
-sanitiser without its environment switch:
+Redaction runs over every message and every field, at any depth. That includes the fields every
+line of a request carries, since `correlationId` is the caller's own text. A value is read as JSON
+would write it, so a class instance is redacted by its fields like any other object. It began as
+the previous platform's sanitiser, without its environment switch:
 
-- a field whose name looks like a secret (`token`, `password`, `apiKey`, `authorization`, a card
-  number's fields, and so on) or like personal data (`email`, `surname`, `dateOfBirth`, `nino`,
-  `postcode`, and so on) is replaced whole;
+- a field is replaced whole when its name is, or is a compound of, one that looks like a secret
+  (`token`, `password`, `apiKey`, `authorization`, a card number's fields, and so on) or like
+  personal data (`email`, `surname`, `dateOfBirth`, `nino`, `postcode`, and so on). So
+  `phoneNumber` and `bank_account_number` are replaced as `phone` is;
 - a string value that looks like a JWT, a card number passing the Luhn check, an email address, a
   UK phone number, a National Insurance number, a UK postcode or an IPv4 address is replaced,
-  under any name.
+  under any name. A phone or card number is found written whole or in groups.
+
+Redaction is by pattern, so it errs towards replacing: a field named `emailSent` is replaced too.
 
 A domain adds its own patterns in `common.logging`: `redactKeys` for field names and
-`redactValues` for values, each a list of regular expressions. Tests in `domains/sdk` log
-synthetic secrets and personal data under matched and unmatched names, and assert their absence.
+`redactValues` for values, each a list of regular expressions. Each is tested from the start of
+the name or value every time, whatever its flags. Tests in `domains/sdk` log synthetic secrets and
+personal data under matched and unmatched names, and assert their absence.
 
 ## Testing a route
 

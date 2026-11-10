@@ -4,7 +4,15 @@
 // which let personal data through outside production, is not carried over: nothing here branches
 // on where it runs. A domain adds its own patterns through its configuration's logging block.
 
+import { isSummary, summarise } from "./summarise.ts";
+
 export const REDACTED = "[redacted]";
+
+// Written for a value that holds itself, as pino's own serialiser writes it, and for one nested
+// deeper than anything a log line should hold.
+const CIRCULAR = "[Circular]";
+const TRUNCATED = "[Truncated]";
+const MAX_DEPTH = 32;
 
 const SECRET_KEYS: readonly RegExp[] = [
   /secret/i,
@@ -12,8 +20,7 @@ const SECRET_KEYS: readonly RegExp[] = [
   /password/i,
   /passwd/i,
   /authorization/i,
-  /apikey/i,
-  /api_key/i,
+  /api.?key/i,
   /credential/i,
   /private.?key/i,
   /access.?key/i,
@@ -29,25 +36,37 @@ const SECRET_KEYS: readonly RegExp[] = [
   /card.?expir/i,
 ];
 
+// A key is tested as written and as words (see `words`), so `\b` finds a short name such as
+// `dob` inside `applicantDob` without finding it inside a longer word.
 const PERSONAL_KEYS: readonly RegExp[] = [
-  /\bemail\b/i,
-  /\bphone\b/i,
+  /email/i,
+  /phone/i,
   /\bmobile\b/i,
-  /\bforename\b/i,
-  /\bsurname\b/i,
-  /\bfirst.?name\b/i,
-  /\blast.?name\b/i,
-  /\bfull.?name\b/i,
-  /\bdate.?of.?birth\b/i,
+  /mobile.?number/i,
+  /forename/i,
+  /surname/i,
+  /first.?name/i,
+  /last.?name/i,
+  /full.?name/i,
+  /date.?of.?birth/i,
   /\bdob\b/i,
   /\bnino\b/i,
-  /\bnational.?insurance\b/i,
-  /\bpostcode\b/i,
-  /\bzip.?code\b/i,
-  /\bsort.?code\b/i,
-  /\baccount.?number\b/i,
+  /national.?insurance/i,
+  /post.?code/i,
+  /zip.?code/i,
+  /sort.?code/i,
+  /account.?number/i,
   /\bip.?address\b/i,
 ];
+
+// A field's name as words: `bankAccountNumber`, `bank_account_number` and `IPAddress` are each
+// split where a reader would split them.
+function words(key: string): string {
+  return key
+    .replaceAll(/([a-z\d])(?=[A-Z])/g, "$1 ")
+    .replaceAll(/([A-Z])(?=[A-Z][a-z])/g, "$1 ")
+    .replaceAll(/[_\-.\s]+/g, " ");
+}
 
 const SECRET_VALUES: readonly RegExp[] = [
   /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/, // a JWT, anywhere in the value
@@ -56,6 +75,7 @@ const SECRET_VALUES: readonly RegExp[] = [
 const PERSONAL_VALUES: readonly RegExp[] = [
   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}/, // an email address
   /(?:\+44|0)\d{9,10}/, // a UK phone number
+  /(?:\+44 ?|(?<!\d)0)(?:\d ?){8,9}\d/, // and one written in groups, such as 07700 900123
   /\b[A-Z]{2}\d{6}[A-D]\b/, // a National Insurance number
   /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i, // a UK postcode
   /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, // an IPv4 address
@@ -88,17 +108,41 @@ function passesLuhn(digits: string): boolean {
   return sum % 10 === 0;
 }
 
+function isCardNumber(digits: string): boolean {
+  return (
+    digits.length >= 13 &&
+    digits.length <= 19 &&
+    CARD_PREFIXES.some((prefix) => prefix.test(digits)) &&
+    passesLuhn(digits)
+  );
+}
+
+// A card number is written whole or in groups, and a run of digits and separators can hold more
+// than the number: a date or a reference before it, say. So every stretch of whole groups is
+// tried, not only the run as one number.
 function holdsCardNumber(value: string): boolean {
-  const candidates = value.match(/\d(?:[ -]?\d){12,18}/g);
-  if (candidates === null) return false;
-  return candidates
-    .map((candidate) => candidate.replaceAll(/[ -]/g, ""))
-    .filter((digits) => digits.length >= 13 && digits.length <= 19)
-    .some(
-      (digits) =>
-        CARD_PREFIXES.some((prefix) => prefix.test(digits)) &&
-        passesLuhn(digits),
-    );
+  for (const [run] of value.matchAll(/\d(?:[ -]?\d)+/g)) {
+    const groups = run.split(/[ -]/);
+    for (let first = 0; first < groups.length; first += 1) {
+      let digits = "";
+      for (
+        let last = first;
+        last < groups.length && digits.length < 19;
+        last += 1
+      ) {
+        digits += groups[last] ?? "";
+        if (isCardNumber(digits)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// A pattern with the `g` or `y` flag remembers where its last match ended and `test` starts from
+// there, so it answers differently on alternate calls. Each test starts from the beginning.
+function matches(pattern: RegExp, text: string): boolean {
+  pattern.lastIndex = 0;
+  return pattern.test(text);
 }
 
 export interface RedactionOptions {
@@ -113,44 +157,78 @@ export interface Redactor {
   redactsKey(key: string): boolean;
   /** The string with anything that looks sensitive replaced. */
   redactString(value: string): string;
-  /** A copy of the value with every sensitive field and string replaced, at any depth. */
+  /**
+   * A copy of the value as JSON would write it, with every sensitive field and string replaced
+   * at any depth, and every error reduced to where it was created.
+   */
   redact(value: unknown): unknown;
 }
 
 export function createRedactor(options: RedactionOptions = {}): Redactor {
+  // The domain's patterns are copied, so resetting where a test starts never touches its own.
+  const copy = (pattern: RegExp) => new RegExp(pattern);
   const keys = [
     ...SECRET_KEYS,
     ...PERSONAL_KEYS,
-    ...(options.redactKeys ?? []),
+    ...(options.redactKeys ?? []).map(copy),
   ];
   const values = [
     ...SECRET_VALUES,
     ...PERSONAL_VALUES,
-    ...(options.redactValues ?? []),
+    ...(options.redactValues ?? []).map(copy),
   ];
 
-  const redactsKey = (key: string) => keys.some((pattern) => pattern.test(key));
+  const redactsKey = (key: string) => {
+    const asWords = words(key);
+    return keys.some(
+      (pattern) => matches(pattern, key) || matches(pattern, asWords),
+    );
+  };
 
   const redactString = (value: string) =>
-    holdsCardNumber(value) || values.some((pattern) => pattern.test(value))
+    holdsCardNumber(value) || values.some((pattern) => matches(pattern, value))
       ? REDACTED
       : value;
 
-  // Walks plain data only. A class instance, an error among them, is logged as whatever pino's
-  // serialisers made of it before this runs, so it is passed through by reference.
-  const redact = (value: unknown, depth = 0): unknown => {
-    if (typeof value === "string") return redactString(value);
-    if (depth > 32 || value === null || typeof value !== "object") return value;
+  // What JSON would write for an object, redacted: an array's items, the result of `toJSON`, or
+  // the object's own enumerable fields, whatever its class or prototype.
+  const redactObject = (value: object, ancestors: Set<object>): unknown => {
     if (Array.isArray(value)) {
-      return value.map((item: unknown) => redact(item, depth + 1));
+      return value.map((item: unknown) => walk(item, ancestors));
     }
-    if (Object.getPrototypeOf(value) !== Object.prototype) return value;
-    const result: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) {
-      result[key] = redactsKey(key) ? REDACTED : redact(item, depth + 1);
+    const { toJSON } = value as { toJSON?: unknown };
+    if (typeof toJSON === "function") {
+      return walk(toJSON.call(value), ancestors);
     }
-    return result;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]: [string, unknown]) => [
+        key,
+        redactsKey(key) ? REDACTED : walk(item, ancestors),
+      ]),
+    );
   };
 
-  return { redactsKey, redactString, redact };
+  const walk = (value: unknown, ancestors: Set<object>): unknown => {
+    if (typeof value === "string") return redactString(value);
+    if (typeof value !== "object" || value === null) return value;
+    if (isSummary(value)) return value;
+    if (Error.isError(value)) return summarise(value);
+    if (ancestors.has(value)) return CIRCULAR;
+    if (ancestors.size >= MAX_DEPTH) return TRUNCATED;
+    ancestors.add(value);
+    try {
+      return redactObject(value, ancestors);
+    } catch {
+      // A getter or a `toJSON` that throws: nothing of the value can be shown to be safe.
+      return REDACTED;
+    } finally {
+      ancestors.delete(value);
+    }
+  };
+
+  return {
+    redactsKey,
+    redactString,
+    redact: (value) => walk(value, new Set()),
+  };
 }

@@ -1,15 +1,15 @@
 // The SDK's logger: pino, written synchronously to stdout, since an asynchronous destination can
 // lose lines when a Lambda is frozen. Every object logged goes through the redactor, and so does
-// every message. An error logged under `err` or `error` is reduced to where it was created,
-// because pino's own serialiser would write its message and stack, and either can hold a payload.
+// every message and every field a child logger carries. An error is reduced to where it was
+// created, because pino's own serialiser would write its message and stack, and either can hold
+// a payload. Whatever else is logged under `err` or `error` is reduced the same way.
 
-import type { UnexpectedErrorSummary } from "@repo/utils/describe-unexpected-error";
-import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 import type { DestinationStream, Logger as PinoLogger } from "pino";
 import pino from "pino";
 
-import type { RedactionOptions } from "./redact.ts";
+import type { RedactionOptions, Redactor } from "./redact.ts";
 import { createRedactor } from "./redact.ts";
+import { summarise } from "./summarise.ts";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -33,11 +33,7 @@ export interface Logger extends Log {
   child(fields: LogFields): Logger;
 }
 
-function summarise(error: unknown): UnexpectedErrorSummary {
-  return describeUnexpectedError(error);
-}
-
-function wrap(logger: PinoLogger): Logger {
+function wrap(logger: PinoLogger, redactor: Redactor): Logger {
   const write =
     (level: LogLevel) =>
     (message: string, fields?: LogFields): void => {
@@ -52,7 +48,10 @@ function wrap(logger: PinoLogger): Logger {
     info: write("info"),
     warn: write("warn"),
     error: write("error"),
-    child: (fields) => wrap(logger.child(fields)),
+    // Pino writes a child's fields as bindings, which never reach `formatters.log`, so they are
+    // redacted here, before pino holds them.
+    child: (fields) =>
+      wrap(logger.child(redactor.redact(fields) as LogFields), redactor),
   };
 }
 
@@ -72,6 +71,7 @@ export function createLogger(
       level: options.level ?? "info",
       // Pino writes `pid` and `hostname` unless told not to; neither says anything in a Lambda.
       base: {},
+      // These run after `formatters.log`, where the redactor has already reduced a real error.
       serializers: { err: summarise, error: summarise },
       formatters: {
         // The level as its name, which is what a log query filters on.
@@ -91,5 +91,5 @@ export function createLogger(
     },
     destination,
   );
-  return wrap(logger);
+  return wrap(logger, redactor);
 }

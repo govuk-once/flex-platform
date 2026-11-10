@@ -55,16 +55,55 @@ describe("createLogger", () => {
     });
   });
 
+  it("redacts the fields a child logger carries", () => {
+    const { lines, sink } = capture();
+    const log = createLogger("todos", {}, sink);
+    log
+      .child({
+        correlationId: "someone@example.com",
+        apiKey: "SYNTHETIC_API_KEY",
+        requestId: "r-1",
+      })
+      .child({ deep: { surname: "x" } })
+      .info("read");
+    expect(JSON.stringify(lines)).not.toContain("SYNTHETIC_API_KEY");
+    expect(JSON.stringify(lines)).not.toContain("example.com");
+    expect(lines[0]).toMatchObject({
+      correlationId: REDACTED,
+      apiKey: REDACTED,
+      requestId: "r-1",
+      deep: { surname: REDACTED },
+    });
+  });
+
   it("reduces an error to where it was created", () => {
     const { lines, sink } = capture();
     const error = new Error("a message holding SYNTHETIC_API_KEY");
-    createLogger("todos", {}, sink).error("failed", { err: error, error });
+    const other = new Error("a message holding SYNTHETIC_API_KEY");
+    createLogger("todos", {}, sink)
+      .child({ error: other })
+      .error("failed", { err: error, nested: { cause: error } });
     const line = JSON.stringify(lines[0]);
     expect(line).not.toContain("SYNTHETIC_API_KEY");
     expect(line).not.toContain("a message");
+    const here = expect.stringContaining("logger.test.ts") as unknown;
     expect(lines[0]).toMatchObject({
-      err: { frames: expect.any(Array) as unknown },
-      error: { frames: expect.any(Array) as unknown },
+      err: { frames: expect.arrayContaining([here]) as unknown },
+      error: { frames: expect.arrayContaining([here]) as unknown },
+      nested: { cause: { frames: expect.arrayContaining([here]) as unknown } },
+    });
+  });
+
+  it("reduces whatever else is logged as an error to nothing", () => {
+    const { lines, sink } = capture();
+    createLogger("todos", {}, sink).error("failed", {
+      err: "thrown text",
+      error: { message: "thrown text" },
+    });
+    expect(JSON.stringify(lines)).not.toContain("thrown text");
+    expect(lines[0]).toMatchObject({
+      err: { frames: [] },
+      error: { frames: [] },
     });
   });
 });
