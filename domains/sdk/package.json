@@ -18,7 +18,7 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@govuk-once/flex-gateway-client": "^0.1.0",
+    "@govuk-once/flex-gateway-client": ">=0.1.0 <1.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
