@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   errorBody,
-  fail,
   Failure,
   fromGatewayError,
   fromInvocationFailure,
@@ -26,8 +25,8 @@ describe("failures", () => {
     expect(errorBody("internal").type).toBe("server_error");
   });
 
-  it("are made by fail", () => {
-    const failure = fail("conflict");
+  it("are errors that carry their code and status", () => {
+    const failure = new Failure("conflict");
     expect(failure).toBeInstanceOf(Failure);
     expect(failure.code).toBe("conflict");
     expect(failure.status).toBe(409);

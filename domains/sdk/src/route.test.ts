@@ -7,7 +7,7 @@ import { CALLER_HEADER } from "./caller.ts";
 import type { DomainConfig } from "./config.ts";
 import { domain } from "./config.ts";
 import { currentCaller } from "./context.ts";
-import { fail, Failure, fromGatewayError } from "./errors.ts";
+import { Failure, fromGatewayError } from "./errors.ts";
 import type { RouteRequest } from "./http.ts";
 import { log } from "./logging/log.ts";
 import { createLogger } from "./logging/logger.ts";
@@ -387,7 +387,7 @@ describe("route", () => {
     const route = createRouteFactory(config, logger);
     const handler = route(
       "DELETE /v1/todos/:id",
-      () => fail("not_found") as never,
+      () => new Failure("not_found") as never,
     );
     const response = await handler.run(request());
     expect(response.status).toBe(500);
@@ -395,6 +395,28 @@ describe("route", () => {
       msg: "handler failed with a code the route does not declare",
       code: "not_found",
     });
+  });
+
+  it("answers 500 for a failure only the route decides", async () => {
+    const { lines, logger } = capture();
+    const route = createRouteFactory(config, logger);
+    for (const code of ["unauthorized", "unsupported_media_type"] as const) {
+      const returned = route(
+        "DELETE /v1/todos/:id",
+        () => new Failure(code) as never,
+      );
+      const response = await returned.run(request());
+      expect(response.status).toBe(500);
+      expect(body(response)).toMatchObject({ code: "internal" });
+      expect(lines.at(-1)).toMatchObject({
+        msg: "handler failed with a code the route does not declare",
+        code,
+      });
+      const thrown = route("DELETE /v1/todos/:id", () => {
+        throw new Failure(code);
+      });
+      expect((await thrown.run(request())).status).toBe(500);
+    }
   });
 
   it("answers 500 for a response the route does not declare, or that fails its schema", async () => {

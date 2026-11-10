@@ -23,7 +23,7 @@ import {
   errorBody,
   Failure,
   fromInvocationFailure,
-  ROUTE_FAILURE_CODES,
+  PLATFORM_FAILURE_CODES,
   statusOf,
 } from "./errors.ts";
 import type { HttpMethod, RouteRequest, RouteResponse } from "./http.ts";
@@ -203,7 +203,13 @@ export function createRouteFactory<const Config extends DomainConfig>(
       ]),
     );
     const declaredFailures = new Set<FailureCode>(declaration.errors ?? []);
-    const routeFailures = new Set<FailureCode>(ROUTE_FAILURE_CODES);
+    // The codes a handler's failure is answered with as given: the route's own, and the
+    // platform's. `unauthorized` and `unsupported_media_type` are neither, since only the route
+    // decides them, so a handler cannot answer with one.
+    const answerable = new Set<FailureCode>([
+      ...PLATFORM_FAILURE_CODES,
+      ...declaredFailures,
+    ]);
 
     const open = (request: RouteRequest): Exchange => {
       const headers = lowerCaseHeaders(request.headers);
@@ -340,7 +346,7 @@ export function createRouteFactory<const Config extends DomainConfig>(
 
       if (result instanceof Failure) {
         const { code } = result as Failure;
-        if (routeFailures.has(code) && !declaredFailures.has(code)) {
+        if (!answerable.has(code)) {
           log.error("handler failed with a code the route does not declare", {
             code,
           });

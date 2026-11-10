@@ -183,7 +183,8 @@ schema, a library or an upstream wrote reaches a body. `type` is `auth_error` fo
 
 The first group of codes, `invalid_request`, `forbidden`, `not_found`, `conflict` and
 `unprocessable`, are the ones a route may declare in `errors` and a handler may then return with
-`fail`. The rest belong to the platform, and any handler may return them.
+`fail`. `internal`, `bad_gateway`, `unavailable` and `timeout` belong to the platform, and any
+handler may return them. `unauthorized` and `unsupported_media_type` are the route's alone.
 
 A gateway returns its errors in an envelope and never throws them, so a handler decides what each
 means. `fromGatewayError(response.error.code)` is the default mapping, which a handler may return:
@@ -196,8 +197,9 @@ is `forbidden`, the one answer that is about the caller; and `UPSTREAM_UNAVAILAB
 and a handler does not catch is mapped the same way: a call that `timed_out` is a 504, a
 `function_error` or `invalid_response` a 502, and `invoke_failed` or `aborted` a 500.
 
-A `Failure` is an `Error`, so a handler may throw one as well as return it. A route answers 500 for
-a `Failure` whose code it does not declare, and logs the code.
+A `Failure` is an `Error`, so a handler may throw one as well as return it. A route answers 500,
+and logs the code, for a `Failure` whose code is neither one it declares nor one of the
+platform's. So no handler answers 401 or 415 on the route's behalf.
 
 ## The caller
 

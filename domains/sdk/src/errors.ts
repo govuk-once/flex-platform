@@ -71,12 +71,11 @@ export type PlatformFailureCode = Exclude<
   RouteFailureCode | "unauthorized" | "unsupported_media_type"
 >;
 
-export const ROUTE_FAILURE_CODES: readonly RouteFailureCode[] = [
-  "invalid_request",
-  "forbidden",
-  "not_found",
-  "conflict",
-  "unprocessable",
+export const PLATFORM_FAILURE_CODES: readonly PlatformFailureCode[] = [
+  "internal",
+  "bad_gateway",
+  "unavailable",
+  "timeout",
 ];
 
 export interface ErrorBody {
@@ -100,10 +99,6 @@ export class Failure<Code extends FailureCode = FailureCode> extends Error {
   get status(): number {
     return FAILURES[this.code].status;
   }
-}
-
-export function fail<Code extends FailureCode>(code: Code): Failure<Code> {
-  return new Failure(code);
 }
 
 export function statusOf(code: FailureCode): number {
