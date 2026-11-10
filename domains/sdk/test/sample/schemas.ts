@@ -17,9 +17,14 @@ export const TodoParams = z.object({ id: TodoId });
 export const CreateTodo = Todo.pick({ title: true });
 
 // The query arrives as strings. The schema turns the page into a number before the handler sees
-// it, so the handler's `query.page` is typed `number`.
+// it, so the handler's `query.page` is typed `number`. Pages count from one, as `TodoList` says,
+// so a page of zero is refused here and never reaches the response's schema.
 export const ListQuery = z.object({
-  page: z.string().regex(/^\d+$/).transform(Number).default(1),
+  page: z
+    .string()
+    .regex(/^[1-9]\d*$/)
+    .transform(Number)
+    .default(1),
 });
 
 export const TodoList = z.object({

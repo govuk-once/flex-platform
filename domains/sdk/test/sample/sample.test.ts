@@ -154,5 +154,7 @@ describe("the sample domain's routes", () => {
     expect(body(page)).toEqual({ items: [], page: 2 });
     const invalid = await run("GET /v1/todos", { query: { page: "two" } });
     expect(invalid.status).toBe(400);
+    const zero = await run("GET /v1/todos", { query: { page: "0" } });
+    expect(zero.status).toBe(400);
   });
 });
