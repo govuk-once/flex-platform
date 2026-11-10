@@ -43,11 +43,15 @@ export const TRACE_HEADER = "x-amzn-trace-id";
 export const CONTENT_TYPE_HEADER = "content-type";
 export const JSON_MEDIA_TYPE = "application/json";
 
-/** The same headers, each name in lower case, so a lookup by name is case-insensitive. */
+/**
+ * The same headers, each name in lower case, so a lookup by name is case-insensitive. The result
+ * has no prototype, so a lookup finds only a header the request sent: a route may declare a
+ * header named `constructor`, and a request may send one named `__proto__`.
+ */
 export function lowerCaseHeaders(
   headers: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
-  const result: Record<string, string> = {};
+  const result = Object.create(null) as Record<string, string>;
   for (const [name, value] of Object.entries(headers)) {
     result[name.toLowerCase()] = value;
   }

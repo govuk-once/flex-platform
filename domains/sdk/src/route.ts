@@ -74,7 +74,8 @@ export function parseRouteKey(key: string): RouteKeySegments {
     version === undefined ||
     version === "" ||
     segments.length === 0 ||
-    segments.includes("")
+    // One empty segment is the version's own root, `GET /v1/`. Any other is a doubled slash.
+    (segments.includes("") && segments.length > 1)
   ) {
     throw new Error(
       `A route's key is "METHOD /version/path", and ${JSON.stringify(key)} is not.`,
@@ -214,29 +215,23 @@ export function createRouteFactory<const Config extends DomainConfig>(
     const open = (request: RouteRequest): Exchange => {
       const headers = lowerCaseHeaders(request.headers);
       const correlationId = headers[CORRELATION_HEADER];
+      const traceId = traceRoot(headers[TRACE_HEADER]);
       const log = logger.child({
         route: key,
         ...(correlationId !== undefined && { correlationId }),
         ...(request.requestId !== undefined && {
           requestId: request.requestId,
         }),
-        ...(traceRoot(headers[TRACE_HEADER]) !== undefined && {
-          traceId: traceRoot(headers[TRACE_HEADER]),
-        }),
+        ...(traceId !== undefined && { traceId }),
       });
 
-      const respond = (
-        status: number,
-        body: string,
-        extra: Readonly<Record<string, string>> = {},
-      ): RouteResponse => ({
+      const respond = (status: number, body: string): RouteResponse => ({
         status,
         headers: {
           ...(body !== "" && { [CONTENT_TYPE_HEADER]: JSON_MEDIA_TYPE }),
           ...(correlationId !== undefined && {
             [CORRELATION_HEADER]: correlationId,
           }),
-          ...extra,
         },
         body,
       });

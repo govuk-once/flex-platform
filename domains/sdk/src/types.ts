@@ -6,11 +6,7 @@
 import type { z, ZodType } from "zod";
 
 import type { Caller } from "./caller.ts";
-import type {
-  DomainConfig,
-  HeaderDeclarations,
-  RouteDeclaration,
-} from "./config.ts";
+import type { DomainConfig, HeaderDeclarations } from "./config.ts";
 import type {
   Failure,
   PlatformFailureCode,
@@ -224,5 +220,3 @@ export interface RouteContextReader<Config extends DomainConfig> {
     ? 'Name the route, so the context is typed: routeContext<"GET /v1/todos/:id">()'
     : RouteContext<Config, Key>;
 }
-
-export type { RouteDeclaration };

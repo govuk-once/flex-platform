@@ -105,11 +105,21 @@ describe("parseRouteKey", () => {
     });
   });
 
+  it("reads a version's root as the path /", () => {
+    expect(parseRouteKey("GET /v1/")).toEqual({
+      method: "GET",
+      version: "v1",
+      path: "/",
+    });
+  });
+
   it.each([
     "get /v1/todos",
     "GET v1/todos",
     "GET /v1",
-    "GET /v1/",
+    "GET /v1//",
+    "GET /v1/todos/",
+    "GET /v1//todos",
     "GET //todos",
     "GET /v1/todos extra",
     "GET",
@@ -543,6 +553,53 @@ describe("route", () => {
     expect((await handler.run(request({ deadline: Number.NaN }))).status).toBe(
       500,
     );
+  });
+
+  it("serves a version's root", async () => {
+    const { logger } = capture();
+    const root = {
+      name: "root",
+      routes: { v1: { "/": { GET: { responses: { 204: null } } } } },
+    } as const satisfies DomainConfig;
+    const route = createRouteFactory(root, logger);
+    const handler = route("GET /v1/", () => ({ status: 204 }));
+    expect(handler).toMatchObject({ method: "GET", path: "/v1/" });
+    expect((await handler.run(request())).status).toBe(204);
+  });
+
+  it("finds a declared header only among those the request sent", async () => {
+    const { logger } = capture();
+    const named = {
+      name: "named",
+      routes: {
+        v1: {
+          "/named": {
+            GET: {
+              headers: {
+                built: { name: "constructor", required: false },
+                proto: { name: "__proto__", required: false },
+                needed: { name: "toString" },
+              },
+              responses: { 204: null },
+            },
+          },
+        },
+      },
+    } as const satisfies DomainConfig;
+    const route = createRouteFactory(named, logger);
+    const spy = vi.fn((context: { headers: unknown }) => {
+      expect(context.headers).toEqual({ needed: "sent" });
+      return { status: 204 } as const;
+    });
+    const handler = route("GET /v1/named", spy);
+    // A required header the request did not send is not answered by the prototype.
+    expect((await handler.run(request())).status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+    const sent = await handler.run(
+      request({ headers: { ...request().headers, toString: "sent" } }),
+    );
+    expect(sent.status).toBe(204);
+    expect(spy).toHaveBeenCalledOnce();
   });
 
   describe("with a declaration that misbehaves", () => {

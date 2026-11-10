@@ -82,7 +82,8 @@ beyond its types, and a route's `params` schema is the only description of its p
 
 `route()` takes a key, `METHOD /version/path`, which the types hold to the routes the
 configuration declares, and a handler. It returns a route handler object: the key, the method, the
-path with its version, and `run`, which takes a matched request through the pipeline below.
+path with its version, and `run`, which takes a matched request through the pipeline below. A
+route declared at the path `/` has the key `METHOD /version/`.
 
 ```ts
 // src/handlers/v1/todos/[id]/get.ts
