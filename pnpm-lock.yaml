@@ -253,6 +253,51 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
+  domains/sdk:
+    dependencies:
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
+    devDependencies:
+      '@govuk-once/flex-gateway-client':
+        specifier: workspace:*
+        version: link:../../gateways/shared/client
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/gateway-core':
+        specifier: workspace:*
+        version: link:../../gateways/shared/core
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../../packages/vitest-config
+      eslint:
+        specifier: 10.13.0
+        version: 10.13.0(jiti@2.7.0)(supports-color@7.2.0)
+      rolldown:
+        specifier: 1.2.15
+        version: 1.2.15
+      rolldown-plugin-dts:
+        specifier: 0.28.8
+        version: 0.28.8(@volar/typescript@2.4.28(typescript@6.0.3))(rolldown@1.2.15)(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    linkDirectory: false
+    publishDirectory: dist
+
   frontdoor/infra:
     dependencies:
       '@repo/frontdoor-origin-request':
