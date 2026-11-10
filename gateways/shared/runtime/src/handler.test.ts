@@ -2,9 +2,7 @@ import type { DriverDefinition } from "@repo/gateway-config";
 import { defineGateway } from "@repo/gateway-config";
 import type {
   DriverContext,
-  EnvelopeError,
   EnvelopeInbound,
-  EnvelopeSuccess,
   SecureClaim,
   Validator,
 } from "@repo/gateway-core";
@@ -173,10 +171,9 @@ describe("createHandler", () => {
       const handler = createHandler(testConfig(), testDeps());
       const resp = await handler(envelope({ input: { msg: "hello" } }));
 
-      expect(resp.ok).toBe(true);
-      const success = resp as EnvelopeSuccess;
-      expect(success.outcome).toBe("success");
-      expect(success.data).toEqual({ id: "123" });
+      assert.isTrue(resp.ok);
+      expect(resp.outcome).toBe("success");
+      expect(resp.data).toEqual({ id: "123" });
     });
   });
 
@@ -185,9 +182,8 @@ describe("createHandler", () => {
       const handler = createHandler(testConfig(), testDeps());
       const resp = await handler(envelope({ operation: "unknown" }));
 
-      expect(resp.ok).toBe(false);
-      const err = resp as EnvelopeError;
-      expect(err.error.code).toBe("OPERATION_NOT_FOUND");
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("OPERATION_NOT_FOUND");
     });
 
     it("keeps the name it did not recognise out of the message", async () => {
@@ -214,9 +210,8 @@ describe("createHandler", () => {
       );
       const resp = await handler(envelope({ input: { bad: true } }));
 
-      expect(resp.ok).toBe(false);
-      const err = resp as EnvelopeError;
-      expect(err.error.code).toBe("INVALID_INPUT");
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("INVALID_INPUT");
       expect(capturedOutput()).toContain("always fails");
       expect(capturedOutput()).toContain("#/bad");
     });
@@ -412,8 +407,8 @@ describe("createHandler", () => {
         envelope({ input: { userId: "user-someone-else" } }),
       );
 
-      expect(resp.ok).toBe(false);
-      expect((resp as EnvelopeError).error.code).toBe("SECURE_VALUE_MISMATCH");
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("SECURE_VALUE_MISMATCH");
     });
 
     it("does not call execute on a mismatch", async () => {
@@ -524,7 +519,8 @@ describe("createHandler", () => {
         deadline: { remainingMs: () => 10_000 },
       });
 
-      expect((exhausted as EnvelopeError).error.code).toBe("UPSTREAM_TIMEOUT");
+      assert.isFalse(exhausted.ok);
+      expect(exhausted.error.code).toBe("UPSTREAM_TIMEOUT");
       expect(roomy.ok).toBe(true);
       expect(attempt).toHaveBeenCalledOnce();
     });
@@ -577,8 +573,8 @@ describe("createHandler", () => {
       );
 
       const resp = await handler(envelope());
-      expect(resp.ok).toBe(true);
-      expect((resp as EnvelopeSuccess).data).toEqual({ id: "456" });
+      assert.isTrue(resp.ok);
+      expect(resp.data).toEqual({ id: "456" });
       expect(execute).toHaveBeenCalledOnce();
       const [call] = vi.mocked(execute).mock.calls;
       assert(call);
@@ -612,9 +608,8 @@ describe("createHandler", () => {
       );
       const resp = await handler(envelope());
 
-      expect(resp.ok).toBe(false);
-      const err = resp as EnvelopeError;
-      expect(err.error.code).toBe("UPSTREAM_CONTRACT_VIOLATION");
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("UPSTREAM_CONTRACT_VIOLATION");
       expect(capturedOutput()).toContain("nonexistent");
     });
 
@@ -632,9 +627,8 @@ describe("createHandler", () => {
       );
       const resp = await handler(envelope());
 
-      expect(resp.ok).toBe(false);
-      const err = resp as EnvelopeError;
-      expect(err.error.code).toBe("UPSTREAM_CONTRACT_VIOLATION");
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("UPSTREAM_CONTRACT_VIOLATION");
     });
   });
 
@@ -707,10 +701,9 @@ describe("createHandler", () => {
       );
       const resp = await handler(envelope());
 
-      expect(resp.ok).toBe(false);
-      const err = resp as EnvelopeError;
-      expect(err.error.code).toBe("INTERNAL");
-      expect(err.error).toEqual({ code: "INTERNAL" });
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("INTERNAL");
+      expect(resp.error).toEqual({ code: "INTERNAL" });
     });
 
     it("wraps GatewayError thrown by execute", async () => {
@@ -723,10 +716,9 @@ describe("createHandler", () => {
       );
       const resp = await handler(envelope());
 
-      expect(resp.ok).toBe(false);
-      const err = resp as EnvelopeError;
-      expect(err.error.code).toBe("UPSTREAM_TIMEOUT");
-      expect(err.error).toEqual({ code: "UPSTREAM_TIMEOUT" });
+      assert.isFalse(resp.ok);
+      expect(resp.error.code).toBe("UPSTREAM_TIMEOUT");
+      expect(resp.error).toEqual({ code: "UPSTREAM_TIMEOUT" });
       expect(capturedOutput()).toContain("timed out");
     });
   });
@@ -749,8 +741,8 @@ describe("createHandler", () => {
       const handler = createHandler(testConfig(), testDeps({ execute }));
       const resp = await handler(envelope());
 
-      expect(resp.ok).toBe(false);
-      expect(Object.keys((resp as EnvelopeError).error)).toEqual(["code"]);
+      assert.isFalse(resp.ok);
+      expect(Object.keys(resp.error)).toEqual(["code"]);
       expect(JSON.stringify(resp)).not.toContain("QQ123456C");
     });
 
@@ -987,10 +979,9 @@ describe("createHandler", () => {
       const handler = createHandler(testConfig(), testDeps({ execute }));
       const resp = await handler(envelope({ input: { key: "value" } }));
 
-      expect(resp.ok).toBe(true);
-      const success = resp as EnvelopeSuccess;
-      expect(success.outcome).toBe("success");
-      expect(success.data).toEqual({ id: "full-path" });
+      assert.isTrue(resp.ok);
+      expect(resp.outcome).toBe("success");
+      expect(resp.data).toEqual({ id: "full-path" });
 
       expect(receivedSignal).toBeInstanceOf(AbortSignal);
       expect(receivedOperation).toBe("ping");

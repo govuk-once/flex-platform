@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import {
   isValidHeaderValue,
@@ -51,10 +51,11 @@ describe("validateHeaders", () => {
       try {
         validateHeaders({ "x-token": value }, "ctx");
       } catch (e: unknown) {
-        return e as Error;
+        return e;
       }
       return new Error("did not throw");
     })();
+    assert.instanceOf(err, Error);
     expect(err.message).toBe('ctx: header "x-token" has an invalid value');
     expect(err.message).not.toContain("SYNTHETIC_SECRET");
     expect(err.cause).toBeUndefined();

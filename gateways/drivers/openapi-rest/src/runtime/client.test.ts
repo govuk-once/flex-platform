@@ -1,5 +1,5 @@
 import { GatewayError } from "@repo/gateway-runtime";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 
 import {
   fakeFetch,
@@ -318,13 +318,13 @@ describe("client.request", () => {
         path: "/users/1",
         headers: { "x-token": "SYNTHETIC_SECRET_123\ninvalid" },
       })
-      .catch((e: unknown) => e as Error);
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("INTERNAL");
-    expect((err as Error).message).toBe(
+      .catch((e: unknown) => e);
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("INTERNAL");
+    expect(err.message).toBe(
       'Operation "getUser" call headers: header "x-token" has an invalid value',
     );
-    expect((err as Error).cause).toBeUndefined();
+    expect(err.cause).toBeUndefined();
   });
 
   it("replaces JSON serialisation errors with a controlled message", async () => {
@@ -489,9 +489,9 @@ describe("client.request", () => {
     const err = await c
       .request({ method: "GET", path: "/users/1" })
       .catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("UPSTREAM_ERROR");
-    expect((err as GatewayError).message).toBe(
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("UPSTREAM_ERROR");
+    expect(err.message).toBe(
       'Upstream request failed for operation "getUser" (GET /users/{id}): TypeError (ECONNREFUSED)',
     );
   });
@@ -499,7 +499,8 @@ describe("client.request", () => {
   it("throws a controlled error when the attempt was aborted", async () => {
     const abortError = new DOMException("aborted", "AbortError");
     const ff = fakeFetch((req) => {
-      (req.init.signal as AbortSignal).throwIfAborted();
+      assert.exists(req.init.signal);
+      req.init.signal.throwIfAborted();
       throw abortError;
     });
     const ctx = {
@@ -523,12 +524,13 @@ describe("client.request", () => {
     });
     const err = await c
       .request({ method: "GET", path: "/users/1" })
-      .catch((e: unknown) => e as Error);
+      .catch((e: unknown) => e);
     expect(err).not.toBe(abortError);
-    expect((err as Error).message).toBe(
+    assert.instanceOf(err, Error);
+    expect(err.message).toBe(
       'Upstream attempt aborted for operation "getUser" (GET /users/{id})',
     );
-    expect((err as Error).cause).toBeUndefined();
+    expect(err.cause).toBeUndefined();
   });
 
   it("rejects a GET with a body and an unsupported method", async () => {

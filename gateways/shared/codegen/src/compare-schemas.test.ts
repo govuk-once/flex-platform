@@ -1,5 +1,5 @@
 import type { GatewaySchemas, JSONSchema } from "@repo/gateway-core";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import {
   checkVersions,
@@ -1417,15 +1417,15 @@ describe("checkVersions", () => {
       thrown = error;
     }
 
-    expect(thrown).toBeInstanceOf(SchemaCompatibilityError);
-    expect((thrown as SchemaCompatibilityError).problems).toEqual([
+    assert.instanceOf(thrown, SchemaCompatibilityError);
+    expect(thrown.problems).toEqual([
       '0001 -> 0002: operations.op.input.required: "age" is now required',
       '0001 -> 0003: operations.op.input.required: "age" is now required',
       "0003 -> 0004: operations.op.input.type: changed from object to string",
       "0003 -> 0004: operations.op.input.properties.age: was removed",
       "0003 -> 0004: operations.op.input.properties.name: was removed",
     ]);
-    expect((thrown as Error).message).toContain('Gateway "test"');
+    expect(thrown.message).toContain('Gateway "test"');
   });
 
   it("holds a version to every one before it, not only the last", () => {

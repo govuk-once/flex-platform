@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { parseEnvelope } from "./envelope.ts";
 import { GatewayError } from "./errors.ts";
@@ -10,9 +10,9 @@ function expectInvalidInput(fn: () => unknown, messagePart: string): void {
     fn();
     expect.fail("Expected GatewayError to be thrown");
   } catch (err) {
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("INVALID_INPUT");
-    expect((err as GatewayError).message).toContain(messagePart);
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("INVALID_INPUT");
+    expect(err.message).toContain(messagePart);
   }
 }
 

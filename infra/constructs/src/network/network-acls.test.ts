@@ -1,5 +1,5 @@
 import { Match } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { buildNetwork } from "../../test/network.ts";
 
@@ -98,10 +98,13 @@ describe("NetworkAcls", () => {
           RuleAction === "allow" &&
           (PortRange as { From: number } | undefined)?.From === 1024,
       );
+      const repliesRule = replies?.RuleNumber;
+      assert(typeof repliesRule === "number");
       const refusingReplies = inbound.filter(
         ({ RuleAction, RuleNumber, PortRange }) =>
           RuleAction === "deny" &&
-          (RuleNumber as number) < (replies?.RuleNumber as number) &&
+          typeof RuleNumber === "number" &&
+          RuleNumber < repliesRule &&
           ((PortRange as { To: number } | undefined)?.To ?? 65535) >= 1024,
       );
 

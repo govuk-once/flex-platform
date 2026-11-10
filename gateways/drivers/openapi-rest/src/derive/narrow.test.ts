@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { narrowingProblems, narrowInto } from "./narrow.ts";
 
@@ -55,7 +55,8 @@ describe("narrowInto", () => {
       required: ["data", "configuration"],
       additionalProperties: false,
     });
-    expect(Object.keys(result as object)).toEqual([
+    assert.exists(result);
+    expect(Object.keys(result)).toEqual([
       "type",
       "properties",
       "required",

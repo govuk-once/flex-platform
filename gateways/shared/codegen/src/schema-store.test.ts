@@ -10,7 +10,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it } from "vitest";
 
 import { SCHEMAS_DIR } from "./layout.ts";
 import {
@@ -172,9 +172,9 @@ describe("readSchemas", () => {
     const error: unknown = await readSchemas(gatewayDir, "0001").catch(
       (reason: unknown) => reason,
     );
-    expect(error).toBeInstanceOf(SchemaStoreError);
-    expect((error as Error).message).toContain(inStore("0001.json"));
-    expect((error as Error).message).toContain("cannot be read as JSON");
+    assert.instanceOf(error, SchemaStoreError);
+    expect(error.message).toContain(inStore("0001.json"));
+    expect(error.message).toContain("cannot be read as JSON");
   });
 
   it("refuses a version that is not an object", async () => {
@@ -410,8 +410,8 @@ describe("writeVersion", () => {
     const wrote = settled.findIndex((run) => run.status === "fulfilled");
     expect(settled.filter((run) => run.status === "fulfilled")).toHaveLength(1);
     for (const refused of settled.filter((run) => run.status === "rejected")) {
-      expect(refused.reason).toBeInstanceOf(SchemaStoreError);
-      expect((refused.reason as Error).message).toContain(
+      assert.instanceOf(refused.reason, SchemaStoreError);
+      expect(refused.reason.message).toContain(
         "a version is never written over",
       );
     }

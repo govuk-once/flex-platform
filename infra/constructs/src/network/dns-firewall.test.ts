@@ -1,5 +1,5 @@
 import { Match, type Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { ACCOUNT, buildNetwork, UPSTREAM } from "../../test/network.ts";
 
@@ -94,7 +94,8 @@ describe("DnsFirewall", () => {
         /^NetworkVpc/,
       );
     }
-    expect(allow?.Priority).toBeLessThan(block?.Priority as number);
+    assert(typeof block?.Priority === "number");
+    expect(allow?.Priority).toBeLessThan(block.Priority);
   });
 
   // The block's group, list and association can't depend on the allowlist, so changing or rolling

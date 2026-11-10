@@ -11,7 +11,15 @@ import {
   createSecretProvider,
   GatewayError,
 } from "@repo/gateway-runtime";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   fakeFetch,
@@ -101,8 +109,8 @@ async function rejection(promise: Promise<unknown>): Promise<Error> {
     () => new Error("did not reject"),
     (e: unknown) => e,
   );
-  expect(err).toBeInstanceOf(Error);
-  return err as Error;
+  assert.instanceOf(err, Error);
+  return err;
 }
 
 describe("createExecutor", () => {
@@ -1175,8 +1183,8 @@ describe("execute", () => {
       const err = await rejection(
         execute(passthroughContext(), "getUser", { userId }),
       );
-      expect(err).toBeInstanceOf(GatewayError);
-      expect((err as GatewayError).code).toBe("INTERNAL");
+      assert.instanceOf(err, GatewayError);
+      expect(err.code).toBe("INTERNAL");
       expect(ff.calls).toHaveLength(0);
     },
   );

@@ -8,7 +8,15 @@ import {
   GetSecretValueCommand,
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { GatewayError } from "./errors.ts";
 import { asSecretObject, createSecretProvider } from "./secret-provider.ts";
@@ -42,8 +50,8 @@ async function failure(promise: Promise<unknown>): Promise<GatewayError> {
     () => new Error("did not reject"),
     (e: unknown) => e,
   );
-  expect(err).toBeInstanceOf(GatewayError);
-  return err as GatewayError;
+  assert.instanceOf(err, GatewayError);
+  return err;
 }
 
 describe("asSecretObject", () => {
@@ -66,10 +74,11 @@ describe("asSecretObject", () => {
       try {
         asSecretObject(input);
       } catch (e: unknown) {
-        return e as GatewayError;
+        return e;
       }
-      return new GatewayError("INTERNAL", "did not throw");
+      return new Error("did not throw");
     })();
+    assert.instanceOf(err, GatewayError);
     expect(err.code).toBe("INTERNAL");
     expect(err.message).toMatch(message);
     expect(err.message).not.toContain("SYNTHETIC");

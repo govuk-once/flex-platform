@@ -1,6 +1,6 @@
 import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 import {
   createCallerTokenKeys,
@@ -85,8 +85,8 @@ async function refusal(promise: Promise<unknown>): Promise<GatewayError> {
   try {
     await promise;
   } catch (error) {
-    expect(error).toBeInstanceOf(GatewayError);
-    return error as GatewayError;
+    assert.instanceOf(error, GatewayError);
+    return error;
   }
   throw new Error("expected the token to be refused");
 }

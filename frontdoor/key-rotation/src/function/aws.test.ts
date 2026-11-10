@@ -1,8 +1,15 @@
 import { generateKeyPairSync } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { awsPorts } from "./aws.ts";
 import type { KeyRotationConfig } from "./types.ts";
@@ -119,7 +126,10 @@ beforeEach(async () => {
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
+  const address = server.address();
+  // A string only for a pipe or socket path, and null before it listens.
+  assert(typeof address === "object" && address !== null);
+  const { port } = address;
   vi.stubEnv("AWS_ENDPOINT_URL", `http://127.0.0.1:${String(port)}`);
   vi.stubEnv("AWS_ACCESS_KEY_ID", "SYNTHETIC_ROTATION");
   vi.stubEnv("AWS_SECRET_ACCESS_KEY", "SYNTHETIC_SECRET");

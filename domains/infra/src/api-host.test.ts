@@ -1,6 +1,6 @@
-import type { App } from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { ACCOUNT, EDGE_ROLE, stackIn, ZONE } from "../test/helpers.ts";
 import { ApiHost } from "./api-host.ts";
@@ -22,7 +22,9 @@ function build(nag = false) {
     certificateArn: CERTIFICATE_ARN,
     api,
   });
-  return { app: stack.node.root as App, template: Template.fromStack(stack) };
+  const app = stack.node.root;
+  assert.instanceOf(app, App);
+  return { app, template: Template.fromStack(stack) };
 }
 
 const HOST = `domain-a.${ZONE.zoneName}`;

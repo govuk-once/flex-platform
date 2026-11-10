@@ -1,6 +1,6 @@
-import type { App } from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { ACCOUNT, EDGE_ROLE, stackIn } from "../test/helpers.ts";
 import { ProxyApi } from "./proxy-api.ts";
@@ -12,8 +12,10 @@ function build(nag = false) {
     domain: "domain-a",
     edgeRole: EDGE_ROLE,
   });
+  const app = stack.node.root;
+  assert.instanceOf(app, App);
   return {
-    app: stack.node.root as App,
+    app,
     proxyApi,
     template: Template.fromStack(stack),
   };

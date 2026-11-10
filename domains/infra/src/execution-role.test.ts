@@ -1,7 +1,7 @@
-import type { App } from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Key } from "aws-cdk-lib/aws-kms";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { ACCOUNT, stackIn } from "../test/helpers.ts";
 import { ExecutionRole } from "./execution-role.ts";
@@ -14,7 +14,9 @@ function build(nag = false) {
     gatewayFunctions: "gateway-sandbox-*",
     logGroupKey: new Key(stack, "LogGroupKey", { enableKeyRotation: true }),
   });
-  return { app: stack.node.root as App, template: Template.fromStack(stack) };
+  const app = stack.node.root;
+  assert.instanceOf(app, App);
+  return { app, template: Template.fromStack(stack) };
 }
 
 const ARN = `eu-west-2:${ACCOUNT}`;

@@ -1,5 +1,5 @@
 import { GatewayError } from "@repo/gateway-runtime";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { encodePathParam, hasDotSegment } from "./path.ts";
 
@@ -9,8 +9,8 @@ function rejection(value: string): GatewayError {
   try {
     encodePathParam(value, "ctx");
   } catch (err: unknown) {
-    expect(err).toBeInstanceOf(GatewayError);
-    return err as GatewayError;
+    assert.instanceOf(err, GatewayError);
+    return err;
   }
   throw new Error(`encodePathParam accepted ${JSON.stringify(value)}`);
 }

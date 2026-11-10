@@ -1,7 +1,8 @@
 import { cdkApp } from "@repo/infra-constructs";
-import { type App, Stack, Validations } from "aws-cdk-lib";
+import { App, Stack, Validations } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { AwsSolutionsChecks } from "cdk-nag";
+import { assert } from "vitest";
 
 import { Edge } from "../src/edge.ts";
 import { OriginRequestFunction } from "../src/origin-request-function.ts";
@@ -66,9 +67,11 @@ export function edgeTemplate(nag = false): {
 } {
   const stack = stackIn("us-east-1", nag);
   const edge = edgeIn(stack);
+  const app = stack.node.root;
+  assert.instanceOf(app, App);
   return {
     edge,
-    app: stack.node.root as App,
+    app,
     template: Template.fromStack(stack),
   };
 }

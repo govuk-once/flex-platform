@@ -1,6 +1,6 @@
-import type { App } from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { ACCOUNT, stackIn } from "../test/helpers.ts";
 import { ApiGatewayLogging } from "./api-gateway-logging.ts";
@@ -10,7 +10,9 @@ function build(nag = false) {
   new ApiGatewayLogging(stack, "ApiGatewayLogging", {
     environment: "sandbox",
   });
-  return { app: stack.node.root as App, template: Template.fromStack(stack) };
+  const app = stack.node.root;
+  assert.instanceOf(app, App);
+  return { app, template: Template.fromStack(stack) };
 }
 
 const ARN = `eu-west-2:${ACCOUNT}`;

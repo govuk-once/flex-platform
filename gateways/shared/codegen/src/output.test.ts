@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { formatSource } from "./output.ts";
 
@@ -8,10 +8,8 @@ describe("formatSource", () => {
       (caught: unknown) => caught,
     );
 
-    expect(refusal).toBeInstanceOf(Error);
-    expect((refusal as Error).message).toBe(
-      "Generated output is not parseable",
-    );
-    expect((refusal as Error).cause).toBeInstanceOf(Error);
+    assert.instanceOf(refusal, Error);
+    expect(refusal.message).toBe("Generated output is not parseable");
+    expect(refusal.cause).toBeInstanceOf(Error);
   });
 });

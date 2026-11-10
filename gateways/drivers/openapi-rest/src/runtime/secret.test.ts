@@ -1,6 +1,6 @@
 import type { SecretProvider } from "@repo/gateway-core";
 import { GatewayError } from "@repo/gateway-runtime";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { fakeSecret } from "../../test/helpers.ts";
 import { fromSecret } from "../config/secret-field.ts";
@@ -14,8 +14,8 @@ async function failure(promise: Promise<unknown>): Promise<GatewayError> {
     () => new Error("did not reject"),
     (e: unknown) => e,
   );
-  expect(err).toBeInstanceOf(GatewayError);
-  return err as GatewayError;
+  assert.instanceOf(err, GatewayError);
+  return err;
 }
 
 describe("secretFields", () => {
