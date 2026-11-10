@@ -94,6 +94,34 @@ describe("GatewayFunction", () => {
     });
   });
 
+  it("never runs an invoke sent as an event again, on the function, its version or the alias", () => {
+    const { template } = build();
+    const version = {
+      "Fn::GetAtt": [
+        Match.stringLikeRegexp("^GatewayFunctionCurrentVersion"),
+        "Version",
+      ],
+    };
+    // CDK reads an alias's name back from its ARN, as the part after the last colon.
+    const alias = {
+      "Fn::Select": [
+        7,
+        {
+          "Fn::Split": [":", { Ref: Match.stringLikeRegexp("^GatewayLive") }],
+        },
+      ],
+    };
+    for (const Qualifier of ["$LATEST", alias, version]) {
+      template.hasResourceProperties("AWS::Lambda::EventInvokeConfig", {
+        FunctionName: { Ref: Match.stringLikeRegexp("^GatewayFunction") },
+        Qualifier,
+        MaximumRetryAttempts: 0,
+        MaximumEventAgeInSeconds: 60,
+      });
+    }
+    template.resourceCountIs("AWS::Lambda::EventInvokeConfig", 3);
+  });
+
   it("writes to its own log group, kept for a year and encrypted", () => {
     build().template.hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: "/flex/gateway/sandbox/udp/function",

@@ -168,13 +168,15 @@ for an integration does not mean that integration is implemented.
 8. **Avoid duplicate upstream writes.** Any invocation client must turn off automatic SDK retries
    (`maxAttempts: 1`). A retry decision needs to know the operation and the deadline. Transport
    retries alone do not, and neither would an attempt count in the policy, which is why there is
-   none. Nothing retries a call today. The single replay after a refused credential is for a GET
-   only. A 401 or a 403 does not show that the upstream refused before acting, because Amazon API
-   Gateway passes on whatever status the service behind it chose. So a write that is refused is
-   never sent again.
+   none. Nothing retries a call today. That includes Lambda: each gateway's function is set to
+   never run an invoke sent as an event again. The single replay after a refused credential is for
+   a GET only. A 401 or a 403 does not show that the upstream refused before acting, because
+   Amazon API Gateway passes on whatever status the service behind it chose. So a write that is
+   refused is never sent again.
 
-   See [refused credentials](/flex-platform/drivers/openapi-rest/authentication/#when-the-upstream-refuses-a-credential)
-   and [calling gateways](/flex-platform/domains/overview/#calling-gateways).
+   See [refused credentials](/flex-platform/drivers/openapi-rest/authentication/#when-the-upstream-refuses-a-credential),
+   [calling gateways](/flex-platform/domains/overview/#calling-gateways) and
+   [the Lambda function](/flex-platform/reference/environment/#the-lambda-function).
 
 9. **Emitted validators are self-contained JavaScript.** Bundle Ajv's runtime helpers and formats
    at generation time, resolving them from codegen's dependencies. Do not keep a manual list of

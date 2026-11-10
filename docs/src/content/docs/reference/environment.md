@@ -53,6 +53,7 @@ codegen writes, with these settings:
 | Runtime | Node.js 24, on arm64 |
 | Memory | 1024 MB |
 | Timeout | 28 seconds, since a domain answers within API Gateway's 29 |
+| Invokes sent as an event | Run once at most, and dropped if not started within 60 seconds |
 | Logs | `/flex/gateway/<environment>/<id>/function`, a `PlatformLogGroup` in the stack |
 | Subnets and security group | Its placement's, which the [network](/flex-platform/infrastructure/network/#ids-other-stacks-read) writes to SSM |
 | Variables | `FLEX_UPSTREAM_SECRET_ARN`, `FLEX_CALLER_TOKEN_KEYS_BUCKET`, `FLEX_CALLER_TOKEN_KEYS_OBJECT`, `FLEX_CALLER_TOKEN_KEYS_ACCOUNT`, `FLEX_CALLER_TOKEN_AUDIENCE`, and `FLEX_UPSTREAM_TARGET` unless config's `target` is `null` |
@@ -60,6 +61,12 @@ codegen writes, with these settings:
 The stack owns the code, the version and the alias, so a gateway is released only by deploying its
 stack. The alias moves to a new version once the version exists, so no call meets new code with
 old variables.
+
+The client invokes a gateway and waits for its answer. Lambda also takes an invoke sent as an
+event, which by default it runs again, twice, when the function fails, and that could send an
+upstream write the first run had already made. So the function, each version and the alias are
+each set to no retry, and to the shortest time Lambda holds an event it has not yet run. Lambda
+keeps these settings separately for each of the three.
 
 Its role, `gateway-<environment>-<id>-execution`, may:
 
