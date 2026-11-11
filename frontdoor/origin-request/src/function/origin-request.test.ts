@@ -256,6 +256,46 @@ describe("createOriginRequestHandler", () => {
   });
 
   it.each([
+    ["an escape that is no UTF-8", "filter=%ff", "malformed"],
+    ["an escape cut short", "filter=%", "malformed"],
+    ["the prototype's name", "__proto__=1", "unsignable_name"],
+    [
+      "one of the signature's own names",
+      "X-Amz-Signature=x",
+      "unsignable_name",
+    ],
+  ])(
+    "answers a query holding %s with a 400, as the caller's fault",
+    async (_, querystring, reason) => {
+      const event = originRequestEvent();
+      event.Records[0].cf.request.querystring = querystring;
+
+      expect(asResponse(await handlerWith()(event))).toEqual({
+        status: "400",
+        statusDescription: "Bad request",
+        headers: {
+          "content-type": [{ key: "Content-Type", value: "application/json" }],
+          "x-correlation-id": [{ key: "X-Correlation-Id", value: TRACE_ID }],
+          "x-rejected-by": [{ key: "X-Rejected-By", value: "lambda-edge" }],
+        },
+        body: '{"message":"Bad request","type":"client_error"}',
+        bodyEncoding: "text",
+      });
+      // One line, not an error, and nothing of the query in it.
+      expect(loggedLines()).toEqual([
+        {
+          level: "INFO",
+          message: "telemetry",
+          telemetry: {
+            event: "origin_request_query_rejected",
+            details: { traceId: TRACE_ID, requestId: REQUEST_ID, reason },
+          },
+        },
+      ]);
+    },
+  );
+
+  it.each([
     ["a truncated body", withBody({ inputTruncated: true }), SIGN],
     [
       "a signature that can't be made",

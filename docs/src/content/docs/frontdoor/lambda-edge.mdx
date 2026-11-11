@@ -68,6 +68,8 @@ Lambda@Edge answers a request itself only to refuse it, in the CloudFront Functi
 - a verified request for a domain it can't route is a 404,
   `{"message":"Not found","type":"client_error"}`. The domain is looked up after the token, so a
   caller without one learns nothing about which domains exist;
+- a verified request whose query can't be signed is a 400,
+  `{"message":"Bad request","type":"client_error"}`. See [signing](#signing);
 - anything else is a 500, `{"message":"Internal server error","type":"server_error"}`: keys that
   can't be fetched, credentials that aren't there, a body CloudFront truncated, or a result
   CloudFront would refuse. The request fails closed, and nothing unsigned is forwarded. Every
@@ -149,8 +151,11 @@ the X-Ray trace starts at API Gateway, and the signed `x-correlation-id` is what
 edge's logs. API Gateway reads a `+` in the query as a space,
 and so does the signature. The body's hash is signed but not repeated in an `x-amz-content-sha256` header,
 which API Gateway doesn't ask for. The body itself is left as it arrived, so CloudFront sends
-exactly what was hashed. A query parameter named `__proto__` can't be signed, and is refused with
-the 500.
+exactly what was hashed. A query the signature can't cover is refused with the 400, logged as
+`origin_request_query_rejected`: an escape that doesn't decode as UTF-8, a parameter named
+`__proto__`, or one whose name starts `X-Amz-` in any case, which are Signature Version 4's own.
+The signer would leave `__proto__` or `X-Amz-Signature` out of the signature while the request
+still carried it.
 
 Before returning the request, Lambda@Edge checks it: no header it didn't receive or set, and every
 header it set appears once, in characters CloudFront accepts. CloudFront would refuse anything

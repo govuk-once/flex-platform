@@ -1,6 +1,14 @@
 import { createHash, createHmac } from "node:crypto";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   createRequestSigner,
@@ -8,6 +16,7 @@ import {
   credentialsFromEnvironment,
   type RequestToSign,
   SIGNING_REGION,
+  UnsignableQuery,
 } from "./sign.ts";
 
 const CREDENTIALS: Credentials = {
@@ -176,10 +185,36 @@ describe("createRequestSigner", () => {
     );
   });
 
-  it("refuses a query name the signer would leave out", async () => {
+  it.each([
+    ["the prototype's name", "__proto__=1", "unsignable_name"],
+    ["the signature's own name", "X-Amz-Signature=x", "unsignable_name"],
+    ["a signing name in any case", "a=1&x-amz-date=x", "unsignable_name"],
+    [
+      "a signing name written with an escape",
+      "X%2DAmz-Signature=x",
+      "unsignable_name",
+    ],
+    ["an escape that is no UTF-8", "a=%ff", "malformed"],
+    ["an escape cut short", "a=1&b=%", "malformed"],
+    ["a malformed name", "%ff=1", "malformed"],
+  ])(
+    "refuses %s, as a query that can't be signed",
+    async (_, querystring, reason) => {
+      const refusal: unknown = await sign({ ...REQUEST, querystring }).catch(
+        (error: unknown) => error,
+      );
+
+      assert.instanceOf(refusal, UnsignableQuery);
+      expect(refusal.reason).toBe(reason);
+      // Nothing of the query, which is the caller's text.
+      expect(refusal.message).toBe(`The query cannot be signed: ${reason}`);
+    },
+  );
+
+  it("signs a name that only starts like the signing names", async () => {
     await expect(
-      sign({ ...REQUEST, querystring: "__proto__=1" }),
-    ).rejects.toThrow(/__proto__/);
+      sign({ ...REQUEST, querystring: "x-amzn=1&xamz-date=2" }),
+    ).resolves.toHaveProperty("authorization");
   });
 
   it("reads the role's credentials from the environment for each request", () => {

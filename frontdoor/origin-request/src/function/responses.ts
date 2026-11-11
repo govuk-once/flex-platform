@@ -16,6 +16,12 @@ export function internalError(traceId: string): CloudFrontResultResponse {
   );
 }
 
+// A query no signature can cover, so nothing is forwarded. The caller's fault, after the token is
+// verified.
+export function badRequest(traceId: string): CloudFrontResultResponse {
+  return rejection("400", "Bad request", "client_error", traceId);
+}
+
 // No domain by that name. The CloudFront Function's own 404, after the token is verified.
 export function notFound(traceId: string): CloudFrontResultResponse {
   return rejection("404", "Not found", "client_error", traceId);

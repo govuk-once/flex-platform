@@ -3,9 +3,14 @@ import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 import { authorizationToken } from "./authorization.ts";
 import type { SignCallerToken } from "./caller-token.ts";
 import { forward } from "./forward.ts";
-import { internalError, notFound, unauthorized } from "./responses.ts";
+import {
+  badRequest,
+  internalError,
+  notFound,
+  unauthorized,
+} from "./responses.ts";
 import { routeFor, type Routes } from "./route.ts";
-import type { SignRequest } from "./sign.ts";
+import { type SignRequest, UnsignableQuery } from "./sign.ts";
 import type { RequestIds } from "./telemetry.ts";
 import { logFailure, logOutcome } from "./telemetry.ts";
 import type { VerifyToken } from "./token.ts";
@@ -23,9 +28,10 @@ export interface OriginRequestOptions {
   readonly signCallerToken: SignCallerToken;
 }
 
-// Verify the token, route the request to its domain, sign the caller token, and sign the request. Every error after reading the
-// IDs is answered with a 500, so the runtime never prints an error, whose text can hold a claim,
-// and nothing unsigned is ever forwarded. If reading the IDs failed, CloudFront would answer the
+// Verify the token, route the request to its domain, sign the caller token, and sign the request.
+// A query that can't be signed is the caller's fault, answered with a 400. Every other error after
+// reading the IDs is answered with a 500, so the runtime never prints an error, whose text can
+// hold a claim, and nothing unsigned is ever forwarded. If reading the IDs failed, CloudFront would answer the
 // request itself and forward nothing.
 export function createOriginRequestHandler(options: OriginRequestOptions) {
   return async (
@@ -83,6 +89,12 @@ export function createOriginRequestHandler(options: OriginRequestOptions) {
       logOutcome("origin_request_forwarded", ids, { domain: route.domain });
       return forwarded;
     } catch (error) {
+      if (error instanceof UnsignableQuery) {
+        logOutcome("origin_request_query_rejected", ids, {
+          reason: error.reason,
+        });
+        return badRequest(ids.traceId);
+      }
       logFailure(ids, describeUnexpectedError(error));
       return internalError(ids.traceId);
     }

@@ -24,7 +24,24 @@ export const SIGNED_HEADERS = [
 // A query name an object literal reads as its prototype. The signer canonicalises a query through
 // an ordinary object, so it would leave the name out of the signature while the request still
 // carried it, and the origin would refuse the request.
-const UNSIGNABLE_QUERY = "__proto__";
+const PROTOTYPE_NAME = "__proto__";
+
+// Signature Version 4's own query names, whatever their case. The signer leaves `X-Amz-Signature`
+// out of the signature, as it would the prototype's name, and the others are how a request is
+// signed in its query, which this one is not.
+const SIGNING_NAME_PREFIX = "x-amz-";
+
+export type UnsignableQueryReason = "malformed" | "unsignable_name";
+
+/**
+ * A query the caller sent that no signature can cover: an escape that decodes to nothing, or a
+ * name the signer leaves out. The caller's fault, so it holds a fixed reason and none of the query.
+ */
+export class UnsignableQuery extends Error {
+  constructor(readonly reason: UnsignableQueryReason) {
+    super(`The query cannot be signed: ${reason}`);
+  }
+}
 
 // A role's credentials are temporary, so they always carry a session token.
 export interface Credentials {
@@ -97,17 +114,21 @@ function parseQuery(querystring: string): Record<string, string | string[]> {
   for (const pair of querystring.split("&")) {
     if (pair === "") continue;
     const [name, value] = splitPair(pair);
-    if (name === UNSIGNABLE_QUERY) {
-      throw new TypeError(
-        `A query parameter named "${UNSIGNABLE_QUERY}" cannot be signed`,
-      );
-    }
+    if (isUnsignableName(name)) throw new UnsignableQuery("unsignable_name");
     const existing = Object.hasOwn(query, name) ? query[name] : undefined;
     if (existing === undefined) query[name] = value;
     else if (Array.isArray(existing)) existing.push(value);
     else query[name] = [existing, value];
   }
   return query;
+}
+
+// A decoded name the signer would leave out, or one that is Signature Version 4's own.
+function isUnsignableName(name: string): boolean {
+  return (
+    name === PROTOTYPE_NAME ||
+    name.toLowerCase().startsWith(SIGNING_NAME_PREFIX)
+  );
 }
 
 function splitPair(pair: string): [name: string, value: string] {
@@ -120,7 +141,11 @@ function splitPair(pair: string): [name: string, value: string] {
 }
 
 function decodeQuery(text: string): string {
-  return decodeURIComponent(text.replaceAll("+", " "));
+  try {
+    return decodeURIComponent(text.replaceAll("+", " "));
+  } catch {
+    throw new UnsignableQuery("malformed");
+  }
 }
 
 /** The role's credentials, from the variables Lambda sets for each invocation. */
