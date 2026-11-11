@@ -1,6 +1,9 @@
 import { createVitestConfig } from "@repo/vitest-config";
 
-// Each test file synthesizes whole stages, and its first synth, and each run of bin/app.ts, loads
-// most of aws-cdk-lib and cdk-nag. Under coverage, on a CI runner busy with every package's tests,
-// a file's first test has taken over 30 seconds.
-export default createVitestConfig({ testTimeout: 120_000 });
+// A worker's first synth of a whole stage, and each run of bin/app.ts, loads most of aws-cdk-lib
+// and cdk-nag, which takes about ten seconds on a CI runner under coverage.
+// Test files share their workers instead of each starting its own, so aws-cdk-lib loads once per
+// worker, not once per file. Modules and globals carry over from one file to the next: see
+// /flex-platform/infrastructure/overview/#tests.
+// A stage synthesized by `synthesizedStage` is shared the same way.
+export default createVitestConfig({ testTimeout: 30_000, isolate: false });
