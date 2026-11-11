@@ -2,6 +2,16 @@
 // package, so all of it runs in that runtime.
 export type { BearerTokenRejection } from "./bearer-token.ts";
 export { bearerToken } from "./bearer-token.ts";
+export type { SigningKey } from "./caller-token.ts";
+export {
+  CALLER_TOKEN_TTL_SECONDS,
+  callerTokenAudience,
+  isKeyId,
+  keyIdFor,
+  parseSigningKeys,
+  SIGNING_KEY_PURPOSE,
+  SIGNING_KEY_REGION,
+} from "./caller-token.ts";
 export { isCanonicalBase64url } from "./canonical-base64url.ts";
 export { traceIdFor } from "./trace-id.ts";
 export type { TrustedIssuer } from "./trusted-issuer.ts";

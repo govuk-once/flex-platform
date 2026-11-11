@@ -49,7 +49,10 @@ The gateway client and the domain SDK are the exceptions, because domains instal
 sources, like every other package, and no task waits on the build.
 
 Workspace packages export their `.ts` sources and resolve to each other's sources. This means
-typecheck and tests see a dependency change immediately, and no task waits on another package.
+typecheck and tests see a dependency change immediately, and no task waits on another package,
+with one exception: the CDK app's tests wait on the codegen of each gateway package it depends on,
+because a gateway's stack deploys the bundle codegen writes. Synth runs outside Turborepo, and stops
+with a message to run `pnpm codegen` when a bundle is missing.
 Vitest, esbuild and tsx use the sources as they are.
 
 Git ignores generated artifacts: `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and `coverage/`.

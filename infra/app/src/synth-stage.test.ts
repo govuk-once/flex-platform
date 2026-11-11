@@ -42,10 +42,12 @@ describe("synthStage", () => {
     synthStage(app, FIXTURE_STAGES);
     expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
       "domainaccount-dev-main",
+      "frontdoor-dev-caller-token-keys",
       "frontdoor-dev-edge-logs-eu-west-2",
       "network-dev-main",
       "domain-dev-domain-a",
       "domain-dev-domain-b",
+      "gateway-dev-main-udp",
       "frontdoor-dev",
     ]);
 

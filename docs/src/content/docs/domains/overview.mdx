@@ -62,7 +62,7 @@ function, and refuses to be created without it. The name follows the
 [template every resource name follows](/flex-platform/infrastructure/overview/#rules-for-stacks-and-constructs),
 so a domain's permissions can name its own environment's gateways and no other's. The Lambda
 client takes the region and credentials from the function it runs in. Gateways and domains share
-an account, and the planned gateway stack will deploy each function under this name. In a test,
+an account, and each gateway's stack deploys its function under this name. In a test,
 set `FLEX_ENVIRONMENT`, and the SDK's own `AWS_ENDPOINT_URL_LAMBDA` variable points the client at
 a stand-in for Lambda's API.
 

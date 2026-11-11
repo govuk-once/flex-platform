@@ -1,6 +1,6 @@
 ---
 title: Lambda@Edge
-description: The Frontdoor's function that verifies each request's Cognito access token, routes it to its domain and signs it.
+description: The Frontdoor's function that verifies each request's Cognito access token, routes it to its domain, signs the caller token and signs the request.
 ---
 
 import { Badge } from "@astrojs/starlight/components";
@@ -8,7 +8,8 @@ import { Badge } from "@astrojs/starlight/components";
 import RoutingDiagram from "../../../components/RoutingDiagram.astro";
 
 **Lambda@Edge** verifies the caller's Amazon Cognito access token, then [routes](#routing) the
-request to its domain and [signs](#signing) it. If any of that fails, the edge answers the request
+request to its domain, signs the [caller token](#the-caller-token), and [signs](#signing) the
+request. If any of that fails, the edge answers the request
 and it never reaches a domain. The code is in `frontdoor/origin-request`.
 
 ## Where it runs
@@ -104,7 +105,7 @@ fresh Node.js process outside the workspace.
 | Memory | 1,024 MB. Lambda gives CPU in proportion to memory, which speeds the first request's key fetch and the signature check |
 | Timeout | 10 seconds. The key fetch's worst case is about 6 |
 | Body | Included, so the signature covers it |
-| Role | `frontdoor-<environment>-edge`, trusting `lambda.amazonaws.com` and `edgelambda.amazonaws.com`. It attaches the policy `frontdoor-<environment>-origin-request-logs-eu-west-2` by name, which the log group's stack provides: it may write to `/flex/frontdoor/<environment>/origin-request` in eu-west-2, and use that group's KMS key through CloudWatch Logs, for that group alone. It may also call `execute-api:Invoke` on the APIs in the environment's domain accounts, in eu-west-2. API Gateway generates an API's ID, so the grant is by account, and each domain API's resource policy names the role |
+| Role | `frontdoor-<environment>-edge`, trusting `lambda.amazonaws.com` and `edgelambda.amazonaws.com`. It attaches the policy `frontdoor-<environment>-origin-request-logs-eu-west-2` by name, which the log group's stack provides: it may write to `/flex/frontdoor/<environment>/origin-request` in eu-west-2, and use that group's KMS key through CloudWatch Logs, for that group alone. It may also call `execute-api:Invoke` on the APIs in the environment's domain accounts, in eu-west-2. API Gateway generates an API's ID, so the grant is by account, and each domain API's resource policy names the role. And it may read the signing key parameter in eu-west-2, and decrypt with the signing key, found by its alias, only with the caller token's encryption context: see [the caller token](/flex-platform/frontdoor/caller-token/#signing) |
 
 The function and its versions are kept when they're removed from the stack: Lambda refuses to
 delete a version until CloudFront has removed its copies, hours after the version is detached.
@@ -163,9 +164,11 @@ actions that user may access. See [Identity and linked accounts](/flex-platform/
 
 ### The caller token
 
-<Badge text="Planned" variant="caution" />
+`x-flex-secure` carries the [caller token](/flex-platform/frontdoor/caller-token/): who the
+request is for, `pairwiseId`, the verified access token's `username`, and the `service` it uses,
+signed by Lambda@Edge, which a domain passes on to the gateways it calls. Its `jti` is
+CloudFront's ID for the request, so a gateway call traces to the request that made it. It is set
+before the request is signed, so the signature covers it, and the CloudFront Function has already
+removed any copy a caller sent.
 
-`x-flex-secure` will carry the platform's signed caller token: the user's values, signed by
-Lambda@Edge, which a domain passes on to the gateways it calls. Until then, Lambda@Edge sets it to
-a fixed `placeholder`, holding nothing about the caller, and signs it, so the header reaches every
-domain already.
+With no key to sign with, the request is the 500: nothing is forwarded without the token.

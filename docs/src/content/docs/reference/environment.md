@@ -32,16 +32,45 @@ ignores the rest. So the secret can be the gateway's own, or one that an upstrea
 own shape. For openapi-rest, see
 [Authentication](/flex-platform/drivers/openapi-rest/authentication/).
 
-The function's execution role needs permission to read the secret, and any permissions the
-driver's authentication needs.
+The function's role may read its secret, and assume the roles config lists for the driver's
+authentication. See [the Lambda function](#the-lambda-function).
 
 ## The Lambda function
 
+Each gateway's stack, `gateway-<environment>-<account>-<id>`, deploys its function from the bundle
+codegen writes, with these settings:
+
 | Setting | Value |
 |---|---|
-| Code | `.gen/runtime/bundle.mjs` |
+| Name | `gateway-<environment>-<id>`, invoked through its alias, `live` |
+| Code | `.gen/runtime/bundle.mjs`, alone |
 | Handler | `bundle.handler` |
-| Runtime | Node.js 24 |
+| Runtime | Node.js 24, on arm64 |
+| Memory | 1024 MB |
+| Timeout | 28 seconds, since a domain answers within API Gateway's 29 |
+| Logs | `/flex/gateway/<environment>/<id>/function`, a `PlatformLogGroup` in the stack |
+| Subnets and security group | Its placement's, which the [network](/flex-platform/infrastructure/network/#ids-other-stacks-read) writes to SSM |
+| Variables | `FLEX_UPSTREAM_SECRET_ARN`, and `FLEX_UPSTREAM_TARGET` unless config's `target` is `null` |
+
+The stack owns the code, the version and the alias, so a gateway is released only by deploying its
+stack. The alias moves to a new version once the version exists, so no call meets new code with
+old variables.
+
+Its role, `gateway-<environment>-<id>-execution`, may:
+
+- write to its own log group, with its stack's log group key;
+- create and remove the function's network interfaces, which Lambda does as the role. A deny on
+  every gateway's function stops the function's own code doing the same;
+- read its secret, and decrypt it with an upstream's key where the upstream holds it;
+- assume the roles config lists for it.
+
+It may read the secret and assume the roles only through the network's `secretsmanager` and `sts`
+endpoints: a deny on any other `aws:SourceVpce` refuses the same calls through NAT, or from outside
+AWS with the role's credentials.
+
+A secret the stack creates, `gateway-<environment>-<id>`, starts with no value, for a person to
+put, and the stack keeps it when it is deleted. Its resource policy refuses every reader but the
+gateway's role, whatever any other policy allows. Its rotation is planned.
 
 The handler is built while the function initialises. A missing or invalid secret prevents
 initialisation from completing, before the handler can process an event. This check runs when
@@ -55,5 +84,6 @@ initialising a function.
 Initialisation failures occur outside the handler and do not return a gateway error envelope.
 An invalid secret read after startup instead fails the affected call as `INTERNAL`.
 
-Whether the function is placed `isolated` or `private` depends on how its upstream is reached. See
+Whether the function is placed `isolated` or `private` depends on how its upstream is reached, and
+is set in [config](/flex-platform/infrastructure/overview/#config). See
 [Egress](/flex-platform/start/platform/#egress).

@@ -52,23 +52,28 @@ Each environment has these stacks:
 | Stack | Account | Region | One per | Holds |
 |---|---|---|---|---|
 | `frontdoor-<environment>-edge-logs-eu-west-2` | Frontdoor | eu-west-2 | Environment | Lambda@Edge's log group, and the policy that lets its role write to it |
+| `frontdoor-<environment>-caller-token-keys` | Frontdoor | eu-west-2 | Environment | The caller token's signing key, the bucket every gateway reads its public keys from, and key rotation: see [the caller token](/flex-platform/frontdoor/caller-token/#stacks) |
 | `frontdoor-<environment>` | Frontdoor | us-east-1 | Environment | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
 | `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, interface endpoints, security groups, network ACLs, DNS Firewall, and its flow and query logs: see [Network](/flex-platform/infrastructure/network/) |
 | `domainaccount-<environment>-<account>` | Domain | eu-west-2 | Domain account | What the account's domains share: see [what a domain account provides](/flex-platform/domains/hosting/#what-a-domain-account-provides) |
 | `domain-<environment>-<domain>` | Domain | eu-west-2 | Domain | The domain's API and host, and its function's log group and roles: see [what a domain provides](/flex-platform/domains/hosting/#what-a-domain-provides) |
+| `gateway-<environment>-<account>-<id>` | Domain | eu-west-2 | Gateway in a domain account | The gateway's function, its version and `live` alias, its role and log group, and its secret if it has its own: see [Environment](/flex-platform/reference/environment/#the-lambda-function) |
 
-The Frontdoor's stacks are in us-east-1 because CloudFront takes its web ACL, its certificate and
-its Lambda@Edge functions from there. Lambda@Edge's log group is in a stack of its own, in the one
+`frontdoor-<environment>` is in us-east-1 because CloudFront takes its web ACL, its certificate and
+its Lambda@Edge functions from there. The caller token's stack is in eu-west-2, where its keys are
+made and kept, and the gateways read them: see [the caller token](/flex-platform/frontdoor/caller-token/#keys). Lambda@Edge's log group is in a stack of its own, in the one
 region its logs are kept: see [the Frontdoor's logs](/flex-platform/frontdoor/overview/#logs). The
 region is in the stack's name, so keeping logs in another region later is another stack beside it.
 `frontdoor-<environment>` depends on it, so it deploys first.
 
 A domain's stack depends on its account's, whose certificate ARN it reads and whose API Gateway
 logging setting its stage logs through, and on its network's, whose subnet and security group IDs
-its deploy role reads. `frontdoor-<environment>` depends on every domain stack in its environment,
-across accounts and regions, so it never routes to a host before the host exists. So an
-environment deploys in that order: the networks and the domain accounts' stacks, the domains'
-stacks, then the Frontdoor's.
+its deploy role reads. A gateway's stack depends on its network's, whose subnet, security group
+and endpoint IDs it reads. `frontdoor-<environment>` depends on every domain stack in its environment,
+across accounts and regions, so it never routes to a host before the host exists. It also depends on the caller token's stack,
+whose keys the edge signs with. So an environment deploys in that order: the networks, the domain
+accounts' stacks and the caller token's, then the domains' and the gateways' stacks, then the
+Frontdoor's.
 
 Every domain account has its stack, whether or not it hosts a domain, so adding a domain deploys
 only the domain's own stack and the Frontdoor's, whose routing map gains it.
@@ -98,6 +103,7 @@ StageConfig         { name, shared: { account }, environments }
 EnvironmentConfig   { name, frontdoor: { account, zone, issuers }, domainAccounts }
 DomainAccountConfig { name, account, domains: [name | { name, disabled: true }], zone,
                       network: { availabilityZones }, gateways }
+GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
 ```
 
 - A domain account's `name` goes into its stacks' and resources' names. Every stage names its
@@ -112,9 +118,22 @@ DomainAccountConfig { name, account, domains: [name | { name, disabled: true }],
   `<domain>.<its domain account's zone>`.
 - `network.availabilityZones` lists the zones the account's network uses, in any order. Each has
   its own NAT gateway. See [availability zones](/flex-platform/infrastructure/network/#availability-zones).
-- `gateways` lists the gateways deployed in the account, each with its id and the names it
-  connects to, `hostnames`. They make up the network's DNS allowlist. See
-  [the allowlist](/flex-platform/infrastructure/network/#the-allowlist).
+- `gateways` lists the gateways deployed in the account. Each domain account runs its own copy of
+  a gateway its domains call. Each gateway has:
+  - `id`, which names its function, `gateway-<environment>-<id>`, and its package,
+    `@repo/gateway-service-<id>`, which `@repo/infra-app` depends on, so its tests wait on the
+    gateway's codegen. Synth takes the bundle from `.gen/runtime/bundle.mjs` in that package.
+  - `hostnames`, the names it connects to, which make up the network's DNS allowlist. See
+    [the allowlist](/flex-platform/infrastructure/network/#the-allowlist).
+  - `placement`, `isolated` or `private`. See [Egress](/flex-platform/start/platform/#egress).
+  - `secret`, which becomes `FLEX_UPSTREAM_SECRET_ARN`: `"create"` for a secret the gateway's stack
+    creates, or `{ arn, keyArn }` for one its upstream holds, with the KMS key it is encrypted with.
+  - `target`, which becomes `FLEX_UPSTREAM_TARGET`, or `null` where the driver takes the target from
+    the secret.
+  - `roleArns`, the roles it assumes to sign as, such as an upstream's for `sigV4`.
+
+  The secrets and roles feed the [endpoints' policies](/flex-platform/infrastructure/network/#endpoints)
+  and the gateway's role exactly.
 - `issuers` lists the Cognito user pools whose access tokens the Frontdoor accepts, each as its
   issuer URL, `https://cognito-idp.<region>.amazonaws.com/<pool ID>`, and the app client IDs it
   accepts from that pool.
@@ -141,8 +160,13 @@ Before building any stage, the app checks every stage's config:
 - every domain account's network lists at least two availability zones, each once, and each one
   the network has a layout for;
 - every gateway's id is a name as above, used once in its account, and short enough for its
-  function's name to fit Lambda's 64 characters. It names at least one hostname, and each passes
-  [the allowlist's rules](/flex-platform/infrastructure/network/#the-allowlist).
+  function's name to fit Lambda's 64 characters and its role's IAM's 64. It names at least one
+  hostname, and each passes
+  [the allowlist's rules](/flex-platform/infrastructure/network/#the-allowlist). An upstream's
+  secret is named by its full ARN in eu-west-2, with the six characters Secrets Manager adds, and
+  its key by a key's ARN in eu-west-2, never an alias, since a policy naming anything else would
+  match nothing. Each role ARN names a role, without a wildcard, once. A target is `null` or not
+  empty.
 
 ## Rules for stacks and constructs
 
