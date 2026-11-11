@@ -124,18 +124,25 @@ include sensitive values.
 
 ## Secure bindings
 
-Bindings require input fields to equal named values in `secure.values`. They do not currently
-verify a signature or prove where those values came from.
+A binding holds an input field to a claim of the [caller token](/flex-platform/frontdoor/caller-token/),
+which the gateway has verified before it gets here. It is how a gateway keeps a domain to its own
+caller's records: any domain may call any gateway, so without a binding a domain could ask for any
+user.
 
 ```ts
-secure: { "actor.id": "sub" }
+secure: { requestingService: "service", requestingServiceUserId: "pairwiseId" }
 ```
 
-The key is an exact dot path into the input. The value is a key in `secure.values`. Comparisons
-are strict, with no type conversion. A missing input field, a missing secure value or a mismatch
-produces `SECURE_VALUE_MISMATCH`. Malformed paths, wildcard paths and empty secure keys are
-rejected when the handler is created.
+The key is an exact dot path into the input. The value is a claim, one of `SECURE_CLAIMS` in
+`@repo/gateway-core`: `pairwiseId`, the caller's access token `username`, and `service`, the
+service whose namespace that ID is in. Bind both wherever an upstream takes both, because an ID
+read in another service's namespace names someone else. Every claim is a string. Comparisons are strict, with no type conversion. A missing input field or a mismatch
+produces `SECURE_VALUE_MISMATCH`, and the log names the path and the claim, never either value.
 
-Secure values must be strings, finite numbers, booleans or null. Other values produce
-`INVALID_INPUT`. Allowing only scalars keeps payload preparation simple and deterministic. The
-envelope requires a string `secure.signature`, but the runtime does not verify it.
+Codegen refuses a binding to anything but a claim, and a binding of a field the input schema
+doesn't declare as a required string, all the way down its path. A field that could be absent, or
+another type, would refuse every call that leaves it out or sends it. Malformed and wildcard paths
+are refused when the handler is created.
+
+Each operation that acts for a user binds the fields that name the user, or says why it can't.
+A field holding the user's ID at another service, which no claim vouches for, can't be bound.

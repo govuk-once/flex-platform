@@ -22,8 +22,7 @@ function typeOf(schema: JSONSchema, ctx: TypeContext, context: string): string {
 
 // The call contract, as types only. A caller names an operation, builds its input and reads the
 // response. The emitted module carries one import, a type import of "@repo/gateway-core" for the
-// envelope and secure-value shapes, erased when the file compiles, so nothing here is imported at
-// run time at all. That package depends only on @repo/utils, so naming an envelope costs a
+// error codes, erased when the file compiles, so nothing here is imported at run time at all. That package depends only on @repo/utils, so naming an envelope costs a
 // consumer neither the runtime nor the generator.
 //
 // It is a workspace package, so the import resolves only in this repository. A domain outside it
@@ -63,7 +62,6 @@ const GENERATED_NAMES = [
   "ErrorCode",
   "ErrorResponse",
   "ResponseMeta",
-  "SecureValue",
   "Operations",
   "OperationName",
   "OperationInput",
@@ -210,7 +208,7 @@ export async function emitContract(
 
   const source = [
     preamble(gatewayId),
-    `import type { ErrorCode, SecureValue } from "@repo/gateway-core";`,
+    `import type { ErrorCode } from "@repo/gateway-core";`,
     "",
     declarations.join("\n\n"),
     "",
@@ -221,16 +219,13 @@ export async function emitContract(
     'export type OperationResult<TName extends OperationName> = Operations[TName]["result"];',
     'export type OperationResponse<TName extends OperationName> = Operations[TName]["response"];',
     "",
-    "// One call as the gateway receives it. `secure` carries the caller's asserted values; an",
-    "// operation's secure bindings are compared against them, and the signature is not verified.",
+    "// One call as the gateway receives it. `secure` carries the caller token, which the gateway",
+    "// verifies, and whose claims an operation's secure bindings compare its input with.",
     "export type GatewayRequest = {",
     "  readonly [TName in OperationName]: {",
     "    readonly operation: TName;",
     "    readonly input: OperationInput<TName>;",
-    "    readonly secure: {",
-    "      readonly values: Readonly<Record<string, SecureValue>>;",
-    "      readonly signature: string;",
-    "    };",
+    "    readonly secure: { readonly token: string };",
     "  };",
     "}[OperationName];",
   ].join("\n");

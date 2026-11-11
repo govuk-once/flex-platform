@@ -31,9 +31,9 @@ describe("emitted entry point", () => {
     expect(entry).toContain('gateway "udp"');
   });
 
-  it("wires the configuration, the validators and the driver's executor", () => {
-    expect(entry).toContain(
-      'import { createHandler, createStartupLog, readUpstreamOptions } from "@repo/gateway-runtime";',
+  it("wires the configuration, the validators, the driver's executor and the caller token's verifier", () => {
+    expect(entry).toMatch(
+      /import \{\s*createHandler,\s*createStartupLog,\s*readCallerTokenVerifier,\s*readUpstreamOptions,\s*\} from "@repo\/gateway-runtime";/,
     );
     expect(entry).toContain('import config from "../../gateway.config.ts";');
     expect(entry).toContain(
@@ -42,8 +42,8 @@ describe("emitted entry point", () => {
     expect(entry).toMatch(
       /config\.driver\.createExecutor\(config, \{\s*\.\.\.readUpstreamOptions\(\),\s*log: createStartupLog\(config\.id\),\s*\}\)/,
     );
-    expect(entry).toContain(
-      "createHandler(config, { validators, meta, execute })",
+    expect(entry).toMatch(
+      /createHandler\(config, \{\s*validators,\s*meta,\s*execute,\s*verifyCallerToken: readCallerTokenVerifier\(\),\s*\}\)/,
     );
   });
 

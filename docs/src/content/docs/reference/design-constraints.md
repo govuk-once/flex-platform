@@ -53,8 +53,9 @@ for an integration does not mean that integration is implemented.
 
 3. **Validate before dispatch and before returning data.** Keep the handler's order: envelope
    parsing, token verification hook, routing, input validation, secure bindings, deadline
-   derivation, execution, outcome validation, health classification and response. The token hook
-   currently performs no verification.
+   derivation, execution, outcome validation, health classification and response. The token step
+   verifies the caller token before routing, so a caller without one learns nothing of the
+   operations.
    - Invalid configuration should fail when the handler is created, not per request. The handler
      compiles once and takes each invocation's deadline as an argument. Nothing specific to one
      invocation is captured at creation.
@@ -76,6 +77,8 @@ for an integration does not mean that integration is implemented.
    | Step | Code |
    |---|---|
    | Envelope parsing, input validation | `INVALID_INPUT` |
+   | Token, without one | `UNAUTHENTICATED` |
+   | Token, failing a check | `SECURE_SIGNATURE_INVALID` |
    | Routing, for an unknown operation | `OPERATION_NOT_FOUND` |
    | Secure bindings | `SECURE_VALUE_MISMATCH` |
    | Outcome validation | `UPSTREAM_CONTRACT_VIOLATION` |

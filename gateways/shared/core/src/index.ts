@@ -16,8 +16,10 @@ export type {
   EnvelopeResponse,
   EnvelopeSuccess,
   MetaValue,
-  SecureValue,
+  SecureClaim,
+  SecureClaims,
 } from "./envelope.ts";
+export { SECURE_CLAIMS } from "./envelope.ts";
 export type { ErrorCode, ErrorRuling, SignalRuling } from "./errors.ts";
 export { ERROR_CODES } from "./errors.ts";
 export {

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseEnvelope } from "./envelope.ts";
 import { GatewayError } from "./errors.ts";
 
-const VALID_SECURE = { values: {}, signature: "" };
+const VALID_SECURE = { token: "a.b.c" };
 
 function expectInvalidInput(fn: () => unknown, messagePart: string): void {
   try {
@@ -17,7 +17,7 @@ function expectInvalidInput(fn: () => unknown, messagePart: string): void {
 }
 
 describe("parseEnvelope", () => {
-  it("parses a minimal valid envelope", () => {
+  it("parses an envelope with a caller token", () => {
     const req = parseEnvelope({
       operation: "ping",
       input: {},
@@ -25,18 +25,16 @@ describe("parseEnvelope", () => {
     });
     expect(req.operation).toBe("ping");
     expect(req.input).toEqual({});
-    expect(req.secure.values).toEqual({});
+    expect(req.secure?.token).toBe("a.b.c");
   });
 
-  it("parses an envelope with populated secure block", () => {
-    const req = parseEnvelope({
-      operation: "transfer",
-      input: { amount: 100 },
-      secure: { values: { userId: "abc" }, signature: "sig123" },
-    });
-    expect(req.operation).toBe("transfer");
-    expect(req.secure.values).toEqual({ userId: "abc" });
-    expect(req.secure.signature).toBe("sig123");
+  it("leaves a missing token to the token step, which refuses it as UNAUTHENTICATED", () => {
+    expect(parseEnvelope({ operation: "ping", input: {} }).secure).toBe(
+      undefined,
+    );
+    expect(
+      parseEnvelope({ operation: "ping", input: {}, secure: {} }).secure?.token,
+    ).toBe(undefined);
   });
 
   it("rejects input: null", () => {
@@ -91,13 +89,6 @@ describe("parseEnvelope", () => {
     );
   });
 
-  it("rejects missing secure block", () => {
-    expectInvalidInput(
-      () => parseEnvelope({ operation: "ping", input: {} }),
-      "secure",
-    );
-  });
-
   it("rejects non-object secure block", () => {
     expectInvalidInput(
       () => parseEnvelope({ operation: "ping", input: {}, secure: "bad" }),
@@ -105,90 +96,11 @@ describe("parseEnvelope", () => {
     );
   });
 
-  it("rejects secure with missing values", () => {
+  it("rejects a token that isn't a string", () => {
     expectInvalidInput(
       () =>
-        parseEnvelope({
-          operation: "ping",
-          input: {},
-          secure: { signature: "sig" },
-        }),
-      "secure.values",
+        parseEnvelope({ operation: "ping", input: {}, secure: { token: 123 } }),
+      "secure.token",
     );
-  });
-
-  it("rejects secure with missing signature", () => {
-    expectInvalidInput(
-      () =>
-        parseEnvelope({
-          operation: "ping",
-          input: {},
-          secure: { values: { a: 1 } },
-        }),
-      "secure.signature",
-    );
-  });
-
-  it("rejects secure with non-string signature", () => {
-    expectInvalidInput(
-      () =>
-        parseEnvelope({
-          operation: "ping",
-          input: {},
-          secure: { values: { a: 1 }, signature: 123 },
-        }),
-      "secure.signature",
-    );
-  });
-});
-
-describe("parseEnvelope: secure.values must be scalars", () => {
-  const withValues = (values: unknown) => ({
-    operation: "op",
-    input: {},
-    secure: { values, signature: "sig" },
-  });
-
-  it.each([
-    ["string", "abc"],
-    ["number", 42],
-    ["zero", 0],
-    ["boolean", true],
-    ["null", null],
-  ])("accepts a %s value", (_label, value) => {
-    expect(() => parseEnvelope(withValues({ k: value }))).not.toThrow();
-  });
-
-  it.each([
-    ["nested object", { nested: { a: 1 } }],
-    ["array", { list: [1, 2] }],
-    ["undefined", { k: undefined }],
-  ])("rejects a %s value as INVALID_INPUT", (_label, values) => {
-    try {
-      parseEnvelope(withValues(values));
-      throw new Error("expected INVALID_INPUT");
-    } catch (err) {
-      expect(err).toBeInstanceOf(GatewayError);
-      expect((err as GatewayError).code).toBe("INVALID_INPUT");
-    }
-  });
-
-  it.each([
-    ["NaN", Number.NaN],
-    ["Infinity", Number.POSITIVE_INFINITY],
-  ])("rejects %s, which would stringify to null when signed", (_l, value) => {
-    expect(() => parseEnvelope(withValues({ k: value }))).toThrow(
-      /secure\.values/,
-    );
-  });
-
-  it("leaves the offending key out of the message, which is logged as written", () => {
-    // The keys are the caller's, so naming one would log whatever a caller chose to send.
-    expect(() =>
-      parseEnvelope(withValues({ ok: 1, "SYNTHETIC-PRIVATE-VALUE": {} })),
-    ).toThrow(/^Envelope 'secure\.values' must hold /);
-    expect(() =>
-      parseEnvelope(withValues({ ok: 1, "SYNTHETIC-PRIVATE-VALUE": {} })),
-    ).not.toThrow(/SYNTHETIC-PRIVATE-VALUE/);
   });
 });

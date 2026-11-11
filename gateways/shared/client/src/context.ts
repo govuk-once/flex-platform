@@ -1,18 +1,18 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import type { SecureValue } from "@repo/gateway-core";
-
 // What the client sends on its caller's behalf, for the whole of the caller's own invocation. The
 // SDK runs a domain's handler inside withCallerContext, and every call made from it, however many
 // awaits deep, carries the context. A call made outside one is a bug in the caller, and is refused
 // before anything is sent. Only the client reads the storage: the `caller` entry exports the
-// function that sets it and nothing that reads it, so the values, a token among them later, are not
-// offered to the rest of a domain's code.
+// function that sets it and nothing that reads it, so the caller token is not offered to the rest of
+// a domain's code.
 
-/** The caller's asserted values, which the gateway compares with its secure bindings. */
+/**
+ * The caller token, as the request's `x-flex-secure` header carried it, passed on unchanged. The
+ * gateway verifies it, and compares an operation's bound input with its claims.
+ */
 export interface SecureContext {
-  readonly values: Readonly<Record<string, SecureValue>>;
-  readonly signature: string;
+  readonly token: string;
 }
 
 export interface CallerContext {
@@ -21,10 +21,7 @@ export interface CallerContext {
    * after it is not sent. The caller keeps its own margin for answering after a call.
    */
   readonly deadline: number;
-  /**
-   * Without it a call sends none, and the gateway refuses the call as invalid input. The gateway
-   * does not verify the signature yet.
-   */
+  /** Without it a call sends none, and the gateway refuses the call as `UNAUTHENTICATED`. */
   readonly secure?: SecureContext;
 }
 

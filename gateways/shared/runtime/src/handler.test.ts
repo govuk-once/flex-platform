@@ -5,6 +5,7 @@ import type {
   EnvelopeError,
   EnvelopeInbound,
   EnvelopeSuccess,
+  SecureClaim,
   Validator,
 } from "@repo/gateway-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +16,29 @@ import { createHandler as createGatewayHandler } from "./handler.ts";
 
 // -- Helpers ------------------------------------------------------------------
 
-const VALID_SECURE = { values: {}, signature: "" };
+// The verifier's own tests cover tokens. Here a token is `pairwiseId:<id>`, verified as that
+// user, or `forged`, refused as a token that fails its checks.
+const VALID_SECURE = { token: "pairwiseId:user-me" };
+
+const stubVerifyCallerToken: HandlerDeps["verifyCallerToken"] = (token) => {
+  if (token === undefined) {
+    return Promise.reject(
+      new GatewayError("UNAUTHENTICATED", "The call carries no caller token"),
+    );
+  }
+  if (!token.startsWith("pairwiseId:")) {
+    return Promise.reject(
+      new GatewayError(
+        "SECURE_SIGNATURE_INVALID",
+        "Caller token refused: signature",
+      ),
+    );
+  }
+  return Promise.resolve({
+    claims: { pairwiseId: token.slice("pairwiseId:".length), service: "app" },
+    tokenId: "request-1",
+  });
+};
 
 const alwaysValid: Validator = Object.assign(
   (_data: unknown): _data is unknown => true,
@@ -53,7 +76,7 @@ function testConfig(
       {
         description?: string;
         log?: { input?: string[]; output?: string[] };
-        secure?: Record<string, string>;
+        secure?: Record<string, SecureClaim>;
       }
     >;
     policy: { upstreamTimeout: string };
@@ -87,6 +110,7 @@ function testDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
       ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
     },
     execute: stubExecute,
+    verifyCallerToken: stubVerifyCallerToken,
     ...overrides,
   };
 }
@@ -307,40 +331,77 @@ describe("createHandler", () => {
     });
   });
 
+  describe("step 2: verify the caller token", () => {
+    it("refuses a call without a token as UNAUTHENTICATED, doing nothing for it", async () => {
+      const execute = vi.fn(stubExecute);
+      const handler = createHandler(testConfig(), testDeps({ execute }));
+      expect(await handler({ operation: "ping", input: {} })).toEqual({
+        ok: false,
+        error: { code: "UNAUTHENTICATED" },
+      });
+      expect(await handler(envelope({ secure: {} as never }))).toEqual({
+        ok: false,
+        error: { code: "UNAUTHENTICATED" },
+      });
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it("refuses a token that fails its checks as SECURE_SIGNATURE_INVALID", async () => {
+      const execute = vi.fn(stubExecute);
+      const handler = createHandler(testConfig(), testDeps({ execute }));
+
+      expect(await handler(envelope({ secure: { token: "forged" } }))).toEqual({
+        ok: false,
+        error: { code: "SECURE_SIGNATURE_INVALID" },
+      });
+      expect(execute).not.toHaveBeenCalled();
+      expect(capturedOutput()).toContain('"signal":"trust"');
+    });
+
+    it("verifies before routing, so a caller without a token learns nothing of the operations", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+      expect(await handler({ operation: "nope", input: {} })).toEqual({
+        ok: false,
+        error: { code: "UNAUTHENTICATED" },
+      });
+    });
+
+    it("refuses a token that isn't a string as invalid input", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+      expect(
+        await handler(envelope({ secure: { token: 7 } as never })),
+      ).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+    });
+
+    it("logs the verified token's ID on every line after it, and never the token or its claims", async () => {
+      const handler = createHandler(testConfig(), testDeps());
+      await handler(
+        envelope({ secure: { token: "pairwiseId:SYNTHETIC_USER" } }),
+      );
+
+      const [line] = capturedRecords();
+      expect(line).toMatchObject({ frontdoorRequestId: "request-1" });
+      expect(capturedOutput()).not.toContain("SYNTHETIC_USER");
+    });
+  });
+
   describe("step 5: secure bindings", () => {
     const bound = () =>
-      testConfig({ operations: { ping: { secure: { userId: "sub" } } } });
+      testConfig({
+        operations: { ping: { secure: { userId: "pairwiseId" } } },
+      });
 
-    it("accepts envelopes with populated secure block", async () => {
-      const handler = createHandler(testConfig(), testDeps());
-      const resp = await handler(
-        envelope({
-          secure: { values: { userId: "abc" }, signature: "sig" },
-        }),
-      );
+    it("accepts a bound input matching the token's claim", async () => {
+      const handler = createHandler(bound(), testDeps());
+      const resp = await handler(envelope({ input: { userId: "user-me" } }));
 
       expect(resp.ok).toBe(true);
     });
 
-    it("accepts a bound input matching the secure value", async () => {
+    it("returns SECURE_VALUE_MISMATCH when input contradicts the token", async () => {
       const handler = createHandler(bound(), testDeps());
       const resp = await handler(
-        envelope({
-          input: { userId: "user-me" },
-          secure: { values: { sub: "user-me" }, signature: "sig" },
-        }),
-      );
-
-      expect(resp.ok).toBe(true);
-    });
-
-    it("returns SECURE_VALUE_MISMATCH when input contradicts the envelope", async () => {
-      const handler = createHandler(bound(), testDeps());
-      const resp = await handler(
-        envelope({
-          input: { userId: "user-someone-else" },
-          secure: { values: { sub: "user-me" }, signature: "sig" },
-        }),
+        envelope({ input: { userId: "user-someone-else" } }),
       );
 
       expect(resp.ok).toBe(false);
@@ -351,25 +412,15 @@ describe("createHandler", () => {
       const execute = vi.fn(stubExecute);
       const handler = createHandler(bound(), testDeps({ execute }));
 
-      await handler(
-        envelope({
-          input: { userId: "user-someone-else" },
-          secure: { values: { sub: "user-me" }, signature: "sig" },
-        }),
-      );
+      await handler(envelope({ input: { userId: "user-someone-else" } }));
 
       expect(execute).not.toHaveBeenCalled();
     });
 
     it("records a trust signal, never an upstream one", async () => {
-      // A consumer lying about its identity says nothing about upstream health.
+      // A domain asking for another user says nothing about upstream health.
       const handler = createHandler(bound(), testDeps());
-      await handler(
-        envelope({
-          input: { userId: "user-someone-else" },
-          secure: { values: { sub: "user-me" }, signature: "sig" },
-        }),
-      );
+      await handler(envelope({ input: { userId: "user-someone-else" } }));
 
       expect(capturedOutput()).toContain('"signal":"trust"');
     });
@@ -377,10 +428,23 @@ describe("createHandler", () => {
     it("fails cold start on a malformed binding path", () => {
       expect(() =>
         createHandler(
-          testConfig({ operations: { ping: { secure: { "a..b": "sub" } } } }),
+          testConfig({
+            operations: { ping: { secure: { "a..b": "pairwiseId" } } },
+          }),
           testDeps(),
         ),
       ).toThrow(/Invalid field path/);
+    });
+
+    it("fails cold start on a binding to a claim no token carries", () => {
+      expect(() =>
+        createHandler(
+          testConfig({
+            operations: { ping: { secure: { userId: "sub" as SecureClaim } } },
+          }),
+          testDeps(),
+        ),
+      ).toThrow(/must name a caller token claim: pairwiseId/);
     });
   });
 
@@ -997,6 +1061,7 @@ describe("outcome lookup hardening", () => {
         pong: { input: alwaysValid, outcomes: { success: alwaysValid } },
       },
       execute: stubExecute,
+      verifyCallerToken: stubVerifyCallerToken,
     });
     expect(() =>
       createGatewayHandler(config, {
