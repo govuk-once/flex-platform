@@ -1,10 +1,4 @@
-import {
-  ArnFormat,
-  CfnResource,
-  Duration,
-  Stack,
-  Validations,
-} from "aws-cdk-lib";
+import { ArnFormat, Duration, Stack } from "aws-cdk-lib";
 import {
   Alarm,
   ComparisonOperator,
@@ -115,17 +109,9 @@ export class DnsFirewall extends Construct {
       priority: BLOCK_PRIORITY,
     });
 
-    // Fail closed is AWS's default, but a default is nothing a test or a reviewer can see. The
-    // resource is newer than aws-cdk-lib's typed classes and its CloudFormation validation schema.
-    const failClosed = new CfnResource(this, "FailClosed", {
-      type: "AWS::Route53Resolver::FirewallConfig",
-      properties: { ResourceId: vpc.vpcId, FirewallFailOpen: "DISABLED" },
-    });
-    Validations.of(failClosed).acknowledge({
-      id: "CloudFormation-Validate::F3006",
-      reason:
-        "AWS::Route53Resolver::FirewallConfig is in the CloudFormation template reference, but not yet in the schema aws-cdk-lib validates against.",
-    });
+    // The VPC fails closed because that is AWS's default, and nothing here sets it. An
+    // AWS::Route53Resolver::FirewallConfig can't: CloudFormation refuses one that sets the default,
+    // and every other value fails open.
     this.logQueries(environment, vpc);
 
     this.blockedQueries = new Alarm(this, "BlockedQueries", {

@@ -193,9 +193,9 @@ The allow rule trusts redirection. How an upstream serves its name, such as whic
 is the upstream's to change, so config lists only the names a gateway connects to.
 
 If DNS Firewall can't evaluate a query, the resolver answers `SERVFAIL`: the VPC fails closed.
-That's AWS's default, but it's set explicitly, with an `AWS::Route53Resolver::FirewallConfig`, so a
-test and a reviewer can see it. aws-cdk-lib has no typed class for that resource yet, so the
-construct declares it as a `CfnResource`.
+That's AWS's default, and nothing in the stack sets it. An `AWS::Route53Resolver::FirewallConfig`
+can't: CloudFormation refuses one that sets the default, and every other value fails open. A test
+checks the stack has none.
 
 ### The allowlist
 

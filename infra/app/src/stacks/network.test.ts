@@ -249,9 +249,8 @@ describe("NetworkStack", () => {
           Domains: ["*"],
         },
       );
-      network.hasResourceProperties("AWS::Route53Resolver::FirewallConfig", {
-        FirewallFailOpen: "DISABLED",
-      });
+      // Fails closed by default, which is set by nothing: see the DnsFirewall construct.
+      network.resourceCountIs("AWS::Route53Resolver::FirewallConfig", 0);
       network.resourceCountIs(
         "AWS::Route53Resolver::ResolverQueryLoggingConfigAssociation",
         1,

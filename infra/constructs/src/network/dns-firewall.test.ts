@@ -133,13 +133,12 @@ describe("DnsFirewall", () => {
     ).toThrow("is a URL");
   });
 
-  it("sets the VPC to fail closed, explicitly, with CloudFormation's own resource", () => {
+  // Failing closed is the VPC's default. CloudFormation refuses a FirewallConfig that sets the
+  // default, and every other value fails open, so the construct sets none.
+  it("leaves the VPC failing closed, as it does by default", () => {
     const { template } = buildNetwork();
 
-    template.hasResourceProperties("AWS::Route53Resolver::FirewallConfig", {
-      ResourceId: { Ref: Match.stringLikeRegexp("^NetworkVpc") },
-      FirewallFailOpen: "DISABLED",
-    });
+    template.resourceCountIs("AWS::Route53Resolver::FirewallConfig", 0);
     template.resourceCountIs("Custom::AWS", 0);
   });
 
