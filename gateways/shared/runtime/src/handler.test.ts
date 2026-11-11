@@ -766,6 +766,50 @@ describe("createHandler", () => {
       expect(resp.error).toEqual({ code: "UPSTREAM_TIMEOUT" });
       expect(capturedOutput()).toContain("timed out");
     });
+
+    // Only untyped code can raise one. "toString" is there on every object, so a lookup that
+    // found inherited members would take it for a code and return it to the caller.
+    it.each(["UPSTREAM_BUSY", "toString"])(
+      "treats a GatewayError whose code is %s, not an error code, as any other error",
+      async (code) => {
+        const handler = createHandler(
+          testConfig(),
+          testDeps({
+            execute: () =>
+              Promise.reject(
+                new GatewayError(code as never, "nino QQ123456C rejected"),
+              ),
+          }),
+        );
+        const resp = await handler(envelope());
+
+        assert.isFalse(resp.ok);
+        expect(resp.error).toEqual({ code: "INTERNAL" });
+        expect(capturedRecords().at(-1)).toMatchObject({
+          msg: "Unhandled error in dispatcher",
+          signal: "unhandled",
+        });
+        expect(capturedOutput()).not.toContain("QQ123456C");
+      },
+    );
+
+    it("answers with a GatewayError's code even when logging it fails", async () => {
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          execute: () =>
+            Promise.reject(new GatewayError("UPSTREAM_TIMEOUT", "timed out")),
+        }),
+      );
+      vi.spyOn(process.stdout, "write").mockImplementation(() => {
+        throw new Error("stdout is closed");
+      });
+
+      await expect(handler(envelope())).resolves.toEqual({
+        ok: false,
+        error: { code: "UPSTREAM_TIMEOUT" },
+      });
+    });
   });
 
   describe("error envelopes carry the code only", () => {
@@ -826,6 +870,18 @@ describe("createHandler", () => {
         createHandler(testConfig(), testDeps({ validators: {} })),
       ).toThrow('Missing validators for operation "ping"');
     });
+
+    it.each(["execute", "verifyCallerToken"] as const)(
+      "throws when %s is not a function",
+      (name) => {
+        // Not reachable from typed code; the generated entry point is JavaScript.
+        const deps = { ...testDeps(), [name]: undefined };
+
+        expect(() =>
+          createHandler(testConfig(), deps as unknown as HandlerDeps),
+        ).toThrow(`Gateway handler has no ${name} function`);
+      },
+    );
 
     it("throws on an empty gateway id", () => {
       expect(() =>
@@ -1118,6 +1174,7 @@ describe("outcome lookup hardening", () => {
           ping: { input: alwaysValid, outcomes: { success: alwaysValid } },
         },
         execute: stubExecute,
+        verifyCallerToken: stubVerifyCallerToken,
       }),
     ).toThrow(/Missing validators for operation "pong"/);
     createGatewayHandler(config, {
@@ -1128,6 +1185,7 @@ describe("outcome lookup hardening", () => {
         pang: { input: alwaysValid, outcomes: { success: alwaysValid } },
       },
       execute: stubExecute,
+      verifyCallerToken: stubVerifyCallerToken,
     });
   });
 });

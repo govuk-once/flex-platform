@@ -94,6 +94,7 @@ for an integration does not mean that integration is implemented.
 4. **Errors carry codes.** Failure responses are `{ ok: false, error: { code } }`. Diagnostic
    messages stay in logs and must be safe to log.
    - A `GatewayError` declares that its message is safe, and the runtime records it as written.
+     One whose code is not an error code is treated as any other error.
    - Any other error is logged as its source locations and the dispatcher step only. A library or
      a custom handler can put a payload in the message, the name, the properties, the cause or the
      stack text, and the stack text can be overwritten.
