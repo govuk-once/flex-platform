@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isRoutable } from "./path.ts";
+import { isRoutable } from "./routable-path.ts";
 
 describe("isRoutable", () => {
   it.each([

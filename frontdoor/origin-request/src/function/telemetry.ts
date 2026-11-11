@@ -7,6 +7,9 @@ import type { UnexpectedErrorSummary } from "@repo/utils/describe-unexpected-err
 export type OriginRequestEventName =
   | "origin_request_forwarded"
   | "origin_request_route_unknown"
+  | "origin_request_method_rejected"
+  | "origin_request_path_rejected"
+  | "origin_request_content_type_rejected"
   | "origin_request_query_rejected"
   | "origin_request_token_missing"
   | "origin_request_token_invalid"

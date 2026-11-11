@@ -12,8 +12,8 @@ import {
   unsupportedMediaType,
 } from "@repo/cloudfront-function";
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
+import { ALLOWED_METHODS, isRoutable } from "@repo/frontdoor-shared";
 
-import { isRoutable } from "./path.ts";
 import { logEvent } from "./telemetry.ts";
 import { checkToken } from "./token.ts";
 import type { ViewerRequestConfig } from "./types.ts";
@@ -23,10 +23,6 @@ const PLATFORM_HEADER_PREFIX = "x-flex-";
 
 // Trace context a caller could send to pick the trace, or force every request to be sampled.
 const CALLER_TRACE_HEADERS = ["traceparent", "tracestate", "x-amzn-trace-id"];
-
-// The methods the platform serves. CloudFront itself allows every method, so this is where the rest
-// are refused.
-const ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 // The method is checked first, since its answer says nothing about the caller or the paths. The
 // token is checked before the path, so a request without a valid token gets a 401 whatever its

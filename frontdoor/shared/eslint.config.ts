@@ -5,5 +5,5 @@ import { defineConfig } from "eslint/config";
 export default defineConfig(...base, {
   files: ["src/**/*.ts"],
   ignores: ["**/*.test.ts"],
-  ...cloudfrontFunction([]),
+  ...cloudfrontFunction(["@repo/cloudfront-js-utils"]),
 });

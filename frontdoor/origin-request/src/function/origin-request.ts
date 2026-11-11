@@ -1,3 +1,5 @@
+import { isJsonContentType } from "@repo/cloudfront-js-utils/is-json-content-type";
+import { ALLOWED_METHODS, isRoutable } from "@repo/frontdoor-shared";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
 import { authorizationToken } from "./authorization.ts";
@@ -6,8 +8,10 @@ import { forward } from "./forward.ts";
 import {
   badRequest,
   internalError,
+  methodNotAllowed,
   notFound,
   unauthorized,
+  unsupportedMediaType,
 } from "./responses.ts";
 import { routeFor, type Routes } from "./route.ts";
 import { type SignRequest, UnsignableQuery } from "./sign.ts";
@@ -67,6 +71,21 @@ export function createOriginRequestHandler(options: OriginRequestOptions) {
         return unauthorized(ids.traceId);
       }
 
+      // The CloudFront Function's checks again, since this is the step that signs.
+      if (!ALLOWED_METHODS.includes(request.method)) {
+        logOutcome("origin_request_method_rejected", ids);
+        return methodNotAllowed(ids.traceId, ALLOWED_METHODS);
+      }
+      if (!isRoutable(request.uri)) {
+        logOutcome("origin_request_path_rejected", ids);
+        return notFound(ids.traceId);
+      }
+      // By the body itself, which the CloudFront Function can't see.
+      if (request.body.data !== "" && !saysJson(request)) {
+        logOutcome("origin_request_content_type_rejected", ids);
+        return unsupportedMediaType(ids.traceId);
+      }
+
       // After the token, so a caller without one learns nothing about which domains exist.
       const route = routeFor(request.uri, options.routes);
       if (route === undefined) {
@@ -99,4 +118,9 @@ export function createOriginRequestHandler(options: OriginRequestOptions) {
       return internalError(ids.traceId);
     }
   };
+}
+
+function saysJson(request: CloudFrontRequest): boolean {
+  const values = request.headers["content-type"];
+  return values?.length === 1 && isJsonContentType(values[0]?.value);
 }

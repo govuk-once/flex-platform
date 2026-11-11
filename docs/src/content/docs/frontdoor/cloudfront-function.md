@@ -40,6 +40,10 @@ In order, it:
    because HTTP/2 and HTTP/3 can send a body without either header. Anything else is a 415, and
    so is any of those three headers appearing more than once.
 
+The function can't see a body, only the headers that announce one.
+[Lambda@Edge](/flex-platform/frontdoor/lambda-edge/#checking-the-request) can, and checks the
+method, the path and the body's content type again before it signs.
+
 CloudFront presents a repeated header with its first value in `value` and every value in
 `multiValue`. The function reads `value`, so every header it reads must appear once: otherwise a
 check could pass on the first value while a later step reads another.
@@ -96,9 +100,11 @@ which bundles for the `cloudfront-js-2.0` runtime, parses the result to check it
 What is particular to a CloudFront Function is in `@repo/cloudfront-function`: the event's types,
 the checks of a repeated header and of a JSON body, the refusals, and the log line. The generic
 functions it uses are in `@repo/cloudfront-js-utils`: the trace ID, the encoding check, the
-decoding of a token's segments, the check of a path, and the rule a name follows. The reading of
-`Authorization` is in `@repo/frontdoor-shared`. Lambda@Edge uses the trace ID, the encoding check
-and the reading of `Authorization` too, so the two functions can't disagree on any of them.
+decoding of a token's segments, the check of a path, the rule a name follows, and what counts as a
+JSON content type. The reading of `Authorization`, the methods and the path rule are in
+`@repo/frontdoor-shared`. Lambda@Edge uses the trace ID, the encoding check, the JSON content
+type, and everything in `@repo/frontdoor-shared` too, so the two functions can't disagree on any
+of them.
 
 The function bundles what it imports from those packages, so that code is held to the same rules.
 esbuild rewrites syntax the runtime lacks, but not built-ins, so lint refuses what the runtime

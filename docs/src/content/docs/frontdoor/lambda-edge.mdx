@@ -59,12 +59,28 @@ then not again for 10 seconds. A fetch that fails isn't tried again for 5 second
 that needs the keys meanwhile gets its 500 at once, so an issuer that can't be reached isn't asked
 again by every request.
 
+## Checking the request
+
+Once the token is verified, Lambda@Edge holds the request to the
+[CloudFront Function's checks](/flex-platform/frontdoor/cloudfront-function/#the-checks) again,
+with [the same code](/flex-platform/frontdoor/cloudfront-function/#building-the-function). It is
+the step that signs, so it signs nothing on the strength of the function having run:
+
+- the method is one the platform serves;
+- the path is one the platform routes;
+- a body that isn't empty says `application/json`, in a `Content-Type` that appears once, whatever
+  the method. The function sees only the headers that announce a body, which HTTP/2 and HTTP/3
+  don't need. Lambda@Edge sees the body itself, so this is where a body on a `DELETE` is held to
+  JSON.
+
 ## Responses
 
 Lambda@Edge answers a request itself only to refuse it, in the CloudFront Function's shape with
 `x-rejected-by: lambda-edge`:
 
 - a token at fault is a 401, the CloudFront Function's body exactly;
+- a verified request that fails one of [its checks](#checking-the-request) is the CloudFront
+  Function's own 405, 404 or 415;
 - a verified request for a domain it can't route is a 404,
   `{"message":"Not found","type":"client_error"}`. The domain is looked up after the token, so a
   caller without one learns nothing about which domains exist;
