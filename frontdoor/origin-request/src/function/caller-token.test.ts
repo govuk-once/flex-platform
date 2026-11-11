@@ -7,6 +7,7 @@ import { assert, describe, expect, it, vi } from "vitest";
 import {
   createCallerTokenSigner,
   createSigningKeyLoader,
+  SIGNING_KEY_LEAD_MS,
   SIGNING_KEY_REFRESH_MS,
   SIGNING_KEY_RETRY_MS,
 } from "./caller-token.ts";
@@ -115,6 +116,27 @@ describe("createSigningKeyLoader", () => {
     now = 60_000;
     expect((await load()).kid).toBe(next.kid);
     expect(aws.call).toHaveBeenCalledTimes(3);
+  });
+
+  it("leaves the next key until its last hour, then decrypts it", async () => {
+    const start = 7 * 24 * 60 * 60 * 1000;
+    const next = testKey("20261106T121500Z", start / 1000);
+    const aws = fakeAws([KEY, next]);
+    let now = 0;
+    const load = loader(aws, () => now);
+
+    await load();
+    now = start - SIGNING_KEY_LEAD_MS - SIGNING_KEY_REFRESH_MS;
+    await load();
+    expect(aws.decrypts()).toBe(1);
+
+    now = start - SIGNING_KEY_LEAD_MS;
+    expect((await load()).kid).toBe(KEY.kid);
+    expect(aws.decrypts()).toBe(2);
+
+    now = start;
+    expect((await load()).kid).toBe(next.kid);
+    expect(aws.decrypts()).toBe(2);
   });
 
   it("reads the keys again every five minutes, decrypting only a key it doesn't hold", async () => {

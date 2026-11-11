@@ -5,6 +5,7 @@ import { isKeyId } from "@repo/frontdoor-shared";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
 import {
+  KeyCheckFailed,
   rotate,
   type RotationPorts,
   type RotationRequest,
@@ -42,6 +43,11 @@ export function createHandler(ports: RotationPorts, now: () => Date) {
       for (const { event: name, ...details } of report.events)
         log("INFO", name, details);
     } catch (error) {
+      if (error instanceof KeyCheckFailed) {
+        const { kid, reason, stored } = error;
+        log("ERROR", "key_check_failed", { kid, reason, stored });
+        throw error;
+      }
       // The name is AWS's error code, such as AccessDeniedException, or Error. A message from
       // this module names only key IDs and accounts.
       log("ERROR", "key_rotation_failed", {

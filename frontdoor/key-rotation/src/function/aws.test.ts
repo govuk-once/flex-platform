@@ -119,6 +119,17 @@ beforeEach(async () => {
               Buffer.from("ciphertext").toString("base64"),
           }),
         );
+      } else if (target === "TrentService.ReEncrypt") {
+        if (
+          body.CiphertextBlob !== Buffer.from("ciphertext").toString("base64")
+        ) {
+          response.statusCode = 400;
+          response.end(
+            JSON.stringify({ __type: "InvalidCiphertextException" }),
+          );
+          return;
+        }
+        response.end(JSON.stringify({ CiphertextBlob: body.CiphertextBlob }));
       } else {
         response.statusCode = 400;
         response.end(JSON.stringify({ __type: "UnknownOperation" }));
@@ -189,6 +200,39 @@ describe("awsPorts", () => {
         },
       }),
     ]);
+  });
+
+  it("has KMS decrypt a key by encrypting it again, under the same key and context", async () => {
+    const ports = awsPorts(CONFIG, "eu-west-2");
+    const context = { purpose: "flex-caller-token", kid: "20261106T120000Z" };
+    await ports.check({
+      kid: "20261106T120000Z",
+      privateKey: Buffer.from("ciphertext").toString("base64"),
+    });
+
+    expect(calls).toEqual([
+      expect.objectContaining({
+        target: "TrentService.ReEncrypt",
+        region: "eu-west-2",
+        body: {
+          CiphertextBlob: Buffer.from("ciphertext").toString("base64"),
+          SourceKeyId: "alias/frontdoor-sandbox-caller-token",
+          SourceEncryptionContext: context,
+          DestinationKeyId: "alias/frontdoor-sandbox-caller-token",
+          DestinationEncryptionContext: context,
+        },
+      }),
+    ]);
+  });
+
+  it("fails the check of a key KMS can't decrypt, by AWS's name for it", async () => {
+    const ports = awsPorts(CONFIG, "eu-west-2");
+    await expect(
+      ports.check({
+        kid: "20261106T120000Z",
+        privateKey: Buffer.from("damaged").toString("base64"),
+      }),
+    ).rejects.toMatchObject({ name: "InvalidCiphertextException" });
   });
 
   it("writes the public keys to the bucket, in its region, and only when they changed", async () => {

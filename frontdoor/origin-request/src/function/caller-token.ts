@@ -1,11 +1,11 @@
 // The caller token: who a request is for, signed by the edge, which a domain passes on to the
 // gateways it calls and each gateway verifies.
 //
-// The edge holds the keys: the one signing now and the one scheduled next, each with the moment it
-// starts. It signs with the latest that has started, so every edge switches at the same moment,
-// without a read. It reads the keys from SSM in the signing region every five minutes, wherever it
-// runs, and decrypts with KMS only a key it doesn't hold yet, so a revocation reaches every edge
-// within minutes.
+// The edge holds the keys: the one signing now and, from an hour before it starts, the one
+// scheduled next. It signs with the latest that has started, so every edge switches at the same
+// moment, without a read. It reads the keys from SSM in the signing region every five minutes,
+// wherever it runs, and decrypts with KMS only a key it doesn't hold yet, so a revocation reaches
+// every edge within minutes.
 
 import { createPrivateKey, type KeyObject, sign } from "node:crypto";
 
@@ -23,6 +23,12 @@ export const SIGNING_KEY_REFRESH_MS = 5 * 60 * 1000;
 
 /** After a failed read, how long the edge goes on with what it has before trying again. */
 export const SIGNING_KEY_RETRY_MS = 30 * 1000;
+
+/**
+ * How long before a key starts the edge decrypts it: many reads, and the least notice key rotation
+ * gives. A key is scheduled days ahead, and few instances that see it then live to sign with it.
+ */
+export const SIGNING_KEY_LEAD_MS = 60 * 60 * 1000;
 
 // One call's whole budget. The function has 10 seconds, and a key load makes at most three calls:
 // a read, then a decrypt for each key it doesn't hold yet, at once.
@@ -50,7 +56,7 @@ export interface SigningKeyLoaderOptions {
 
 /**
  * Loads the keys to sign with, keeps them, and gives the one that signs now. A read that fails
- * keeps the keys the edge has, which hold the next key before it starts; with none that has
+ * keeps the keys the edge has, which hold the next key in its last hour; with none that has
  * started, it fails the request, so nothing unsigned is forwarded.
  */
 export function createSigningKeyLoader(
@@ -69,7 +75,7 @@ export function createSigningKeyLoader(
       if (held !== undefined) return held.keys;
       throw new Error("No signing key: the last read failed");
     }
-    inFlight ??= read(options, held?.keys ?? []).finally(() => {
+    inFlight ??= read(options, held?.keys ?? [], at).finally(() => {
       inFlight = undefined;
     });
     try {
@@ -97,6 +103,7 @@ export function createSigningKeyLoader(
 async function read(
   { ssm, kms, parameterName }: SigningKeyLoaderOptions,
   held: readonly HeldKey[],
+  at: number,
 ): Promise<HeldKey[]> {
   const { Parameter } = await ssm.send(
     new GetParameterCommand({ Name: parameterName }),
@@ -107,12 +114,15 @@ async function read(
 
   // A key ID names one key pair, so a key already decrypted is the same key.
   const loaded = new Map(held.map((key) => [key.kid, key.key]));
+  const due = Math.floor((at + SIGNING_KEY_LEAD_MS) / 1000);
   return Promise.all(
-    parseSigningKeys(value).map(async (signingKey) => ({
-      kid: signingKey.kid,
-      signsFrom: signingKey.signsFrom,
-      key: loaded.get(signingKey.kid) ?? (await decrypt(kms, signingKey)),
-    })),
+    parseSigningKeys(value)
+      .filter(({ signsFrom }) => signsFrom <= due)
+      .map(async (signingKey) => ({
+        kid: signingKey.kid,
+        signsFrom: signingKey.signsFrom,
+        key: loaded.get(signingKey.kid) ?? (await decrypt(kms, signingKey)),
+      })),
   );
 }
 

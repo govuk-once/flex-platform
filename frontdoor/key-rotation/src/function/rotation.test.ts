@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { MemoryPorts } from "../../test/ports.ts";
 import {
+  KeyCheckFailed,
   MINIMUM_LEAD_MS,
   RETIRED_KEPT_MS,
   REVOKED_KEPT_MS,
@@ -37,6 +38,7 @@ describe("rotate", () => {
     expect(ports.signingKid(START)).toBe(FIRST);
     expect(ports.calls).toEqual([
       `generate ${FIRST}`,
+      `check ${FIRST}`,
       "writeState",
       "publish",
       "distribute",
@@ -98,6 +100,64 @@ describe("rotate", () => {
       },
     ]);
     expect(ports.signingKid(late)).toBe(FIRST);
+  });
+
+  it("checks every key the edge is to hold on every run, and none that has stopped", async () => {
+    const ports = await rotated();
+    await rotate(ports, after(MINUTE, SWITCH));
+    ports.calls.length = 0;
+
+    await rotate(ports, after(2 * MINUTE, SWITCH));
+    expect(ports.calls).toEqual([
+      `check ${NEXT}`,
+      "check 20261113T120100Z",
+      "writeState",
+      "publish",
+      "distribute",
+    ]);
+  });
+
+  it("keeps no key it made that KMS can't decrypt, and makes another on the next run", async () => {
+    const ports = new MemoryPorts();
+    await rotate(ports, START);
+    ports.undecryptable = NEXT;
+
+    const error = await rotate(ports, after(15 * MINUTE)).catch(
+      (thrown: unknown) => thrown,
+    );
+    assert.instanceOf(error, KeyCheckFailed);
+    expect(error).toMatchObject({
+      kid: NEXT,
+      reason: "InvalidCiphertextException",
+      stored: false,
+    });
+    expect(ports.state.keys.map(({ kid }) => kid)).toEqual([FIRST]);
+    expect(ports.distributed.map(({ kid }) => kid)).toEqual([FIRST]);
+
+    await rotate(ports, after(30 * MINUTE));
+    expect(ports.distributed.map(({ kid }) => kid)).toEqual([
+      FIRST,
+      "20261106T123000Z",
+    ]);
+  });
+
+  it("stops at a kept key KMS can't decrypt, writing nothing, until it is revoked", async () => {
+    const ports = await rotated();
+    ports.undecryptable = NEXT;
+    ports.calls.length = 0;
+
+    const error = await rotate(ports, after(30 * MINUTE)).catch(
+      (thrown: unknown) => thrown,
+    );
+    assert.instanceOf(error, KeyCheckFailed);
+    expect(error).toMatchObject({ kid: NEXT, stored: true });
+    expect(ports.calls).toEqual([`check ${FIRST}`, `check ${NEXT}`]);
+
+    await rotate(ports, after(45 * MINUTE), { revoke: NEXT });
+    expect(ports.distributed.map(({ kid }) => kid)).toEqual([
+      FIRST,
+      "20261106T124500Z",
+    ]);
   });
 
   it("fails when the edge couldn't be given its keys, and gives them on the next run", async () => {
