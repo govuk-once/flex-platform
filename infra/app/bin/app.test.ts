@@ -30,15 +30,8 @@ function runEntryPoint(context: Record<string, string>): Promise<Run> {
 }
 
 describe("bin/app.ts", () => {
-  it("refuses to build without a stage", async () => {
-    const run = await runEntryPoint({});
-
-    expect(run.failed).toBe(true);
-    expect(run.stderr).toContain(
-      "Pass the stage to build with -c stage=<name>",
-    );
-  });
-
+  // One run, since each loads most of aws-cdk-lib: it shows the entry point loads, and that the
+  // context reaches the committed stages. What synthStage refuses is tested in-process.
   it("refuses a stage the config doesn't have", async () => {
     const run = await runEntryPoint({ stage: "platform-qa" });
 
