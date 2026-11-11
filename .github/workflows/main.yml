@@ -1,7 +1,7 @@
 name: Continuous Deployment
 
 # Runs the shared quality checks on the main branch, then publishes what releases.json records
-# that the registry does not have yet.
+# that the registry does not have yet, and deploys platform-dev.
 
 on:
   push:
@@ -18,6 +18,25 @@ jobs:
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_URL: ${{ secrets.SONAR_URL }}
+
+  deployDev:
+    name: Deploy platform-dev
+    if: github.ref == 'refs/heads/main'
+    needs: qualityChecks
+    # One deploy of the stage at a time, the others waiting their turn, oldest first, for the same
+    # reason as publishing's. A deploy refuses a commit older than the stage has: see
+    # _deploy-account.yml.
+    concurrency:
+      group: deploy-platform-dev
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      deployments: read # to find the commit the stage has
+      id-token: write # OIDC, to assume each account's deploy role
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      stage: platform-dev
 
   publish:
     name: Publish

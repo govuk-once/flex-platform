@@ -88,8 +88,52 @@ deleted role. So deleting any of them takes a deliberate step first: turning the
 it from config leaves its stack to be deleted by hand, since CDK doesn't delete a stack the app no
 longer builds.
 
+## Deploying
+
+A merge to `main` deploys platform-dev, through GitHub Actions, once the quality checks pass. No
+person deploys from their own machine. platform-staging and platform-prod have no deploy yet.
+
 Each account is bootstrapped for CDK in each region it deploys to, so a frontdoor account is
-bootstrapped in us-east-1 and eu-west-2, and a domain account in eu-west-2.
+bootstrapped in us-east-1 and eu-west-2, and a domain account in eu-west-2. Each trusts only
+itself. The platform team bootstraps the accounts, and gives each a role the deploy assumes through
+GitHub's OIDC.
+
+Each stage has a GitHub environment of the same name, which only `main` may deploy from. It holds
+each account's role as a variable named `DEPLOY_ROLE_<account ID>`, such as
+`DEPLOY_ROLE_553915472156`. A deploy that finds no variable for an account stops before it
+deploys anything into it.
+
+A deploy (`.github/workflows/_deploy.yml`) synthesizes the stage once, then deploys that cloud
+assembly in waves. A stack is in the wave after the last stack it depends on, so the order comes
+from the dependencies the app records, and `infra/app/bin/deploy-waves.ts` works it out. Each wave
+runs a job per account, alongside each other, and each job deploys only its own account's stacks,
+as that account's role, with `cdk deploy --exclusively`. Without `--exclusively`, `cdk deploy`
+deploys a stack's dependencies too, including those in another account, which the role can't
+reach. A wave starts once every job in the one before has succeeded.
+
+For platform-dev, that is:
+
+| Wave | Domain account | Frontdoor account |
+|---|---|---|
+| 1 | `network-<environment>-<account>`, `domainaccount-<environment>-<account>` | `frontdoor-<environment>-edge-logs-eu-west-2`, `frontdoor-<environment>-caller-token-keys` |
+| 2 | `domain-<environment>-<domain>`, `gateway-<environment>-<account>-<id>` | |
+| 3 | | `frontdoor-<environment>` |
+
+The workflow has three wave jobs. A stage whose stacks would need a fourth fails its plan before
+anything deploys, and a test holds every stage in config to three. Adding a wave means a job in
+the workflow and a change to `DEPLOY_WAVES`.
+
+One deploy of a stage runs at a time, and the others wait, oldest first. A deploy never goes back:
+each account's job first finds the commit the stage has, from the GitHub environment's latest
+successful deployment, and fails unless its own commit includes it
+(`infra/app/src/stage-check.ts`). A job can be run again on its own, reusing its run's plan, so
+the check is in every job, not once per run. A commit can still go on to a stage after newer
+commits have deployed elsewhere, so long as that stage has nothing newer.
+
+Every account's job is a deployment of its own, so a commit counts as the stage's once any one of
+its jobs succeeds, even if a later wave fails: some of the stage's stacks run it. So what the stage
+has is the newest commit any of its stacks run, not the last commit that deployed in full. A failed
+deploy is put right by deploying it again or a newer commit, never an older one.
 
 ## Config
 
