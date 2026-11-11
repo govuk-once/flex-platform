@@ -10,8 +10,11 @@ import {
   SIGNING_KEY_PURPOSE,
   SIGNING_KEY_REGION,
 } from "@repo/frontdoor-shared";
-import { PlatformLogGroup } from "@repo/infra-constructs";
-import { ArnFormat, Duration, Stack, Validations } from "aws-cdk-lib";
+import {
+  logGroupWriteStatements,
+  PlatformLogGroup,
+} from "@repo/infra-constructs";
+import { Duration, Stack, Validations } from "aws-cdk-lib";
 import { CfnRule } from "aws-cdk-lib/aws-events";
 import {
   Effect,
@@ -80,12 +83,7 @@ export class KeyRotation extends Construct {
     const { logGroup, key: logGroupKey } = new PlatformLogGroup(this, "Logs", {
       logGroupName,
     });
-    const logGroupArn = stack.formatArn({
-      service: "logs",
-      resource: "log-group",
-      resourceName: logGroupName,
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
+    const logs = logGroupWriteStatements(this, { logGroupName, logGroupKey });
 
     const parameterArn = (name: string) =>
       stack.formatArn({
@@ -100,22 +98,7 @@ export class KeyRotation extends Construct {
     });
 
     const statements = [
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
-        resources: [`${logGroupArn}:*`],
-      }),
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: ["kms:Encrypt", "kms:GenerateDataKey*"],
-        resources: [logGroupKey.keyArn],
-        conditions: {
-          StringEquals: {
-            "kms:ViaService": `logs.${stack.region}.amazonaws.com`,
-          },
-          ArnEquals: { "kms:EncryptionContext:aws:logs:arn": logGroupArn },
-        },
-      }),
+      ...logs.statements,
       // KMS generates the key's ID, so it is found by its alias.
       new PolicyStatement({
         effect: Effect.ALLOW,
@@ -201,23 +184,11 @@ export class KeyRotation extends Construct {
       sourceArn: schedule.attrArn,
     });
 
-    Validations.of(role).acknowledge(
-      {
-        id: `AwsSolutions-IAM5[Resource::${logGroupArn}:*]`,
-        reason:
-          "Lambda names each log stream itself, so the grant covers every stream in the function's own log group.",
-      },
-      {
-        id: "AwsSolutions-IAM5[Action::kms:GenerateDataKey*]",
-        reason:
-          "CloudWatch Logs chooses which GenerateDataKey call it makes; the grant holds only for the one key and log group.",
-      },
-      {
-        id: `AwsSolutions-IAM5[Resource::${signingKey}]`,
-        reason:
-          "KMS generates the signing key's ID, so the grant names its alias by condition, which holds it to the one key.",
-      },
-    );
+    Validations.of(role).acknowledge(...logs.acknowledgements, {
+      id: `AwsSolutions-IAM5[Resource::${signingKey}]`,
+      reason:
+        "KMS generates the signing key's ID, so the grant names its alias by condition, which holds it to the one key.",
+    });
   }
 }
 

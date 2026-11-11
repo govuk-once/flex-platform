@@ -27,6 +27,14 @@ change you are making.
   "alphabetically", depends on the runtime's locale and ICU data. Generated files, the digests
   taken over them, and the canonical payload a secure envelope is built from must all come out the
   same every time.
+- Never assert that a value is there with `!`: lint refuses it. Check for it, and throw or
+  answer differently when it is missing. A map lookup under a key the code built the map to hold
+  uses `heldValue` from `@repo/utils`, which throws for a missing key. A test uses `assert` from
+  Vitest, which fails the test and narrows the type.
+- A test checks a type it can check rather than casting to it:
+  `assert.instanceOf(err, GatewayError)`, not `err as GatewayError`, and
+  `assert.isFalse(response.ok)` before reading an error envelope. A cast passes whatever the value
+  is, so the test fails later, or not at all.
 - Each package owns its configuration and extends the shared tooling. Only add a root-level tool
   configuration when the tool requires one, with a comment saying why.
 - Every package extends the one TypeScript base, `base.json`: strict, no emit. The documentation

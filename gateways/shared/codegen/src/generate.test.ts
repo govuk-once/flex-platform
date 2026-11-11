@@ -13,7 +13,6 @@ import {
 } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -26,6 +25,7 @@ import ts from "typescript";
 import {
   afterAll,
   afterEach,
+  assert,
   beforeAll,
   beforeEach,
   describe,
@@ -110,7 +110,10 @@ async function startS3(): Promise<{ url: string; close: () => void }> {
     response.end(keys);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
+  const address = server.address();
+  // A string only for a pipe or socket path, and null before it listens.
+  assert(typeof address === "object" && address !== null);
+  const { port } = address;
   return {
     url: `http://127.0.0.1:${String(port)}`,
     close: () => server.close(),
@@ -830,7 +833,10 @@ export const named = () => createFixtureClient({ functionName: "other" });
       await new Promise<void>((resolve) => {
         lambda.listen(0, "127.0.0.1", resolve);
       });
-      const { port } = lambda.address() as AddressInfo;
+      const address = lambda.address();
+      // A string only for a pipe or socket path, and null before it listens.
+      assert(typeof address === "object" && address !== null);
+      const { port } = address;
 
       const script = `
         import { GatewayInvocationError } from ${JSON.stringify(sharedClient)};

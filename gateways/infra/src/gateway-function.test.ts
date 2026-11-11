@@ -1,11 +1,11 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import type { App } from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Asset } from "aws-cdk-lib/aws-s3-assets";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { ACCOUNT, BUNDLE, stack } from "../test/helpers.ts";
 import {
@@ -170,9 +170,11 @@ describe("GatewayFunction", () => {
     const [asset] = scope.node
       .findAll()
       .filter((construct) => construct instanceof Asset);
-    const { outdir } = scope.node.root as App;
+    const app = scope.node.root;
+    assert.instanceOf(app, App);
+    assert.instanceOf(asset, Asset);
 
-    expect(readdirSync(join(outdir, (asset as Asset).assetPath))).toEqual([
+    expect(readdirSync(join(app.outdir, asset.assetPath))).toEqual([
       "bundle.mjs",
     ]);
   });

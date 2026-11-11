@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import {
   type Conversion,
@@ -60,7 +60,9 @@ describe("convertSchema, on either side", () => {
       properties: { id: { type: "string" } },
       required: ["id"],
     });
-    expect(Object.keys(convert({ items: {} }) as object)[0]).toBe("type");
+    const array = convert({ items: {} });
+    assert.exists(array);
+    expect(Object.keys(array)[0]).toBe("type");
     expect(convert({ minLength: 1 })).toEqual({ type: "string" });
     expect([...conversion.notes]).toEqual([
       "here declares no type; its keywords are those of an object, so it was given that type",
@@ -151,9 +153,8 @@ describe("convertSchema, for an input", () => {
       },
       additionalProperties: false,
     });
-    expect(Object.keys(converted as object).at(-1)).toBe(
-      "additionalProperties",
-    );
+    assert.exists(converted);
+    expect(Object.keys(converted).at(-1)).toBe("additionalProperties");
   });
 
   it("leaves an object that names no field open, as an object of any shape, and says so", () => {

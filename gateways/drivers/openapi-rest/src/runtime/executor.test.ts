@@ -11,7 +11,15 @@ import {
   createSecretProvider,
   GatewayError,
 } from "@repo/gateway-runtime";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import {
   fakeFetch,
@@ -101,8 +109,8 @@ async function rejection(promise: Promise<unknown>): Promise<Error> {
     () => new Error("did not reject"),
     (e: unknown) => e,
   );
-  expect(err).toBeInstanceOf(Error);
-  return err as Error;
+  assert.instanceOf(err, Error);
+  return err;
 }
 
 describe("createExecutor", () => {
@@ -200,8 +208,8 @@ describe("createExecutor", () => {
     );
     await execute(passthroughContext(), "op", {});
     expect(seen).toEqual(["key"]);
-    expect(headerOf(ff.calls[0]!, "x-api-key")).toBe("key");
-    expect(headerOf(ff.calls[0]!, "x-after")).toBe("yes");
+    expect(headerOf(ff.calls[0], "x-api-key")).toBe("key");
+    expect(headerOf(ff.calls[0], "x-after")).toBe("yes");
   });
 
   it("shows each part the address being sent, whatever a part before it did to its copy", async () => {
@@ -249,7 +257,7 @@ describe("createExecutor", () => {
       { fetch: ff.fetch },
     );
     await execute(passthroughContext(), "op", {});
-    expect(headerOf(ff.calls[0]!, "authorization")).toBeNull();
+    expect(headerOf(ff.calls[0], "authorization")).toBeNull();
   });
 
   it("logs each optional field the secret does not hold as it starts, by name only", async () => {
@@ -687,7 +695,7 @@ describe("a refusal of the gateway's credentials", () => {
           fields: { status },
         },
       ]);
-      expect(headerOf(ff.calls[1]!, "authorization")).toBe("after-rotation");
+      expect(headerOf(ff.calls[1], "authorization")).toBe("after-rotation");
     },
   );
 
@@ -725,7 +733,7 @@ describe("a refusal of the gateway's credentials", () => {
       ]);
 
       await execute(passthroughContext(), "op", {});
-      expect(headerOf(ff.calls[1]!, "authorization")).toBe("after-rotation");
+      expect(headerOf(ff.calls[1], "authorization")).toBe("after-rotation");
     },
   );
 
@@ -878,7 +886,7 @@ describe("secret rotation and refresh", () => {
 
     secret.rotate({ token: "third" });
     await execute(passthroughContext(), "op", {});
-    expect(headerOf(ff.calls[0]!, "authorization")).toBe("third");
+    expect(headerOf(ff.calls[0], "authorization")).toBe("third");
   });
 
   it("fails the operation when a refresh fails", async () => {
@@ -1175,8 +1183,8 @@ describe("execute", () => {
       const err = await rejection(
         execute(passthroughContext(), "getUser", { userId }),
       );
-      expect(err).toBeInstanceOf(GatewayError);
-      expect((err as GatewayError).code).toBe("INTERNAL");
+      assert.instanceOf(err, GatewayError);
+      expect(err.code).toBe("INTERNAL");
       expect(ff.calls).toHaveLength(0);
     },
   );
@@ -1188,7 +1196,7 @@ describe("execute", () => {
     });
     expect(result).toEqual({ outcome: "ok", data: { id: "u1" } });
     expect(ff.calls[0]?.url).toBe("https://api.test/v1/users/u1");
-    expect(headerOf(ff.calls[0]!, "x-api-version")).toBe("2");
+    expect(headerOf(ff.calls[0], "x-api-version")).toBe("2");
   });
 
   it("sends the payload as the body", async () => {
@@ -1205,7 +1213,7 @@ describe("execute", () => {
     const result = await execute(passthroughContext(), "custom", { id: "c1" });
     expect(result).toEqual({ outcome: "custom", data: { status: 200 } });
     expect(ff.calls[0]?.url).toBe("https://api.test/v1/custom/c1");
-    expect(headerOf(ff.calls[0]!, "x-custom")).toBe("yes");
+    expect(headerOf(ff.calls[0], "x-custom")).toBe("yes");
   });
 
   it("throws for an operation it was not built with", async () => {

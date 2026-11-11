@@ -1,7 +1,7 @@
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 import { describeUnexpectedError } from "./describe-unexpected-error.ts";
 
@@ -304,7 +304,8 @@ describe("describeUnexpectedError", () => {
   });
 
   it("drops the frame of code created at runtime", () => {
-    const evaluated = eval("new Error('x')") as Error;
+    const evaluated: unknown = eval("new Error('x')");
+    assert.instanceOf(evaluated, Error);
     const { frames } = describeUnexpectedError(evaluated);
     expect(frames.length).toBeGreaterThan(0);
     expect(JSON.stringify(frames)).not.toMatch(/eval|anonymous/);

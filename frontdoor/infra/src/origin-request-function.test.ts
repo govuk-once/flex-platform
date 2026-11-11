@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { buildOriginRequestFunction } from "@repo/frontdoor-origin-request";
-import type { App } from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { API_ACCOUNTS, ISSUERS, ROUTES, stackIn } from "../test/helpers.ts";
 import { OriginRequestFunction } from "./origin-request-function.ts";
@@ -17,8 +17,10 @@ function build(region = "us-east-1", apiAccounts = API_ACCOUNTS) {
     routes: ROUTES,
     apiAccounts,
   });
+  const app = stack.node.root;
+  assert.instanceOf(app, App);
   return {
-    app: stack.node.root as App,
+    app,
     originRequest,
     template: Template.fromStack(stack),
   };

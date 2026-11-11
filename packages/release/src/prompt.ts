@@ -14,6 +14,7 @@ import {
   select,
   symbol,
 } from "@clack/prompts";
+import { heldValue } from "@repo/utils/held-value";
 
 import type { Choice, Chooser, Lock } from "./prepare.ts";
 import { type Bump, bumped } from "./versions.ts";
@@ -93,17 +94,21 @@ export async function chooseRelease(
   const pending = new Set(
     choices.filter((c) => c.reason !== undefined).map((c) => nameOf(c.pkg)),
   );
-  const groups: Record<string, Item[]> = {};
+  const groups = new Map<string, Item[]>();
   for (const { pkg } of choices) {
-    const members = groups[pkg.source.group] ?? [];
+    const members = groups.get(pkg.source.group) ?? [];
     members.push({ value: nameOf(pkg) });
-    groups[pkg.source.group] = members;
+    groups.set(pkg.source.group, members);
   }
+  const membersOf = (item: Item): string[] =>
+    item.group === true
+      ? heldValue(groups, item.value).map((i) => i.value)
+      : [item.value];
   let chosen = new Set<string>();
   let locked: ReadonlyMap<string, string> = new Map();
 
   const describe = (name: string): string => {
-    const { released, next, reason } = byName.get(name)!;
+    const { released, next, reason } = heldValue(byName, name);
     const versions = `${released?.version ?? "none"} → ${next ?? "asked next"}`;
     const forced = chosen.has(name) ? undefined : locked.get(name);
     const why = [reason, forced].filter(Boolean).join(", ") || "no changes";
@@ -111,11 +116,10 @@ export async function chooseRelease(
     return `${name}  ${versions}  ${note}`;
   };
   const line = (item: Item, active: boolean): string => {
-    const members =
-      item.group === true
-        ? groups[item.value]!.map((i) => i.value)
-        : [item.value];
-    const box = checkbox(tickOf(members, chosen, locked, pending), active);
+    const box = checkbox(
+      tickOf(membersOf(item), chosen, locked, pending),
+      active,
+    );
     const text = item.group === true ? item.value : describe(item.value);
     const indent = item.group === true ? "" : "  ";
     return `${indent}${box} ${active ? text : styleText("dim", text)}`;
@@ -123,7 +127,7 @@ export async function chooseRelease(
 
   const prompt = new GroupMultiSelectPrompt<Item>({
     ...terminal,
-    options: groups,
+    options: Object.fromEntries(groups),
     required: false,
     render() {
       const title = `${styleText("gray", S_BAR)}\n${symbol(this.state)}  Which packages are released?`;
@@ -151,11 +155,7 @@ export async function chooseRelease(
     if (action !== "space") return;
     const item = prompt.options[prompt.cursor];
     if (item === undefined) return;
-    const target =
-      item.group === true
-        ? groups[item.value]!.map((i) => i.value)
-        : [item.value];
-    chosen = toggled(chosen, target, pending, locked);
+    chosen = toggled(chosen, membersOf(item), pending, locked);
     locked = lock(chosen);
     prompt.value = [...chosen, ...locked.keys()];
   });

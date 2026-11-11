@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import type { DeadlineProvider } from "./context.ts";
 import { createDriverContext } from "./context.ts";
@@ -82,8 +90,8 @@ describe("createDriverContext", () => {
     await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
 
     const err = await result;
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("UPSTREAM_TIMEOUT");
   });
 
   it("passes signal that becomes aborted on timeout", async () => {
@@ -126,7 +134,9 @@ describe("createDriverContext", () => {
     // Well inside the 60s policy timeout, so only the deadline can have aborted this.
     await vi.advanceTimersByTimeAsync(50);
 
-    expect(((await result) as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
+    const err = await result;
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("UPSTREAM_TIMEOUT");
   });
 
   it("refuses to dispatch when the deadline is exhausted", async () => {
@@ -135,11 +145,10 @@ describe("createDriverContext", () => {
     const ctx = createDriverContext(testPolicy, { remainingMs: () => 0 });
 
     const fn = vi.fn(() => Promise.resolve("should not run"));
-    const err = (await ctx
-      .upstream(fn)
-      .catch((e: unknown) => e)) as GatewayError;
+    const err = await ctx.upstream(fn).catch((e: unknown) => e);
 
     expect(fn).not.toHaveBeenCalled();
+    assert.instanceOf(err, GatewayError);
     expect(err.code).toBe("UPSTREAM_TIMEOUT");
     expect(err.message).toContain("exhausted");
   });
@@ -152,7 +161,9 @@ describe("createDriverContext", () => {
       .catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(testPolicy.timeoutMs);
 
-    expect(((await result) as GatewayError).code).toBe("UPSTREAM_TIMEOUT");
+    const err = await result;
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("UPSTREAM_TIMEOUT");
   });
 
   it("preserves GatewayError thrown by the callback", async () => {

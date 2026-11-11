@@ -23,12 +23,12 @@ export async function verifyRelease(
   const statuses = await statusesOf(workspace, pkgs, record);
   const problems = released.flatMap((name) => {
     const status = statuses.get(name);
-    if (status === undefined) {
+    if (status?.released === undefined) {
       return [`${RECORD_FILE} releases ${name}, which nothing here builds.`];
     }
     if (buildsAsRecorded(status)) return [];
     return [
-      `${name} does not build as ${RECORD_FILE} releases it, at ${record.get(name)!.version}. Prepare the release again.`,
+      `${name} does not build as ${RECORD_FILE} releases it, at ${status.released.version}. Prepare the release again.`,
     ];
   });
   if (problems.length > 0) throw new Error(problems.join("\n"));

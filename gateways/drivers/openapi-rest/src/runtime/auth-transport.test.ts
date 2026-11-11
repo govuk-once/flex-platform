@@ -1,5 +1,5 @@
 import { GatewayError } from "@repo/gateway-runtime";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { fakeFetch, headerOf, json } from "../../test/helpers.ts";
 import { createAuthTransport } from "./auth-transport.ts";
@@ -44,8 +44,8 @@ describe("createAuthTransport", () => {
     expect(req?.init.signal).toBe(signal);
     expect(req?.init.redirect).toBe("manual");
     expect(req?.init.body).toBe('{"a":1}');
-    expect(headerOf(req!, "content-type")).toBe("application/json");
-    expect(headerOf(req!, "accept")).toBe("application/json");
+    expect(headerOf(req, "content-type")).toBe("application/json");
+    expect(headerOf(req, "accept")).toBe("application/json");
   });
 
   it("resolves a path against the upstream target", async () => {
@@ -83,10 +83,10 @@ describe("createAuthTransport", () => {
     expect(req?.init.body).toBe(
       "grant_type=client_credentials&client_secret=a+b%26c",
     );
-    expect(headerOf(req!, "content-type")).toBe(
+    expect(headerOf(req, "content-type")).toBe(
       "application/x-www-form-urlencoded",
     );
-    expect(headerOf(req!, "x-client")).toBe("gw");
+    expect(headerOf(req, "x-client")).toBe("gw");
   });
 
   it.each([
@@ -139,10 +139,10 @@ describe("createAuthTransport", () => {
   ] as const)("rejects %s without sending", async (_label, call, message) => {
     const { t, ff, signal } = transport(() => json(200, {}));
     const err = await t.request(call, signal).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("INTERNAL");
-    expect((err as GatewayError).message).toMatch(message);
-    expect((err as GatewayError).message).not.toContain("SYNTHETIC");
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("INTERNAL");
+    expect(err.message).toMatch(message);
+    expect(err.message).not.toContain("SYNTHETIC");
     expect(ff.calls).toHaveLength(0);
   });
 
@@ -189,7 +189,8 @@ describe("createAuthTransport", () => {
     const controller = new AbortController();
     controller.abort();
     const { t } = transport((req) => {
-      (req.init.signal as AbortSignal).throwIfAborted();
+      assert.exists(req.init.signal);
+      req.init.signal.throwIfAborted();
       return json(200, {});
     });
     await expect(

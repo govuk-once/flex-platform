@@ -1,6 +1,6 @@
-import type { App } from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { stackIn, ZONE } from "../test/helpers.ts";
 import { WildcardCertificate } from "./wildcard-certificate.ts";
@@ -8,7 +8,9 @@ import { WildcardCertificate } from "./wildcard-certificate.ts";
 function build(nag = false) {
   const stack = stackIn("eu-west-2", nag);
   new WildcardCertificate(stack, "Zone", { zone: ZONE });
-  return { app: stack.node.root as App, template: Template.fromStack(stack) };
+  const app = stack.node.root;
+  assert.instanceOf(app, App);
+  return { app, template: Template.fromStack(stack) };
 }
 
 describe("WildcardCertificate", () => {

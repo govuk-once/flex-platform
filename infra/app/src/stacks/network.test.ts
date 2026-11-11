@@ -1,6 +1,6 @@
 import { cdkApp as cdkAppForTest } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import {
   FIXTURE_STAGES,
@@ -225,8 +225,11 @@ describe("NetworkStack", () => {
           "AWS::Route53Resolver::FirewallRuleGroupAssociation",
         ),
       ).map(({ Properties }) => Properties as Record<string, unknown>);
-      const priority = (name: string) =>
-        associations.find(({ Name }) => Name === name)?.Priority as number;
+      const priority = (name: string) => {
+        const association = associations.find(({ Name }) => Name === name);
+        assert(typeof association?.Priority === "number");
+        return association.Priority;
+      };
 
       expect(rules).toContainEqual([
         expect.objectContaining({ Action: "ALLOW" }),

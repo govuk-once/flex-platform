@@ -1,6 +1,6 @@
-import type { App } from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { ACCOUNT, stackIn } from "../test/helpers.ts";
 import { DeployRole } from "./deploy-role.ts";
@@ -17,7 +17,9 @@ function build(nag = false) {
     subnetIdsParameterName: SUBNETS_PARAMETER,
     securityGroupIdParameterName: SECURITY_GROUP_PARAMETER,
   });
-  return { app: stack.node.root as App, template: Template.fromStack(stack) };
+  const app = stack.node.root;
+  assert.instanceOf(app, App);
+  return { app, template: Template.fromStack(stack) };
 }
 
 // The template parameter CDK adds to read an SSM parameter at deploy.

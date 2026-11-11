@@ -129,9 +129,10 @@ describe("createTokenVerifier", () => {
     const alphabet =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     const variant =
-      signed.slice(0, -1) + alphabet[alphabet.indexOf(signed.slice(-1)) + 1]!;
+      signed.slice(0, -1) +
+      alphabet.charAt(alphabet.indexOf(signed.slice(-1)) + 1);
     const signature = (value: string) =>
-      Buffer.from(value.split(".")[2]!, "base64url");
+      Buffer.from(value.slice(value.lastIndexOf(".") + 1), "base64url");
     expect(signature(variant)).toEqual(signature(signed));
 
     await expect(verify(signed)).resolves.toEqual({

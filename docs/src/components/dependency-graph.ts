@@ -7,6 +7,7 @@ import { existsSync, globSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { graphlib, layout } from "@dagrejs/dagre";
+import { heldValue } from "@repo/utils/held-value";
 import { sortedNames } from "@repo/utils/sorted-names";
 
 // Every package uses these, so drawing them would only add an arrow to each. The site is not a
@@ -73,9 +74,9 @@ function packageGlobs(root: string): string[] {
   ).split("\n");
   const globs: string[] = [];
   for (const line of lines.slice(lines.indexOf("packages:") + 1)) {
-    const match = /^\s+-\s+"?([^"]+?)"?\s*$/.exec(line);
-    if (match === null) break;
-    globs.push(match[1]!);
+    const glob = /^\s+-\s+"?([^"]+?)"?\s*$/.exec(line)?.[1];
+    if (glob === undefined) break;
+    globs.push(glob);
   }
   if (globs.length === 0)
     throw new Error("pnpm-workspace.yaml lists no packages");
@@ -108,7 +109,7 @@ function readWorkspace(): Map<string, WorkspacePackage> {
   );
   const boxes = new Map<string, WorkspacePackage>();
   for (const { manifest } of found) {
-    const { name, directory } = boxOf.get(manifest.name)!;
+    const { name, directory } = heldValue(boxOf, manifest.name);
     const box = boxes.get(name) ?? { directory, runtime: [], dev: [] };
     const into = (deps: Readonly<Record<string, string>> = {}) =>
       Object.keys(deps).flatMap((dep) => {
@@ -124,7 +125,7 @@ function readWorkspace(): Map<string, WorkspacePackage> {
     boxes.set(name, box);
   }
   return new Map(
-    sortedNames(boxes.keys()).map((name) => [name, boxes.get(name)!]),
+    sortedNames(boxes.keys()).map((name) => [name, heldValue(boxes, name)]),
   );
 }
 
@@ -161,9 +162,9 @@ function drawnEdges(workspace: ReadonlyMap<string, WorkspacePackage>) {
         .map((to) => ({ from, to, dev: true })),
     ].filter(({ to, dev }) => {
       const through = dev ? all : runtime;
-      return !through
-        .get(from)!
-        .some((other) => other !== to && reachable(through, other).has(to));
+      return !heldValue(through, from).some(
+        (other) => other !== to && reachable(through, other).has(to),
+      );
     }),
   );
 }
@@ -171,12 +172,18 @@ function drawnEdges(workspace: ReadonlyMap<string, WorkspacePackage>) {
 // A line through the points dagre routes an edge along, bending at each through its midpoints.
 function curve(points: readonly Point[]): string {
   const at = ({ x, y }: Point) => `${x.toFixed(1)},${y.toFixed(1)}`;
-  let d = `M${at(points[0]!)}`;
-  for (let i = 1; i < points.length - 1; i++) {
-    const [p, next] = [points[i]!, points[i + 1]!];
-    d += ` Q${at(p)} ${at({ x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 })}`;
-  }
-  return `${d} L${at(points.at(-1)!)}`;
+  const [first, ...rest] = points;
+  if (first === undefined)
+    throw new Error("dagre routed an edge through no points");
+  let d = `M${at(first)}`;
+  rest.forEach((p, i) => {
+    const next = rest[i + 1];
+    d +=
+      next === undefined
+        ? ` L${at(p)}`
+        : ` Q${at(p)} ${at({ x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 })}`;
+  });
+  return d;
 }
 
 export function dependencyGraph() {

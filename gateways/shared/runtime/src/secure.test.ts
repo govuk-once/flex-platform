@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { GatewayError } from "./errors.ts";
 import { checkSecureBindings, compileBindings } from "./secure.ts";
@@ -9,9 +9,9 @@ function expectMismatch(fn: () => void): GatewayError {
   try {
     fn();
   } catch (err) {
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("SECURE_VALUE_MISMATCH");
-    return err as GatewayError;
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("SECURE_VALUE_MISMATCH");
+    return err;
   }
   throw new Error("expected SECURE_VALUE_MISMATCH, nothing was thrown");
 }

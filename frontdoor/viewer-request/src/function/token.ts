@@ -42,7 +42,10 @@ export function checkToken(
 
   const payload = decodeObject(segments[1]);
   if (!payload) return invalid("payload");
-  if (!isCanonicalBase64url(segments[2]!)) return invalid("signature");
+  const signature = segments[2];
+  if (signature === undefined || !isCanonicalBase64url(signature)) {
+    return invalid("signature");
+  }
 
   const trusted = trustedIssuer(issuers, payload.iss);
   if (!trusted) return invalid("issuer");
@@ -68,11 +71,7 @@ function trustedIssuer(
   issuers: readonly TrustedIssuer[],
   iss: unknown,
 ): TrustedIssuer | undefined {
-  // An index loop: the runtime has no for...of.
-  for (let i = 0; i < issuers.length; i++) {
-    if (issuers[i]!.issuer === iss) return issuers[i];
-  }
-  return undefined;
+  return issuers.find((trusted) => trusted.issuer === iss);
 }
 
 function missing(reason: string): TokenRejection {

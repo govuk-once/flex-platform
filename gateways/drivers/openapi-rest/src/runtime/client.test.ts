@@ -1,5 +1,5 @@
 import { GatewayError } from "@repo/gateway-runtime";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 
 import {
   fakeFetch,
@@ -165,8 +165,8 @@ describe("client.request", () => {
     expect(req?.init.method).toBe("GET");
     expect(req?.init.redirect).toBe("manual");
     expect(req?.init.signal).toBeInstanceOf(AbortSignal);
-    expect(headerOf(req!, "accept")).toBe("application/json");
-    expect(headerOf(req!, "content-type")).toBeNull();
+    expect(headerOf(req, "accept")).toBe("application/json");
+    expect(headerOf(req, "content-type")).toBeNull();
     expect(req?.init.body).toBeUndefined();
   });
 
@@ -179,7 +179,7 @@ describe("client.request", () => {
     await c.request({ method: "POST", path: "/users", body: { a: 1 } });
     const [req] = ff.calls;
     expect(req?.init.body).toBe('{"a":1}');
-    expect(headerOf(req!, "content-type")).toBe("application/json");
+    expect(headerOf(req, "content-type")).toBe("application/json");
   });
 
   it("layers static, call and authentication headers in that order", async () => {
@@ -196,10 +196,10 @@ describe("client.request", () => {
       headers: { "X-B": "call", "X-D": "call" },
     });
     const [req] = ff.calls;
-    expect(headerOf(req!, "x-a")).toBe("static");
-    expect(headerOf(req!, "x-b")).toBe("auth");
-    expect(headerOf(req!, "x-c")).toBe("auth");
-    expect(headerOf(req!, "x-d")).toBe("call");
+    expect(headerOf(req, "x-a")).toBe("static");
+    expect(headerOf(req, "x-b")).toBe("auth");
+    expect(headerOf(req, "x-c")).toBe("auth");
+    expect(headerOf(req, "x-d")).toBe("call");
     expect(auth).toHaveBeenCalledWith(
       expect.objectContaining({
         operation: "getUser",
@@ -258,8 +258,8 @@ describe("client.request", () => {
     await c.request({ method: "GET", path: "/users/1" });
 
     const [sent] = ff.calls;
-    expect(headerOf(sent!, "x-smuggled")).toBeNull();
-    expect(String(sent!.url)).toBe("https://api.test/prod/users/1");
+    expect(headerOf(sent, "x-smuggled")).toBeNull();
+    expect(String(sent?.url)).toBe("https://api.test/prod/users/1");
   });
 
   it("keeps the body's content type whatever authentication returns", async () => {
@@ -274,7 +274,7 @@ describe("client.request", () => {
 
     await c.request({ method: "POST", path: "/users/u1", body: {} });
 
-    expect(headerOf(ff.calls[0]!, "content-type")).toBe("application/json");
+    expect(headerOf(ff.calls[0], "content-type")).toBe("application/json");
   });
 
   it("runs authentication inside the timed attempt", async () => {
@@ -318,13 +318,13 @@ describe("client.request", () => {
         path: "/users/1",
         headers: { "x-token": "SYNTHETIC_SECRET_123\ninvalid" },
       })
-      .catch((e: unknown) => e as Error);
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("INTERNAL");
-    expect((err as Error).message).toBe(
+      .catch((e: unknown) => e);
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("INTERNAL");
+    expect(err.message).toBe(
       'Operation "getUser" call headers: header "x-token" has an invalid value',
     );
-    expect((err as Error).cause).toBeUndefined();
+    expect(err.cause).toBeUndefined();
   });
 
   it("replaces JSON serialisation errors with a controlled message", async () => {
@@ -489,9 +489,9 @@ describe("client.request", () => {
     const err = await c
       .request({ method: "GET", path: "/users/1" })
       .catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("UPSTREAM_ERROR");
-    expect((err as GatewayError).message).toBe(
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("UPSTREAM_ERROR");
+    expect(err.message).toBe(
       'Upstream request failed for operation "getUser" (GET /users/{id}): TypeError (ECONNREFUSED)',
     );
   });
@@ -499,7 +499,8 @@ describe("client.request", () => {
   it("throws a controlled error when the attempt was aborted", async () => {
     const abortError = new DOMException("aborted", "AbortError");
     const ff = fakeFetch((req) => {
-      (req.init.signal as AbortSignal).throwIfAborted();
+      assert.exists(req.init.signal);
+      req.init.signal.throwIfAborted();
       throw abortError;
     });
     const ctx = {
@@ -523,12 +524,13 @@ describe("client.request", () => {
     });
     const err = await c
       .request({ method: "GET", path: "/users/1" })
-      .catch((e: unknown) => e as Error);
+      .catch((e: unknown) => e);
     expect(err).not.toBe(abortError);
-    expect((err as Error).message).toBe(
+    assert.instanceOf(err, Error);
+    expect(err.message).toBe(
       'Upstream attempt aborted for operation "getUser" (GET /users/{id})',
     );
-    expect((err as Error).cause).toBeUndefined();
+    expect(err.cause).toBeUndefined();
   });
 
   it("rejects a GET with a body and an unsupported method", async () => {

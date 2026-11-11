@@ -1,5 +1,5 @@
 import { GatewayError } from "@repo/gateway-runtime";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
 import { defineHandler } from "../config/handler.ts";
 import { compileOperation } from "./operation.ts";
@@ -376,8 +376,8 @@ describe("prepare", () => {
       }
       return undefined;
     })();
-    expect(err).toBeInstanceOf(GatewayError);
-    expect((err as GatewayError).code).toBe("INTERNAL");
+    assert.instanceOf(err, GatewayError);
+    expect(err.code).toBe("INTERNAL");
   });
 
   it("rejects a header mapping that names a reserved header at compile time", () => {
@@ -445,10 +445,11 @@ describe("prepare", () => {
       try {
         op.prepare({ id: "u1", SYNTHETIC_FIELD: 1, more: 2 });
       } catch (e: unknown) {
-        return e as Error;
+        return e;
       }
       return new Error("did not throw");
     })();
+    assert.instanceOf(err, Error);
     expect(err.message).toMatch(
       /2 input fields are not mapped to the upstream request$/,
     );
@@ -520,11 +521,11 @@ describe("prepare scalar rules", () => {
       try {
         others.prepare({ h: value });
       } catch (e: unknown) {
-        return e as GatewayError;
+        return e;
       }
-      return new Error("did not throw") as GatewayError;
+      return new Error("did not throw");
     })();
-    expect(err).toBeInstanceOf(GatewayError);
+    assert.instanceOf(err, GatewayError);
     expect(err.code).toBe("INTERNAL");
     expect(err.message).toBe(
       'Operation "get": header "x-h" needs a scalar input field "h"',
