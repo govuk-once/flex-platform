@@ -1,0 +1,128 @@
+name: Deploy
+
+# Deploys every stack of one stage. The plan synthesizes the stage once and groups its stacks into
+# waves from their dependencies (infra/app/bin/deploy-waves.ts). Each wave deploys after the one
+# before, one job per account, as that account's role.
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: "The stage, as config names it, which is also its GitHub environment"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      # A wave with nothing in it is an empty list.
+      wave1: ${{ steps.waves.outputs.wave1 }}
+      wave2: ${{ steps.waves.outputs.wave2 }}
+      wave3: ${{ steps.waves.outputs.wave3 }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ".nvmrc"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # A gateway's stack deploys the bundle codegen writes.
+      - name: Generate gateways
+        run: pnpm run codegen
+
+      - name: Synthesize
+        working-directory: infra/app
+        env:
+          STAGE: ${{ inputs.stage }}
+        run: pnpm exec cdk synth -c "stage=${STAGE}" --quiet
+
+      - name: Plan the waves
+        id: waves
+        working-directory: infra/app
+        run: pnpm exec tsx bin/deploy-waves.ts cdk.out "$GITHUB_OUTPUT"
+
+      - name: Upload the cloud assembly
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cdk-out-${{ inputs.stage }}
+          path: infra/app/cdk.out
+          retention-days: 7
+          if-no-files-found: error
+
+  # One job per wave, as many as DEPLOY_WAVES in infra/app/src/deploy-waves.ts. A stack is in the
+  # wave after its last dependency, so a wave with stacks follows one with stacks, and the default
+  # of skipping a job whose needs were skipped is right. fail-fast is off so that an account that
+  # fails doesn't stop another's deploy midway. Any failure stops the next wave.
+
+  wave1:
+    name: Wave 1
+    needs: plan
+    if: needs.plan.outputs.wave1 != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.wave1) }}
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    uses: ./.github/workflows/_deploy-account.yml
+    with:
+      stage: ${{ inputs.stage }}
+      account: ${{ matrix.account }}
+      stacks: ${{ matrix.stacks }}
+
+  wave2:
+    name: Wave 2
+    needs: [plan, wave1]
+    if: needs.plan.outputs.wave2 != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.wave2) }}
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    uses: ./.github/workflows/_deploy-account.yml
+    with:
+      stage: ${{ inputs.stage }}
+      account: ${{ matrix.account }}
+      stacks: ${{ matrix.stacks }}
+
+  wave3:
+    name: Wave 3
+    needs: [plan, wave2]
+    if: needs.plan.outputs.wave3 != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.wave3) }}
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    uses: ./.github/workflows/_deploy-account.yml
+    with:
+      stage: ${{ inputs.stage }}
+      account: ${{ matrix.account }}
+      stacks: ${{ matrix.stacks }}
