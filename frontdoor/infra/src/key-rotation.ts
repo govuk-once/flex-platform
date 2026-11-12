@@ -15,7 +15,6 @@ import {
   PlatformLogGroup,
 } from "@repo/infra-constructs";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
-import { CfnRule } from "aws-cdk-lib/aws-events";
 import {
   Effect,
   PolicyDocument,
@@ -29,6 +28,7 @@ import {
   Function as LambdaFunction,
   Runtime,
 } from "aws-cdk-lib/aws-lambda";
+import { CfnSchedule } from "aws-cdk-lib/aws-scheduler";
 import { Construct } from "constructs";
 
 import {
@@ -36,6 +36,7 @@ import {
   keyRotationFunctionName,
   keyRotationLogGroupName,
   keyRotationRoleName,
+  keyRotationScheduleRoleName,
   keyRotationStateParameterName,
   signingKeyAliasName,
   signingKeyParameterName,
@@ -163,25 +164,48 @@ export class KeyRotation extends Construct {
       logGroup,
     });
 
-    // Written out rather than with CDK's Lambda target, which names its permission after the stack,
-    // so the logical ID would differ between environments.
-    const schedule = new CfnRule(this, "Schedule", {
-      name: keyRotationFunctionName(environment),
+    // Written out rather than with CDK's Scheduler target, which makes its own role under an ID
+    // derived from the stack, so the logical ID would differ between environments.
+    const scheduleName = keyRotationFunctionName(environment);
+    const scheduleRole = new Role(this, "SchedulerRole", {
+      roleName: keyRotationScheduleRoleName(environment),
+      assumedBy: new ServicePrincipal("scheduler.amazonaws.com", {
+        conditions: {
+          StringEquals: {
+            "aws:SourceAccount": stack.account,
+            "aws:SourceArn": stack.formatArn({
+              service: "scheduler",
+              resource: "schedule",
+              resourceName: `default/${scheduleName}`,
+            }),
+          },
+        },
+      }),
+      inlinePolicies: {
+        InvokeKeyRotation: new PolicyDocument({
+          statements: [
+            new PolicyStatement({
+              effect: Effect.ALLOW,
+              actions: ["lambda:InvokeFunction"],
+              resources: [this.function.functionArn],
+            }),
+          ],
+        }),
+      },
+    });
+
+    new CfnSchedule(this, "Scheduler", {
+      name: scheduleName,
       description: "Runs the caller token's key rotation",
       scheduleExpression: `rate(${KEY_ROTATION_SCHEDULE.toMinutes()} minutes)`,
+      flexibleTimeWindow: { mode: "OFF" },
       state: "ENABLED",
       // The next run is the retry.
-      targets: [
-        {
-          id: "KeyRotation",
-          arn: this.function.functionArn,
-          retryPolicy: { maximumRetryAttempts: 0 },
-        },
-      ],
-    });
-    this.function.addPermission("Schedule", {
-      principal: new ServicePrincipal("events.amazonaws.com"),
-      sourceArn: schedule.attrArn,
+      target: {
+        arn: this.function.functionArn,
+        roleArn: scheduleRole.roleArn,
+        retryPolicy: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 60 },
+      },
     });
 
     Validations.of(role).acknowledge(...logs.acknowledgements, {

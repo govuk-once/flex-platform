@@ -117,6 +117,11 @@ export function keyRotationFunctionName(environment: string): string {
   return `frontdoor-${environment}-key-rotation`;
 }
 
+/** The role EventBridge Scheduler runs key rotation's schedule as, in the frontdoor account. */
+export function keyRotationScheduleRoleName(environment: string): string {
+  return `frontdoor-${environment}-key-rotation-schedule`;
+}
+
 /** Key rotation's log group. */
 export function keyRotationLogGroupName(environment: string): string {
   return `/flex/frontdoor/${environment}/key-rotation`;

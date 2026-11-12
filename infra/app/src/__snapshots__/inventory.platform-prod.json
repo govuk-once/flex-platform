@@ -205,10 +205,6 @@
         "type": "AWS::Lambda::Function"
       },
       {
-        "logicalId": "KeyRotationFunctionScheduleE037CEEA",
-        "type": "AWS::Lambda::Permission"
-      },
-      {
         "logicalId": "KeyRotationLogsLogGroupA2DE2F3C",
         "type": "AWS::Logs::LogGroup"
       },
@@ -217,8 +213,12 @@
         "type": "AWS::IAM::Role"
       },
       {
-        "logicalId": "KeyRotationScheduleECEBC9DE",
-        "type": "AWS::Events::Rule"
+        "logicalId": "KeyRotationSchedulerF765E1CA",
+        "type": "AWS::Scheduler::Schedule"
+      },
+      {
+        "logicalId": "KeyRotationSchedulerRole770389ED",
+        "type": "AWS::IAM::Role"
       },
       {
         "logicalId": "LogGroupKeyD49CF390",
@@ -376,10 +376,6 @@
         "type": "AWS::Lambda::Function"
       },
       {
-        "logicalId": "KeyRotationFunctionScheduleE037CEEA",
-        "type": "AWS::Lambda::Permission"
-      },
-      {
         "logicalId": "KeyRotationLogsLogGroupA2DE2F3C",
         "type": "AWS::Logs::LogGroup"
       },
@@ -388,8 +384,12 @@
         "type": "AWS::IAM::Role"
       },
       {
-        "logicalId": "KeyRotationScheduleECEBC9DE",
-        "type": "AWS::Events::Rule"
+        "logicalId": "KeyRotationSchedulerF765E1CA",
+        "type": "AWS::Scheduler::Schedule"
+      },
+      {
+        "logicalId": "KeyRotationSchedulerRole770389ED",
+        "type": "AWS::IAM::Role"
       },
       {
         "logicalId": "LogGroupKeyD49CF390",
@@ -547,10 +547,6 @@
         "type": "AWS::Lambda::Function"
       },
       {
-        "logicalId": "KeyRotationFunctionScheduleE037CEEA",
-        "type": "AWS::Lambda::Permission"
-      },
-      {
         "logicalId": "KeyRotationLogsLogGroupA2DE2F3C",
         "type": "AWS::Logs::LogGroup"
       },
@@ -559,8 +555,12 @@
         "type": "AWS::IAM::Role"
       },
       {
-        "logicalId": "KeyRotationScheduleECEBC9DE",
-        "type": "AWS::Events::Rule"
+        "logicalId": "KeyRotationSchedulerF765E1CA",
+        "type": "AWS::Scheduler::Schedule"
+      },
+      {
+        "logicalId": "KeyRotationSchedulerRole770389ED",
+        "type": "AWS::IAM::Role"
       },
       {
         "logicalId": "LogGroupKeyD49CF390",
