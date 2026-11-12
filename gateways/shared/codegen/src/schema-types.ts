@@ -648,6 +648,36 @@ function declareRequired(
   }
 }
 
+// The index signature for fields under a name the schema does not list. A schema for the rest,
+// or `false` with patterns beside it: every name the schema admits
+// carries one of these, so one index signature holds them all, and TypeScript makes it
+// govern the declared properties as well, which JSON Schema does not, so their types join it.
+//
+// Patterns are read only here, where something is said about the names they do not match. A
+// schema that leaves `additionalProperties` out says what some names carry and nothing about
+// the rest, and an index signature typed from the patterns alone would offer a pattern's
+// type under every name: a validator takes `{ "unmatched": 123 }` where the pattern is
+// `^x-`, and `data.unmatched.toUpperCase()` would compile and fail. An index signature is a
+// promise about every name, so it is made only where the schema covers every name.
+function indexSignature(
+  shape: ObjectShape,
+  declared: readonly TypeExpression[],
+  ctx: TypeContext,
+  depth: number,
+): string | undefined {
+  if (shape.additional === true) return "readonly [key: string]: unknown;";
+  if (shape.additional === undefined) return undefined;
+  const other = [
+    ...(isRecord(shape.additional)
+      ? [expressionOf(shape.additional, ctx, depth + 1)]
+      : []),
+    ...shape.patterns,
+  ];
+  if (other.length === 0) return undefined;
+  const index = union([...other, ...declared, leaf("undefined")]);
+  return `readonly [key: string]: ${index.text};`;
+}
+
 function objectFromShape(
   shape: ObjectShape,
   refs: readonly Reference[],
@@ -676,31 +706,9 @@ function objectFromShape(
   // caller happens to have. An object literal with a field of its own is then refused by the
   // compiler where the gateway would have taken it, which is the narrower of the two on purpose.
   const unconstrained = shape.additional === true;
+  const index = indexSignature(shape, declared, ctx, depth);
 
-  if (unconstrained) {
-    members.push("readonly [key: string]: unknown;");
-  } else if (shape.additional !== undefined) {
-    // A schema for the rest, or `false` with patterns beside it: every name the schema admits
-    // carries one of these, so one index signature holds them all, and TypeScript makes it
-    // govern the declared properties as well, which JSON Schema does not, so their types join it.
-    //
-    // Patterns are read only here, where something is said about the names they do not match. A
-    // schema that leaves `additionalProperties` out says what some names carry and nothing about
-    // the rest, and an index signature typed from the patterns alone would offer a pattern's
-    // type under every name: a validator takes `{ "unmatched": 123 }` where the pattern is
-    // `^x-`, and `data.unmatched.toUpperCase()` would compile and fail. An index signature is a
-    // promise about every name, so it is made only where the schema covers every name.
-    const other = [
-      ...(isRecord(shape.additional)
-        ? [expressionOf(shape.additional, ctx, depth + 1)]
-        : []),
-      ...shape.patterns,
-    ];
-    if (other.length > 0) {
-      const index = union([...other, ...declared, leaf("undefined")]);
-      members.push(`readonly [key: string]: ${index.text};`);
-    }
-  }
+  if (index !== undefined) members.push(index);
 
   if (members.length === 0) {
     if (shape.additional === false) return leaf("Record<string, never>");

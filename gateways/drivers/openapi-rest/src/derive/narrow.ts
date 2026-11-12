@@ -109,36 +109,40 @@ export function narrowingProblems(
     problems.push(`${where} cannot declare "${UNUSABLE_NAME}"`);
   }
 
-  // A narrowing is merged into what the document says, so a keyword written as something other
-  // than what it takes would be filtered out on the way and the schema would compile without
-  // saying what it was written to say: `required: "id"` is not a list, and neither is
-  // `properties: []` an object.
-  if (Object.hasOwn(schema, "required")) {
-    const listed: unknown = schema.required;
-    if (
-      !Array.isArray(listed) ||
-      !listed.every((name) => typeof name === "string")
-    ) {
-      problems.push(`${where}.required must be a list of field names`);
-    } else if (listed.includes(UNUSABLE_NAME)) {
-      problems.push(`${where}.required cannot list "${UNUSABLE_NAME}"`);
-    }
-  }
+  requiredProblems(schema, where, problems);
+  subschemaProblems(schema, where, problems);
+}
 
+// A narrowing is merged into what the document says, so a keyword written as something other
+// than what it takes would be filtered out on the way and the schema would compile without
+// saying what it was written to say: `required: "id"` is not a list, and neither is
+// `properties: []` an object.
+function requiredProblems(
+  schema: Schema,
+  where: string,
+  problems: string[],
+): void {
+  if (!Object.hasOwn(schema, "required")) return;
+
+  const listed: unknown = schema.required;
+  if (
+    !Array.isArray(listed) ||
+    !listed.every((name) => typeof name === "string")
+  ) {
+    problems.push(`${where}.required must be a list of field names`);
+  } else if (listed.includes(UNUSABLE_NAME)) {
+    problems.push(`${where}.required cannot list "${UNUSABLE_NAME}"`);
+  }
+}
+
+function subschemaProblems(
+  schema: Schema,
+  where: string,
+  problems: string[],
+): void {
   for (const key of SUBSCHEMA_MAPS) {
     if (!Object.hasOwn(schema, key)) continue;
-    const held: unknown = schema[key];
-    if (!isRecord(held)) {
-      problems.push(`${where}.${key} must be an object of schemas`);
-      continue;
-    }
-    for (const [name, member] of Object.entries(held)) {
-      if (name === UNUSABLE_NAME) {
-        problems.push(`${where}.${key} cannot declare "${UNUSABLE_NAME}"`);
-        continue;
-      }
-      narrowingProblems(member, `${where}.${key}.${name}`, problems);
-    }
+    subschemaMapProblems(schema[key], `${where}.${key}`, problems);
   }
 
   for (const key of SUBSCHEMA_LISTS) {
@@ -156,6 +160,25 @@ export function narrowingProblems(
   for (const key of SUBSCHEMAS) {
     if (!Object.hasOwn(schema, key)) continue;
     narrowingProblems(schema[key], `${where}.${key}`, problems);
+  }
+}
+
+function subschemaMapProblems(
+  held: unknown,
+  where: string,
+  problems: string[],
+): void {
+  if (!isRecord(held)) {
+    problems.push(`${where} must be an object of schemas`);
+    return;
+  }
+
+  for (const [name, member] of Object.entries(held)) {
+    if (name === UNUSABLE_NAME) {
+      problems.push(`${where} cannot declare "${UNUSABLE_NAME}"`);
+      continue;
+    }
+    narrowingProblems(member, `${where}.${name}`, problems);
   }
 }
 

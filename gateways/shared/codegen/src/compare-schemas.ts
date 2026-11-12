@@ -159,6 +159,9 @@ const MAX_DEPTH = 64;
 type Schema = Readonly<Record<string, unknown>>;
 type Defs = Readonly<Record<string, unknown>>;
 
+// Marks keywords as read, and says whether either side writes any of them.
+type Take = (...names: string[]) => boolean;
+
 // Keywords whose subschema does not act on the whole the way it acts on itself: `not` reverses
 // it, `if` chooses between `then` and `else` rather than admitting anything of its own, a
 // `contains` under a `maxContains` refuses an array for holding one match too many, and a branch
@@ -460,12 +463,36 @@ class Comparison {
       new Set([...Object.keys(previous), ...Object.keys(next)]),
     ).filter((key) => !ANNOTATIONS.has(key));
     const handled = new Set<string>();
-    const take = (...names: string[]): boolean => {
+    const take: Take = (...names) => {
       const present = names.some((name) => keys.includes(name));
       for (const name of names) handled.add(name);
       return present;
     };
 
+    this.#valueKeywords(take, previous, next, position, where);
+    this.#shapeKeywords(take, previous, next, position, where, depth);
+
+    // Whatever else a schema is written with says the same or is a break: nothing here knows
+    // which way a difference in it leans.
+    for (const key of keys) {
+      if (handled.has(key) || sameAt(key, previous[key], next[key])) continue;
+      this.add(
+        "unknown",
+        position,
+        `${where}.${key}`,
+        "changed in a way that cannot be read as safe",
+      );
+    }
+  }
+
+  // What a schema says of a value itself: its type, the values it lists, and its bounds.
+  #valueKeywords(
+    take: Take,
+    previous: Schema,
+    next: Schema,
+    position: Position,
+    where: string,
+  ): void {
     if (take("type", "nullable")) this.#types(previous, next, position, where);
     if (take("enum", "const")) this.#values(previous, next, position, where);
 
@@ -484,7 +511,18 @@ class Comparison {
       if (take(key)) this.#unordered(key, previous, next, position, where);
     }
     if (take("uniqueItems")) this.#unique(previous, next, position, where);
+  }
 
+  // What a schema says of what a value holds: its fields, its elements, and the schemas it is
+  // composed of.
+  #shapeKeywords(
+    take: Take,
+    previous: Schema,
+    next: Schema,
+    position: Position,
+    where: string,
+    depth: number,
+  ): void {
     if (take("required")) this.#required(previous, next, position, where);
     if (take("properties")) {
       this.#properties(previous, next, position, where, depth);
@@ -510,18 +548,6 @@ class Comparison {
     }
     if (take("oneOf")) {
       this.#exclusive(previous.oneOf, next.oneOf, position, where);
-    }
-
-    // Whatever else a schema is written with says the same or is a break: nothing here knows
-    // which way a difference in it leans.
-    for (const key of keys) {
-      if (handled.has(key) || sameAt(key, previous[key], next[key])) continue;
-      this.add(
-        "unknown",
-        position,
-        `${where}.${key}`,
-        "changed in a way that cannot be read as safe",
-      );
     }
   }
 
@@ -1000,16 +1026,17 @@ function eachReference(
   if (typeof value.$ref === "string") visit(value.$ref, position);
   for (const [key, held] of Object.entries(value)) {
     const at = reversesEffect(key, value) ? "uncertain" : position;
-    if (SUBSCHEMA_MAPS.has(key) && isRecord(held)) {
-      for (const schema of Object.values(held)) {
-        eachReference(schema, at, visit);
-      }
-    } else if (SUBSCHEMA_LISTS.has(key) && Array.isArray(held)) {
-      for (const schema of held) eachReference(schema, at, visit);
-    } else if (SUBSCHEMAS.has(key)) {
-      eachReference(held, at, visit);
+    for (const schema of subschemasIn(key, held)) {
+      eachReference(schema, at, visit);
     }
   }
+}
+
+// The schemas one keyword holds, however it holds them.
+function subschemasIn(key: string, held: unknown): readonly unknown[] {
+  if (SUBSCHEMA_MAPS.has(key) && isRecord(held)) return Object.values(held);
+  if (SUBSCHEMA_LISTS.has(key) && Array.isArray(held)) return held;
+  return SUBSCHEMAS.has(key) ? [held] : [];
 }
 
 // Which side of a call each definition of one version is used on. A definition reached only

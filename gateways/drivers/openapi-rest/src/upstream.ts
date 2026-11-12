@@ -35,6 +35,44 @@ export function pathParts(template: string): PathPart[] {
 // A "%" a parameter's value could complete. "/x/%2e%{id}" with id "2e" sends "/x/%2e%2e", a
 // dot segment the reviewed template never showed, so each escape must be whole in its literal.
 const INCOMPLETE_ESCAPE = /%(?![0-9A-Fa-f]{2})/;
+
+// The names of a template's parameters, each a valid name and declared once.
+function paramsOf(upstream: string, parts: readonly PathPart[]): string[] {
+  const params: string[] = [];
+  for (const part of parts) {
+    if (part.kind !== "param") continue;
+    const name = part.name;
+    if (!PARAM_NAME.test(name)) {
+      throw new TypeError(
+        `Upstream "${upstream}" has an invalid path parameter name "{${name}}"`,
+      );
+    }
+    if (params.includes(name)) {
+      throw new TypeError(
+        `Upstream "${upstream}" declares path parameter "{${name}}" more than once`,
+      );
+    }
+    params.push(name);
+  }
+  return params;
+}
+
+function checkLiterals(upstream: string, parts: readonly PathPart[]): void {
+  for (const part of parts) {
+    if (part.kind !== "literal") continue;
+    if (/[{}]/.test(part.value)) {
+      throw new TypeError(
+        `Upstream "${upstream}" has unbalanced braces in its path`,
+      );
+    }
+    if (INCOMPLETE_ESCAPE.test(part.value)) {
+      throw new TypeError(
+        `Upstream "${upstream}" has an incomplete percent escape in its path; a parameter must not complete one`,
+      );
+    }
+  }
+}
+
 // Parses "<METHOD> /path/{param}" into a method and path parts. Any failure is a configuration
 // error, so callers run this when creating the executor rather than per request.
 export function parseUpstream(upstream: string): ParsedUpstream {
@@ -70,36 +108,9 @@ export function parseUpstream(upstream: string): ParsedUpstream {
   }
 
   const parts = pathParts(template);
-  const params: string[] = [];
-  for (const part of parts) {
-    if (part.kind !== "param") continue;
-    const name = part.name;
-    if (!PARAM_NAME.test(name)) {
-      throw new TypeError(
-        `Upstream "${upstream}" has an invalid path parameter name "{${name}}"`,
-      );
-    }
-    if (params.includes(name)) {
-      throw new TypeError(
-        `Upstream "${upstream}" declares path parameter "{${name}}" more than once`,
-      );
-    }
-    params.push(name);
-  }
+  const params = paramsOf(upstream, parts);
 
-  for (const part of parts) {
-    if (part.kind !== "literal") continue;
-    if (/[{}]/.test(part.value)) {
-      throw new TypeError(
-        `Upstream "${upstream}" has unbalanced braces in its path`,
-      );
-    }
-    if (INCOMPLETE_ESCAPE.test(part.value)) {
-      throw new TypeError(
-        `Upstream "${upstream}" has an incomplete percent escape in its path; a parameter must not complete one`,
-      );
-    }
-  }
+  checkLiterals(upstream, parts);
 
   // Each parameter stands in as one ordinary character: its value is never empty, never only
   // dots and never holds a "%", so a segment containing one cannot be a dot segment whatever

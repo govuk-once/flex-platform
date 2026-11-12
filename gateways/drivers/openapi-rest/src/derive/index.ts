@@ -9,31 +9,23 @@ import { sortedNames } from "@repo/utils/sorted-names";
 
 import type { ParameterMapping } from "../config/definition.ts";
 import { normaliseHeaderName } from "../headers.ts";
-import { type MetadataConfig, metadataProblems } from "../metadata.ts";
+import type { MetadataConfig } from "../metadata.ts";
+import { metadataProblems } from "../metadata.ts";
 import { outcomeForStatus } from "../outcomes.ts";
 import { PAYLOAD_FIELD } from "../types.ts";
-import { type ParsedUpstream, parseUpstream } from "../upstream.ts";
+import type { ParsedUpstream } from "../upstream.ts";
+import { parseUpstream } from "../upstream.ts";
+import type { Conversion, Side } from "./convert.ts";
 import {
-  type Conversion,
   convertSchema,
   eachSubschema,
   mapSubschemas,
   setKey,
-  type Side,
 } from "./convert.ts";
-import {
-  loadDocument,
-  OpenApiDeriveError,
-  type OpenApiDocument,
-  resolved,
-} from "./document.ts";
-import {
-  couldReach,
-  type Fit,
-  fit,
-  isMoreSpecific,
-  segmentsOf,
-} from "./match.ts";
+import type { OpenApiDocument } from "./document.ts";
+import { loadDocument, OpenApiDeriveError, resolved } from "./document.ts";
+import type { Fit } from "./match.ts";
+import { couldReach, fit, isMoreSpecific, segmentsOf } from "./match.ts";
 import { narrowingProblems, narrowInto } from "./narrow.ts";
 
 // A gateway's schemas from its upstream's OpenAPI document, for the operations its configuration
@@ -127,6 +119,10 @@ function both(a: ReadonlySet<string>, b: ReadonlySet<string>): Set<string> {
   return kept;
 }
 
+// The types either of two parts admits, for a union.
+const either = (a: ReadonlySet<string>, b: ReadonlySet<string>): Set<string> =>
+  new Set([...a, ...b]);
+
 // A part says something about elements only where it could be an array: a branch admitting null
 // beside one admitting an array of strings says nothing of elements, and taking its silence for
 // a restriction, or for the absence of one, would read the union wrong either way.
@@ -138,23 +134,24 @@ const mayBeArray = (part: Admits): boolean =>
 // admits strings a union admits every element and an `allOf` admits strings.
 function merged(parts: readonly Admits[], how: "all" | "any"): Admits {
   const all = how === "all";
-  let types = all ? new Set([ANYTHING]) : new Set<string>();
-  let elements = all ? new Set([ANYTHING]) : new Set<string>();
-  // An empty array is a value like any other: every part has to admit it for an `allOf` to,
-  // and one branch admitting it is enough for a union.
-  let empty = all;
-  let recursive = false;
-  for (const part of parts) {
-    types = all ? both(types, part.types) : new Set([...types, ...part.types]);
-    if (mayBeArray(part)) {
-      elements = all
-        ? both(elements, part.elements)
-        : new Set([...elements, ...part.elements]);
-      empty = all ? empty && part.empty : empty || part.empty;
-    }
-    if (part.recursive) recursive = true;
-  }
-  return { types, elements, empty, recursive };
+  const combine = all ? both : either;
+  const start = (): Set<string> =>
+    all ? new Set([ANYTHING]) : new Set<string>();
+  const arrays = parts.filter(mayBeArray);
+
+  return {
+    types: parts.reduce((types, part) => combine(types, part.types), start()),
+    elements: arrays.reduce(
+      (elements, part) => combine(elements, part.elements),
+      start(),
+    ),
+    // An empty array is a value like any other: every part has to admit it for an `allOf` to,
+    // and one branch admitting it is enough for a union.
+    empty: all
+      ? arrays.every((part) => part.empty)
+      : arrays.some((part) => part.empty),
+    recursive: parts.some((part) => part.recursive),
+  };
 }
 
 // Whether an array this schema describes may have nothing in it. `minItems` says so outright;
@@ -274,7 +271,6 @@ function parameterProblems(
   const { in: location, name, parameter } = declared;
   const what = `${location} parameter "${name}" of ${where}`;
   const problems: string[] = [];
-  const { style, explode } = parameter;
 
   if (parameter.allowReserved === true) {
     problems.push(
@@ -282,7 +278,23 @@ function parameterProblems(
     );
   }
 
-  const { types, elements, empty, recursive } = admittedBy(schema, defs);
+  const admitted = admittedBy(schema, defs);
+  problems.push(...typeProblems(declared, what, admitted));
+  if (location === "query" && admitted.types.has("array")) {
+    problems.push(...elementProblems(declared, what, admitted));
+  }
+  problems.push(...styleProblems(declared, what, admitted.types));
+  return problems;
+}
+
+// What the parameter's types are, against what the driver sends in its place.
+function typeProblems(
+  declared: Declared,
+  what: string,
+  { types, recursive }: Admits,
+): string[] {
+  const location = declared.in;
+  const problems: string[] = [];
   if (recursive) {
     problems.push(
       `${what} refers to itself, and the driver has one scalar to send there`,
@@ -302,8 +314,10 @@ function parameterProblems(
     ),
   );
   if (unsupported.length > 0) {
+    const sent =
+      location === "query" ? "a scalar or an array of them" : "one scalar";
     problems.push(
-      `${what} is ${unsupported.join(" or ")}, and the driver sends ${location === "query" ? "a scalar or an array of them" : "one scalar"} there`,
+      `${what} is ${unsupported.join(" or ")}, and the driver sends ${sent} there`,
     );
   }
   // A required parameter has to be written, and null is not something the driver writes: in a
@@ -314,52 +328,71 @@ function parameterProblems(
       `${what} is required and admits null, which the driver does not send: null leaves a parameter out`,
     );
   }
+  return problems;
+}
 
-  if (location === "query" && types.has("array")) {
-    // The elements reach the upstream one by one, each written as itself. An array that says
-    // nothing of them says nothing this can hold them to.
-    if (elements.has(ANYTHING)) {
-      problems.push(
-        `${what} is an array whose elements are not all described, so what the driver would have to send cannot be read`,
-      );
-    }
-    const badElements = sortedNames(
-      [...elements].filter(
-        (type) => type !== ANYTHING && (!SCALARS.has(type) || type === "null"),
-      ),
-    );
-    if (badElements.length > 0) {
-      problems.push(
-        `${what} is an array of ${badElements.join(" or ")}, and the driver writes each element as one scalar`,
-      );
-    }
-    // The name is written once per element, so an array with no elements writes nothing and the
-    // upstream sees a request without the parameter: the same absence null would leave, past a
-    // validator that admitted the value.
-    if (declared.required && empty) {
-      problems.push(
-        `${what} is required and admits an array with nothing in it, which the driver does not send: an empty array leaves a parameter out`,
-      );
-    }
-  }
-
-  if (location === "query") {
-    if (style !== undefined && style !== "form") {
-      problems.push(
-        `${what} is serialised as ${JSON.stringify(style)}, and the driver writes a query as "form"`,
-      );
-    }
-    if (types.has("array") && explode === false) {
-      problems.push(
-        `${what} is an array written without exploding, and the driver repeats the name for each element`,
-      );
-    }
-  } else if (style !== undefined && style !== "simple") {
+// What the elements of a query parameter's array are. They reach the upstream one by one, each
+// written as itself.
+function elementProblems(
+  declared: Declared,
+  what: string,
+  { elements, empty }: Admits,
+): string[] {
+  const problems: string[] = [];
+  // An array that says nothing of them says nothing this can hold them to.
+  if (elements.has(ANYTHING)) {
     problems.push(
-      `${what} is serialised as ${JSON.stringify(style)}, and the driver writes a ${location} parameter as "simple"`,
+      `${what} is an array whose elements are not all described, so what the driver would have to send cannot be read`,
     );
   }
+  const badElements = sortedNames(
+    [...elements].filter(
+      (type) => type !== ANYTHING && (!SCALARS.has(type) || type === "null"),
+    ),
+  );
+  if (badElements.length > 0) {
+    problems.push(
+      `${what} is an array of ${badElements.join(" or ")}, and the driver writes each element as one scalar`,
+    );
+  }
+  // The name is written once per element, so an array with no elements writes nothing and the
+  // upstream sees a request without the parameter: the same absence null would leave, past a
+  // validator that admitted the value.
+  if (declared.required && empty) {
+    problems.push(
+      `${what} is required and admits an array with nothing in it, which the driver does not send: an empty array leaves a parameter out`,
+    );
+  }
+  return problems;
+}
 
+// How the parameter is serialised, against how the driver writes it.
+function styleProblems(
+  declared: Declared,
+  what: string,
+  types: ReadonlySet<string>,
+): string[] {
+  const location = declared.in;
+  const { style, explode } = declared.parameter;
+  const problems: string[] = [];
+  if (location !== "query") {
+    if (style !== undefined && style !== "simple") {
+      problems.push(
+        `${what} is serialised as ${JSON.stringify(style)}, and the driver writes a ${location} parameter as "simple"`,
+      );
+    }
+    return problems;
+  }
+  if (style !== undefined && style !== "form") {
+    problems.push(
+      `${what} is serialised as ${JSON.stringify(style)}, and the driver writes a query as "form"`,
+    );
+  }
+  if (types.has("array") && explode === false) {
+    problems.push(
+      `${what} is an array written without exploding, and the driver repeats the name for each element`,
+    );
+  }
   return problems;
 }
 

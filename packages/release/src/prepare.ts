@@ -4,14 +4,16 @@ import path from "node:path";
 import { heldValue } from "@repo/utils/held-value";
 
 import { readRecord, writeRecord } from "./record.ts";
-import { nextVersion, type Status, statusesOf } from "./status.ts";
-import { type Bump, bumped, nextDerivedVersion } from "./versions.ts";
+import type { Status } from "./status.ts";
+import { nextVersion, statusesOf } from "./status.ts";
+import type { Bump } from "./versions.ts";
+import { bumped, nextDerivedVersion } from "./versions.ts";
+import type { Publishable, Workspace } from "./workspace.ts";
 import {
   buildWorkspace,
   dependencyOrder,
   lockedIn,
   nameOf,
-  type Workspace,
 } from "./workspace.ts";
 
 // Prepares a release: builds every package, lists those with changes no release holds yet, has a
@@ -43,6 +45,32 @@ export interface Planned {
   readonly from: string | undefined;
   readonly to: string;
   readonly reason: string;
+}
+
+// Each declared package's last release raised by the bump a person chooses, asked for before
+// anything is written.
+async function getRaisedVersions(
+  releasing: readonly Publishable[],
+  choices: ReadonlyMap<string, Choice>,
+  chooser: Chooser,
+): Promise<Map<string, string>> {
+  const raised = new Map<string, string>();
+
+  for (const pkg of releasing) {
+    if (pkg.source.versioning !== "declared") continue;
+
+    const choice = heldValue(choices, nameOf(pkg));
+
+    const { released, next } = choice;
+
+    // Its first release, or one a person set ahead: the manifest holds it already.
+    if (released === undefined || next !== undefined) continue;
+
+    const bump = await chooser.bump(choice, released.version);
+    raised.set(nameOf(pkg), bumped(released.version, bump));
+  }
+
+  return raised;
 }
 
 async function setVersion(file: string, version: string): Promise<string> {
@@ -85,26 +113,17 @@ export async function prepare(
       heldValue(statuses, nameOf(pkg)).reason ?? heldValue(locked, nameOf(pkg)),
     ]),
   );
-
-  // Each declared package's last release raised by the bump a person chooses, asked for before
-  // anything is written.
-  const raised = new Map<string, string>();
-  for (const pkg of releasing) {
-    if (pkg.source.versioning !== "declared") continue;
-    const choice = heldValue(choices, nameOf(pkg));
-    const { released, next } = choice;
-    // Its first release, or one a person set ahead: the manifest holds it already.
-    if (released === undefined || next !== undefined) continue;
-    const bump = await chooser.bump(choice, released.version);
-    raised.set(nameOf(pkg), bumped(released.version, bump));
-  }
+  const raisedVersions = await getRaisedVersions(releasing, choices, chooser);
 
   // Each manifest as it was, to put back if the release goes no further.
   const originals = new Map<string, string>();
+
   try {
     for (const pkg of releasing) {
-      const version = raised.get(nameOf(pkg));
+      const version = raisedVersions.get(nameOf(pkg));
+
       if (version === undefined) continue;
+
       const file = path.join(root, pkg.directory, "package.json");
       originals.set(file, await setVersion(file, version));
     }
