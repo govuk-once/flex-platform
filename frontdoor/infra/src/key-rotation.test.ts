@@ -113,7 +113,7 @@ describe("KeyRotation", () => {
     });
   });
 
-  it("is run by a schedule whose role may only invoke the function, assumed for that schedule alone", () => {
+  it("is run by a schedule whose role may only invoke the function, assumed only through the account's default schedule group", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "frontdoor-sandbox-key-rotation-schedule",
       AssumeRolePolicyDocument: Match.exact({
@@ -125,7 +125,7 @@ describe("KeyRotation", () => {
             Condition: {
               StringEquals: {
                 "aws:SourceAccount": ACCOUNT,
-                "aws:SourceArn": `arn:aws:scheduler:eu-west-2:${ACCOUNT}:schedule/default/frontdoor-sandbox-key-rotation`,
+                "aws:SourceArn": `arn:aws:scheduler:eu-west-2:${ACCOUNT}:schedule-group/default`,
               },
             },
           },

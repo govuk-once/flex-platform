@@ -171,12 +171,13 @@ export class KeyRotation extends Construct {
       roleName: keyRotationScheduleRoleName(environment),
       assumedBy: new ServicePrincipal("scheduler.amazonaws.com", {
         conditions: {
+          // Scheduler gives its schedule group's ARN as the source, never the schedule's.
           StringEquals: {
             "aws:SourceAccount": stack.account,
             "aws:SourceArn": stack.formatArn({
               service: "scheduler",
-              resource: "schedule",
-              resourceName: `default/${scheduleName}`,
+              resource: "schedule-group",
+              resourceName: "default",
             }),
           },
         },
