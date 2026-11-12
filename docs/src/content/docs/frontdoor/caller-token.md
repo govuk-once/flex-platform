@@ -212,7 +212,8 @@ The function's role, `frontdoor-<environment>-key-rotation`, may:
 - write to its own log group, `/flex/frontdoor/<environment>/key-rotation`.
 
 The schedule runs it as its own role, `frontdoor-<environment>-key-rotation-schedule`, which only
-that schedule may assume, and which may only invoke the function.
+EventBridge Scheduler may assume, for a schedule in the account's default group, and which may only
+invoke the function. Scheduler names a schedule's group, not the schedule, when it assumes a role.
 
 It logs each key it makes, with when it starts, and each it removes or revokes, by key ID alone. A
 failed run logs the AWS error's name and the source locations, and fails, so Lambda's error metric
