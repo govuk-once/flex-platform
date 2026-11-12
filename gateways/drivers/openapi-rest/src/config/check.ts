@@ -6,10 +6,12 @@ import { stringsIn } from "@repo/utils/strings-in";
 import { normaliseHeaderName } from "../headers.ts";
 import { metadataProblems } from "../metadata.ts";
 import { METHODS_WITH_BODY, PAYLOAD_FIELD } from "../types.ts";
-import { type ParsedUpstream, parseUpstream } from "../upstream.ts";
+import type { ParsedUpstream } from "../upstream.ts";
+import { parseUpstream } from "../upstream.ts";
 import type {
   OpenApiRestGatewayConfig,
   OpenApiRestOperationFields,
+  ParameterMapping,
 } from "./definition.ts";
 
 // What a generated entry point cannot discover for itself: whether an operation's mappings and
@@ -59,6 +61,30 @@ interface Fields {
   cyclic: boolean;
 }
 
+function absorb(fields: Fields, other: Fields, required: boolean): void {
+  for (const name of other.names) fields.names.add(name);
+  if (required) for (const name of other.required) fields.required.add(name);
+  if (other.unresolved) fields.unresolved = true;
+  if (other.cyclic) fields.cyclic = true;
+}
+
+// The branches of an `anyOf` or a `oneOf`, of which only one need hold.
+function absorbUnion(
+  fields: Fields,
+  branches: readonly JSONSchema[],
+  defs: Readonly<Record<string, JSONSchema>>,
+  following: ReadonlySet<string>,
+): void {
+  const collected = branches.map((branch) =>
+    collectFields(branch, defs, following),
+  );
+  for (const branch of collected) absorb(fields, branch, false);
+  // Only a field every branch requires is one every valid input carries.
+  for (const name of intersect(collected.map((branch) => branch.required))) {
+    fields.required.add(name);
+  }
+}
+
 // `following` holds the definitions on the way to this schema, not every definition seen. A
 // reference to one of them is a cycle, and stops there; the same definition reached down two
 // branches is read on each, because a branch is combined by where it sits: anyOf keeps only
@@ -78,13 +104,6 @@ function collectFields(
     fields.unresolved = true;
     return fields;
   }
-  const absorb = (other: Fields, required: boolean): void => {
-    for (const name of other.names) fields.names.add(name);
-    if (required) for (const name of other.required) fields.required.add(name);
-    if (other.unresolved) fields.unresolved = true;
-    if (other.cyclic) fields.cyclic = true;
-  };
-
   // A reference contributes what it declares, and in the 2020-12 dialect the keywords written
   // beside it still apply, so both are read.
   if (typeof schema.$ref === "string") {
@@ -93,6 +112,7 @@ function collectFields(
     } else {
       const target = ownValue(defs, schema.$ref);
       absorb(
+        fields,
         collectFields(target, defs, new Set([...following, schema.$ref])),
         true,
       );
@@ -111,21 +131,18 @@ function collectFields(
 
   if (Array.isArray(schema.allOf)) {
     for (const branch of schema.allOf) {
-      absorb(collectFields(branch as JSONSchema, defs, following), true);
+      absorb(
+        fields,
+        collectFields(branch as JSONSchema, defs, following),
+        true,
+      );
     }
   }
 
   for (const keyword of ["anyOf", "oneOf"] as const) {
     const branches = schema[keyword];
     if (!Array.isArray(branches) || branches.length === 0) continue;
-    const collected = branches.map((branch) =>
-      collectFields(branch as JSONSchema, defs, following),
-    );
-    for (const branch of collected) absorb(branch, false);
-    // Only a field every branch requires is one every valid input carries.
-    for (const name of intersect(collected.map((branch) => branch.required))) {
-      fields.required.add(name);
-    }
+    absorbUnion(fields, branches as JSONSchema[], defs, following);
   }
 
   return fields;
@@ -183,156 +200,210 @@ function checkOperation(
   // Read from the schema as written: a reference's own keywords are followed from there, and
   // the ones beside it are part of the same shape.
   const declared = collectFields(input, defs);
-  if (declared.unresolved) {
-    return [
-      `${context}: input schema has a "$ref" that no shared definition resolves`,
-    ];
-  }
-  if (declared.cyclic) {
-    return [
-      `${context}: input schema has a "$ref" that refers back to a definition it is reached from, so it declares no fields`,
-    ];
-  }
+  const unreadable = inputProblem(input, defs, declared);
+  if (unreadable !== undefined) return [`${context}: ${unreadable}`];
 
-  // What the schema says itself, or what the definition it references says.
-  const stated = input.type ?? resolveSchema(input, defs).type;
-  if (stated !== undefined && stated !== "object") {
-    return [
-      `${context}: input schema must describe an object, so every field maps to part of the request`,
-    ];
-  }
-
-  const problems: string[] = [];
-  const fields = [...declared.names];
-  const required = declared.required;
-
-  // A custom handler builds its own request: the executor hands it the input and the client and
-  // never calls the automatic mapping, so what that mapping would need of the schema is not a
-  // requirement here. What the executor compiles for every operation, handler or not — the
-  // template's parameters, the names a mapping may take, the headers it may not set — is read
-  // below either way. A handler that does call `prepare` is left to the runtime, which fails
-  // the request as INTERNAL: nothing here can tell which kind of handler it is.
-  const automatic = operation.handler === undefined;
+  const check: MappingCheck = {
+    context,
+    upstream,
+    declared,
+    // A custom handler builds its own request: the executor hands it the input and the client
+    // and never calls the automatic mapping, so what that mapping would need of the schema is
+    // not a requirement here. What the executor compiles for every operation, handler or not —
+    // the template's parameters, the names a mapping may take, the headers it may not set — is
+    // read below either way. A handler that does call `prepare` is left to the runtime, which
+    // fails the request as INTERNAL: nothing here can tell which kind of handler it is.
+    automatic: operation.handler === undefined,
+    reserved,
+    filled: new Set(),
+    queries: new Set(),
+    headers: new Set(),
+    problems: [],
+  };
+  const { problems } = check;
 
   const mapped = new Set<string>();
-  // The upstream names already spoken for, by location. Two fields on one name means the
-  // request sends whichever the executor compiled last, so it refuses to compile at all; that
-  // is a cold start away from the deployment, and the configuration says it here.
-  const filled = new Set<string>();
-  const queries = new Set<string>();
-  const headers = new Set<string>();
-
   for (const [field, mapping] of Object.entries(operation.parameters ?? {})) {
     // Counted as accounted for before anything is read of it: a field the configuration tried
     // to map is not also one that reaches no part of the request.
     mapped.add(field);
-    // What the executor refuses outright when it compiles the operation, said at build time
-    // rather than at the first cold start after a deployment. Nothing further is read of the
-    // entry, because there is no field for the schema to declare.
-    if (field.length === 0) {
-      problems.push(`${context}: parameter fields must be non-empty`);
-      continue;
-    }
-    if (field === PAYLOAD_FIELD) {
-      problems.push(
-        `${context}: "${PAYLOAD_FIELD}" is the request body and cannot be a parameter`,
-      );
-      continue;
-    }
-    // Only the automatic mapping reads the operation's input: a handler calls `prepare` with an
-    // object it builds, so the fields a mapping names are the handler's to supply and need not
-    // be declared in the schema at all.
-    if (automatic && !declared.names.has(field)) {
-      problems.push(
-        `${context}: parameter "${field}" has no field of that name in the input schema`,
-      );
-    }
-    // An empty upstream name reaches no parameter and no header. Reading further would record
-    // it as a name of its own, and report a second field renamed onto the same nothing.
-    if (mapping.name?.length === 0) {
-      problems.push(
-        `${context}: parameter "${field}" has an empty upstream name`,
-      );
-      continue;
-    }
-    const upstreamName = mapping.name ?? field;
-
-    if (mapping.in === "path") {
-      if (!upstream.params.includes(upstreamName)) {
-        problems.push(
-          `${context}: parameter "${field}" names path parameter "{${upstreamName}}", which the template "${upstream.template}" does not declare`,
-        );
-        continue;
-      }
-      if (filled.has(upstreamName)) {
-        problems.push(
-          `${context}: path parameter "{${upstreamName}}" is supplied by more than one field`,
-        );
-      }
-      filled.add(upstreamName);
-      // A path is built from every segment, so an absent value has no request to send. The
-      // executor would raise INTERNAL per request; the schema can refuse it per caller instead.
-      if (automatic && !required.has(field)) {
-        problems.push(
-          `${context}: path parameter "{${upstreamName}}" is filled by input field "${field}", which the input schema does not require`,
-        );
-      }
-    } else if (mapping.in === "header") {
-      try {
-        const header = normaliseHeaderName(
-          upstreamName,
-          `${context} parameter "${field}"`,
-        );
-        if (reserved.has(header)) {
-          problems.push(
-            `${context}: parameter "${field}" maps to header "${upstreamName}", which the gateway's authentication owns`,
-          );
-        }
-        // Compared as the executor holds them: header names differing only in case are one name.
-        if (headers.has(header)) {
-          problems.push(
-            `${context}: header "${upstreamName}" is supplied by more than one field`,
-          );
-        }
-        headers.add(header);
-      } catch (error: unknown) {
-        problems.push(messageOf(error));
-      }
-    } else if (mapping.in === "query") {
-      if (queries.has(upstreamName)) {
-        problems.push(
-          `${context}: query parameter "${upstreamName}" is supplied by more than one field`,
-        );
-      }
-      queries.add(upstreamName);
-    } else {
-      // Not reachable from typed configuration; guards a JavaScript caller, and says what the
-      // executor refuses rather than reading an unknown location as a query parameter.
-      problems.push(
-        `${context}: parameter "${field}" has unknown location "${String(mapping.in)}"`,
-      );
-    }
+    checkMapping(check, field, mapping);
   }
 
   for (const param of upstream.params) {
-    if (!filled.has(param)) {
+    if (!check.filled.has(param)) {
       problems.push(
         `${context}: path parameter "{${param}}" has no parameters entry with in: "path" that names it`,
       );
     }
   }
 
-  if (automatic) {
-    for (const field of fields) {
-      if (field === PAYLOAD_FIELD || mapped.has(field)) continue;
+  if (check.automatic) problems.push(...automaticProblems(check, mapped));
+  return problems;
+}
+
+// Why an input schema cannot be read for the fields it declares, if it cannot.
+function inputProblem(
+  input: JSONSchema,
+  defs: Readonly<Record<string, JSONSchema>>,
+  declared: Fields,
+): string | undefined {
+  if (declared.unresolved) {
+    return `input schema has a "$ref" that no shared definition resolves`;
+  }
+  if (declared.cyclic) {
+    return `input schema has a "$ref" that refers back to a definition it is reached from, so it declares no fields`;
+  }
+  // What the schema says itself, or what the definition it references says.
+  const stated = input.type ?? resolveSchema(input, defs).type;
+  if (stated !== undefined && stated !== "object") {
+    return `input schema must describe an object, so every field maps to part of the request`;
+  }
+  return undefined;
+}
+
+// One operation's mappings as they are read, entry by entry.
+interface MappingCheck {
+  readonly context: string;
+  readonly upstream: ParsedUpstream;
+  readonly declared: Fields;
+  readonly automatic: boolean;
+  readonly reserved: ReadonlySet<string>;
+  // The upstream names already spoken for, by location. Two fields on one name means the
+  // request sends whichever the executor compiled last, so it refuses to compile at all; that
+  // is a cold start away from the deployment, and the configuration says it here.
+  readonly filled: Set<string>;
+  readonly queries: Set<string>;
+  readonly headers: Set<string>;
+  readonly problems: string[];
+}
+
+function checkMapping(
+  check: MappingCheck,
+  field: string,
+  mapping: ParameterMapping,
+): void {
+  const { context, problems } = check;
+  // What the executor refuses outright when it compiles the operation, said at build time
+  // rather than at the first cold start after a deployment. Nothing further is read of the
+  // entry, because there is no field for the schema to declare.
+  if (field.length === 0) {
+    problems.push(`${context}: parameter fields must be non-empty`);
+    return;
+  }
+  if (field === PAYLOAD_FIELD) {
+    problems.push(
+      `${context}: "${PAYLOAD_FIELD}" is the request body and cannot be a parameter`,
+    );
+    return;
+  }
+  // Only the automatic mapping reads the operation's input: a handler calls `prepare` with an
+  // object it builds, so the fields a mapping names are the handler's to supply and need not
+  // be declared in the schema at all.
+  if (check.automatic && !check.declared.names.has(field)) {
+    problems.push(
+      `${context}: parameter "${field}" has no field of that name in the input schema`,
+    );
+  }
+  // An empty upstream name reaches no parameter and no header. Reading further would record
+  // it as a name of its own, and report a second field renamed onto the same nothing.
+  if (mapping.name?.length === 0) {
+    problems.push(
+      `${context}: parameter "${field}" has an empty upstream name`,
+    );
+    return;
+  }
+  const upstreamName = mapping.name ?? field;
+
+  if (mapping.in === "path") {
+    checkPathMapping(check, field, upstreamName);
+  } else if (mapping.in === "header") {
+    checkHeaderMapping(check, field, upstreamName);
+  } else if (mapping.in === "query") {
+    if (check.queries.has(upstreamName)) {
       problems.push(
-        `${context}: input field "${field}" is not mapped to the upstream request; give it a parameters entry or carry it in "${PAYLOAD_FIELD}"`,
+        `${context}: query parameter "${upstreamName}" is supplied by more than one field`,
       );
     }
+    check.queries.add(upstreamName);
+  } else {
+    // Not reachable from typed configuration; guards a JavaScript caller, and says what the
+    // executor refuses rather than reading an unknown location as a query parameter.
+    problems.push(
+      `${context}: parameter "${field}" has unknown location "${String(mapping.in)}"`,
+    );
   }
+}
 
+function checkPathMapping(
+  { context, upstream, declared, automatic, filled, problems }: MappingCheck,
+  field: string,
+  upstreamName: string,
+): void {
+  if (!upstream.params.includes(upstreamName)) {
+    problems.push(
+      `${context}: parameter "${field}" names path parameter "{${upstreamName}}", which the template "${upstream.template}" does not declare`,
+    );
+    return;
+  }
+  if (filled.has(upstreamName)) {
+    problems.push(
+      `${context}: path parameter "{${upstreamName}}" is supplied by more than one field`,
+    );
+  }
+  filled.add(upstreamName);
+  // A path is built from every segment, so an absent value has no request to send. The
+  // executor would raise INTERNAL per request; the schema can refuse it per caller instead.
+  if (automatic && !declared.required.has(field)) {
+    problems.push(
+      `${context}: path parameter "{${upstreamName}}" is filled by input field "${field}", which the input schema does not require`,
+    );
+  }
+}
+
+function checkHeaderMapping(
+  { context, reserved, headers, problems }: MappingCheck,
+  field: string,
+  upstreamName: string,
+): void {
+  let header: string;
+  try {
+    header = normaliseHeaderName(
+      upstreamName,
+      `${context} parameter "${field}"`,
+    );
+  } catch (error: unknown) {
+    problems.push(messageOf(error));
+    return;
+  }
+  if (reserved.has(header)) {
+    problems.push(
+      `${context}: parameter "${field}" maps to header "${upstreamName}", which the gateway's authentication owns`,
+    );
+  }
+  // Compared as the executor holds them: header names differing only in case are one name.
+  if (headers.has(header)) {
+    problems.push(
+      `${context}: header "${upstreamName}" is supplied by more than one field`,
+    );
+  }
+  headers.add(header);
+}
+
+// What the automatic mapping needs of the input schema beyond each entry: every field reaching
+// part of the request, and a body only where the method carries one.
+function automaticProblems(
+  { context, upstream, declared }: MappingCheck,
+  mapped: ReadonlySet<string>,
+): string[] {
+  const problems: string[] = [];
+  for (const field of declared.names) {
+    if (field === PAYLOAD_FIELD || mapped.has(field)) continue;
+    problems.push(
+      `${context}: input field "${field}" is not mapped to the upstream request; give it a parameters entry or carry it in "${PAYLOAD_FIELD}"`,
+    );
+  }
   if (
-    automatic &&
     declared.names.has(PAYLOAD_FIELD) &&
     !METHODS_WITH_BODY.has(upstream.method)
   ) {
@@ -340,7 +411,6 @@ function checkOperation(
       `${context}: the input schema declares "${PAYLOAD_FIELD}", which a ${upstream.method} request cannot carry`,
     );
   }
-
   return problems;
 }
 

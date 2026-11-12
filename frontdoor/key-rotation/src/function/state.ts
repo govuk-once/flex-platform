@@ -84,8 +84,10 @@ export function parseState(text: string): KeyState {
   return { keys, revoked };
 }
 
-const byKid = (a: StoredKey, b: StoredKey) =>
-  a.kid < b.kid ? -1 : a.kid > b.kid ? 1 : 0;
+function byKid(a: StoredKey, b: StoredKey): number {
+  if (a.kid < b.kid) return -1;
+  return a.kid > b.kid ? 1 : 0;
+}
 
 /**
  * The public keys every gateway accepts, as a JWK set. Beside each key, the times it signs

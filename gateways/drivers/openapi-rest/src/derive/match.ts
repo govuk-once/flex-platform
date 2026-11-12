@@ -152,25 +152,37 @@ export function fit(path: string, template: string): Fit | string {
 
     const part = asked[index];
     if (part === undefined) return "it has fewer segments than the template";
-    // A parameter sharing a segment with text is a form this does not work out: what of it the
-    // path fills, and what it keeps, is not one thing or the other.
-    if (segment.kind === "mixed" || part.kind === "mixed") {
-      return "a parameter that shares its segment with text is not one this fits a path through";
-    }
-    if (segment.kind === "literal") {
-      if (part.kind !== "literal" || part.text !== segment.text) {
-        return `its segment ${String(index + 1)} is not "${segment.text}"`;
-      }
-    } else if (part.kind === "literal") {
-      fixed.set(segment.name, part.text);
-    } else {
-      carried.set(segment.name, part.name);
-    }
+    const unfit = fitSegment(segment, part, index, fixed, carried);
+    if (unfit !== undefined) return unfit;
   }
 
   return asked.length > offered.length
     ? "it has more segments than the template"
     : ({ fixed, carried } satisfies Fit);
+}
+
+// How one segment of a path fits the template's segment there, recorded in `fixed` or `carried`,
+// or why it does not.
+function fitSegment(
+  segment: Segment,
+  part: Segment,
+  index: number,
+  fixed: Map<string, string>,
+  carried: Map<string, string>,
+): string | undefined {
+  // A parameter sharing a segment with text is a form this does not work out: what of it the
+  // path fills, and what it keeps, is not one thing or the other.
+  if (segment.kind === "mixed" || part.kind === "mixed") {
+    return "a parameter that shares its segment with text is not one this fits a path through";
+  }
+  if (segment.kind === "literal") {
+    return part.kind === "literal" && part.text === segment.text
+      ? undefined
+      : `its segment ${String(index + 1)} is not "${segment.text}"`;
+  }
+  if (part.kind === "literal") fixed.set(segment.name, part.text);
+  else carried.set(segment.name, part.name);
+  return undefined;
 }
 
 // What "{name+}" takes from a path: every segment that is left, each written out.

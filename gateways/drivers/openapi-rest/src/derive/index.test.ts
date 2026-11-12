@@ -480,6 +480,47 @@ describe("derive, what the driver can actually send", () => {
         sending("ids", { in: "query" }),
       ),
     ).resolves.toBeDefined();
+
+    // A branch that is no array says nothing of whether one may be empty: beside an array that
+    // has to hold something, a union with null admits null and no empty array. 3.0 has no null
+    // type, so the document says it is 3.1.
+    expect(
+      await problemsOf(
+        deriving(
+          {
+            openapi: "3.1.0",
+            info: { title: "Upstream", version: "1.0.0" },
+            paths: {
+              "/things": {
+                get: {
+                  parameters: [
+                    {
+                      in: "query",
+                      name: "ids",
+                      required: true,
+                      schema: {
+                        anyOf: [
+                          {
+                            type: "array",
+                            items: { type: "string" },
+                            minItems: 1,
+                          },
+                          { type: "null" },
+                        ],
+                      },
+                    },
+                  ],
+                  responses: ok(THING),
+                },
+              },
+            },
+          },
+          sending("ids", { in: "query" }),
+        ),
+      ),
+    ).toEqual([
+      'query parameter "ids" of GET /things is required and admits null, which the driver does not send: null leaves a parameter out',
+    ]);
   });
 
   it("refuses a branch that constrains nothing, however narrow the others are", async () => {

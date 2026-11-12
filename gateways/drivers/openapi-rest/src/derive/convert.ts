@@ -287,62 +287,58 @@ const typesOf = (schema: Readonly<Record<string, unknown>>): string[] =>
 const admits = (types: readonly string[], type: string): boolean =>
   types.includes(type) || (type === "number" && types.includes("integer"));
 
-export function convertSchema(
-  schema: unknown,
+// One keyword of a schema, converted into `converted`, or left out where it is not JSON Schema.
+// `position` is the schema's own, with `composed` already worked out.
+function convertKey(
+  converted: Record<string, unknown>,
+  schema: Readonly<Record<string, unknown>>,
+  key: string,
+  value: unknown,
   where: string,
   conversion: Conversion,
-  position: Position = TOP,
-): unknown {
-  if (!isRecord(schema)) return schema;
-  const { side, notes } = conversion;
-  const composed =
-    position.composed || COMPOSITION.some((key) => Object.hasOwn(schema, key));
-  let converted: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(schema)) {
-    if (
-      NOT_JSON_SCHEMA.has(key) ||
-      key.startsWith("x-") ||
-      key === "nullable"
-    ) {
-      continue;
-    }
-    // `nullable: true` beside a type is how OpenAPI 3.0 admits null, and is a type by now. Read
-    // from the value rather than from the keyword being there, so `nullable: false` adds
-    // nothing whichever order the two were written in, and with no type there is nothing for it
-    // to add to: the schema admitted null already.
-    if (key === "type") {
-      const types = typesOf(schema);
-      setKey(
-        converted,
-        "type",
-        schema.nullable === true && types.length > 0
-          ? [...new Set([...types, "null"])]
-          : value,
-      );
-      continue;
-    }
-
-    if (key === "$ref") {
-      const name = referredTo(value, where, conversion, {
-        ...position,
-        composed,
-      });
-      if (name !== undefined) setKey(converted, "$ref", name);
-      continue;
-    }
-
+  position: Position,
+): void {
+  if (NOT_JSON_SCHEMA.has(key) || key.startsWith("x-") || key === "nullable") {
+    return;
+  }
+  // `nullable: true` beside a type is how OpenAPI 3.0 admits null, and is a type by now. Read
+  // from the value rather than from the keyword being there, so `nullable: false` adds
+  // nothing whichever order the two were written in, and with no type there is nothing for it
+  // to add to: the schema admitted null already.
+  if (key === "type") {
+    const types = typesOf(schema);
     setKey(
       converted,
-      key,
-      convertHeld(key, value, where, conversion, {
-        composed,
-        unionBranch: position.unionBranch,
-        reversed: position.reversed || reverses(key, schema),
-      }),
+      "type",
+      schema.nullable === true && types.length > 0
+        ? [...new Set([...types, "null"])]
+        : value,
     );
+    return;
   }
 
+  if (key === "$ref") {
+    const name = referredTo(value, where, conversion, position);
+    if (name !== undefined) setKey(converted, "$ref", name);
+    return;
+  }
+
+  setKey(
+    converted,
+    key,
+    convertHeld(key, value, where, conversion, {
+      composed: position.composed,
+      unionBranch: position.unionBranch,
+      reversed: position.reversed || reverses(key, schema),
+    }),
+  );
+}
+
+function noteAccessMarks(
+  converted: Readonly<Record<string, unknown>>,
+  where: string,
+  { side, notes }: Conversion,
+): void {
   if (side === "input" && converted.readOnly === true) {
     notes.add(
       `${where} is marked readOnly and is part of an input all the same`,
@@ -353,6 +349,29 @@ export function convertSchema(
       `${where} is marked writeOnly and is part of an outcome all the same`,
     );
   }
+}
+
+export function convertSchema(
+  schema: unknown,
+  where: string,
+  conversion: Conversion,
+  position: Position = TOP,
+): unknown {
+  if (!isRecord(schema)) return schema;
+
+  const { side, notes } = conversion;
+  const composed =
+    position.composed || COMPOSITION.some((key) => Object.hasOwn(schema, key));
+  let converted: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(schema)) {
+    convertKey(converted, schema, key, value, where, conversion, {
+      ...position,
+      composed,
+    });
+  }
+
+  noteAccessMarks(converted, where, conversion);
 
   converted = withType(
     converted,

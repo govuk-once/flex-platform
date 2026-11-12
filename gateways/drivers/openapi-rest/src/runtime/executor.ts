@@ -8,14 +8,17 @@ import type {
   OpenApiRestAuthInstance,
 } from "../config/auth.ts";
 import type { OpenApiRestGatewayConfig } from "../config/definition.ts";
+import type { SecretField, SecretValues } from "../config/secret-field.ts";
 import { isSecretField } from "../config/secret-field.ts";
 import { normaliseHeaderName, validateHeaders } from "../headers.ts";
 import { compileMetadata } from "../metadata.ts";
 import { OPENAPI_REST_DRIVER_TYPE } from "../types.ts";
 import { createAuthTransport } from "./auth-transport.ts";
-import { type AuthHeaders, type ClientDeps, createClient } from "./client.ts";
+import type { AuthHeaders, ClientDeps } from "./client.ts";
+import { createClient } from "./client.ts";
 import { requestFailure } from "./failure.ts";
-import { type CompiledOperation, compileOperation } from "./operation.ts";
+import type { CompiledOperation } from "./operation.ts";
+import { compileOperation } from "./operation.ts";
 import { secretFields } from "./secret.ts";
 import { parseUpstreamTarget } from "./target.ts";
 
@@ -140,6 +143,51 @@ function authHeadersFor(steps: readonly AuthStep[]): AuthHeaders {
   };
 }
 
+function checkedMaxResponseBytes(configured: number | undefined): number {
+  const maxResponseBytes = configured ?? DEFAULT_MAX_RESPONSE_BYTES;
+  if (!Number.isInteger(maxResponseBytes) || maxResponseBytes <= 0) {
+    throw new TypeError("Driver maxResponseBytes must be a positive integer");
+  }
+  return maxResponseBytes;
+}
+
+function checkedStaticHeaders(
+  configured: Readonly<Record<string, string>>,
+  reservedHeaders: ReadonlySet<string>,
+): Headers {
+  const staticHeaders = validateHeaders(configured, "Driver headers");
+  for (const name of staticHeaders.keys()) {
+    if (reservedHeaders.has(name)) {
+      throw new TypeError(
+        `Driver headers: header "${name}" is reserved by the driver's authentication and cannot be set`,
+      );
+    }
+  }
+  return staticHeaders;
+}
+
+// A field marked optional is one the secret's owner does not always provide, and what reads it
+// goes without: a header left out, FLEX_UPSTREAM_TARGET used instead. Said once, as the gateway
+// starts, so a field the owner stopped providing shows here rather than only as the upstream's
+// refusal. The name is the configuration's; nothing of the secret is logged.
+function logAbsentFields(
+  fields: readonly SecretField[],
+  initial: SecretValues,
+  options: ExecutorOptions,
+): void {
+  const absent = new Set(
+    fields
+      .filter((field) => field.optional && initial.get(field) === undefined)
+      .map((field) => field.secretField),
+  );
+  for (const field of absent) {
+    options.log?.info(
+      "An optional secret field is absent; what reads it goes without",
+      { field },
+    );
+  }
+}
+
 // Test seam: the executor with an injected fetch. Not part of the public surface;
 // createExecutor is what an entrypoint calls.
 export interface BuildDeps {
@@ -158,11 +206,9 @@ export async function buildExecutor(
     );
   }
 
-  const maxResponseBytes =
-    config.driver.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
-  if (!Number.isInteger(maxResponseBytes) || maxResponseBytes <= 0) {
-    throw new TypeError("Driver maxResponseBytes must be a positive integer");
-  }
+  const maxResponseBytes = checkedMaxResponseBytes(
+    config.driver.maxResponseBytes,
+  );
 
   // The headers authentication owns are reserved before anything else is compiled: neither
   // the driver's static headers, an operation's mappings nor a handler's call may set them, so
@@ -176,18 +222,10 @@ export async function buildExecutor(
       `Gateway "${config.id}" driver target must name the secret field that holds it, with fromSecret`,
     );
   }
-  const staticHeaders = validateHeaders(
+  const staticHeaders = checkedStaticHeaders(
     config.driver.headers ?? {},
-    "Driver headers",
+    reservedHeaders,
   );
-  for (const name of staticHeaders.keys()) {
-    if (reservedHeaders.has(name)) {
-      throw new TypeError(
-        `Driver headers: header "${name}" is reserved by the driver's authentication and cannot be set`,
-      );
-    }
-  }
-
   const metadata = compileMetadata(config.driver.metadata);
 
   // With no field of the secret naming the upstream, FLEX_UPSTREAM_TARGET is the only place it can
@@ -200,6 +238,7 @@ export async function buildExecutor(
     options.target === undefined
       ? undefined
       : parseUpstreamTarget(options.target);
+
   if (targetField === undefined && fromEnvironment === undefined) {
     throw noUpstream();
   }
@@ -219,21 +258,7 @@ export async function buildExecutor(
   const secret = secretFields(config.id, options.secret, fields);
   const initial = await secret.get();
 
-  // A field marked optional is one the secret's owner does not always provide, and what reads it
-  // goes without: a header left out, FLEX_UPSTREAM_TARGET used instead. Said once, as the gateway
-  // starts, so a field the owner stopped providing shows here rather than only as the upstream's
-  // refusal. The name is the configuration's; nothing of the secret is logged.
-  const absent = new Set(
-    fields
-      .filter((field) => field.optional && initial.get(field) === undefined)
-      .map((field) => field.secretField),
-  );
-  for (const field of absent) {
-    options.log?.info(
-      "An optional secret field is absent; what reads it goes without",
-      { field },
-    );
-  }
+  logAbsentFields(fields, initial, options);
 
   // A target the secret names is used in place of FLEX_UPSTREAM_TARGET, so the environment variable
   // and the secret can each be set without the other. Read once, here: an address that moves
