@@ -43,6 +43,22 @@ Config holds no routes, and nothing else about what the domain does. See
 A domain is hosted only in the environments that list it. Moving it to another domain account is
 moving its name to that account's list.
 
+The stage lists the domain too, once, in its own `domains`, whichever of its environments host
+it. The entry names the GitHub repository that may [release](#releasing-a-domains-function) the
+domain, by GitHub's IDs for the repository and its owner, or `null` until the repository exists:
+
+```ts
+domains: [
+  {
+    name: "domain-a",
+    repository: { name: "example-org/domain-a", id: "700000001", ownerId: "800000001" },
+  },
+  { name: "domain-b", repository: null },
+],
+```
+
+`gh api repos/<owner>/<repository> --jq '.id, .owner.id'` prints the two IDs.
+
 <Aside type="caution" title="Moving a domain between accounts">
 Moving a domain's name does not move its function or code. The destination account gets a new
 domain stack, and the domain team must release the function there before it can serve requests.
@@ -73,6 +89,9 @@ Before building any stage, the app checks every domain, disabled ones included:
   ending with a hyphen;
 - its name is used once in its environment, across all of the environment's domain accounts,
   since the Frontdoor routes by name alone;
+- it is in its stage's `domains`, once, and every domain there is hosted in at least one of the
+  stage's environments;
+- it is hosted in the environment its own environment's `release` promotes from, if it promotes;
 - its execution role's name, `domain-<environment>-<name>-execution`, is within IAM's 64
   characters. It is the longest of the names Lambda and IAM limit, so the others fit too. Each name
   is within 32 alone, but the two together can pass it: together they may be 46 at most.
@@ -282,6 +301,13 @@ The function is named `domain-<environment>-<name>`, built by `domainFunctionNam
 ## Releasing a domain's function
 
 <Badge text="Planned" variant="caution" />
+
+A domain's code will be uploaded once, and the same upload released to each environment in turn.
+Config already says which way code reaches each environment, in its `release`: `"publish"` where
+new code enters the stage, or `{ promoteFrom }`, naming the environment whose released code it
+takes. In platform-prod, `development` publishes, `staging` promotes from `development`, and
+`production` from `staging`. The repository the stage's `domains` names for a domain is the only
+one that will be able to release it.
 
 A release will create and update a domain's function as `domain-<environment>-<name>-deploy`. It
 will set:

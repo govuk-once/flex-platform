@@ -16,6 +16,7 @@ import type {
   DomainAccountConfig,
   EnvironmentConfig,
   GatewayConfig,
+  RepositoryConfig,
   StageConfig,
   ZoneConfig,
 } from "./types.ts";
@@ -43,9 +44,19 @@ const ROLE_ARN = /^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/;
 // A Route 53 hosted zone ID, as the console shows it, without `/hostedzone/`.
 const ZONE_ID = /^Z[0-9A-Z]{1,31}$/;
 
-// ACM limits a certificate's first domain name to 64 characters. The frontdoor's certificate is
-// for its zone's apex, and a domain account's is the wildcard under its zone.
+// ACM limits a certificate's first domain name to 64 characters. The frontdoor's certificate and
+// the shared account's are each for their zone's apex, and a domain account's is the wildcard
+// under its zone.
 const CERTIFICATE_NAME_LENGTH = 64;
+
+// GitHub's `<owner>/<repository>`. An owner is letters, digits and hyphens. A repository may hold
+// dots and underscores too.
+const REPOSITORY_NAME =
+  /^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/;
+
+// One of GitHub's IDs as a token's claim holds it: digits, with no leading zero. Anything else
+// would never equal a claim, and the repository could release nothing, with nothing to say why.
+const GITHUB_ID = /^[1-9]\d*$/;
 
 interface AccountUse {
   readonly account: string;
@@ -69,6 +80,7 @@ export function validateStages(stages: readonly StageConfig[]): void {
     }
   }
   for (const stage of stages) {
+    checkZone(`${stage.name} shared zone`, stage.shared.zone, (name) => name);
     checkNames(
       `${stage.name} environment`,
       stage.environments.map((environment) => environment.name),
@@ -98,8 +110,114 @@ export function validateStages(stages: readonly StageConfig[]): void {
       );
       checkDomains(`${stage.name}/${environment.name}`, environment);
     }
+    checkStageDomains(stage);
+    checkRelease(stage);
   }
   checkAccounts(accountUses(stages));
+}
+
+// The stage's domains say who may release each one, so they are exactly the domains its
+// environments host. One missing could never be released. One no environment hosts would leave
+// its repository trusted to upload code for a domain the stage no longer has.
+function checkStageDomains(stage: StageConfig): void {
+  checkNames(
+    `${stage.name} domain`,
+    stage.domains.map(({ name }) => name),
+  );
+  const listed = new Set(stage.domains.map(({ name }) => name));
+  const hosted = new Set<string>();
+  for (const environment of stage.environments) {
+    for (const domain of domainsOf(environment)) {
+      if (!listed.has(domain)) {
+        throw new Error(
+          `${stage.name}/${environment.name}: the domain ${domain} is not in ${stage.name}'s domains, which say who may release it`,
+        );
+      }
+      hosted.add(domain);
+    }
+  }
+  for (const { name, repository } of stage.domains) {
+    if (!hosted.has(name)) {
+      throw new Error(
+        `${stage.name}: the domain ${name} is in its domains, but no environment hosts it`,
+      );
+    }
+    if (repository !== null) {
+      checkRepository(`${stage.name} ${name} domain`, repository);
+    }
+  }
+}
+
+function checkRepository(
+  at: string,
+  { name, id, ownerId }: RepositoryConfig,
+): void {
+  if (!REPOSITORY_NAME.test(name)) {
+    throw new Error(
+      `${at}: its repository ${JSON.stringify(name)} must be <owner>/<repository>`,
+    );
+  }
+  for (const [what, value] of [
+    ["repository's ID", id],
+    ["repository's owner's ID", ownerId],
+  ] as const) {
+    if (!GITHUB_ID.test(value)) {
+      throw new Error(
+        `${at}: its ${what} ${JSON.stringify(value)} must be digits, as GitHub gives it`,
+      );
+    }
+  }
+}
+
+// Code enters a stage where an environment publishes, and reaches every other by promotion. So
+// each promotion names another of the stage's environments, the promotions lead back to one that
+// publishes, and a domain is hosted wherever it would be promoted from.
+function checkRelease(stage: StageConfig): void {
+  const environments = new Map(
+    stage.environments.map((environment) => [environment.name, environment]),
+  );
+  for (const environment of stage.environments) {
+    if (environment.release === "publish") continue;
+    const at = `${stage.name}/${environment.name}`;
+    const { promoteFrom } = environment.release;
+    const source = environments.get(promoteFrom);
+    if (source === undefined || source === environment) {
+      throw new Error(
+        `${at}: it promotes from ${JSON.stringify(promoteFrom)}, which must be another environment of ${stage.name}`,
+      );
+    }
+
+    if (promotesInACircle(environments, environment)) {
+      throw new Error(
+        `${at}: its promotions never reach an environment that publishes`,
+      );
+    }
+
+    const promotable = new Set(domainsOf(source));
+    for (const domain of domainsOf(environment)) {
+      if (!promotable.has(domain)) {
+        throw new Error(
+          `${at}: the domain ${domain} is not hosted in ${promoteFrom}, which it would be promoted from`,
+        );
+      }
+    }
+  }
+}
+
+// Whether following an environment's promotions comes back to one already passed. A promotion
+// from an environment the stage doesn't have ends the walk: that is reported as its own problem.
+function promotesInACircle(
+  environments: ReadonlyMap<string, EnvironmentConfig>,
+  environment: EnvironmentConfig,
+): boolean {
+  const seen = new Set<string>();
+  let from: EnvironmentConfig | undefined = environment;
+  while (from !== undefined && from.release !== "publish") {
+    if (seen.has(from.name)) return true;
+    seen.add(from.name);
+    from = environments.get(from.release.promoteFrom);
+  }
+  return false;
 }
 
 function checkEnvironment(

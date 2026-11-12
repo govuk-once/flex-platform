@@ -5,15 +5,20 @@ import {
   FIXTURE_STAGES,
   FRONTDOOR,
   OWN_SECRET_GATEWAY,
+  REPOSITORY,
+  shared,
   TEST_USERS,
   UDP,
 } from "../../test/helpers.ts";
+import { domainName } from "./domain-name.ts";
 import type {
   DomainAccountConfig,
   DomainConfig,
   EnvironmentConfig,
   FrontdoorConfig,
+  RepositoryConfig,
   StageConfig,
+  StageDomainConfig,
   ZoneConfig,
 } from "./types.ts";
 import { validateStages } from "./validate.ts";
@@ -25,31 +30,54 @@ const MAIN_DOMAIN_ACCOUNT: DomainAccountConfig = {
 
 const ENVIRONMENT: EnvironmentConfig = {
   name: "sandbox",
+  release: "publish",
   domainAccounts: [MAIN_DOMAIN_ACCOUNT],
   frontdoor: FRONTDOOR,
 };
 
 const STAGE: StageConfig = {
   name: "platform-dev",
-  shared: { account: "100000000001", testUsers: null },
+  shared: shared("100000000001"),
+  domains: [{ name: "domain-a", repository: null }],
   environments: [ENVIRONMENT],
 };
 
 // A second stage with accounts of its own, to put beside STAGE.
 const OTHER_STAGE: StageConfig = {
   name: "platform-prod",
-  shared: { account: "300000000001", testUsers: null },
+  shared: shared("300000000001"),
+  domains: [],
   environments: [
     {
       name: "prod",
+      release: "publish",
       domainAccounts: [domainAccount("prod", "main", "300000000003")],
       frontdoor: { ...FRONTDOOR, account: "300000000002" },
     },
   ],
 };
 
+// The domains the environments host, each once and with no repository, so a test that changes
+// what is hosted keeps the stage's own list in step with it.
+function hostedDomains(
+  environments: readonly EnvironmentConfig[],
+): StageDomainConfig[] {
+  const names = new Set(
+    environments.flatMap(({ domainAccounts }) =>
+      domainAccounts.flatMap(({ domains }) => domains.map(domainName)),
+    ),
+  );
+  return [...names].map((name) => ({ name, repository: null }));
+}
+
+function withEnvironments(
+  environments: readonly EnvironmentConfig[],
+): StageConfig {
+  return { ...STAGE, domains: hostedDomains(environments), environments };
+}
+
 function withEnvironment(environment: Partial<EnvironmentConfig>): StageConfig {
-  return { ...STAGE, environments: [{ ...ENVIRONMENT, ...environment }] };
+  return withEnvironments([{ ...ENVIRONMENT, ...environment }]);
 }
 
 function withFrontdoor(frontdoor: Partial<FrontdoorConfig>): StageConfig {
@@ -190,6 +218,28 @@ describe("validateStages", () => {
         validateStages([withFrontdoorZone({ name: `a${name}` })]),
       ).toThrow(
         `platform-dev/sandbox frontdoor zone: its certificate's name, a${name}, is longer than ACM's 64 characters`,
+      );
+    });
+
+    it("holds the shared account's zone to the same rules", () => {
+      const withSharedZone = (zone: Partial<ZoneConfig>): StageConfig => ({
+        ...STAGE,
+        shared: { ...STAGE.shared, zone: { ...STAGE.shared.zone, ...zone } },
+      });
+      const name = `${"a".repeat(56)}.example`;
+
+      expect(() => validateStages([withSharedZone({ name })])).not.toThrow();
+      expect(() =>
+        validateStages([withSharedZone({ name: "shared" })]),
+      ).toThrow('platform-dev shared zone: "shared" must be a DNS name');
+      expect(() => validateStages([withSharedZone({ id: "z1" })])).toThrow(
+        'platform-dev shared zone: "z1" is not a hosted zone ID',
+      );
+      // The management distribution's certificate is for the apex, as the frontdoor's is.
+      expect(() =>
+        validateStages([withSharedZone({ name: `a${name}` })]),
+      ).toThrow(
+        `platform-dev shared zone: its certificate's name, a${name}, is longer than ACM's 64 characters`,
       );
     });
 
@@ -373,9 +423,8 @@ describe("validateStages", () => {
       const environment = "e".repeat(32);
       const fits = "d".repeat(64 - 32 - "domain---execution".length);
 
-      const stage = (name: string): StageConfig => ({
-        ...STAGE,
-        environments: [
+      const stage = (name: string): StageConfig =>
+        withEnvironments([
           {
             ...ENVIRONMENT,
             name: environment,
@@ -383,12 +432,214 @@ describe("validateStages", () => {
               { ...MAIN_DOMAIN_ACCOUNT, domains: [{ name, disabled: true }] },
             ],
           },
-        ],
-      });
+        ]);
 
       expect(() => validateStages([stage(fits)])).not.toThrow();
       expect(() => validateStages([stage(`${fits}d`)])).toThrow(
         `platform-dev/${environment} ${fits}d domain: its execution role's name domain-${environment}-${fits}d-execution is longer than IAM's 64 characters`,
+      );
+    });
+  });
+
+  describe("a stage's domains", () => {
+    function withStageDomains(
+      domains: readonly StageDomainConfig[],
+    ): StageConfig {
+      return { ...STAGE, domains };
+    }
+
+    function withRepository(
+      repository: Partial<RepositoryConfig>,
+    ): StageConfig {
+      return withStageDomains([
+        { name: "domain-a", repository: { ...REPOSITORY, ...repository } },
+      ]);
+    }
+
+    it("accepts a domain with a repository, and one with none yet", () => {
+      expect(() => validateStages([withRepository({})])).not.toThrow();
+      expect(() =>
+        validateStages([
+          withStageDomains([{ name: "domain-a", repository: null }]),
+        ]),
+      ).not.toThrow();
+    });
+
+    it("refuses a hosted domain the stage doesn't list, disabled or not", () => {
+      expect(() => validateStages([withStageDomains([])])).toThrow(
+        "platform-dev/sandbox: the domain domain-a is not in platform-dev's domains, which say who may release it",
+      );
+
+      const disabled: StageConfig = {
+        ...STAGE,
+        domains: [],
+        environments: [
+          {
+            ...ENVIRONMENT,
+            domainAccounts: [
+              {
+                ...MAIN_DOMAIN_ACCOUNT,
+                domains: [{ name: "domain-a", disabled: true }],
+              },
+            ],
+          },
+        ],
+      };
+      expect(() => validateStages([disabled])).toThrow(
+        "platform-dev/sandbox: the domain domain-a is not in platform-dev's domains",
+      );
+    });
+
+    // Its repository would stay trusted to upload code for a domain the stage no longer has.
+    it("refuses a listed domain that no environment hosts", () => {
+      expect(() =>
+        validateStages([
+          withStageDomains([
+            { name: "domain-a", repository: null },
+            { name: "domain-b", repository: REPOSITORY },
+          ]),
+        ]),
+      ).toThrow(
+        "platform-dev: the domain domain-b is in its domains, but no environment hosts it",
+      );
+    });
+
+    it("refuses a domain listed twice", () => {
+      expect(() =>
+        validateStages([
+          withStageDomains([
+            { name: "domain-a", repository: null },
+            { name: "domain-a", repository: REPOSITORY },
+          ]),
+        ]),
+      ).toThrow("The platform-dev domain name domain-a is used more than once");
+    });
+
+    it.each(["example-org/domain-a", "a/b", "Example-Org/Domain.A_1"])(
+      "accepts the repository %j",
+      (name) => {
+        expect(() => validateStages([withRepository({ name })])).not.toThrow();
+      },
+    );
+
+    it.each([
+      "",
+      "domain-a",
+      "example-org/",
+      "/domain-a",
+      "example-org/domain-a/extra",
+      "example_org/domain-a",
+      "https://github.com/example-org/domain-a",
+      "example-org/domain a",
+    ])("refuses the repository %j", (name) => {
+      expect(() => validateStages([withRepository({ name })])).toThrow(
+        `platform-dev domain-a domain: its repository ${JSON.stringify(name)} must be <owner>/<repository>`,
+      );
+    });
+
+    // A token's claim holds the ID in digits, so anything else would never match one.
+    it.each(["", "0", "0123", "12a", " 123", "1.5", "-1"])(
+      "refuses the ID %j",
+      (id) => {
+        expect(() => validateStages([withRepository({ id })])).toThrow(
+          `platform-dev domain-a domain: its repository's ID ${JSON.stringify(id)} must be digits`,
+        );
+        expect(() => validateStages([withRepository({ ownerId: id })])).toThrow(
+          `platform-dev domain-a domain: its repository's owner's ID ${JSON.stringify(id)} must be digits`,
+        );
+      },
+    );
+  });
+
+  describe("release", () => {
+    const [, , PROD] = FIXTURE_STAGES;
+    const [DEV, STAGING, LIVE] = PROD.environments;
+
+    function withProdEnvironments(
+      environments: readonly EnvironmentConfig[],
+    ): StageConfig {
+      return { ...PROD, environments };
+    }
+
+    it("accepts environments that promote one to the next from one that publishes", () => {
+      expect(() => validateStages([PROD])).not.toThrow();
+    });
+
+    it("accepts a stage whose environments all publish", () => {
+      expect(() =>
+        validateStages([
+          withProdEnvironments([
+            DEV,
+            { ...STAGING, release: "publish" },
+            { ...LIVE, release: "publish" },
+          ]),
+        ]),
+      ).not.toThrow();
+    });
+
+    it.each(["production", "", "platform-prod"])(
+      "refuses a promotion from %j, which the stage doesn't have",
+      (promoteFrom) => {
+        expect(() =>
+          validateStages([
+            withProdEnvironments([
+              DEV,
+              { ...STAGING, release: { promoteFrom } },
+              LIVE,
+            ]),
+          ]),
+        ).toThrow(
+          `platform-prod/staging: it promotes from ${JSON.stringify(promoteFrom)}, which must be another environment of platform-prod`,
+        );
+      },
+    );
+
+    it("refuses an environment that promotes from itself", () => {
+      expect(() =>
+        validateStages([
+          withProdEnvironments([
+            DEV,
+            { ...STAGING, release: { promoteFrom: "staging" } },
+            LIVE,
+          ]),
+        ]),
+      ).toThrow(
+        'platform-prod/staging: it promotes from "staging", which must be another environment of platform-prod',
+      );
+    });
+
+    it("refuses promotions that never reach an environment that publishes", () => {
+      expect(() =>
+        validateStages([
+          withProdEnvironments([
+            { ...DEV, release: { promoteFrom: "prod" } },
+            STAGING,
+            LIVE,
+          ]),
+        ]),
+      ).toThrow(
+        "platform-prod/dev: its promotions never reach an environment that publishes",
+      );
+    });
+
+    it("refuses a domain that isn't hosted where it would be promoted from, disabled or not", () => {
+      const [main, second] = LIVE.domainAccounts;
+      const live = (domain: DomainConfig): EnvironmentConfig => ({
+        ...LIVE,
+        domainAccounts: [main, { ...second, domains: [domain] }],
+      });
+      const stage = (domain: DomainConfig): StageConfig => ({
+        ...withProdEnvironments([DEV, STAGING, live(domain)]),
+        domains: [...PROD.domains, { name: "domain-c", repository: null }],
+      });
+
+      expect(() => validateStages([stage("domain-c")])).toThrow(
+        "platform-prod/prod: the domain domain-c is not hosted in staging, which it would be promoted from",
+      );
+      expect(() =>
+        validateStages([stage({ name: "domain-c", disabled: true })]),
+      ).toThrow(
+        "platform-prod/prod: the domain domain-c is not hosted in staging",
       );
     });
   });
