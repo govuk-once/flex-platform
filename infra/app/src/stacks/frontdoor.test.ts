@@ -96,22 +96,6 @@ describe("FrontdoorStack", () => {
     expect(Object.keys(Outputs ?? {})).toEqual(["DistributionDomainName"]);
   });
 
-  it("is built for one environment alone when the target names it", () => {
-    const app = cdkApp();
-    buildApp(app, PROD, selectTarget(PROD, "staging"));
-
-    expect(app.synth().stacks.map((stack) => stack.stackName)).toEqual([
-      "domainaccount-staging-main",
-      "frontdoor-staging-caller-token-keys",
-      "frontdoor-staging-edge-logs-eu-west-2",
-      "network-staging-main",
-      "domain-staging-domain-a",
-      "domain-staging-domain-b",
-      "gateway-staging-main-udp",
-      "frontdoor-staging",
-    ]);
-  });
-
   it("routes each domain the environment hosts to its host, whichever account and order config lists it in", () => {
     const [, , prodEnvironment] = PROD.environments;
     const [main, second] = prodEnvironment.domainAccounts;

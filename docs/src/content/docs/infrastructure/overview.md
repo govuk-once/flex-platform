@@ -327,6 +327,14 @@ deployed app does. It applies the flags from `cdk.json`, so a test checks what d
 defaults. `cdkApp` reads that file by path, so `turbo.json` names it as a global dependency: a flag
 change reruns every task, rather than leaving a cached result that used the old flags.
 
+The CDK packages (`infra/app`, `infra/constructs` and each section's `infra/`) run their test files
+in shared workers, with `isolate: false` in each `vitest.config.ts`. Loading `aws-cdk-lib` is most
+of a small test file's time, and a worker loads it once instead of once per file. In `infra/app`, a
+stage that `synthesizedStage` builds is shared the same way. So a module and its state carry over
+from one test file to the next, in no fixed order. A CDK test never mocks a
+module, sets an environment variable or changes anything global, and builds whatever it changes
+itself, with its own `cdkApp()`.
+
 `infra/app` builds its fixture stages, in `test/helpers.ts`, and the committed stages, and checks
 that:
 
