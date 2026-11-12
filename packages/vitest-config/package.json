@@ -13,12 +13,12 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
-    "eslint": "10.13.0"
+    "eslint": "10.14.0"
   },
   "peerDependencies": {
     "vitest": "^5.0.0"
   },
   "dependencies": {
-    "@vitest/coverage-v8": "5.0.5"
+    "@vitest/coverage-v8": "5.1.0"
   }
 }
