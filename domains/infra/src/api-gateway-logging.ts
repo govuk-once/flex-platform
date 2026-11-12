@@ -2,6 +2,7 @@ import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
 import { CfnAccount } from "aws-cdk-lib/aws-apigateway";
 import {
   Effect,
+  ManagedPolicy,
   PolicyDocument,
   PolicyStatement,
   Role,
@@ -15,10 +16,16 @@ export interface ApiGatewayLoggingProps {
   readonly environment: string;
 }
 
+const PUSH_TO_CLOUDWATCH_LOGS =
+  "service-role/AmazonAPIGatewayPushToCloudWatchLogs";
+
 /**
  * The role API Gateway writes every API's access and execution logs as, set on the account. API
- * Gateway has one per account and region. The role may create no log group, so it writes only to
- * groups that already exist, encrypted.
+ * Gateway has one per account and region.
+ *
+ * API Gateway refuses a role that may not create, describe, write to and read any log group: it
+ * checks the role's effective permissions, so neither scoping them nor denying one is accepted. So
+ * it has AWS's managed policy, and each API's stack creates its log groups before its stage.
  */
 export class ApiGatewayLogging extends Construct {
   constructor(
@@ -30,19 +37,13 @@ export class ApiGatewayLogging extends Construct {
 
     const stack = Stack.of(this);
 
-    const accessLogs = stack.formatArn({
-      service: "logs",
-      resource: "log-group",
-      resourceName: apiAccessLogGroupName(environment, "*"),
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
-
-    const executionLogs = stack.formatArn({
-      service: "logs",
-      resource: "log-group",
-      resourceName: apiExecutionLogGroupName("*", "*"),
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
+    const logGroupArn = (resourceName: string) =>
+      stack.formatArn({
+        service: "logs",
+        resource: "log-group",
+        resourceName,
+        arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+      });
 
     const anyKey = stack.formatArn({
       service: "kms",
@@ -52,23 +53,12 @@ export class ApiGatewayLogging extends Construct {
 
     const role = new Role(this, "Role", {
       assumedBy: new ServicePrincipal("apigateway.amazonaws.com"),
+      managedPolicies: [
+        ManagedPolicy.fromAwsManagedPolicyName(PUSH_TO_CLOUDWATCH_LOGS),
+      ],
       inlinePolicies: {
-        WriteLogs: new PolicyDocument({
+        EncryptLogs: new PolicyDocument({
           statements: [
-            new PolicyStatement({
-              effect: Effect.ALLOW,
-              actions: [
-                "logs:CreateLogStream",
-                "logs:DescribeLogStreams",
-                "logs:PutLogEvents",
-              ],
-              resources: [`${accessLogs}:*`, `${executionLogs}:*`],
-            }),
-            new PolicyStatement({
-              effect: Effect.ALLOW,
-              actions: ["logs:DescribeLogGroups"],
-              resources: ["*"],
-            }),
             new PolicyStatement({
               effect: Effect.ALLOW,
               actions: ["kms:Encrypt", "kms:GenerateDataKey*"],
@@ -79,8 +69,8 @@ export class ApiGatewayLogging extends Construct {
                 },
                 ArnLike: {
                   "kms:EncryptionContext:aws:logs:arn": [
-                    accessLogs,
-                    executionLogs,
+                    logGroupArn(apiAccessLogGroupName(environment, "*")),
+                    logGroupArn(apiExecutionLogGroupName("*", "*")),
                   ],
                 },
               },
@@ -92,18 +82,9 @@ export class ApiGatewayLogging extends Construct {
 
     Validations.of(role).acknowledge(
       {
-        id: `AwsSolutions-IAM5[Resource::${accessLogs}:*]`,
+        id: `AwsSolutions-IAM4[Policy::arn:<AWS::Partition>:iam::aws:policy/${PUSH_TO_CLOUDWATCH_LOGS}]`,
         reason:
-          "Each domain's API logs to a group named under this pattern, and API Gateway names each stream.",
-      },
-      {
-        id: `AwsSolutions-IAM5[Resource::${executionLogs}:*]`,
-        reason:
-          "API Gateway names each API's execution log group after the API's generated ID.",
-      },
-      {
-        id: "AwsSolutions-IAM5[Resource::*]",
-        reason: "DescribeLogGroups applies to no log group ARN.",
+          "API Gateway refuses a logging role that may not create, write to and read any log group, and counts a deny against it.",
       },
       {
         id: `AwsSolutions-IAM5[Resource::${anyKey}]`,

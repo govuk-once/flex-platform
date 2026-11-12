@@ -210,11 +210,24 @@ describe("ProxyApi", () => {
       });
     });
 
-    it("creates its execution log group, which API Gateway may not", () => {
-      build().template.hasResourceProperties("AWS::Logs::LogGroup", {
-        LogGroupName: {
-          "Fn::Join": ["", ["API-Gateway-Execution-Logs_", API, "/default"]],
-        },
+    it("creates its execution log group before the stage, so API Gateway never does", () => {
+      const { template } = build();
+      const groups = Object.keys(
+        template.findResources("AWS::Logs::LogGroup", {
+          Properties: {
+            LogGroupName: {
+              "Fn::Join": [
+                "",
+                ["API-Gateway-Execution-Logs_", API, "/default"],
+              ],
+            },
+          },
+        }),
+      );
+      expect(groups).toHaveLength(1);
+
+      template.hasResource("AWS::ApiGateway::Stage", {
+        DependsOn: Match.arrayWith(groups),
       });
     });
   });
