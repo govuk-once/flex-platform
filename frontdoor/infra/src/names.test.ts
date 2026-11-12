@@ -7,6 +7,7 @@ import {
   keyRotationFunctionName,
   keyRotationLogGroupName,
   keyRotationRoleName,
+  keyRotationScheduleRoleName,
   keyRotationStateParameterName,
   originRequestFunctionName,
   originRequestLogGroupName,
@@ -52,6 +53,9 @@ describe("names", () => {
     );
     expect(keyRotationFunctionName("sandbox")).toBe(
       "frontdoor-sandbox-key-rotation",
+    );
+    expect(keyRotationScheduleRoleName("sandbox")).toBe(
+      "frontdoor-sandbox-key-rotation-schedule",
     );
     expect(keyRotationLogGroupName("sandbox")).toBe(
       "/flex/frontdoor/sandbox/key-rotation",

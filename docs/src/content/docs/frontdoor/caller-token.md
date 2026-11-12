@@ -148,8 +148,8 @@ every domain account too. It is retained, versioned, and refuses plain HTTP, as 
 
 ## Rotation
 
-Key rotation is a Lambda function, `frontdoor-<environment>-key-rotation`, in eu-west-2. A
-schedule runs it every 15 minutes. Each run does what is due and nothing more, so a run that fails
+Key rotation is a Lambda function, `frontdoor-<environment>-key-rotation`, in eu-west-2. An
+EventBridge Scheduler schedule of the same name runs it every 15 minutes, with no retry. Each run does what is due and nothing more, so a run that fails
 is simply retried by the next. Only one copy runs at a time, so two runs never write the state at
 once.
 
@@ -210,6 +210,9 @@ The function's role, `frontdoor-<environment>-key-rotation`, may:
 - read and write its state, and the signing key parameter;
 - read and write the public keys' object, in its own account's bucket;
 - write to its own log group, `/flex/frontdoor/<environment>/key-rotation`.
+
+The schedule runs it as its own role, `frontdoor-<environment>-key-rotation-schedule`, which only
+that schedule may assume, and which may only invoke the function.
 
 It logs each key it makes, with when it starts, and each it removes or revokes, by key ID alone. A
 failed run logs the AWS error's name and the source locations, and fails, so Lambda's error metric

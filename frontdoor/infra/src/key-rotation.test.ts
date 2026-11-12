@@ -31,17 +31,26 @@ describe("KeyRotation", () => {
         LogGroup: { Ref: Match.stringLikeRegexp("^KeyRotationLogs") },
       },
     });
-    template.hasResourceProperties("AWS::Events::Rule", {
+    template.hasResourceProperties("AWS::Scheduler::Schedule", {
       Name: "frontdoor-sandbox-key-rotation",
       ScheduleExpression: "rate(15 minutes)",
-      Targets: [Match.objectLike({ RetryPolicy: { MaximumRetryAttempts: 0 } })],
-    });
-    template.hasResourceProperties("AWS::Lambda::Permission", {
-      Principal: "events.amazonaws.com",
-      SourceArn: {
-        "Fn::GetAtt": [Match.stringLikeRegexp("^KeyRotationSchedule"), "Arn"],
+      FlexibleTimeWindow: { Mode: "OFF" },
+      State: "ENABLED",
+      Target: {
+        Arn: {
+          "Fn::GetAtt": [Match.stringLikeRegexp("^KeyRotationFunction"), "Arn"],
+        },
+        RoleArn: {
+          "Fn::GetAtt": [
+            Match.stringLikeRegexp("^KeyRotationSchedulerRole"),
+            "Arn",
+          ],
+        },
+        RetryPolicy: { MaximumRetryAttempts: 0, MaximumEventAgeInSeconds: 60 },
       },
     });
+    template.resourceCountIs("AWS::Events::Rule", 0);
+    template.resourceCountIs("AWS::Lambda::Permission", 0);
     template.hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: "/flex/frontdoor/sandbox/key-rotation",
     });
@@ -101,6 +110,48 @@ describe("KeyRotation", () => {
           },
         },
       ],
+    });
+  });
+
+  it("is run by a schedule whose role may only invoke the function, assumed for that schedule alone", () => {
+    build().template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "frontdoor-sandbox-key-rotation-schedule",
+      AssumeRolePolicyDocument: Match.exact({
+        Statement: [
+          {
+            Action: "sts:AssumeRole",
+            Effect: "Allow",
+            Principal: { Service: "scheduler.amazonaws.com" },
+            Condition: {
+              StringEquals: {
+                "aws:SourceAccount": ACCOUNT,
+                "aws:SourceArn": `arn:aws:scheduler:eu-west-2:${ACCOUNT}:schedule/default/frontdoor-sandbox-key-rotation`,
+              },
+            },
+          },
+        ],
+        Version: "2012-10-17",
+      }),
+      Policies: Match.exact([
+        {
+          PolicyName: "InvokeKeyRotation",
+          PolicyDocument: {
+            Statement: [
+              {
+                Action: "lambda:InvokeFunction",
+                Effect: "Allow",
+                Resource: {
+                  "Fn::GetAtt": [
+                    Match.stringLikeRegexp("^KeyRotationFunction"),
+                    "Arn",
+                  ],
+                },
+              },
+            ],
+            Version: "2012-10-17",
+          },
+        },
+      ]),
     });
   });
 
