@@ -24,16 +24,16 @@ import { PLATFORM_TAGS } from "./tags.ts";
 const [STAGE] = FIXTURE_STAGES;
 
 // The checks and the tags are the app's, whatever stacks it holds, so each test builds the app
-// with no environment's stacks and adds a stack of its own to probe. Every stage's synth runs the
-// same checks over the stacks a stage does build.
-const NO_ENVIRONMENTS: Target = { environments: [] };
+// with none of its own stacks, no environment's and not the shared account's, and adds a stack of
+// its own to probe. Every stage's synth runs the same checks over the stacks a stage does build.
+const NO_STACKS: Target = { environments: [], shared: false };
 
 // A plain queue has two known findings: no dead-letter queue, and plain HTTP allowed.
 const PROBE_FINDINGS = ["AwsSolutions-SQS3", "AwsSolutions-SQS4"];
 
 function appWithProbe(): { app: App; stack: Stack; queue: Queue } {
   const app = cdkApp();
-  buildApp(app, STAGE, NO_ENVIRONMENTS);
+  buildApp(app, STAGE, NO_STACKS);
   const stack = new Stack(app, "probe");
   return { app, stack, queue: new Queue(stack, "Queue") };
 }
@@ -62,7 +62,7 @@ describe("buildApp", () => {
 
     it("keeps a value a stack sets itself", () => {
       const app = cdkApp();
-      buildApp(app, STAGE, NO_ENVIRONMENTS);
+      buildApp(app, STAGE, NO_STACKS);
       const stack = new Stack(app, "probe", {
         tags: { Owner: "a-domain-team" },
       });

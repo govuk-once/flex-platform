@@ -22,6 +22,13 @@ export const FRONTDOOR: FrontdoorConfig = {
       clientIds: ["example-app-client"],
     },
   ],
+  testUsers: false,
+};
+
+// A stage's test user pool, which one fixture environment trusts.
+export const TEST_USERS = {
+  issuer: "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_testusers",
+  clientIds: ["test-users-client"],
 };
 
 // An account's zone, named after the account as the platform team names them.
@@ -63,8 +70,12 @@ export const OWN_SECRET_GATEWAY = {
   target: "https://api.udp.example",
 } as const satisfies GatewayConfig;
 
-function frontdoor(environment: string, account: string): FrontdoorConfig {
-  return { ...FRONTDOOR, account, zone: zone(environment, account) };
+function frontdoor(
+  environment: string,
+  account: string,
+  testUsers = false,
+): FrontdoorConfig {
+  return { ...FRONTDOOR, account, zone: zone(environment, account), testUsers };
 }
 
 export function domainAccount(
@@ -87,11 +98,12 @@ export function domainAccount(
 const FIXTURE_DOMAINS = ["domain-a", "domain-b"];
 
 // The real stages' shape: two stages with one environment, one with three, and one environment
-// with two domain accounts, the second hosting no domains, so every loop is exercised.
+// with two domain accounts, the second hosting no domains, so every loop is exercised. platform-prod
+// has a test user pool, which its dev environment trusts.
 export const FIXTURE_STAGES = [
   {
     name: "platform-dev",
-    shared: { account: "100000000001" },
+    shared: { account: "100000000001", testUsers: null },
     environments: [
       {
         name: "sandbox",
@@ -104,7 +116,7 @@ export const FIXTURE_STAGES = [
   },
   {
     name: "platform-staging",
-    shared: { account: "200000000001" },
+    shared: { account: "200000000001", testUsers: null },
     environments: [
       {
         name: "sandbox",
@@ -117,7 +129,7 @@ export const FIXTURE_STAGES = [
   },
   {
     name: "platform-prod",
-    shared: { account: "300000000001" },
+    shared: { account: "300000000001", testUsers: TEST_USERS },
     environments: [
       {
         name: "dev",
@@ -130,7 +142,7 @@ export const FIXTURE_STAGES = [
             THREE_ZONES,
           ),
         ],
-        frontdoor: frontdoor("dev", "300000000002"),
+        frontdoor: frontdoor("dev", "300000000002", true),
       },
       {
         name: "staging",

@@ -4,6 +4,7 @@ import {
   OriginRequestFunction,
   ViewerRequestFunction,
 } from "@repo/frontdoor-infra";
+import type { TrustedIssuer } from "@repo/frontdoor-shared";
 import { sortedEntries } from "@repo/utils/sorted-entries";
 import { CfnOutput, Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
@@ -19,11 +20,15 @@ export function frontdoorStackName(environment: EnvironmentConfig): string {
 }
 
 /**
- * One environment's edge, in its frontdoor account. Nothing it creates is exposed: another stack
+ * One environment's edge, in its frontdoor account, trusting the issuers `trustedIssuers` builds. Nothing it creates is exposed: another stack
  * that reached in would take a dependency on this one.
  */
 export class FrontdoorStack extends Stack {
-  constructor(scope: Construct, environment: EnvironmentConfig) {
+  constructor(
+    scope: Construct,
+    environment: EnvironmentConfig,
+    issuers: readonly TrustedIssuer[],
+  ) {
     super(scope, frontdoorStackName(environment), {
       description: `Flex front door for the ${environment.name} environment`,
       env: { account: environment.frontdoor.account, region: FRONTDOOR_REGION },
@@ -34,12 +39,12 @@ export class FrontdoorStack extends Stack {
 
     const viewerRequest = new ViewerRequestFunction(this, "ViewerRequest", {
       environment: environment.name,
-      issuers: environment.frontdoor.issuers,
+      issuers,
     });
 
     const originRequest = new OriginRequestFunction(this, "OriginRequest", {
       environment: environment.name,
-      issuers: environment.frontdoor.issuers,
+      issuers,
       routes: domainRoutes(environment),
       apiAccounts: environment.domainAccounts.map(({ account }) => account),
     });

@@ -801,5 +801,21 @@
         "type": "AWS::EC2::SecurityGroupEgress"
       }
     ]
+  },
+  {
+    "name": "shared-identity",
+    "account": "743702012480",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "TestUsersPool41BD324E",
+        "type": "AWS::Cognito::UserPool"
+      },
+      {
+        "logicalId": "TestUsersPoolClient07B5037F",
+        "type": "AWS::Cognito::UserPoolClient"
+      }
+    ]
   }
 ]

@@ -26,7 +26,7 @@ const THREE_ZONES: NetworkConfig = {
 export const STAGES: readonly StageConfig[] = [
   {
     name: "platform-dev",
-    shared: { account: "743702012480" },
+    shared: { account: "743702012480", testUsers: null },
     environments: [
       {
         name: "development",
@@ -50,13 +50,14 @@ export const STAGES: readonly StageConfig[] = [
             id: "Z031433615ESLO5K1AH7F",
           },
           issuers: [STAGING_POOL],
+          testUsers: false,
         },
       },
     ],
   },
   {
     name: "platform-staging",
-    shared: { account: "186579591752" },
+    shared: { account: "186579591752", testUsers: null },
     environments: [
       {
         name: "staging",
@@ -80,13 +81,14 @@ export const STAGES: readonly StageConfig[] = [
             id: "Z0462383HSDK7C8IQ6HN",
           },
           issuers: [STAGING_POOL],
+          testUsers: false,
         },
       },
     ],
   },
   {
     name: "platform-prod",
-    shared: { account: "706098201385" },
+    shared: { account: "706098201385", testUsers: null },
     environments: [
       {
         name: "development",
@@ -110,6 +112,7 @@ export const STAGES: readonly StageConfig[] = [
             id: "Z08635081XAI47LT6BSJQ",
           },
           issuers: [STAGING_POOL],
+          testUsers: false,
         },
       },
       {
@@ -134,6 +137,7 @@ export const STAGES: readonly StageConfig[] = [
             id: "Z0490122CGGKQPL28DUH",
           },
           issuers: [STAGING_POOL],
+          testUsers: false,
         },
       },
       {
@@ -158,6 +162,7 @@ export const STAGES: readonly StageConfig[] = [
             id: "Z04221372NJE375QTYYDR",
           },
           issuers: [PRODUCTION_POOL],
+          testUsers: false,
         },
       },
     ],

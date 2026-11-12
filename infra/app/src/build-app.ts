@@ -10,6 +10,7 @@ import { AwsSolutionsChecks } from "cdk-nag";
 
 import { domainName } from "./config/domain-name.ts";
 import type { Target } from "./config/select-target.ts";
+import { trustedIssuers } from "./config/trusted-issuers.ts";
 import type { StageConfig } from "./config/types.ts";
 import { gatewayBundle } from "./gateway-bundle.ts";
 import { DomainStack } from "./stacks/domain.ts";
@@ -19,6 +20,7 @@ import { FrontdoorEdgeLogsStack } from "./stacks/frontdoor-edge-logs.ts";
 import { FrontdoorCallerTokenKeysStack } from "./stacks/frontdoor-keys.ts";
 import { GatewayStack } from "./stacks/gateway.ts";
 import { NetworkStack } from "./stacks/network.ts";
+import { SharedIdentityStack } from "./stacks/shared-identity.ts";
 import { StackTags } from "./tags.ts";
 
 export function buildApp(app: App, stage: StageConfig, target: Target): void {
@@ -32,13 +34,19 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
   );
   Aspects.of(app).add(new StackTags(stage));
 
+  if (target.shared) new SharedIdentityStack(app, stage.shared);
+
   for (const environment of target.environments) {
     const edgeLogs = new FrontdoorEdgeLogsStack(
       app,
       environment,
       ORIGIN_REQUEST_LOG_REGION,
     );
-    const frontdoor = new FrontdoorStack(app, environment);
+    const frontdoor = new FrontdoorStack(
+      app,
+      environment,
+      trustedIssuers(stage, environment),
+    );
 
     frontdoor.addStackDependency(
       edgeLogs,

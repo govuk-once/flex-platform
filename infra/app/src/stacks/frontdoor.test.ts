@@ -55,7 +55,9 @@ describe("FrontdoorStack", () => {
   });
 
   it("builds the edge from the environment's config, reading nothing back from a deployment", () => {
-    const template = Template.fromStack(new FrontdoorStack(cdkApp(), DEV));
+    const template = Template.fromStack(
+      new FrontdoorStack(cdkApp(), DEV, DEV.frontdoor.issuers),
+    );
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.objectLike({
@@ -94,6 +96,29 @@ describe("FrontdoorStack", () => {
     };
     expect(Object.keys(Parameters ?? {})).toEqual(["BootstrapVersion"]);
     expect(Object.keys(Outputs ?? {})).toEqual(["DistributionDomainName"]);
+  });
+
+  // The CloudFront Function's code holds its issuers, as Lambda@Edge's bundle does.
+  it("trusts the stage's test users only in an environment that opts in", () => {
+    const assembly = synthesizedStage(PROD);
+    const functionCode = (environment: string) =>
+      JSON.stringify(
+        Template.fromJSON(
+          assembly.getStackByName(`frontdoor-${environment}`)
+            .template as Record<string, unknown>,
+        ).findResources("AWS::CloudFront::Function"),
+      );
+
+    expect(
+      PROD.environments.map((e) => [e.name, e.frontdoor.testUsers]),
+    ).toEqual([
+      ["dev", true],
+      ["staging", false],
+      ["prod", false],
+    ]);
+    expect(functionCode("dev")).toContain(PROD.shared.testUsers.issuer);
+    expect(functionCode("staging")).not.toContain(PROD.shared.testUsers.issuer);
+    expect(functionCode("prod")).not.toContain(PROD.shared.testUsers.issuer);
   });
 
   it("routes each domain the environment hosts to its host, whichever account and order config lists it in", () => {

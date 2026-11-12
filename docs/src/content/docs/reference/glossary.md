@@ -107,6 +107,12 @@ One of the three copies of the platform the platform team deploys through: platf
 platform-staging and platform-prod. Each has its own accounts, and one or more environments. See
 [Infrastructure](/flex-platform/infrastructure/overview/#stages-and-environments).
 
+## Test user
+
+A user in a stage's test user pool, which software signs in as with a generated password, to test
+an environment from outside the platform. See
+[Test users](/flex-platform/infrastructure/overview/#test-users).
+
 ## Upstream
 
 The system a gateway calls, which holds data a domain needs. It can be another team's API, an

@@ -18,6 +18,7 @@
     "@repo/gateway-infra": "workspace:*",
     "@repo/gateway-service-udp": "workspace:*",
     "@repo/infra-constructs": "workspace:*",
+    "@repo/shared-infra": "workspace:*",
     "@repo/utils": "workspace:*",
     "aws-cdk-lib": "2.275.0",
     "cdk-nag": "3.0.2",

@@ -9,22 +9,27 @@ describe("selectTarget", () => {
   it("builds the whole stage when no target is given", () => {
     expect(selectTarget(PROD, undefined)).toEqual({
       environments: PROD.environments,
+      shared: true,
     });
   });
 
   it("builds one environment's stacks", () => {
     expect(selectTarget(PROD, "staging")).toEqual({
       environments: [PROD.environments[1]],
+      shared: false,
     });
   });
 
-  // The shared account has no stacks to build.
-  it.each(["qa", "shared", "", 42])(
-    "names the known targets for %j",
-    (name) => {
-      expect(() => selectTarget(PROD, name)).toThrow(
-        `Unknown target ${JSON.stringify(name)} for platform-prod. Known targets: dev, staging, prod`,
-      );
-    },
-  );
+  it("builds only the shared account's stacks", () => {
+    expect(selectTarget(PROD, "shared")).toEqual({
+      environments: [],
+      shared: true,
+    });
+  });
+
+  it.each(["qa", "", 42])("names the known targets for %j", (name) => {
+    expect(() => selectTarget(PROD, name)).toThrow(
+      `Unknown target ${JSON.stringify(name)} for platform-prod. Known targets: dev, staging, prod, shared`,
+    );
+  });
 });

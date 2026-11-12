@@ -15,8 +15,8 @@ change you are making.
   Gateway code lives under `gateways/`, and what gateways share lives in `gateways/shared/`.
   Frontdoor code lives under `frontdoor/`, and what its functions share lives in
   `frontdoor/shared/`. A section's CDK constructs live in its own `infra/`, such as
-  `frontdoor/infra`, constructs every section uses in `infra/constructs`, and the CDK app in
-  `infra/app`. A section's `infra/` never imports another section's: only `infra/app` joins them,
+  `frontdoor/infra`, the shared account's in `shared/infra`, constructs every section uses in
+  `infra/constructs`, and the CDK app in `infra/app`. A section's `infra/` never imports another section's: only `infra/app` joins them,
   and lint refuses anything else. See [Infrastructure](/flex-platform/infrastructure/overview/).
 - `@repo/utils` exports one function per module. Each is imported by its own path, such as
   `@repo/utils/sorted-entries`, so a consumer takes only what it uses. Export a module once

@@ -5,6 +5,7 @@ import {
   FIXTURE_STAGES,
   FRONTDOOR,
   OWN_SECRET_GATEWAY,
+  TEST_USERS,
   UDP,
 } from "../../test/helpers.ts";
 import type {
@@ -30,14 +31,14 @@ const ENVIRONMENT: EnvironmentConfig = {
 
 const STAGE: StageConfig = {
   name: "platform-dev",
-  shared: { account: "100000000001" },
+  shared: { account: "100000000001", testUsers: null },
   environments: [ENVIRONMENT],
 };
 
 // A second stage with accounts of its own, to put beside STAGE.
 const OTHER_STAGE: StageConfig = {
   name: "platform-prod",
-  shared: { account: "300000000001" },
+  shared: { account: "300000000001", testUsers: null },
   environments: [
     {
       name: "prod",
@@ -92,6 +93,13 @@ describe("validateStages", () => {
       expect(() =>
         validateStages([withEnvironment({ name: "Sandbox" })]),
       ).toThrow('The platform-dev environment name "Sandbox" must be');
+    });
+
+    // It's the target that builds the shared account's stacks.
+    it("refuses an environment named shared", () => {
+      expect(() =>
+        validateStages([withEnvironment({ name: "shared" })]),
+      ).toThrow("platform-dev: no environment may be named shared");
     });
 
     it("refuses an invalid domain account name", () => {
@@ -219,6 +227,98 @@ describe("validateStages", () => {
     });
   });
 
+  describe("test users", () => {
+    const WITH_POOL: StageConfig = {
+      ...STAGE,
+      shared: { ...STAGE.shared, testUsers: TEST_USERS },
+    };
+
+    function trusting(
+      stage: StageConfig,
+      frontdoor: Partial<FrontdoorConfig>,
+    ): StageConfig {
+      return {
+        ...stage,
+        environments: [
+          { ...ENVIRONMENT, frontdoor: { ...FRONTDOOR, ...frontdoor } },
+        ],
+      };
+    }
+
+    it("accepts an environment that trusts its stage's test users", () => {
+      expect(() =>
+        validateStages([trusting(WITH_POOL, { testUsers: true })]),
+      ).not.toThrow();
+    });
+
+    it("accepts an environment that trusts test users alone", () => {
+      expect(() =>
+        validateStages([trusting(WITH_POOL, { issuers: [], testUsers: true })]),
+      ).not.toThrow();
+    });
+
+    it("holds a stage's test user pool to the rule every issuer is held to", () => {
+      const http = { ...TEST_USERS, issuer: "http://example" };
+      expect(() =>
+        validateStages([
+          { ...STAGE, shared: { ...STAGE.shared, testUsers: http } },
+        ]),
+      ).toThrow(
+        'platform-dev shared test users: the issuer "http://example" must be an https URL',
+      );
+
+      const noClient = { ...TEST_USERS, clientIds: [] };
+      expect(() =>
+        validateStages([
+          { ...STAGE, shared: { ...STAGE.shared, testUsers: noClient } },
+        ]),
+      ).toThrow(
+        `platform-dev shared test users: the issuer ${TEST_USERS.issuer} names no app client`,
+      );
+    });
+
+    it("refuses its stage's test user pool in an environment's issuers", () => {
+      expect(() =>
+        validateStages([
+          trusting(WITH_POOL, { issuers: [...FRONTDOOR.issuers, TEST_USERS] }),
+        ]),
+      ).toThrow(
+        `platform-dev/sandbox: the issuer ${TEST_USERS.issuer} is a test user pool, which an environment trusts only through frontdoor.testUsers`,
+      );
+    });
+
+    it("refuses another stage's test user pool in an environment's issuers", () => {
+      const other: StageConfig = {
+        ...OTHER_STAGE,
+        shared: { ...OTHER_STAGE.shared, testUsers: TEST_USERS },
+      };
+      expect(() =>
+        validateStages([
+          trusting(STAGE, { issuers: [...FRONTDOOR.issuers, TEST_USERS] }),
+          other,
+        ]),
+      ).toThrow(
+        `platform-dev/sandbox: the issuer ${TEST_USERS.issuer} is a test user pool`,
+      );
+    });
+
+    it("refuses trust in test users where the stage has no pool", () => {
+      expect(() =>
+        validateStages([trusting(STAGE, { testUsers: true })]),
+      ).toThrow(
+        "platform-dev/sandbox: the frontdoor trusts test users, but platform-dev names no test user pool",
+      );
+    });
+
+    it("needs an issuer when the environment doesn't trust test users", () => {
+      expect(() =>
+        validateStages([trusting(WITH_POOL, { issuers: [] })]),
+      ).toThrow(
+        "platform-dev/sandbox: the frontdoor needs at least one trusted issuer",
+      );
+    });
+  });
+
   describe("domains", () => {
     function withDomains(
       domains: readonly DomainConfig[],
@@ -298,7 +398,9 @@ describe("validateStages", () => {
       "refuses the account ID %j",
       (sharedAccount) => {
         expect(() =>
-          validateStages([{ ...STAGE, shared: { account: sharedAccount } }]),
+          validateStages([
+            { ...STAGE, shared: { ...STAGE.shared, account: sharedAccount } },
+          ]),
         ).toThrow(
           /platform-dev shared account: .* is not a 12-digit account ID/,
         );
@@ -359,7 +461,10 @@ describe("validateStages", () => {
     it("refuses an account shared between stages", () => {
       const other: StageConfig = {
         ...OTHER_STAGE,
-        shared: { account: ENVIRONMENT.frontdoor.account },
+        shared: {
+          ...OTHER_STAGE.shared,
+          account: ENVIRONMENT.frontdoor.account,
+        },
       };
       expect(() => validateStages([STAGE, other])).toThrow(
         "platform-prod shared account: account 100000000002 is already the platform-dev/sandbox frontdoor account",
