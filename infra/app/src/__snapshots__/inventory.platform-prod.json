@@ -639,10 +639,6 @@
         "type": "AWS::Route53Resolver::FirewallDomainList"
       },
       {
-        "logicalId": "DnsFirewallFailClosed4DBE11D3",
-        "type": "AWS::Route53Resolver::FirewallConfig"
-      },
-      {
         "logicalId": "DnsFirewallQueryLogDeliveryResourcePolicy8350F2DF",
         "type": "AWS::Logs::ResourcePolicy"
       },
@@ -1191,10 +1187,6 @@
         "type": "AWS::Route53Resolver::FirewallDomainList"
       },
       {
-        "logicalId": "DnsFirewallFailClosed4DBE11D3",
-        "type": "AWS::Route53Resolver::FirewallConfig"
-      },
-      {
         "logicalId": "DnsFirewallQueryLogDeliveryResourcePolicy8350F2DF",
         "type": "AWS::Logs::ResourcePolicy"
       },
@@ -1741,10 +1733,6 @@
       {
         "logicalId": "DnsFirewallEveryName79DF0734",
         "type": "AWS::Route53Resolver::FirewallDomainList"
-      },
-      {
-        "logicalId": "DnsFirewallFailClosed4DBE11D3",
-        "type": "AWS::Route53Resolver::FirewallConfig"
       },
       {
         "logicalId": "DnsFirewallQueryLogDeliveryResourcePolicy8350F2DF",
