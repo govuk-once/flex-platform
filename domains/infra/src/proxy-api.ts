@@ -225,9 +225,12 @@ export class ProxyApi extends Construct {
     // that never answers.
     api.node.tryRemoveChild("Endpoint");
 
-    new PlatformLogGroup(this, "ExecutionLogs", {
+    const executionLogs = new PlatformLogGroup(this, "ExecutionLogs", {
       logGroupName: apiExecutionLogGroupName(api.restApiId, STAGE_NAME),
     });
+    // API Gateway's logging role may create log groups. The group exists before the stage can log,
+    // so API Gateway never creates it first, which would fail this one's create.
+    api.deploymentStage.node.addDependency(executionLogs);
 
     Validations.of(api).acknowledge(
       {

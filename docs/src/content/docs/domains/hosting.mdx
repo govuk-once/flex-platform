@@ -98,9 +98,11 @@ ACM generates the certificate's ARN, so the stack writes it to SSM, at
 the certificate is ever replaced, each domain's stack deploys with `--force` to read the new ARN,
 and CloudFormation can't delete the old certificate while a domain's custom domain still uses it.
 
-API Gateway's logging role may write only to the domains' API access log groups,
-`/flex/domain/<environment>/<domain>/api-access`, and to API Gateway's execution log groups. It may
-create none, so it writes only to log groups that already exist, encrypted.
+API Gateway's logging role has AWS's managed policy, `AmazonAPIGatewayPushToCloudWatchLogs`, so it
+may create, write to and read any log group in the account and region. API Gateway refuses a
+logging role with less: it checks the role's effective permissions, so it refuses one scoped to the
+domains' log groups, or one denied `logs:CreateLogGroup`. Every API's log groups are created by its
+own stack instead, before its stage, so API Gateway never creates one.
 
 ## What a domain provides
 
@@ -121,8 +123,8 @@ config keeps its stack until someone deletes it.
 
 The stage is traced with X-Ray, logs errors, and never logs request or response bodies. Its access
 logs go to `/flex/domain/<environment>/<domain>/api-access`, one JSON line per request. Its
-execution logs go to `API-Gateway-Execution-Logs_<api id>/default`, which the stack creates, since
-API Gateway's logging role may not, so it is encrypted and kept for a year. The stage has no
+execution logs go to `API-Gateway-Execution-Logs_<api id>/default`, which the stack creates before
+the stage, so it is encrypted and kept for a year, and API Gateway never creates it first. The stage has no
 throttling of its own, so it shares the account's limits.
 
 ### Network

@@ -50,30 +50,33 @@ describe("ApiGatewayLogging", () => {
     });
   });
 
-  it("may write only to the domains' API log groups, and creates none", () => {
+  it("has AWS's policy for writing logs, which API Gateway requires", () => {
     const { template } = build();
 
     template.resourceCountIs("AWS::Logs::LogGroup", 0);
     template.hasResourceProperties("AWS::IAM::Role", {
+      ManagedPolicyArns: Match.exact([
+        {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              { Ref: "AWS::Partition" },
+              ":iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs",
+            ],
+          ],
+        },
+      ]),
+    });
+  });
+
+  it("may encrypt only through CloudWatch Logs, for the domains' API log groups", () => {
+    build().template.hasResourceProperties("AWS::IAM::Role", {
       Policies: Match.exact([
         {
-          PolicyName: "WriteLogs",
+          PolicyName: "EncryptLogs",
           PolicyDocument: {
             Statement: [
-              {
-                Action: [
-                  "logs:CreateLogStream",
-                  "logs:DescribeLogStreams",
-                  "logs:PutLogEvents",
-                ],
-                Effect: "Allow",
-                Resource: [`${ACCESS_LOGS}:*`, `${EXECUTION_LOGS}:*`],
-              },
-              {
-                Action: "logs:DescribeLogGroups",
-                Effect: "Allow",
-                Resource: "*",
-              },
               {
                 Action: ["kms:Encrypt", "kms:GenerateDataKey*"],
                 Effect: "Allow",
