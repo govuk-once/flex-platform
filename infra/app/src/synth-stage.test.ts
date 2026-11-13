@@ -56,7 +56,11 @@ describe("synthStage", () => {
     const app = cdkApp({ stage: prod.name, target: "shared" });
     synthStage(app, FIXTURE_STAGES);
 
-    expect(stackNames(app.synth())).toEqual(["shared-identity"]);
+    expect(stackNames(app.synth())).toEqual([
+      "shared-identity",
+      "shared-release",
+      "shared-management",
+    ]);
   });
 
   it("asks for a stage when none is given", () => {

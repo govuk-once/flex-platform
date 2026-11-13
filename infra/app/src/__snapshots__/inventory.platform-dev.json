@@ -821,5 +821,147 @@
         "type": "AWS::Cognito::UserPoolClient"
       }
     ]
+  },
+  {
+    "name": "shared-management",
+    "account": "743702012480",
+    "region": "us-east-1",
+    "dependencies": [
+      "shared-release"
+    ],
+    "resources": [
+      {
+        "logicalId": "EdgeAccessLogDelivery3D5940B7",
+        "type": "AWS::Logs::Delivery"
+      },
+      {
+        "logicalId": "EdgeAccessLogDestinationE5F9C7E7",
+        "type": "AWS::Logs::DeliveryDestination"
+      },
+      {
+        "logicalId": "EdgeAccessLogPolicyC29106C6",
+        "type": "AWS::Logs::ResourcePolicy"
+      },
+      {
+        "logicalId": "EdgeAccessLogSource9F478627",
+        "type": "AWS::Logs::DeliverySource"
+      },
+      {
+        "logicalId": "EdgeAccessLogsLogGroupC3051F4B",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "EdgeAliasIpv44B7054A7",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeAliasIpv6DD2856F2",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeCaaE2EE557A",
+        "type": "AWS::Route53::RecordSet"
+      },
+      {
+        "logicalId": "EdgeCertificateE929CC3D",
+        "type": "AWS::CertificateManager::Certificate"
+      },
+      {
+        "logicalId": "EdgeCiOriginAccessControl8295660E",
+        "type": "AWS::CloudFront::OriginAccessControl"
+      },
+      {
+        "logicalId": "EdgeCiOriginRequest628BA3AF",
+        "type": "AWS::CloudFront::OriginRequestPolicy"
+      },
+      {
+        "logicalId": "EdgeDistribution0060737B",
+        "type": "AWS::CloudFront::Distribution"
+      },
+      {
+        "logicalId": "EdgeDistributionMonitoringSubscription5F8A9097",
+        "type": "AWS::CloudFront::MonitoringSubscription"
+      },
+      {
+        "logicalId": "EdgeResponseHeadersPolicyD0EDE4A5",
+        "type": "AWS::CloudFront::ResponseHeadersPolicy"
+      },
+      {
+        "logicalId": "EdgeWebAcl44C47E06",
+        "type": "AWS::WAFv2::WebACL"
+      },
+      {
+        "logicalId": "EdgeWebAclLogging8385F5A7",
+        "type": "AWS::WAFv2::LoggingConfiguration"
+      },
+      {
+        "logicalId": "EdgeWebAclLogsLogGroupCC9BE8DF",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "ViewerRequestFunction272348D7",
+        "type": "AWS::CloudFront::Function"
+      },
+      {
+        "logicalId": "ViewerRequestLogsLogGroupD165548C",
+        "type": "AWS::Logs::LogGroup"
+      }
+    ]
+  },
+  {
+    "name": "shared-release",
+    "account": "743702012480",
+    "region": "eu-west-2",
+    "dependencies": [],
+    "resources": [
+      {
+        "logicalId": "AWS679f53fac002430cb0da5b7982bd22872D164C4C",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "CiFunction29129BCA",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "CiFunctionFunctionUrl7CB2CF21",
+        "type": "AWS::Lambda::Url"
+      },
+      {
+        "logicalId": "CiFunctionInvokeFromCloudFront7D1E52D5",
+        "type": "AWS::Lambda::Permission"
+      },
+      {
+        "logicalId": "CiFunctionInvokeUrlFromCloudFront8D949321",
+        "type": "AWS::Lambda::Permission"
+      },
+      {
+        "logicalId": "CiLogsLogGroupD52664F2",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "CiRoleBD61905B",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "CrossRegionLogsLogGroup9D681D96",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "CrossRegionRole8F289DB2",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "CrossRegionuseast1sharedcioriginhost6821D5F2",
+        "type": "Custom::CrossRegionParameter"
+      },
+      {
+        "logicalId": "LogGroupKeyD49CF390",
+        "type": "AWS::KMS::Key"
+      }
+    ]
   }
 ]
