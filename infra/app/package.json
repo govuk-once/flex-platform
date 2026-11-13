@@ -30,7 +30,7 @@
     "@repo/frontdoor-origin-request": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "aws-cdk": "2.1147.0",
+    "aws-cdk": "2.1148.0",
     "eslint": "10.14.0",
     "tsx": "4.23.15",
     "vitest": "5.1.0"
