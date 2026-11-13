@@ -29,12 +29,12 @@ describe("parseEnvelope", () => {
   });
 
   it("leaves a missing token to the token step, which refuses it as UNAUTHENTICATED", () => {
-    expect(parseEnvelope({ operation: "ping", input: {} }).secure).toBe(
-      undefined,
-    );
+    expect(
+      parseEnvelope({ operation: "ping", input: {} }).secure,
+    ).toBeUndefined();
     expect(
       parseEnvelope({ operation: "ping", input: {}, secure: {} }).secure?.token,
-    ).toBe(undefined);
+    ).toBeUndefined();
   });
 
   it("rejects input: null", () => {

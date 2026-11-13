@@ -85,6 +85,52 @@ function pathSteps(
   return steps;
 }
 
+// The upstream name a field maps to, once the field and its mapping are ones a request can be
+// built from.
+function upstreamName(
+  context: string,
+  field: string,
+  mapping: ParameterMapping,
+): string {
+  if (field.length === 0) {
+    throw new TypeError(`${context}: parameter fields must be non-empty`);
+  }
+  if (field === PAYLOAD_FIELD) {
+    throw new TypeError(
+      `${context}: "${PAYLOAD_FIELD}" is the request body and cannot be a parameter`,
+    );
+  }
+  if (mapping.name?.length === 0) {
+    throw new TypeError(
+      `${context}: parameter "${field}" has an empty upstream name`,
+    );
+  }
+  // Not reachable from typed configuration; guards a JavaScript caller.
+  if (!LOCATIONS.has(mapping.in)) {
+    throw new TypeError(
+      `${context}: parameter "${field}" has unknown location "${String(mapping.in)}"`,
+    );
+  }
+
+  return mapping.name ?? field;
+}
+
+// One field per upstream name, so no request depends on which of two fields was read last.
+function bindOnce(
+  context: string,
+  bindings: Map<string, string>,
+  key: string,
+  field: string,
+  target: string,
+): void {
+  if (bindings.has(key)) {
+    throw new TypeError(
+      `${context}: ${target} is supplied by more than one field`,
+    );
+  }
+  bindings.set(key, field);
+}
+
 function compileParameters(
   context: string,
   upstream: ParsedUpstream,
@@ -96,62 +142,30 @@ function compileParameters(
   const headers = new Map<string, string>();
 
   for (const [field, mapping] of Object.entries(parameters ?? {})) {
-    if (field.length === 0) {
-      throw new TypeError(`${context}: parameter fields must be non-empty`);
-    }
-    if (field === PAYLOAD_FIELD) {
-      throw new TypeError(
-        `${context}: "${PAYLOAD_FIELD}" is the request body and cannot be a parameter`,
-      );
-    }
-    if (mapping.name?.length === 0) {
-      throw new TypeError(
-        `${context}: parameter "${field}" has an empty upstream name`,
-      );
-    }
-    const name = mapping.name ?? field;
-
-    // Not reachable from typed configuration; guards a JavaScript caller.
-    if (!LOCATIONS.has(mapping.in)) {
-      throw new TypeError(
-        `${context}: parameter "${field}" has unknown location "${String(mapping.in)}"`,
-      );
-    }
+    const name = upstreamName(context, field, mapping);
     if (mapping.in === "path") {
       if (!upstream.params.includes(name)) {
         throw new TypeError(
           `${context}: parameter "${field}" names path parameter "{${name}}", which is not in the template`,
         );
       }
-      if (params.has(name)) {
-        throw new TypeError(
-          `${context}: path parameter "{${name}}" is supplied by more than one field`,
-        );
-      }
-      params.set(name, field);
+
+      bindOnce(context, params, name, field, `path parameter "{${name}}"`);
     } else if (mapping.in === "query") {
-      if (query.has(name)) {
-        throw new TypeError(
-          `${context}: query parameter "${name}" is supplied by more than one field`,
-        );
-      }
-      query.set(name, field);
+      bindOnce(context, query, name, field, `query parameter "${name}"`);
     } else {
       const header = normaliseHeaderName(
         name,
         `${context} parameter "${field}"`,
       );
+
       if (reservedHeaders.has(header)) {
         throw new TypeError(
           `${context}: parameter "${field}" maps to header "${name}", which is reserved by the driver`,
         );
       }
-      if (headers.has(header)) {
-        throw new TypeError(
-          `${context}: header "${name}" is supplied by more than one field`,
-        );
-      }
-      headers.set(header, field);
+
+      bindOnce(context, headers, header, field, `header "${name}"`);
     }
   }
 
@@ -166,6 +180,101 @@ function compileParameters(
       PAYLOAD_FIELD,
     ]),
   };
+}
+
+// Reads an input field the caller set, never one it inherits.
+type ReadField = (field: string) => unknown;
+
+function buildPath(
+  context: string,
+  steps: readonly PathStep[],
+  read: ReadField,
+): string {
+  let path = "";
+
+  for (const step of steps) {
+    if (step.kind === "literal") {
+      path += step.value;
+      continue;
+    }
+
+    const value = read(step.field);
+    if (!isScalar(value)) {
+      throw new GatewayError(
+        "INTERNAL",
+        `${context}: path parameter "${step.name}" needs a scalar input field "${step.field}"`,
+      );
+    }
+
+    path += encodePathParam(
+      String(value),
+      `${context} path parameter "${step.name}"`,
+    );
+  }
+
+  return path;
+}
+
+// Null-prototype dictionaries, here and for headers: an upstream name such as "__proto__" must
+// become an own property, not an attempt to set the prototype that silently drops the value.
+function queryValues(
+  context: string,
+  query: ReadonlyMap<string, string>,
+  read: ReadField,
+): Record<string, QueryValue> {
+  const values = Object.create(null) as Record<string, QueryValue>;
+
+  for (const [param, field] of query) {
+    const value = read(field);
+    if (value === undefined || value === null) continue;
+    if (!isQueryValue(value)) {
+      throw new GatewayError(
+        "INTERNAL",
+        `${context}: query parameter "${param}" needs a scalar or array of scalars in input field "${field}"`,
+      );
+    }
+    values[param] = value;
+  }
+
+  return values;
+}
+
+function headerValues(
+  context: string,
+  headers: ReadonlyMap<string, string>,
+  read: ReadField,
+): Record<string, string> {
+  const values = Object.create(null) as Record<string, string>;
+
+  for (const [header, field] of headers) {
+    const value = read(field);
+    if (value === undefined || value === null) continue;
+    if (!isScalar(value)) {
+      throw new GatewayError(
+        "INTERNAL",
+        `${context}: header "${header}" needs a scalar input field "${field}"`,
+      );
+    }
+    values[header] = String(value);
+  }
+
+  return values;
+}
+
+function bodyOf(
+  context: string,
+  method: ParsedUpstream["method"],
+  read: ReadField,
+): unknown {
+  const body = read(PAYLOAD_FIELD);
+  if (body !== undefined && !METHODS_WITH_BODY.has(method)) {
+    throw new GatewayError(
+      "INTERNAL",
+      `${context}: ${method} requests cannot carry a "${PAYLOAD_FIELD}"`,
+    );
+  }
+
+  return body;
 }
 
 // `reservedHeaders` holds lowercased names the driver keeps for itself, those its
@@ -190,8 +299,6 @@ export function compileOperation(
     reservedHeaders,
   );
 
-  const acceptsBody = METHODS_WITH_BODY.has(upstream.method);
-
   function prepare(input: unknown): OpenApiRestCall {
     if (!isRecord(input)) {
       throw new GatewayError("INTERNAL", `${context}: input must be an object`);
@@ -200,80 +307,28 @@ export function compileOperation(
     // must read as absent rather than as Object.prototype's function.
     const read = (field: string): unknown => ownValue(input, field);
 
-    let path = "";
-    for (const step of steps) {
-      if (step.kind === "literal") {
-        path += step.value;
-        continue;
-      }
-      const value = read(step.field);
-      if (!isScalar(value)) {
-        throw new GatewayError(
-          "INTERNAL",
-          `${context}: path parameter "${step.name}" needs a scalar input field "${step.field}"`,
-        );
-      }
-      path += encodePathParam(
-        String(value),
-        `${context} path parameter "${step.name}"`,
-      );
-    }
-
-    // Null-prototype dictionaries: an upstream name such as "__proto__" must become an own
-    // property, not an attempt to set the prototype that silently drops the value.
-    const queryValues = Object.create(null) as Record<string, QueryValue>;
-    for (const [param, field] of query) {
-      const value = read(field);
-      if (value === undefined || value === null) continue;
-      if (!isQueryValue(value)) {
-        throw new GatewayError(
-          "INTERNAL",
-          `${context}: query parameter "${param}" needs a scalar or array of scalars in input field "${field}"`,
-        );
-      }
-      queryValues[param] = value;
-    }
-
-    const headerValues = Object.create(null) as Record<string, string>;
-    for (const [header, field] of headers) {
-      const value = read(field);
-      if (value === undefined || value === null) continue;
-      if (!isScalar(value)) {
-        throw new GatewayError(
-          "INTERNAL",
-          `${context}: header "${header}" needs a scalar input field "${field}"`,
-        );
-      }
-      headerValues[header] = String(value);
-    }
-
-    let body: unknown;
-    if (Object.hasOwn(input, PAYLOAD_FIELD)) {
-      body = input[PAYLOAD_FIELD];
-      if (body !== undefined && !acceptsBody) {
-        throw new GatewayError(
-          "INTERNAL",
-          `${context}: ${upstream.method} requests cannot carry a "${PAYLOAD_FIELD}"`,
-        );
-      }
-    }
+    const path = buildPath(context, steps, read);
+    const queryParams = queryValues(context, query, read);
+    const headerParams = headerValues(context, headers, read);
+    const body = bodyOf(context, upstream.method, read);
 
     // Counted, never named: a schema that allows additional properties lets the caller choose
     // the names, and the message is logged.
     const unmapped = Object.keys(input).filter((key) => !recognised.has(key));
     if (unmapped.length > 0) {
+      const fields = unmapped.length === 1 ? "field is" : "fields are";
       throw new GatewayError(
         "INTERNAL",
-        `${context}: ${unmapped.length} input ${unmapped.length === 1 ? "field is" : "fields are"} not mapped to the upstream request`,
+        `${context}: ${unmapped.length} input ${fields} not mapped to the upstream request`,
       );
     }
 
     return {
       method: upstream.method,
       path,
-      ...(Object.keys(queryValues).length > 0 ? { query: queryValues } : {}),
-      ...(Object.keys(headerValues).length > 0
-        ? { headers: headerValues }
+      ...(Object.keys(queryParams).length > 0 ? { query: queryParams } : {}),
+      ...(Object.keys(headerParams).length > 0
+        ? { headers: headerParams }
         : {}),
       ...(body !== undefined ? { body } : {}),
     };
