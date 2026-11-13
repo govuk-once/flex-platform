@@ -12,8 +12,10 @@ This page describes the app and the rules every stack added to it follows.
 Infrastructure lives with the section it belongs to. A section's constructs are in its own
 `infra/` package, such as `frontdoor/infra`, and the shared account's are in `shared/infra`.
 Constructs and checks more than one section uses are in
-`infra/constructs`, the network's among them, since domains and gateways both run in it. The app,
-its config and its stacks are in `infra/app`.
+`infra/constructs`, the network's among them, since domains and gateways both run in it. So are
+the parts of a CloudFront distribution that aren't particular to the Frontdoor: the web ACL, a
+CloudFront Function with its log group, the response headers, the access logs, and the
+certificate and records at a zone's apex. The app, its config and its stacks are in `infra/app`.
 
 Imports run one way, so there are no cycles: `infra/constructs`, then a section's `infra/`, then
 `infra/app`. A section's `infra/` package imports `@repo/infra-constructs`, `@repo/utils` and its
