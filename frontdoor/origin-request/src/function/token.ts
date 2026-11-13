@@ -2,8 +2,8 @@
 // what proves it: the signature against the issuer's published keys, and every claim the platform
 // relies on.
 
+import { isCanonicalBase64url } from "@repo/cloudfront-js-utils/is-canonical-base64url";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
-import { isCanonicalBase64url } from "@repo/frontdoor-shared";
 import {
   JwtExpiredError,
   JwtInvalidSignatureAlgorithmError,

@@ -344,6 +344,9 @@ importers:
       '@aws-sdk/client-ssm':
         specifier: 3.1162.0
         version: 3.1162.0
+      '@repo/cloudfront-js-utils':
+        specifier: workspace:*
+        version: link:../../packages/cloudfront-js-utils
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../shared
@@ -399,18 +402,15 @@ importers:
 
   frontdoor/viewer-request:
     dependencies:
+      '@repo/cloudfront-function':
+        specifier: workspace:*
+        version: link:../../packages/cloudfront-function
+      '@repo/cloudfront-js-utils':
+        specifier: workspace:*
+        version: link:../../packages/cloudfront-js-utils
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../shared
-      '@repo/utils':
-        specifier: workspace:*
-        version: link:../../packages/utils
-      acorn:
-        specifier: 8.19.0
-        version: 8.19.0
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -659,9 +659,9 @@ importers:
 
   gateways/shared/core:
     dependencies:
-      '@repo/utils':
+      '@repo/cloudfront-js-utils':
         specifier: workspace:*
-        version: link:../../../packages/utils
+        version: link:../../../packages/cloudfront-js-utils
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -721,6 +721,9 @@ importers:
 
   infra/app:
     dependencies:
+      '@repo/cloudfront-js-utils':
+        specifier: workspace:*
+        version: link:../../packages/cloudfront-js-utils
       '@repo/domain-infra':
         specifier: workspace:*
         version: link:../../domains/infra
@@ -807,6 +810,49 @@ importers:
       cdk-nag:
         specifier: 3.0.2
         version: 3.0.2(aws-cdk-lib@2.275.0(constructs@10.8.1))(constructs@10.8.1)
+      eslint:
+        specifier: 10.14.0
+        version: 10.14.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.1.0
+        version: 5.1.0(@types/node@24.19.2)(@vitest/coverage-v8@5.1.0)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/cloudfront-function:
+    dependencies:
+      acorn:
+        specifier: 8.19.0
+        version: 8.19.0
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../vitest-config
+      eslint:
+        specifier: 10.14.0
+        version: 10.14.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.1.0
+        version: 5.1.0(@types/node@24.19.2)(@vitest/coverage-v8@5.1.0)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/cloudfront-js-utils:
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../vitest-config
       eslint:
         specifier: 10.14.0
         version: 10.14.0(jiti@2.7.0)(supports-color@7.2.0)

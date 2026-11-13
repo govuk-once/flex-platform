@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isCanonicalBase64url } from "./canonical-base64url.ts";
+import { isCanonicalBase64url } from "./is-canonical-base64url.ts";
 
 describe("isCanonicalBase64url", () => {
   it.each([[[1]], [[1, 2]], [[1, 2, 3]], [[255, 255]], [[255, 255, 255, 255]]])(

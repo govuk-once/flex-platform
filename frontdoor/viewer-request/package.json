@@ -12,10 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@repo/frontdoor-shared": "workspace:*",
-    "@repo/utils": "workspace:*",
-    "acorn": "8.19.0",
-    "esbuild": "0.28.2"
+    "@repo/cloudfront-function": "workspace:*",
+    "@repo/cloudfront-js-utils": "workspace:*",
+    "@repo/frontdoor-shared": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

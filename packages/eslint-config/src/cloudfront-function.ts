@@ -45,7 +45,8 @@ export function cloudfrontFunction(
   const allowed = [
     String.raw`\.{1,2}/`,
     "crypto$",
-    ...allowedImports.map((name) => `${escapeRegExp(name)}$`),
+    // A package by its name, or any module of it.
+    ...allowedImports.map((name) => `${escapeRegExp(name)}(/|$)`),
   ];
   return {
     rules: {

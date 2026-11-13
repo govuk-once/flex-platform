@@ -1,4 +1,4 @@
-import { traceIdFor } from "@repo/frontdoor-shared";
+import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 
 const TRACE_ID = /^1-[0-9a-f]{8}-[0-9a-f]{24}$/;
 

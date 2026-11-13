@@ -191,8 +191,9 @@ for an integration does not mean that integration is implemented.
    See [validators](/flex-platform/codegen/overview/#validators).
 
 10. **Keep shared types independent of execution.** `@repo/gateway-core` depends only on
-    `@repo/utils`, which depends on no other workspace package, so consumers can name envelopes
-    and error codes without installing the runtime or generator. Parsing and `GatewayError` belong
+    `@repo/cloudfront-js-utils`, for the rule a name follows, which depends on no other workspace
+    package, so consumers can name envelopes and error codes without installing the runtime or
+    generator. Parsing and `GatewayError` belong
     in the runtime.
     - Import a shared type from the package that declares it. No package re-exports another's
       types, and every package that uses one declares the dependency itself.

@@ -89,16 +89,24 @@ creates it first, and the function's name never changes. See
 
 The trusted issuers and their app clients are baked into the function for each environment by
 `buildViewerRequestFunction`. The domain list isn't: a few hundred names would pass CloudFront's
-size limit. It bundles for the `cloudfront-js-2.0` runtime, parses the result to check it declares
+size limit. It builds with `buildCloudFrontFunction`, from `@repo/cloudfront-function/build`,
+which bundles for the `cloudfront-js-2.0` runtime, parses the result to check it declares
 `function handler` at the top level, and refuses a function over CloudFront's 10 KB limit.
 
-The trace ID, the reading of `Authorization` and the encoding check are in
-`@repo/frontdoor-shared`, which Lambda@Edge uses too, so the two functions can't disagree on any
-of them. The function bundles that package, so it is held to the same rules. esbuild rewrites
-syntax the runtime lacks, but not built-ins, so lint refuses what the runtime doesn't have: `Map`,
-`Set`, `URL`, timers, `process`, `for...of`, any `console` method but a one-argument `log`, and
-imports other than `crypto`, `isPlatformName` from `@repo/utils` and `@repo/frontdoor-shared`.
-These rules are `@repo/eslint-config`'s `cloudfrontFunction` preset, which both packages use.
+What is particular to a CloudFront Function is in `@repo/cloudfront-function`: the event's types,
+the checks of a repeated header and of a JSON body, the refusals, and the log line. The generic
+functions it uses are in `@repo/cloudfront-js-utils`: the trace ID, the encoding check, the
+decoding of a token's segments, the check of a path, and the rule a name follows. The reading of
+`Authorization` is in `@repo/frontdoor-shared`. Lambda@Edge uses the trace ID, the encoding check
+and the reading of `Authorization` too, so the two functions can't disagree on any of them.
+
+The function bundles what it imports from those packages, so that code is held to the same rules.
+esbuild rewrites syntax the runtime lacks, but not built-ins, so lint refuses what the runtime
+doesn't have: `Map`, `Set`, `URL`, timers, `process`, `for...of`, any `console` method but a
+one-argument `log`, and any import but `crypto` and the packages the function's lint config
+names. These rules are `@repo/eslint-config`'s `cloudfrontFunction` preset, which
+`@repo/cloudfront-js-utils`, `@repo/frontdoor-shared` and the function code in
+`@repo/cloudfront-function` all use throughout.
 
 The package's tests run the built bundle in Node. That proves the bundling and the behaviour. The
 lint rules keep to what CloudFront's runtime has, and the first request after a deploy proves the

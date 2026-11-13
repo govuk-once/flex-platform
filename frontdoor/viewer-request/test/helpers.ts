@@ -1,8 +1,6 @@
-import type {
-  FieldValue,
-  ViewerRequestConfig,
-  ViewerRequestEvent,
-} from "../src/function/types.ts";
+import type { FieldValue, ViewerRequestEvent } from "@repo/cloudfront-function";
+
+import type { ViewerRequestConfig } from "../src/function/types.ts";
 
 export const ISSUER =
   "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_example";

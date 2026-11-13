@@ -1,6 +1,6 @@
-// Shared shapes, error metadata and gateway names, depending only on @repo/utils. Consumers can
-// name the wire contract without installing the runtime. Parsing and GatewayError remain in the
-// runtime.
+// Shared shapes, error metadata and gateway names, depending only on @repo/cloudfront-js-utils.
+// Consumers can name the wire contract without installing the runtime. Parsing and GatewayError
+// remain in the runtime.
 export type {
   DriverContext,
   DriverLogFields,

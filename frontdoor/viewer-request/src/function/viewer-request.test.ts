@@ -1,4 +1,5 @@
-import { traceIdFor } from "@repo/frontdoor-shared";
+import type { CloudFrontResponse } from "@repo/cloudfront-function";
+import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TestHeaders } from "../../test/helpers.ts";
@@ -9,7 +10,6 @@ import {
   token,
   viewerRequestEvent,
 } from "../../test/helpers.ts";
-import type { CloudFrontResponse } from "./types.ts";
 import { viewerRequest } from "./viewer-request.ts";
 
 const TRACE_ID = traceIdFor(REQUEST_ID, NOW);

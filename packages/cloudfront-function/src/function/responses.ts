@@ -1,6 +1,7 @@
-import type { CloudFrontResponse } from "./types.ts";
+import type { CloudFrontResponse } from "./event.ts";
 
-// What kind of failure it is, which tells the app how to handle it. The status says which one.
+// What a function answers when it refuses a request, in one shape wherever it runs. The type is
+// what kind of failure it is, which tells the caller how to handle it. The status says which one.
 type ErrorType = "auth_error" | "client_error";
 
 export function methodNotAllowed(
@@ -17,7 +18,7 @@ export function methodNotAllowed(
   return response;
 }
 
-// The app relies on this 401 exactly, so it never changes.
+// The GOV.UK app relies on the Frontdoor's 401 exactly, so it never changes.
 export function unauthorized(traceId: string): CloudFrontResponse {
   return rejection(401, "Unauthorized", "auth_error", traceId);
 }

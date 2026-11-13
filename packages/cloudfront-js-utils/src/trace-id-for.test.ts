@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { traceIdFor } from "./trace-id.ts";
+import { traceIdFor } from "./trace-id-for.ts";
 
 const NOW = 1_800_000_000;
 

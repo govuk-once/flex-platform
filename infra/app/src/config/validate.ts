@@ -1,3 +1,4 @@
+import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
 import { executionRoleName, ROLE_NAME_LENGTH } from "@repo/domain-infra";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
 import { gatewayFunctionName } from "@repo/gateway-core";
@@ -7,7 +8,6 @@ import {
   NETWORK_REGION,
   networkZones,
 } from "@repo/infra-constructs";
-import { isPlatformName } from "@repo/utils/is-platform-name";
 
 import { domainName } from "./domain-name.ts";
 import { SHARED_TARGET } from "./select-target.ts";

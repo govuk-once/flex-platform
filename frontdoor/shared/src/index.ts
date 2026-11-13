@@ -12,6 +12,4 @@ export {
   SIGNING_KEY_PURPOSE,
   SIGNING_KEY_REGION,
 } from "./caller-token.ts";
-export { isCanonicalBase64url } from "./canonical-base64url.ts";
-export { traceIdFor } from "./trace-id.ts";
 export type { TrustedIssuer } from "./trusted-issuer.ts";

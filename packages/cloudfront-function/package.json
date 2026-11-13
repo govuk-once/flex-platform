@@ -1,0 +1,26 @@
+{
+  "name": "@repo/cloudfront-function",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/function/index.ts",
+    "./build": "./src/build/build.ts"
+  },
+  "scripts": {
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "acorn": "8.19.0",
+    "esbuild": "0.28.2"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "eslint": "10.14.0",
+    "vitest": "5.1.0"
+  }
+}
