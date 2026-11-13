@@ -88,7 +88,7 @@ export function buildNetwork(
   const endpoints = new InterfaceEndpoints(stack, "Endpoints", {
     vpc,
     subnets: subnets.isolated,
-    invokableFunctions: "gateway-sandbox-*",
+    invokableFunctions: "gateway-sandbox-*:live",
     readableObjects: [KEYS_OBJECT],
     readableSecrets: [UPSTREAM_SECRET],
     assumableRoles: [UPSTREAM_ROLE],

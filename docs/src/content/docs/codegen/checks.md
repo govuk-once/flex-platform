@@ -52,7 +52,8 @@ fixed, which would reject an array that types its first elements by position and
 `items`.
 
 A schema with asynchronous validation is always rejected, because the dispatcher validates
-synchronously.
+synchronously. It counts only `true` as a pass, so a validator that answered with a promise
+would have every value refused.
 
 ## While writing
 

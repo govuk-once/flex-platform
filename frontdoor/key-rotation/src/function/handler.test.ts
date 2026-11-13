@@ -53,6 +53,31 @@ describe("createHandler", () => {
     expect(ports.publishedKids()).not.toContain("20261106T120000Z");
   });
 
+  it("logs a key that fails its check by its ID, AWS's name for the error, and whether it was held", async () => {
+    const ports = new MemoryPorts();
+    await createHandler(ports, () => NOW)({});
+    const lines = captureLogs();
+    ports.undecryptable = "20261106T120000Z";
+
+    await expect(
+      createHandler(ports, () => new Date("2026-11-06T12:15:00Z"))({}),
+    ).rejects.toThrow("failed its check");
+    expect(lines).toEqual([
+      {
+        level: "ERROR",
+        message: "telemetry",
+        telemetry: {
+          event: "key_check_failed",
+          details: {
+            kid: "20261106T120000Z",
+            reason: "InvalidCiphertextException",
+            stored: true,
+          },
+        },
+      },
+    ]);
+  });
+
   it("refuses a revocation that names no key ID", async () => {
     const lines = captureLogs();
     await expect(

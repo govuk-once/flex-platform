@@ -7,12 +7,15 @@ export interface GatewaySecretProps {
   readonly secretName: string;
   /** The role of the gateway that reads it. */
   readonly readerArn: string;
+  /** The network's `secretsmanager` endpoint, by ID. */
+  readonly endpointId: string;
 }
 
 /**
  * A gateway's own secret, for an upstream that doesn't hold one. It is created empty, and a person
  * puts its value: a gateway whose secret has none fails as it starts. Only the gateway's role may
- * read it, whatever any other policy allows. It is retained, since it holds what a person put.
+ * read it, and only through the network's endpoint, whatever any other policy allows. It is
+ * retained, since it holds what a person put.
  */
 export class GatewaySecret extends Construct {
   public readonly secret: Secret;
@@ -39,6 +42,21 @@ export class GatewaySecret extends Construct {
         resources: ["*"],
         conditions: {
           StringNotEquals: { "aws:PrincipalArn": props.readerArn },
+        },
+      }),
+    );
+    // The role's own policy refuses a read made any other way than the endpoint. The secret
+    // refuses it too, so the role's credentials read nothing from outside the network even if
+    // that policy is changed. A statement of its own, since one statement's conditions must all
+    // hold for it to refuse.
+    this.secret.addToResourcePolicy(
+      new PolicyStatement({
+        effect: Effect.DENY,
+        principals: [new AnyPrincipal()],
+        actions: ["secretsmanager:GetSecretValue"],
+        resources: ["*"],
+        conditions: {
+          StringNotEquals: { "aws:SourceVpce": props.endpointId },
         },
       }),
     );

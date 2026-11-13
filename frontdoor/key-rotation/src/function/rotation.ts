@@ -48,6 +48,8 @@ export interface RotationPorts {
   writeState(state: KeyState): Promise<void>;
   /** Makes a key pair, its private key encrypted for the edge. */
   generate(kid: string): Promise<GeneratedKey>;
+  /** Fails unless KMS can decrypt the private key, as the edge will ask it to. */
+  check(key: Pick<StoredKey, "kid" | "privateKey">): Promise<void>;
   /** Writes the public key set where every gateway reads it. */
   publish(keySet: string): Promise<void>;
   /** Writes the keys the edge signs with. */
@@ -70,6 +72,20 @@ export interface RotationEvent {
   readonly kid: string;
   /** For a key made, when it starts to sign, in seconds since the epoch. */
   readonly signsFrom?: number;
+}
+
+/** A key KMS wouldn't decrypt when a run checked it. */
+export class KeyCheckFailed extends Error {
+  constructor(
+    readonly kid: string,
+    /** AWS's name for the error, such as InvalidCiphertextException. */
+    readonly reason: string,
+    /** Whether rotation held the key before this run. It passed this check when it was made. */
+    readonly stored: boolean,
+    cause: unknown,
+  ) {
+    super(`The key ${kid} failed its check: ${reason}`, { cause });
+  }
 }
 
 export interface RotationReport {
@@ -171,6 +187,22 @@ export async function rotate(
   revokedKeys = revokedKeys.filter(
     ({ revokedAt }) => nowSeconds - revokedAt < seconds(REVOKED_KEPT_MS),
   );
+
+  // Every key the edge is to hold, on every run and before anything is written: a key made here
+  // that fails is never kept, and one that fails later stops the run until it is revoked.
+  for (const key of keys) {
+    if (key.signsUntil !== undefined && key.signsUntil <= nowSeconds) continue;
+    try {
+      await ports.check(key);
+    } catch (error) {
+      throw new KeyCheckFailed(
+        key.kid,
+        error instanceof Error ? error.name : typeof error,
+        state.keys.some(({ kid }) => kid === key.kid),
+        error,
+      );
+    }
+  }
 
   // Kept first, so a key made here is never lost. Published before the edge is given it, so no
   // edge signs with a key a gateway can't have read. Every run writes what each reader should

@@ -56,6 +56,28 @@ describe("KeyRotation", () => {
     });
   });
 
+  it("alarms on runs that fail in two of three periods, with no action", () => {
+    build().template.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      AlarmName: "frontdoor-sandbox-key-rotation-failed",
+      Namespace: "AWS/Lambda",
+      MetricName: "Errors",
+      Dimensions: [
+        {
+          Name: "FunctionName",
+          Value: { Ref: Match.stringLikeRegexp("^KeyRotationFunction") },
+        },
+      ],
+      Statistic: "Sum",
+      Period: 900,
+      Threshold: 1,
+      ComparisonOperator: "GreaterThanOrEqualToThreshold",
+      EvaluationPeriods: 3,
+      DatapointsToAlarm: 2,
+      TreatMissingData: "notBreaching",
+      AlarmActions: Match.absent(),
+    });
+  });
+
   it("makes key pairs only under the signing key, by alias, for the caller token's purpose", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "frontdoor-sandbox-key-rotation",
@@ -82,6 +104,39 @@ describe("KeyRotation", () => {
         },
       ],
     });
+  });
+
+  it("checks a key decrypts only by encrypting it again under the same key, and can't decrypt", () => {
+    const { template } = build();
+    template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "frontdoor-sandbox-key-rotation",
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: ["kms:ReEncryptFrom", "kms:ReEncryptTo"],
+                Resource: `arn:aws:kms:eu-west-2:${ACCOUNT}:key/*`,
+                Condition: {
+                  "ForAnyValue:StringEquals": {
+                    "kms:ResourceAliases":
+                      "alias/frontdoor-sandbox-caller-token",
+                  },
+                  StringEquals: {
+                    "kms:EncryptionContext:purpose": "flex-caller-token",
+                  },
+                  Bool: { "kms:ReEncryptOnSameKey": "true" },
+                },
+              },
+            ]),
+          },
+        },
+      ],
+    });
+    expect(
+      JSON.stringify(template.findResources("AWS::IAM::Role")),
+    ).not.toContain("kms:Decrypt");
   });
 
   it("reads and writes only its state, the edge's signing keys, and the public keys' object", () => {

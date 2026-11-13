@@ -1,5 +1,5 @@
-// Which domain a request is for, and where its API is. The CloudFront Function has already held
-// the path to `/app/<domain>/...`, with `<domain>` a platform name and no empty or dot segment.
+// Which domain a request is for, and where its API is. The handler has already held the path to
+// `/app/<domain>/...`, with `<domain>` a platform name and no empty or dot segment.
 
 export interface Route {
   /** The domain's name, from the config, so safe to log. */

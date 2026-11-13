@@ -6,6 +6,7 @@ import { createPublicKey } from "node:crypto";
 import {
   GenerateDataKeyPairWithoutPlaintextCommand,
   KMSClient,
+  ReEncryptCommand,
 } from "@aws-sdk/client-kms";
 import {
   GetObjectCommand,
@@ -99,6 +100,21 @@ export function awsPorts(
         x,
         privateKey: Buffer.from(PrivateKeyCiphertextBlob).toString("base64"),
       };
+    },
+
+    // Rotation's role can't decrypt. Encrypting the key again, under the same KMS key and
+    // context, makes KMS decrypt it without returning it. The result is thrown away.
+    async check({ kid, privateKey }) {
+      const context = { purpose: SIGNING_KEY_PURPOSE, kid };
+      await kms.send(
+        new ReEncryptCommand({
+          CiphertextBlob: Buffer.from(privateKey, "base64"),
+          SourceKeyId: config.keyAlias,
+          SourceEncryptionContext: context,
+          DestinationKeyId: config.keyAlias,
+          DestinationEncryptionContext: context,
+        }),
+      );
     },
 
     async publish(keySet) {

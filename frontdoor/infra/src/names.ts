@@ -122,6 +122,11 @@ export function keyRotationScheduleRoleName(environment: string): string {
   return `frontdoor-${environment}-key-rotation-schedule`;
 }
 
+/** The alarm on key rotation's failed runs. */
+export function keyRotationAlarmName(environment: string): string {
+  return `frontdoor-${environment}-key-rotation-failed`;
+}
+
 /** Key rotation's log group. */
 export function keyRotationLogGroupName(environment: string): string {
   return `/flex/frontdoor/${environment}/key-rotation`;

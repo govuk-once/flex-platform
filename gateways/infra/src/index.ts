@@ -1,6 +1,7 @@
 export { GatewayFunction } from "./gateway-function.ts";
 export { GatewaySecret } from "./gateway-secret.ts";
 export {
+  gatewayAliasPattern,
   gatewayFunctionPattern,
   gatewayLogGroupName,
   gatewayRoleName,

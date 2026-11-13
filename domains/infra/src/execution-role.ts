@@ -20,22 +20,34 @@ import {
 export interface ExecutionRoleProps {
   readonly environment: string;
   readonly domain: string;
-  /** The functions a domain may invoke, as a name pattern such as `gateway-dev-*`. */
-  readonly gatewayFunctions: string;
+  /**
+   * The gateways a domain may invoke, each by the alias its client names, as a pattern such as
+   * `gateway-dev-*:live`.
+   */
+  readonly gatewayAliases: string;
+  /** The network's `lambda` endpoint, by ID. */
+  readonly lambdaEndpointId: string;
   /** The key the domain's function log group is encrypted with. */
   readonly logGroupKey: IKey;
 }
 
 /**
  * The role one domain's function runs as. It may write only to that domain's log group, so a
- * domain's code can never write into another's. Its boundary holds the same limits, in case the
- * role is ever widened by mistake.
+ * domain's code can never write into another's. It may invoke a gateway only through the
+ * network's endpoint, so its credentials invoke nothing from anywhere else. Its boundary holds the
+ * same limits, in case the role is ever widened by mistake.
  */
 export class ExecutionRole extends Construct {
   constructor(
     scope: Construct,
     id: string,
-    { environment, domain, gatewayFunctions, logGroupKey }: ExecutionRoleProps,
+    {
+      environment,
+      domain,
+      gatewayAliases,
+      lambdaEndpointId,
+      logGroupKey,
+    }: ExecutionRoleProps,
   ) {
     super(scope, id);
 
@@ -44,7 +56,7 @@ export class ExecutionRole extends Construct {
     const gateways = stack.formatArn({
       service: "lambda",
       resource: "function",
-      resourceName: gatewayFunctions,
+      resourceName: gatewayAliases,
       arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
 
@@ -55,11 +67,23 @@ export class ExecutionRole extends Construct {
     });
 
     const statements = [
-      // The pattern covers each gateway's qualifiers too, such as `:live`.
+      // By its alias alone. A gateway's function with no qualifier is what a deploy is still
+      // changing, and a numbered version is one the alias has left or not yet reached.
       new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ["lambda:InvokeFunction"],
         resources: [gateways],
+      }),
+      // A domain's code holds the role's credentials, and could give them away. The deny refuses
+      // an invoke made with them by any other way than the endpoint, so no other grant can open
+      // one from outside the network, past the Frontdoor and the domain's API.
+      new PolicyStatement({
+        effect: Effect.DENY,
+        actions: ["lambda:InvokeFunction"],
+        resources: ["*"],
+        conditions: {
+          StringNotEquals: { "aws:SourceVpce": lambdaEndpointId },
+        },
       }),
       ...execution.statements,
       // Lambda sends a function's traces as its role when tracing is active.

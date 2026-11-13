@@ -85,7 +85,7 @@ refuses everything, since one with no policy would allow everything:
 
 | Endpoint | Allows |
 |---|---|
-| `lambda` | `lambda:InvokeFunction` on `gateway-<environment>-*`, any qualifier included |
+| `lambda` | `lambda:InvokeFunction` on `gateway-<environment>-*:live`, a gateway's alias and nothing else of it |
 | `secretsmanager` | `secretsmanager:GetSecretValue` on the account's gateways' secrets, by a gateway's role alone |
 | `sts` | `sts:AssumeRole` on each role the account's gateways sign as, by a gateway's role alone |
 | `s3` | `s3:GetObject` on the caller token's public keys alone, in a bucket the frontdoor account owns |
@@ -108,10 +108,13 @@ and assume which role, is held by each gateway's own role, and by the resource p
 its stack creates. See
 [the gateway's function](/flex-platform/reference/environment/#the-lambda-function).
 
-The `lambda` endpoint's pattern comes from `gatewayFunctionPattern` in `gateways/infra`. It is
-built from `gatewayFunctionPrefix` in `@repo/gateway-core`, which also names each gateway's
-function and the function its client invokes. Any function in the account with that prefix can be
-invoked by every domain in the environment, so the gateways section gives it to gateways alone.
+The `lambda` endpoint's pattern comes from `gatewayAliasPattern` in `gateways/infra`. It is built
+from `gatewayFunctionPrefix` and the alias's name in `@repo/gateway-core`, which also name each
+gateway's function and what its client invokes. Any function in the account with that prefix and
+a `live` alias can be invoked by every domain in the environment, so the gateways section gives
+the prefix to gateways alone. The pattern names the alias, so a gateway is never reached without
+a qualifier or by a version's number: see
+[the Lambda function](/flex-platform/reference/environment/#the-lambda-function).
 
 An endpoint costs the same whether it's used or not, so one is added when something calls its API.
 Tracing needs none: Lambda's X-Ray daemon sends from outside the VPC, so neither the X-Ray SDK nor

@@ -17,6 +17,8 @@ export class MemoryPorts implements RotationPorts {
   readonly calls: string[] = [];
   failDistribution = false;
   failPublish = false;
+  /** The ID of a key KMS can't decrypt. */
+  undecryptable: string | undefined;
 
   readState(): Promise<KeyState> {
     return Promise.resolve(this.state);
@@ -34,6 +36,16 @@ export class MemoryPorts implements RotationPorts {
       x: Buffer.from(`public ${kid}`).toString("base64url"),
       privateKey: Buffer.from(`private ${kid}`).toString("base64"),
     });
+  }
+
+  check({ kid }: { readonly kid: string }): Promise<void> {
+    this.calls.push(`check ${kid}`);
+    if (kid === this.undecryptable) {
+      const error = new Error("KMS refused the ciphertext");
+      error.name = "InvalidCiphertextException";
+      return Promise.reject(error);
+    }
+    return Promise.resolve();
   }
 
   publish(keySet: string): Promise<void> {

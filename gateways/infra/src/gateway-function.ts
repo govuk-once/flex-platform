@@ -31,6 +31,16 @@ const TIMEOUT = Duration.seconds(28);
 
 const MEMORY_MB = 1024;
 
+// The client invokes a gateway and waits, but nothing holds a role that may invoke to that. Lambda
+// would run an invoke sent as an event again when it fails, twice, for up to six hours, and so send
+// an upstream write the first run had made again. These are the least Lambda takes: no retry, and
+// the shortest wait for an event it has yet to run. The function, each version and the alias each
+// hold their own, so each is given them.
+const ASYNC_INVOKE = {
+  retryAttempts: 0,
+  maxEventAge: Duration.seconds(60),
+} as const;
+
 export interface GatewayFunctionProps {
   readonly functionName: string;
   readonly roleName: string;
@@ -104,6 +114,8 @@ export class GatewayFunction extends Construct {
       memorySize: MEMORY_MB,
       environment: { ...props.environment },
       logGroup,
+      ...ASYNC_INVOKE,
+      currentVersionOptions: ASYNC_INVOKE,
     });
 
     // The subnets and group are IDs the network writes to SSM, which CloudFormation resolves at
@@ -126,6 +138,7 @@ export class GatewayFunction extends Construct {
       // CDK declares a version's role optional where IVersion requires it, which only
       // exactOptionalPropertyTypes notices.
       version: this.function.currentVersion as IVersion,
+      ...ASYNC_INVOKE,
     });
 
     Validations.of(this.role).acknowledge(...execution.acknowledgements, {

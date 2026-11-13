@@ -30,10 +30,15 @@ gateway calls, but only for that user.
 
 Lambda@Edge reads its signing keys from eu-west-2, wherever the copy runs. It reads the signing key
 parameter from SSM: the key signing now and the one scheduled next, each with the moment it starts.
-It decrypts each private key it doesn't already hold with KMS, with the key's encryption context.
-Each call is signed with the function's own role and has 1.5 seconds.
+It decrypts with KMS, with the key's encryption context, each private key it doesn't already hold
+that has started or starts within the hour. Each call is signed with the function's own role and
+has 1.5 seconds.
 
-It signs with the latest key that has started. It already holds the next key, so every copy
+The next key is scheduled seven days ahead, and few copies that read it then are still running when
+it starts. So a copy leaves it until its last hour, which is 12 reads, and the least notice
+[rotation](#rotation) gives of a key.
+
+It signs with the latest key that has started. By then it holds the next key, so every copy
 switches at the scheduled moment without a read. It reads the parameter again every five minutes,
 so a [revocation](#revoking-a-key) normally reaches every copy within five minutes, and calls KMS
 only for a key it hasn't seen. A read that fails keeps the keys it has, however old, and isn't tried
@@ -169,8 +174,17 @@ A switch from one key to the next is a moment, set when the next key is made:
 
 Rotation needs no downtime, and no edge or gateway has to read anything at the moment of a switch.
 
-A run writes its state first, so a key it has made is never lost, then the public keys, then the
-edge's signing keys. If the public keys can't be written, no edge is given anything new, so no edge
+Before a run writes anything, it has KMS check every key the edge is to hold: one it has just
+made, and each it made before. Its role can't decrypt a private key, so it asks KMS to encrypt the
+key again under the same KMS key and context, with `ReEncrypt`. KMS decrypts the key to do it and
+returns only a new ciphertext, which the run discards. A key that was damaged, or doesn't decrypt
+as its key ID under the signing key, fails the run. A key just made is then never kept, and the
+next run makes another. A key made before stops every run until it is
+[revoked](#revoking-a-key). So a key that can't be decrypted is found within 15 minutes, normally
+days before an edge asks for it. See [when a run fails](#when-a-run-fails).
+
+A run then writes its state first, so a key it has made is never lost, then the public keys, then
+the edge's signing keys. If the public keys can't be written, no edge is given anything new, so no edge
 holds a key a gateway can't. If the signing keys can't be written, the run fails and the next run
 writes them again. A key is normally scheduled seven days ahead, so there are hundreds
 of runs to do it in. Each run writes what each reader should hold, and only what differs from what
@@ -201,12 +215,35 @@ worked. An edge stops signing with the key at its next read, normally within fiv
 can't read goes on signing with it, and gateways refuse those tokens, as they refuse tokens signed
 by an edge that hasn't read its new key yet.
 
+### When a run fails
+
+The alarm `frontdoor-<environment>-key-rotation-failed` goes off when runs fail in two of the last
+three 15-minute periods. One failed run doesn't set it off, since the next run is the retry. The
+function's log group, `/flex/frontdoor/<environment>/key-rotation`, says why.
+
+A key that fails its check is logged as `key_check_failed`, with its `kid`, AWS's name for the
+error as `reason`, and `stored`: whether rotation held the key before this run. A stored key passed
+the same check when it was made, so something has changed since: the state parameter, or the KMS
+key.
+
+| `reason` | Means | Do |
+|---|---|---|
+| `InvalidCiphertextException`, `IncorrectKeyException` | The private key rotation holds isn't what KMS encrypted for that key ID | [Revoke](#revoking-a-key) the key. If it was stored, look in CloudTrail for a `PutParameter` on the state parameter by anything but rotation's role |
+| `DisabledException`, `KMSInvalidStateException` | The KMS key is disabled or scheduled for deletion, so no edge can decrypt either | Enable the KMS key, or cancel its deletion, and look in CloudTrail for who changed it |
+| `AccessDeniedException` | The role's policy or the KMS key's no longer allows the check | Compare both with what the stack deploys |
+| Throttling, or a timeout | KMS didn't answer | Nothing, unless every run says it |
+
+Any other failure is logged as `key_rotation_failed`, with the AWS error's name and the source
+locations.
+
 ### Permissions
 
 The function's role, `frontdoor-<environment>-key-rotation`, may:
 
 - make key pairs only under the signing key, found by its alias, since KMS generates the key's ID,
   and only with the caller token's encryption context purpose;
+- have KMS encrypt a private key again, only under that same key and with that purpose, which is
+  how a run [checks](#rotation) one. It can't decrypt one;
 - read and write its state, and the signing key parameter;
 - read and write the public keys' object, in its own account's bucket;
 - write to its own log group, `/flex/frontdoor/<environment>/key-rotation`.
@@ -216,15 +253,14 @@ EventBridge Scheduler may assume, for a schedule in the account's default group,
 invoke the function. Scheduler names a schedule's group, not the schedule, when it assumes a role.
 
 It logs each key it makes, with when it starts, and each it removes or revokes, by key ID alone. A
-failed run logs the AWS error's name and the source locations, and fails, so Lambda's error metric
-counts it.
+[failed run](#when-a-run-fails) logs why, and fails, so Lambda's error metric counts it.
 
 ## Stacks
 
 One stack, `frontdoor-<environment>-caller-token-keys`, in the frontdoor account in eu-west-2,
 holds the signing key and its alias, the [public keys' bucket](#the-public-keys-bucket) and its
-policy, and key rotation's function, role, log group and schedule. It is protected from deletion,
-and the key and the bucket are retained.
+policy, and key rotation's function, role, log group, schedule and alarm. It is protected from
+deletion, and the key and the bucket are retained.
 
 A gateway's stack doesn't depend on it: a gateway finds the bucket by name, and reads it only when
 called.

@@ -2,10 +2,7 @@ import {
   CALLER_TOKEN_KEYS_OBJECT,
   callerTokenKeysBucketName,
 } from "@repo/frontdoor-infra";
-import {
-  gatewayFunctionPattern,
-  gatewayRolePattern,
-} from "@repo/gateway-infra";
+import { gatewayAliasPattern, gatewayRolePattern } from "@repo/gateway-infra";
 import {
   DnsFirewall,
   FlowLogs,
@@ -109,8 +106,8 @@ export class NetworkStack extends Stack {
     const endpoints = new InterfaceEndpoints(this, "Endpoints", {
       vpc,
       subnets: subnets.isolated,
-      // Any domain may invoke any of its environment's gateways.
-      invokableFunctions: gatewayFunctionPattern(environment.name),
+      // Any domain may invoke any of its environment's gateways, by the alias its client names.
+      invokableFunctions: gatewayAliasPattern(environment.name),
       // In the frontdoor account, where key rotation writes them.
       readableObjects: [
         {

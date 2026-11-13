@@ -88,6 +88,9 @@ function withBody(
 ): OriginRequestEvent {
   const event = originRequestEvent();
   event.Records[0].cf.request.method = "POST";
+  event.Records[0].cf.request.headers["content-type"] = [
+    { key: "Content-Type", value: "application/json" },
+  ];
   event.Records[0].cf.request.body = {
     action: "read-only",
     data: Buffer.from('{"name":"value"}').toString("base64"),
@@ -254,6 +257,181 @@ describe("createOriginRequestHandler", () => {
       },
     ]);
   });
+
+  describe("holds a verified request to the CloudFront Function's rules itself", () => {
+    const REJECTED_BY = {
+      "content-type": [{ key: "Content-Type", value: "application/json" }],
+      "x-correlation-id": [{ key: "X-Correlation-Id", value: TRACE_ID }],
+      "x-rejected-by": [{ key: "X-Rejected-By", value: "lambda-edge" }],
+    };
+
+    function refusal(event: string) {
+      return [
+        {
+          level: "INFO",
+          message: "telemetry",
+          telemetry: {
+            event,
+            details: { traceId: TRACE_ID, requestId: REQUEST_ID },
+          },
+        },
+      ];
+    }
+
+    it.each(["HEAD", "OPTIONS", "TRACE", "get"])(
+      "answers a %s with the 405, and signs nothing",
+      async (method) => {
+        const sign = vi.fn<SignRequest>(SIGN);
+        const event = originRequestEvent();
+        event.Records[0].cf.request.method = method;
+
+        expect(asResponse(await handlerWith(undefined, sign)(event))).toEqual({
+          status: "405",
+          statusDescription: "Method not allowed",
+          headers: {
+            ...REJECTED_BY,
+            allow: [{ key: "Allow", value: "GET, POST, PUT, PATCH, DELETE" }],
+          },
+          body: '{"message":"Method not allowed","type":"client_error"}',
+          bodyEncoding: "text",
+        });
+        expect(sign).not.toHaveBeenCalled();
+        expect(signCallerToken).not.toHaveBeenCalled();
+        expect(loggedLines()).toEqual(
+          refusal("origin_request_method_rejected"),
+        );
+      },
+    );
+
+    it.each([
+      ["a dot segment written with escapes", "/app/udp/a/%2e%2e/b"],
+      ["a dot segment", "/app/udp/a/../b"],
+      ["an encoded slash", "/app/udp/a%2Fb"],
+      ["an empty segment", "/app/udp//b"],
+      ["a path outside /app", "/docs/index.html"],
+      ["a domain that could not be a name", "/app/udp.example/v1"],
+    ])("answers %s with the 404, and signs nothing", async (_, uri) => {
+      const sign = vi.fn<SignRequest>(SIGN);
+      const event = originRequestEvent();
+      event.Records[0].cf.request.uri = uri;
+
+      expect(asResponse(await handlerWith(undefined, sign)(event))).toEqual({
+        status: "404",
+        statusDescription: "Not found",
+        headers: REJECTED_BY,
+        body: '{"message":"Not found","type":"client_error"}',
+        bodyEncoding: "text",
+      });
+      expect(sign).not.toHaveBeenCalled();
+      expect(signCallerToken).not.toHaveBeenCalled();
+      expect(loggedLines()).toEqual(refusal("origin_request_path_rejected"));
+    });
+
+    it.each([
+      ["a POST whose body says it is something else", "POST", ["text/xml"]],
+      ["a DELETE with a body that says nothing", "DELETE", []],
+      ["a DELETE whose body says it is something else", "DELETE", ["text/xml"]],
+      [
+        "a body that says it is JSON and something else",
+        "POST",
+        ["application/json", "text/xml"],
+      ],
+    ])(
+      "answers %s with the 415, and signs nothing",
+      async (_, method, types) => {
+        const sign = vi.fn<SignRequest>(SIGN);
+        const event = withBody({});
+        const request = event.Records[0].cf.request;
+        request.method = method;
+        if (types.length === 0) delete request.headers["content-type"];
+        else {
+          request.headers["content-type"] = types.map((value) => ({
+            key: "Content-Type",
+            value,
+          }));
+        }
+
+        expect(asResponse(await handlerWith(undefined, sign)(event))).toEqual({
+          status: "415",
+          statusDescription: "Unsupported media type",
+          headers: REJECTED_BY,
+          body: '{"message":"Unsupported media type","type":"client_error"}',
+          bodyEncoding: "text",
+        });
+        expect(sign).not.toHaveBeenCalled();
+        expect(signCallerToken).not.toHaveBeenCalled();
+        expect(loggedLines()).toEqual(
+          refusal("origin_request_content_type_rejected"),
+        );
+      },
+    );
+
+    it("forwards a DELETE whose body says it is JSON", async () => {
+      const event = withBody({});
+      event.Records[0].cf.request.method = "DELETE";
+
+      expect(asRequest(await handlerWith()(event)).method).toBe("DELETE");
+    });
+
+    it("asks nothing of the content type of a request without a body", async () => {
+      const event = originRequestEvent({
+        headers: {
+          authorization: `Bearer ${token()}`,
+          "content-type": "text/xml",
+        },
+      });
+
+      expect(asRequest(await handlerWith()(event)).uri).toBe("/v1/identity");
+    });
+
+    it("answers a request without a valid token with the 401, whatever else is wrong with it", async () => {
+      const event = originRequestEvent({ headers: {} });
+      event.Records[0].cf.request.method = "OPTIONS";
+      event.Records[0].cf.request.uri = "/app/udp/a/../b";
+
+      expect(asResponse(await handlerWith()(event)).status).toBe("401");
+    });
+  });
+
+  it.each([
+    ["an escape that is no UTF-8", "filter=%ff", "malformed"],
+    ["an escape cut short", "filter=%", "malformed"],
+    ["the prototype's name", "__proto__=1", "unsignable_name"],
+    [
+      "one of the signature's own names",
+      "X-Amz-Signature=x",
+      "unsignable_name",
+    ],
+  ])(
+    "answers a query holding %s with a 400, as the caller's fault",
+    async (_, querystring, reason) => {
+      const event = originRequestEvent();
+      event.Records[0].cf.request.querystring = querystring;
+
+      expect(asResponse(await handlerWith()(event))).toEqual({
+        status: "400",
+        statusDescription: "Bad request",
+        headers: {
+          "content-type": [{ key: "Content-Type", value: "application/json" }],
+          "x-correlation-id": [{ key: "X-Correlation-Id", value: TRACE_ID }],
+          "x-rejected-by": [{ key: "X-Rejected-By", value: "lambda-edge" }],
+        },
+        body: '{"message":"Bad request","type":"client_error"}',
+        bodyEncoding: "text",
+      });
+      // One line, not an error, and nothing of the query in it.
+      expect(loggedLines()).toEqual([
+        {
+          level: "INFO",
+          message: "telemetry",
+          telemetry: {
+            event: "origin_request_query_rejected",
+            details: { traceId: TRACE_ID, requestId: REQUEST_ID, reason },
+          },
+        },
+      ]);
+    },
+  );
 
   it.each([
     ["a truncated body", withBody({ inputTruncated: true }), SIGN],

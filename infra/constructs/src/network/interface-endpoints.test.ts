@@ -60,7 +60,7 @@ describe("InterfaceEndpoints", () => {
     [
       "lambda",
       "lambda:InvokeFunction",
-      `arn:aws:lambda:eu-west-2:${ACCOUNT}:function:gateway-sandbox-*`,
+      `arn:aws:lambda:eu-west-2:${ACCOUNT}:function:gateway-sandbox-*:live`,
     ],
     [
       "secretsmanager",
@@ -150,7 +150,7 @@ describe("InterfaceEndpoints", () => {
     new InterfaceEndpoints(stack, "Endpoints", {
       vpc,
       subnets: subnets.isolated,
-      invokableFunctions: "gateway-sandbox-*",
+      invokableFunctions: "gateway-sandbox-*:live",
       readableObjects: [],
       readableSecrets: [],
       assumableRoles: [],

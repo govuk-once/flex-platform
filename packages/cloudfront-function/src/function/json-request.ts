@@ -1,7 +1,7 @@
+import { isJsonContentType } from "@repo/cloudfront-js-utils/is-json-content-type";
+
 import type { CloudFrontRequest } from "./event.ts";
 import { isRepeated } from "./repeated.ts";
-
-const JSON_CONTENT_TYPE = /^application\/json\s*(;|$)/i;
 
 // The headers that describe a body, each read below.
 const BODY_HEADERS = ["content-length", "content-type", "transfer-encoding"];
@@ -30,6 +30,5 @@ function expectsBody(request: CloudFrontRequest): boolean {
 }
 
 function isJson(request: CloudFrontRequest): boolean {
-  const contentType = request.headers["content-type"]?.value;
-  return contentType !== undefined && JSON_CONTENT_TYPE.test(contentType);
+  return isJsonContentType(request.headers["content-type"]?.value);
 }

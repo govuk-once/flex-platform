@@ -273,6 +273,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "KeyRotationFailedRuns9B762AFC",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
         "logicalId": "KeyRotationFunction96F96846",
         "type": "AWS::Lambda::Function"
       },

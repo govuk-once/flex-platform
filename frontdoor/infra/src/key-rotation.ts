@@ -16,6 +16,11 @@ import {
 } from "@repo/infra-constructs";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
+  Alarm,
+  ComparisonOperator,
+  TreatMissingData,
+} from "aws-cdk-lib/aws-cloudwatch";
+import {
   Effect,
   PolicyDocument,
   PolicyStatement,
@@ -33,6 +38,7 @@ import { Construct } from "constructs";
 
 import {
   CALLER_TOKEN_KEYS_OBJECT,
+  keyRotationAlarmName,
   keyRotationFunctionName,
   keyRotationLogGroupName,
   keyRotationRoleName,
@@ -63,11 +69,17 @@ export interface KeyRotationProps {
  * schedule. Only one copy runs at a time, so two runs never write the state at once.
  *
  * Its role may make key pairs only under the signing keys, found by alias, and bound to the caller
- * token's purpose; and read and write only the state, the signing key parameters and the public
- * keys' object.
+ * token's purpose; have KMS encrypt one again under the same key, which proves it decrypts without
+ * returning it; and read and write only the state, the signing key parameters and the public keys'
+ * object.
  */
 export class KeyRotation extends Construct {
   public readonly function: LambdaFunction;
+  /**
+   * Runs that failed in two of the last three periods. It has no actions, so it notifies no one.
+   * One failed run doesn't set it off: the next run is the retry.
+   */
+  public readonly failedRuns: Alarm;
 
   constructor(scope: Construct, id: string, props: KeyRotationProps) {
     super(scope, id);
@@ -112,6 +124,22 @@ export class KeyRotation extends Construct {
           StringEquals: {
             "kms:EncryptionContext:purpose": SIGNING_KEY_PURPOSE,
           },
+        },
+      }),
+      // No Decrypt: this is how rotation checks a key decrypts. Only onto the same key, so a
+      // private key is never encrypted again under one that someone else can use.
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["kms:ReEncryptFrom", "kms:ReEncryptTo"],
+        resources: [signingKey],
+        conditions: {
+          "ForAnyValue:StringEquals": {
+            "kms:ResourceAliases": signingKeyAliasName(environment),
+          },
+          StringEquals: {
+            "kms:EncryptionContext:purpose": SIGNING_KEY_PURPOSE,
+          },
+          Bool: { "kms:ReEncryptOnSameKey": "true" },
         },
       }),
       new PolicyStatement({
@@ -207,6 +235,22 @@ export class KeyRotation extends Construct {
         roleArn: scheduleRole.roleArn,
         retryPolicy: { maximumRetryAttempts: 0, maximumEventAgeInSeconds: 60 },
       },
+    });
+
+    this.failedRuns = new Alarm(this, "FailedRuns", {
+      alarmName: keyRotationAlarmName(environment),
+      alarmDescription: `Key rotation in ${environment} failed in two of the last three ${KEY_ROTATION_SCHEDULE.toMinutes()}-minute periods. See the caller token page of the platform's docs, "When a run fails".`,
+      metric: this.function.metricErrors({
+        statistic: "Sum",
+        period: KEY_ROTATION_SCHEDULE,
+      }),
+      threshold: 1,
+      comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      // Two of three, since a run close to a period's edge can fall either side of it.
+      evaluationPeriods: 3,
+      datapointsToAlarm: 2,
+      // Lambda publishes nothing for a period with no run.
+      treatMissingData: TreatMissingData.NOT_BREACHING,
     });
 
     Validations.of(role).acknowledge(...logs.acknowledgements, {

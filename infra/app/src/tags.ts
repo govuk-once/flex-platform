@@ -11,15 +11,16 @@ export const PLATFORM_TAGS = {
   Source: "https://github.com/govuk-once/flex-platform",
 } as const;
 
-// What a planned prune step will find the stacks this app owns by.
-const PRUNE_MARKER = { "flex:managed-by": "flex-platform" } as const;
+// Marks a stack as one this app owns, so the stacks it has built can be listed in an account,
+// including one that has since left config.
+const OWNED_MARKER = { "flex:managed-by": "flex-platform" } as const;
 
 /**
  * Tags every stack in the app, whoever creates it, with the platform's tags, its stage and the
- * prune marker. Tags go on stacks only: CloudFormation propagates a stack's tags to the resources
- * in it that support stack-tag propagation, and cdk.json's explicitStackTags keeps Tags.of() from
- * reaching stacks. A tag the stack sets itself keeps its value, so a domain's stack can name its
- * own Owner.
+ * mark of a stack the app owns. Tags go on stacks only: CloudFormation propagates a stack's tags
+ * to the resources in it that support stack-tag propagation, and cdk.json's explicitStackTags
+ * keeps Tags.of() from reaching stacks. A tag the stack sets itself keeps its value, so a domain's
+ * stack can name its own Owner.
  */
 export class StackTags implements IAspect {
   constructor(private readonly stage: StageConfig) {}
@@ -27,7 +28,7 @@ export class StackTags implements IAspect {
   public visit(node: IConstruct): void {
     if (!(node instanceof Stack)) return;
     const own = node.tags.tagValues();
-    const tags = { ...PLATFORM_TAGS, Stage: this.stage.name, ...PRUNE_MARKER };
+    const tags = { ...PLATFORM_TAGS, Stage: this.stage.name, ...OWNED_MARKER };
     for (const [key, value] of Object.entries(tags)) {
       if (own[key] === undefined) node.tags.setTag(key, value);
     }

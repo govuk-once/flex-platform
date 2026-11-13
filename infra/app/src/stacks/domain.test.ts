@@ -98,13 +98,13 @@ describe("DomainStack", () => {
     expect(domainStackName(DEV, DOMAIN)).toBe("domain-dev-domain-a");
   });
 
-  it("is in the domain's account, in the region the edge signs requests for, and can be removed with the domain", () => {
+  it("is in the domain's account, in the region the edge signs requests for, protected from deletion", () => {
     const { stack } = build();
 
     expect(stack.stackName).toBe("domain-dev-domain-a");
     expect(stack.account).toBe(MAIN.account);
     expect(stack.region).toBe(SIGNING_REGION);
-    expect(stack.terminationProtection).toBe(false);
+    expect(stack.terminationProtection).toBe(true);
   });
 
   it("reads the account's certificate and the network's IDs, and outputs nothing", () => {
@@ -121,6 +121,7 @@ describe("DomainStack", () => {
 
     expect(parameters.toSorted()).toEqual([
       "/flex/domain/dev/certificate-arn",
+      "/flex/network/dev/endpoint/lambda",
       "/flex/network/dev/isolated-subnet-ids",
       "/flex/network/dev/security-group/domain",
       "BootstrapVersion",
@@ -227,8 +228,17 @@ describe("DomainStack", () => {
     });
   });
 
-  it("lets the domain's function invoke the environment's gateways", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+  it("lets the domain's function invoke the environment's gateways, by their live alias and through the network's lambda endpoint alone", () => {
+    const { template } = build();
+    const parameters = template.toJSON().Parameters as Record<
+      string,
+      { Default: string }
+    >;
+    const endpoint = Object.keys(parameters).find(
+      (key) => parameters[key]?.Default === "/flex/network/dev/endpoint/lambda",
+    );
+
+    template.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "domain-dev-domain-a-execution",
       Policies: [
         {
@@ -236,7 +246,16 @@ describe("DomainStack", () => {
             Statement: Match.arrayWith([
               Match.objectLike({
                 Action: "lambda:InvokeFunction",
-                Resource: `arn:aws:lambda:eu-west-2:${MAIN.account}:function:gateway-dev-*`,
+                Effect: "Allow",
+                Resource: `arn:aws:lambda:eu-west-2:${MAIN.account}:function:gateway-dev-*:live`,
+              }),
+              Match.objectLike({
+                Action: "lambda:InvokeFunction",
+                Effect: "Deny",
+                Resource: "*",
+                Condition: {
+                  StringNotEquals: { "aws:SourceVpce": { Ref: endpoint } },
+                },
               }),
             ]),
           },

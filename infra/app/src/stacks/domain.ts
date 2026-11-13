@@ -8,8 +8,12 @@ import {
   ProxyApi,
 } from "@repo/domain-infra";
 import { edgeRoleName } from "@repo/frontdoor-infra";
-import { gatewayFunctionPattern } from "@repo/gateway-infra";
 import {
+  gatewayAliasPattern,
+  gatewayFunctionPattern,
+} from "@repo/gateway-infra";
+import {
+  endpointIdParameterName,
   PlatformLogGroup,
   securityGroupIdParameterName,
   subnetIdsParameterName,
@@ -48,6 +52,9 @@ export class DomainStack extends Stack {
     super(scope, domainStackName(environment, domain), {
       description: `Flex domain ${domain} in the ${environment.name} environment`,
       env: { account: domainAccount.account, region: DOMAIN_REGION },
+      // Deleting it would take the role the domain's function runs as, and the API and host it
+      // answers at. A domain is withdrawn by disabling it, which keeps its stack.
+      terminationProtection: true,
     });
 
     const { api } = new ProxyApi(this, "Domain", {
@@ -76,19 +83,21 @@ export class DomainStack extends Stack {
       logGroupName: functionLogGroupName(environment.name, domain),
     });
 
-    const gatewayFunctions = gatewayFunctionPattern(environment.name);
-
     new ExecutionRole(this, "Execution", {
       environment: environment.name,
       domain,
-      gatewayFunctions,
+      gatewayAliases: gatewayAliasPattern(environment.name),
+      lambdaEndpointId: StringParameter.valueForStringParameter(
+        this,
+        endpointIdParameterName(environment.name, "lambda"),
+      ),
       logGroupKey: key,
     });
 
     new DeployRole(this, "Deploy", {
       environment: environment.name,
       domain,
-      gatewayFunctions,
+      gatewayFunctions: gatewayFunctionPattern(environment.name),
       subnetIdsParameterName: subnetIdsParameterName(
         environment.name,
         "isolated",

@@ -14,6 +14,13 @@ allowBuilds:
   esbuild: true
   unrs-resolver: true
 
+# astro2tsx pins @emnapi/core but leaves @emnapi/runtime, its WASM runtime's peer, to whatever the
+# lockfile holds. A 2.x runtime beside the 1.x core fails to load, and `astro check` with it.
+packageExtensions:
+  "@astrojs/astro2tsx@0.1.3":
+    dependencies:
+      "@emnapi/runtime": 1.11.3
+
 savePrefix: ""
 
 minimumReleaseAge: 10080

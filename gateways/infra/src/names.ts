@@ -7,15 +7,19 @@
 //   /flex/gateway/{environment}/{id}/function  its log group
 //
 // The prefix is a boundary: the Lambda endpoint in the domain account's network, and each domain's
-// execution role, let a domain invoke any function whose name starts with `gateway-{environment}-`.
-// So no other function the gateways section creates may have it.
+// execution role, let a domain invoke any function whose name starts with `gateway-{environment}-`,
+// through its `live` alias. So no other function the gateways section creates may have it.
 //
 // The same holds for roles and secrets. The network's `secretsmanager` and `sts` endpoints let any
 // role named `gateway-{environment}-*-execution` through, to any secret named
 // `gateway-{environment}-*` in the account, and the caller token's public keys bucket lets any role
 // named that way in a domain account read them. So no other role or secret may have those names.
 
-import { gatewayFunctionName, gatewayFunctionPrefix } from "@repo/gateway-core";
+import {
+  GATEWAY_FUNCTION_ALIAS,
+  gatewayFunctionName,
+  gatewayFunctionPrefix,
+} from "@repo/gateway-core";
 
 // IAM's limit on a role's name.
 const ROLE_NAME_LENGTH = 64;
@@ -23,6 +27,15 @@ const ROLE_NAME_LENGTH = 64;
 /** Every gateway's function in the environment, and each one's versions and aliases. */
 export function gatewayFunctionPattern(environment: string): string {
   return `${gatewayFunctionPrefix(environment)}*`;
+}
+
+/**
+ * Every gateway's function in the environment, by the alias its client invokes and no other way.
+ * A grant that names it refuses the function without a qualifier, which is the code and
+ * configuration a deploy is still changing, and every numbered version.
+ */
+export function gatewayAliasPattern(environment: string): string {
+  return `${gatewayFunctionPattern(environment)}:${GATEWAY_FUNCTION_ALIAS}`;
 }
 
 /** The role every gateway's function in the environment runs as. */

@@ -148,6 +148,14 @@ function compileMeta(
   return compiled;
 }
 
+// Whether a validator passed a value: only if it answered `true`, there and then. One that
+// answered with a promise would be truthy before it settled, and so pass every value. Codegen
+// refuses a schema that compiles to one, and this holds whatever validator a handler is given.
+function passes(validator: Validator, data: unknown): boolean {
+  const result: unknown = validator(data);
+  return result === true;
+}
+
 // What of a driver's report a caller and a log may see: what the gateway declared, where it is
 // the scalar its schema says. The rest is left out and nothing is said of its value, only of
 // where its schema refused it. A report is never a reason to fail a call: what it describes has
@@ -164,7 +172,7 @@ function acceptedMeta(
     try {
       if (!isScalar(value)) {
         refused(name, "not a string, a finite number or a boolean");
-      } else if (validator(value)) {
+      } else if (passes(validator, value)) {
         accepted[name] = value;
       } else {
         refused(name, formatValidationErrors(validator.errors));
@@ -236,6 +244,15 @@ export function createHandler<const TOps extends AnyOperations>(
     throw new Error("Gateway config must have a non-empty string id");
   }
 
+  // The generated entry point is JavaScript, so nothing has checked these are there. Without
+  // one, every request would fail where this fails once.
+  if (typeof deps.execute !== "function") {
+    throw new TypeError("Gateway handler has no execute function");
+  }
+  if (typeof deps.verifyCallerToken !== "function") {
+    throw new TypeError("Gateway handler has no verifyCallerToken function");
+  }
+
   const operations = compileOperations(config, deps.validators);
   const declaredMeta = compileMeta(deps.meta);
   const logger = createLogger(config.id);
@@ -251,14 +268,19 @@ export function createHandler<const TOps extends AnyOperations>(
       frontdoorRequestId === undefined ? {} : { frontdoorRequestId };
     // Outside the attempt, so what a driver reported before it failed is still to hand.
     const reported: ReportedMeta = new Map();
+    // Never throws: what was reported is left out before it fails a call.
     const metaOf = (): { meta?: EnvelopeMeta } => {
-      const meta = acceptedMeta(declaredMeta, reported, (name, where) => {
-        logger.warn(
-          { operation: loggedOperation(event, operations), metadata: name },
-          `Reported metadata left out: ${where}`,
-        );
-      });
-      return meta === undefined ? {} : { meta };
+      try {
+        const meta = acceptedMeta(declaredMeta, reported, (name, where) => {
+          logger.warn(
+            { operation: loggedOperation(event, operations), metadata: name },
+            `Reported metadata left out: ${where}`,
+          );
+        });
+        return meta === undefined ? {} : { meta };
+      } catch {
+        return {};
+      }
     };
     try {
       // Step 1: Parse envelope
@@ -281,7 +303,7 @@ export function createHandler<const TOps extends AnyOperations>(
 
       // Step 4: Validate input
       step = "input";
-      if (!op.input(envelope.input)) {
+      if (!passes(op.input, envelope.input)) {
         throw new GatewayError(
           "INVALID_INPUT",
           formatValidationErrors(op.input.errors),
@@ -328,7 +350,7 @@ export function createHandler<const TOps extends AnyOperations>(
           `Unknown outcome "${result.outcome}" for operation "${envelope.operation}"`,
         );
       }
-      if (!outcomeValidator(result.data)) {
+      if (!passes(outcomeValidator, result.data)) {
         throw new GatewayError(
           "UPSTREAM_CONTRACT_VIOLATION",
           `Outcome "${result.outcome}" data failed validation for operation "${envelope.operation}"`,
@@ -363,18 +385,26 @@ export function createHandler<const TOps extends AnyOperations>(
     } catch (err: unknown) {
       const operation = loggedOperation(event, operations);
 
-      if (err instanceof GatewayError) {
+      // A declared error names one of the gateway's codes. One that names anything else, which
+      // only untyped code can raise, has its own code wrong, so its message is trusted no more
+      // than any other error's. An own key, so a name such as "toString" is not a code.
+      if (err instanceof GatewayError && Object.hasOwn(ERROR_CODES, err.code)) {
         // Step 9: Record health (error path)
         const health = recordHealthSignal(
           operation,
           ERROR_CODES[err.code].signal,
         );
 
+        // As below: the envelope is returned whatever becomes of the log line.
         const meta = metaOf();
-        logger.warn(
-          { operation, ...traced(), code: err.code, ...health, ...meta },
-          err.message,
-        );
+        try {
+          logger.warn(
+            { operation, ...traced(), code: err.code, ...health, ...meta },
+            err.message,
+          );
+        } catch {
+          // The response still carries the code.
+        }
         // Detail is logged above, never returned. What the gateway declared it may report is
         // not detail: it is validated, and a failure is when a caller most needs it.
         return { ok: false as const, error: { code: err.code }, ...meta };
@@ -384,11 +414,9 @@ export function createHandler<const TOps extends AnyOperations>(
       const health = recordHealthSignal(operation, ERROR_CODES.INTERNAL.signal);
 
       // Nothing declared this error, so nothing about it is known to be safe to log. The
-      // envelope is returned whatever happens here; logging must not become a second failure,
-      // and neither must what was reported.
-      let meta: { meta?: EnvelopeMeta } = {};
+      // envelope is returned whatever happens here; logging must not become a second failure.
+      const meta = metaOf();
       try {
-        meta = metaOf();
         logger.error(
           {
             err: describeUnexpectedError(err),

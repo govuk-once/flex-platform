@@ -78,8 +78,10 @@ change what the function's role may do. The routes change when the Frontdoor's s
 copies of Lambda@Edge can route to the domain until the new version has replaced them.
 
 Removing a domain from config is different. Its stack leaves the app, and CDK doesn't delete a
-stack the app no longer builds, so it is deleted by hand. Its log groups are retained, so adding
-the domain back later fails until they are imported into its new stack or deleted.
+stack the app no longer builds, so it is deleted by hand, once its
+[termination protection](/flex-platform/infrastructure/overview/#stacks) is turned off. Its log
+groups are retained, so adding the domain back later fails until they are imported into its new
+stack or deleted.
 
 ### Checks
 
@@ -127,10 +129,8 @@ own stack instead, before its stage, so API Gateway never creates one.
 
 `DomainStack`, `domain-<environment>-<domain>`, holds one domain's API and the host it answers at,
 and the log group and roles its function runs and is released with, in the domain account that
-hosts it, in eu-west-2. It holds no function: the API reaches the domain's function by name. It has
-no termination protection, since everything in it but its log groups, which are retained, is built
-again from config. CDK doesn't delete a stack the app no longer builds, so a domain removed from
-config keeps its stack until someone deletes it.
+hosts it, in eu-west-2. It holds no function: the API reaches the domain's function by name. A
+domain [removed from config](#disabling-a-domain) keeps its stack until someone deletes it.
 
 | Construct | Builds |
 |---|---|
@@ -155,15 +155,16 @@ reaches an upstream through a gateway, and a gateway that needs the internet has
 security group a domain's function runs in, which may reach only the `lambda` endpoint: see
 [what a workload may reach](/flex-platform/infrastructure/network/#what-a-workload-may-reach).
 
-The stack reads two of the network's
-[parameters](/flex-platform/infrastructure/network/#ids-other-stacks-read) when it deploys, and
-holds the deploy role to them. The deploy role may read them too, so a release places a function
-from the same values:
+The stack reads three of the network's
+[parameters](/flex-platform/infrastructure/network/#ids-other-stacks-read) when it deploys. It
+holds the deploy role to the first two, which the deploy role may read too, so a release places a
+function from the same values. It holds the execution role to the third:
 
 | Parameter | Holds |
 |---|---|
 | `/flex/network/<environment>/isolated-subnet-ids` | The isolated subnets' IDs |
 | `/flex/network/<environment>/security-group/domain` | The `domain` security group's ID |
+| `/flex/network/<environment>/endpoint/lambda` | The `lambda` endpoint's ID |
 
 If the network is ever replaced, the stack deploys with `--force` to read the new IDs.
 
@@ -172,13 +173,19 @@ If the network is ever replaced, the stack deploys with `--force` to read the ne
 Each domain's function runs as a role of its own, `domain-<environment>-<domain>-execution`. It
 may:
 
-- invoke any function named `gateway-<environment>-*`, with any qualifier, such as `:live`. Any
-  domain may call any gateway in its environment, and only gateways have that name. The stack
-  takes the pattern from `gatewayFunctionPattern` in `gateways/infra`;
+- invoke any function named `gateway-<environment>-*`, through its `live` alias and no other way.
+  Any domain may call any gateway in its environment, and only gateways have that name. The stack
+  takes the pattern from `gatewayAliasPattern` in `gateways/infra`, as the network's
+  [`lambda` endpoint](/flex-platform/infrastructure/network/#endpoints) does;
 - write to its own domain's log group, `/flex/domain/<environment>/<domain>/function`, and use
   its stack's key for that through CloudWatch Logs;
 - send its traces to X-Ray;
 - create and remove the network interfaces Lambda needs to run it in the VPC.
+
+It may invoke a gateway only through the network's `lambda` endpoint. A domain's code holds the
+role's credentials, and could give them away in a response or a log line. So the role denies
+invoking any function by any other way, and the credentials invoke nothing from outside the
+network.
 
 Lambda manages those network interfaces with the role's credentials, which the function's code
 holds too. So the role denies the network interface actions to any call made from a domain's code,
