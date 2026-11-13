@@ -22,11 +22,19 @@ const THREE_ZONES: NetworkConfig = {
   availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
 };
 
-// The development environments trust the staging pool until they have a test pool of their own.
+// platform-prod's development environment trusts the staging pool until it has a test pool of its
+// own.
 export const STAGES: readonly StageConfig[] = [
   {
     name: "platform-dev",
-    shared: { account: "743702012480", testUsers: null },
+    shared: {
+      account: "743702012480",
+      testUsers: {
+        issuer:
+          "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_UCFRiLfsD",
+        clientIds: ["4hurkb79cvepuo6v078ui1rdhv"],
+      },
+    },
     environments: [
       {
         name: "development",
@@ -49,8 +57,8 @@ export const STAGES: readonly StageConfig[] = [
             name: "development.flex-platformedge.once.service.gov.uk",
             id: "Z031433615ESLO5K1AH7F",
           },
-          issuers: [STAGING_POOL],
-          testUsers: false,
+          issuers: [],
+          testUsers: true,
         },
       },
     ],
