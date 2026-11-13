@@ -9,25 +9,16 @@
 //
 // A log group's name is a path instead: /flex/frontdoor/{environment}/{thing}. Where AWS requires
 // a prefix, the name above follows it: WAF's aws-waf-logs-, and CloudFront's
-// /aws/cloudfront/function/ before the function's name.
+// /aws/cloudfront/function/ before the function's name. The constructs in @repo/infra-constructs
+// that create those two log groups derive their names.
 
 export function webAclName(environment: string): string {
   return `frontdoor-${environment}-web-acl`;
 }
 
-/** WAF only accepts a log group whose name starts with `aws-waf-logs-`. */
-export function wafLogGroupName(environment: string): string {
-  return `aws-waf-logs-${webAclName(environment)}`;
-}
-
 /** The CloudFront Function's name, which also names the log group CloudFront writes it to. */
 export function viewerRequestFunctionName(environment: string): string {
   return `frontdoor-${environment}-viewer-request`;
-}
-
-/** CloudFront writes a function's logs here, in us-east-1, and creates the group if it's missing. */
-export function viewerRequestLogGroupName(environment: string): string {
-  return `/aws/cloudfront/function/${viewerRequestFunctionName(environment)}`;
 }
 
 /**

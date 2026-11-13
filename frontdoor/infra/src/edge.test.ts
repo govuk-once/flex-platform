@@ -1,8 +1,19 @@
+import { CONTENT_SECURITY_POLICY } from "@repo/infra-constructs";
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { edgeIn, edgeTemplate, stackIn, ZONE } from "../test/helpers.ts";
-import { CONTENT_SECURITY_POLICY } from "./response-headers-policy.ts";
+import { REDACTED_HEADERS } from "./edge.ts";
+
+interface Rule {
+  Name: string;
+  Statement: {
+    RateBasedStatement?: {
+      Limit: number;
+      CustomKeys?: { Header: { Name: string } }[];
+    };
+  };
+}
 
 describe("Edge", () => {
   it("refuses any region but us-east-1", () => {
@@ -320,6 +331,51 @@ describe("Edge", () => {
             { Header: "x-amzn-remapped-www-authenticate" },
           ],
         },
+      },
+    });
+  });
+
+  it("limits each token to 1,000 requests and each address to 5,000 in five minutes", () => {
+    const { template } = edgeTemplate();
+    const [webAcl] = Object.values(
+      template.findResources("AWS::WAFv2::WebACL"),
+    );
+    const { Name, Rules } = webAcl?.Properties as {
+      Name: string;
+      Rules: Rule[];
+    };
+    const rate = (name: string) =>
+      Rules.find((rule) => rule.Name === name)?.Statement.RateBasedStatement;
+
+    expect(Name).toBe("frontdoor-sandbox-web-acl");
+    expect(rate("RateLimitPerToken")).toMatchObject({
+      Limit: 1000,
+      CustomKeys: [{ Header: { Name: "authorization" } }],
+    });
+    expect(rate("RateLimitPerIp")).toMatchObject({ Limit: 5000 });
+  });
+
+  // A token in a log is a token anyone who reads the log can use until it expires.
+  it("keeps credentials out of the web ACL's logs and samples", () => {
+    const { template } = edgeTemplate();
+
+    expect(REDACTED_HEADERS).toEqual(["authorization", "cookie"]);
+    template.hasResourceProperties("AWS::Logs::LogGroup", {
+      LogGroupName: "aws-waf-logs-frontdoor-sandbox-web-acl",
+    });
+    template.hasResourceProperties("AWS::WAFv2::LoggingConfiguration", {
+      RedactedFields: REDACTED_HEADERS.map((Name) => ({
+        SingleHeader: { Name },
+      })),
+    });
+    template.hasResourceProperties("AWS::WAFv2::WebACL", {
+      DataProtectionConfig: {
+        DataProtections: Match.arrayWith([
+          Match.objectLike({
+            Action: "SUBSTITUTION",
+            Field: { FieldType: "SINGLE_HEADER", FieldKeys: ["authorization"] },
+          }),
+        ]),
       },
     });
   });

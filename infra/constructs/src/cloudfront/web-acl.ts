@@ -1,34 +1,41 @@
-import { PlatformLogGroup } from "@repo/infra-constructs";
 import { ArnFormat, Stack } from "aws-cdk-lib";
 import type { LogGroup } from "aws-cdk-lib/aws-logs";
 import { CfnLoggingConfiguration, CfnWebACL } from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 
-import { wafLogGroupName, webAclName } from "./names.ts";
+import { PlatformLogGroup } from "../log-group.ts";
 import {
   BODY_INSPECTION_LIMIT,
   CUSTOM_RESPONSE_BODIES,
-  wafRules,
+  webAclRules,
+  type WebAclRulesProps,
 } from "./waf-rules.ts";
 
-/** Substituted in sampled requests and redacted in logs, so a credential reaches neither. */
-export const REDACTED_HEADERS: readonly string[] = ["authorization", "cookie"];
+/** WAF only accepts a log group whose name starts with `aws-waf-logs-`. */
+export function wafLogGroupName(webAclName: string): string {
+  return `aws-waf-logs-${webAclName}`;
+}
 
-export interface WebAclProps {
-  readonly environment: string;
+export interface CloudFrontWebAclProps extends WebAclRulesProps {
+  /** Derived from config. It is also the web ACL's metric name, and names its log group. */
+  readonly name: string;
+  /** Substituted in sampled requests and redacted in logs, so a credential reaches neither. */
+  readonly redactedHeaders: readonly string[];
 }
 
 /**
+ * A distribution's web ACL, and the log group every request it evaluates is logged to.
+ *
  * WAF accepts a CloudFront web ACL, its logging configuration and the log group it writes to in
  * us-east-1 only, so the construct refuses any other region at synth time.
  */
-export class WebAcl extends Construct {
+export class CloudFrontWebAcl extends Construct {
   public readonly webAcl: CfnWebACL;
   public readonly logGroup: LogGroup;
   /** In evaluation order; also the rules' metric names. */
   public readonly ruleNames: readonly string[];
 
-  constructor(scope: Construct, id: string, props: WebAclProps) {
+  constructor(scope: Construct, id: string, props: CloudFrontWebAclProps) {
     super(scope, id);
 
     const stack = Stack.of(this);
@@ -38,10 +45,10 @@ export class WebAcl extends Construct {
       );
     }
 
-    const rules = wafRules();
+    const { name, redactedHeaders } = props;
+    const rules = webAclRules(props);
     this.ruleNames = rules.map((rule) => rule.name);
 
-    const name = webAclName(props.environment);
     this.webAcl = new CfnWebACL(this, "WebAcl", {
       name,
       scope: "CLOUDFRONT",
@@ -58,7 +65,7 @@ export class WebAcl extends Construct {
         sampledRequestsEnabled: true,
       },
       dataProtectionConfig: {
-        dataProtections: REDACTED_HEADERS.map((header) => ({
+        dataProtections: redactedHeaders.map((header) => ({
           action: "SUBSTITUTION",
           field: { fieldType: "SINGLE_HEADER", fieldKeys: [header] },
           excludeRuleMatchDetails: false,
@@ -69,7 +76,7 @@ export class WebAcl extends Construct {
     });
 
     this.logGroup = new PlatformLogGroup(this, "Logs", {
-      logGroupName: wafLogGroupName(props.environment),
+      logGroupName: wafLogGroupName(name),
     }).logGroup;
 
     new CfnLoggingConfiguration(this, "Logging", {
@@ -83,7 +90,7 @@ export class WebAcl extends Construct {
           arnFormat: ArnFormat.COLON_RESOURCE_NAME,
         }),
       ],
-      redactedFields: REDACTED_HEADERS.map((header) => ({
+      redactedFields: redactedHeaders.map((header) => ({
         singleHeader: { Name: header },
       })),
     });
