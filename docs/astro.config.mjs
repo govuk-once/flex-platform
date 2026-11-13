@@ -47,6 +47,7 @@ export default defineConfig({
             "domains/overview",
             "domains/hosting",
             "domains/designing-a-domain",
+            "domains/building-a-domain",
           ],
         },
         {

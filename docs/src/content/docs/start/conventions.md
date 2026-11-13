@@ -42,9 +42,10 @@ change you are making.
   and `exactOptionalPropertyTypes` as `base.json` does.
 - ESLint provides `base`, `driver`, `service`, `cloudfrontFunction`, `infraConstructs` and
   `sectionInfra` presets. Drivers own transport access. `service` is for code that reaches an
-  upstream only through a driver: each gateway's package under `gateways/services/`, and the
-  runtime. It blocks common network globals and builtin imports, but it does not fully enforce
-  network isolation, so review transport access too. Code that runs in the CloudFront Functions runtime uses `cloudfrontFunction`, which refuses
+  upstream only through a driver, or a gateway only through its client: each gateway's package
+  under `gateways/services/`, the runtime, and the domain SDK. It blocks common network globals
+  and builtin imports, but it does not fully enforce network isolation, so review transport access
+  too. Code that runs in the CloudFront Functions runtime uses `cloudfrontFunction`, which refuses
   what that runtime lacks, and names the packages the code may import. `infra/constructs` uses
   `infraConstructs`, and a section's `infra/` uses `sectionInfra("<prefix>")`, which hold the
   infrastructure's imports to one direction. The argument is the prefix of the section's package

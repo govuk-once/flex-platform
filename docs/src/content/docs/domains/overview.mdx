@@ -5,8 +5,6 @@ sidebar:
   label: Overview
 ---
 
-import { Aside } from "@astrojs/starlight/components";
-
 A **domain** is the logic behind a personalised feature of the GOV.UK app. It sits between the app
 and the upstreams that hold the data it needs.
 
@@ -23,7 +21,7 @@ and the boundary between domain logic and gateway code.
 ## Where a domain's code lives
 
 Domain code will live with the team that writes it and use the domain SDK the platform publishes.
-This repository does not yet include a domain skeleton or the SDK. How a domain is
+This repository holds the SDK, which is being written, and no domain skeleton yet. How a domain is
 declared, and where it runs, is in [Hosting a domain](/flex-platform/domains/hosting/).
 
 ## Releasing a domain
@@ -90,8 +88,9 @@ A call's second argument, its options, can carry a `signal` that stops the clien
 What a call sends on its caller's behalf comes from the caller context, not from the call. It is
 set once for the whole of a domain's invocation, by running the handler inside `withCallerContext`
 from `@govuk-once/flex-gateway-client/caller`. Every call made from the handler, however many
-`await`s deep, then carries it. The planned domain SDK will do this for every handler, so a domain
-developer does not. The entry is kept apart from the client's main one so that an editor does not
+`await`s deep, then carries it. The domain SDK's
+[`route()`](/flex-platform/domains/building-a-domain/#the-caller) does this for every handler, so a
+domain developer does not. The entry is kept apart from the client's main one so that an editor does not
 offer it, and nothing exports a way to read the context back.
 
 ```ts
@@ -149,10 +148,9 @@ gateway refuses as `UPSTREAM_CONTRACT_VIOLATION`.
 
 ## Domain SDK
 
-<Aside type="note" title="To do">
-The platform will publish a domain SDK, one package with examples, that domain developers install
-to build a domain. It is not written yet. This section will describe it when it is.
-</Aside>
+The domain SDK, `@govuk-once/flex-domain-sdk` in `domains/sdk`, is the one package a domain is
+built with. It is being written. [Building a domain](/flex-platform/domains/building-a-domain/)
+describes what it holds so far.
 
 ## API specifications
 

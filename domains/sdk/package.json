@@ -1,0 +1,40 @@
+{
+  "name": "@govuk-once/flex-domain-sdk",
+  "version": "0.1.0",
+  "description": "Builds a domain's function from its configuration: typed handlers, validation, responses and logging.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "directory": "dist",
+    "linkDirectory": false
+  },
+  "scripts": {
+    "build": "rolldown -c",
+    "lint": "eslint src/ test/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@govuk-once/flex-gateway-client": ">=0.1.0 <1.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@govuk-once/flex-gateway-client": "workspace:*",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/gateway-core": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/utils": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "eslint": "10.13.0",
+    "rolldown": "1.2.15",
+    "rolldown-plugin-dts": "0.28.8",
+    "vitest": "5.0.5",
+    "zod": "4.6.7"
+  },
+  "dependencies": {
+    "pino": "10.4.0"
+  }
+}
