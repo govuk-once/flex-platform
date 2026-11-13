@@ -1,6 +1,12 @@
 export { PlatformBucket } from "./bucket.ts";
 export { cdkApp } from "./cdk-app.ts";
 export {
+  CROSS_REGION_PARAMETER_PATH,
+  crossRegionParameterName,
+  CrossRegionParameters,
+  type CrossRegionParametersProps,
+} from "./cross-region-parameters.ts";
+export {
   functionRoleStatements,
   type FunctionRoleStatementsProps,
   logGroupWriteStatements,

@@ -266,6 +266,25 @@ Before building any stage, the app checks every stage's config:
   reference: the consumer's template would hold a lookup instead of the value, so replacing the
   producer's resource would change no consumer. A shared resource that has to be replaced gets a
   new name, so the change reaches every consumer's template.
+- **A value AWS generates crosses regions through `CrossRegionParameters`.** A name derived from
+  config can't stand in for a value AWS generates, such as a function URL's host. Within a region,
+  the stack that has the value writes it to SSM and its reader resolves it at deploy, as a domain's
+  stack reads its account's
+  [certificate ARN](/flex-platform/domains/hosting/#what-a-domain-account-provides).
+  CloudFormation writes a parameter only in a stack's own region. So for a reader in another
+  region, the stack that has the value uses `CrossRegionParameters`, from `infra/constructs`: a
+  custom resource writes each value to a parameter in the reader's region, when the stack
+  deploys, so synth stays offline. The value is the custom resource's own property, so it is
+  written again when it changes and never otherwise, and a template is the same from one synth
+  to the next. The reader uses `valueForStringParameter`, declares the dependency, and deploys
+  with `--force` after the value changes.
+
+  CloudFormation holds the custom resource, not the parameter, so these parameters are the one
+  thing the stacks create that the [inventory](#tests) doesn't list. Each is under
+  `/flex/cross-region/`, named by `crossRegionParameterName`, which is how one is told from a
+  parameter nothing accounts for. A stack has one `CrossRegionParameters`, which takes its values
+  by region: CDK runs every such custom resource in a stack in one function, which here runs as a
+  role that may write only those parameters, and logs to a log group the stack names.
 
 ## Test users
 
