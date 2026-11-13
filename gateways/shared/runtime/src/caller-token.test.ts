@@ -1,4 +1,5 @@
-import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
+import type { KeyObject } from "node:crypto";
+import { generateKeyPairSync, sign } from "node:crypto";
 
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
@@ -46,6 +47,13 @@ function token({ header, payload, key }: TokenParts = {}): string {
     },
   )}`;
   const signature = sign(null, Buffer.from(input), key ?? SIGNING.privateKey);
+  return `${input}.${signature.toString("base64url")}`;
+}
+
+// A token signed over a payload that isn't JSON, which `token` can't make.
+function signedText(payload: string): string {
+  const input = `${b64({ alg: "EdDSA", kid: KID })}.${Buffer.from(payload).toString("base64url")}`;
+  const signature = sign(null, Buffer.from(input), SIGNING.privateKey);
   return `${input}.${signature.toString("base64url")}`;
 }
 
@@ -198,6 +206,25 @@ describe("createCallerTokenVerifier", () => {
       () => `${Buffer.from("x").toString("base64url")}.e30.e30`,
       "header",
     ],
+    ["without a key ID", () => token({ header: { kid: undefined } }), "key ID"],
+    [
+      "with a signature of the wrong length",
+      () => {
+        const [header, payload] = token().split(".");
+        return `${header}.${payload}.${Buffer.alloc(32).toString("base64url")}`;
+      },
+      "signature",
+    ],
+    [
+      "with a signed payload that isn't JSON",
+      () => signedText("SYNTHETIC"),
+      "payload",
+    ],
+    [
+      "with an expiry that isn't a number",
+      () => token({ payload: { exp: String(IAT + 60) } }),
+      "times",
+    ],
   ])("refuses a token %s, naming the check alone", async (_, make, check) => {
     const error = await refusal(verifier()(make()));
     expect(error.code).toBe("SECURE_SIGNATURE_INVALID");
@@ -208,6 +235,20 @@ describe("createCallerTokenVerifier", () => {
   it("allows the edge's clock a few seconds either way", async () => {
     await expect(verifier(() => NOW + 63_000)(token())).resolves.toBeDefined();
     await expect(verifier(() => NOW - 4_000)(token())).resolves.toBeDefined();
+  });
+
+  it("refuses a token at the moment its expiry passes the tolerance", async () => {
+    const error = await refusal(verifier(() => NOW + 65_000)(token()));
+    expect(error.message).toBe("Caller token refused: expired");
+  });
+
+  it("allows the key's times the same tolerance as the clock", async () => {
+    await expect(
+      verifier(() => NOW, { signsFrom: IAT + 5 })(token()),
+    ).resolves.toBeDefined();
+    await expect(
+      verifier(() => NOW, { signsUntil: IAT - 5 })(token()),
+    ).resolves.toBeDefined();
   });
 
   it("refuses a token issued before its key started to sign", async () => {
@@ -381,6 +422,45 @@ describe("createCallerTokenKeys", () => {
           keySet({ [KID]: SIGNING.publicKey }, { signsUntil: FROM }),
         ),
     ],
+    [
+      "hold a key that isn't an object",
+      () => Promise.resolve(JSON.stringify({ keys: ["SYNTHETIC"] })),
+    ],
+    [
+      "hold a key with a key ID of another shape",
+      () => Promise.resolve(keySet({ "../keys": SIGNING.publicKey })),
+    ],
+    [
+      "hold a key of the wrong length",
+      () =>
+        Promise.resolve(
+          JSON.stringify({
+            keys: [
+              {
+                kty: "OKP",
+                crv: "Ed25519",
+                kid: KID,
+                x: Buffer.alloc(16).toString("base64url"),
+                signsFrom: FROM,
+              },
+            ],
+          }),
+        ),
+    ],
+    [
+      "hold a key whose start isn't whole seconds",
+      () =>
+        Promise.resolve(
+          keySet({ [KID]: SIGNING.publicKey }, { signsFrom: FROM + 0.5 }),
+        ),
+    ],
+    [
+      "hold a key whose end isn't whole seconds",
+      () =>
+        Promise.resolve(
+          keySet({ [KID]: SIGNING.publicKey }, { signsUntil: FROM + 60.5 }),
+        ),
+    ],
   ])(
     "fails as INTERNAL, saying nothing of why, when the keys %s",
     async (_, read) => {
@@ -420,6 +500,15 @@ describe("readCallerTokenVerifier", () => {
     expect(() => readCallerTokenVerifier(env)).toThrow(
       `Environment variable ${name} must be set`,
     );
+  });
+
+  it("refuses to start with a variable that is only whitespace", () => {
+    expect(() =>
+      readCallerTokenVerifier({
+        ...DEPLOYED,
+        FLEX_CALLER_TOKEN_AUDIENCE: "  ",
+      }),
+    ).toThrow("Environment variable FLEX_CALLER_TOKEN_AUDIENCE must be set");
   });
 
   it("refuses to start with a bucket owner that isn't an account ID", () => {

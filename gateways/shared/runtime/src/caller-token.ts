@@ -125,90 +125,112 @@ function own(record: Record<string, unknown>, name: string): unknown {
   return Object.hasOwn(record, name) ? record[name] : undefined;
 }
 
+interface CompactJws {
+  readonly header: string;
+  readonly payload: string;
+  readonly signature: string;
+}
+
+function splitToken(token: string | undefined): CompactJws {
+  // A domain that forgot the token, not one that tampered with it.
+  if (token === undefined || token.length === 0) {
+    throw new GatewayError(
+      "UNAUTHENTICATED",
+      "The call carries no caller token",
+    );
+  }
+  if (token.length > MAX_TOKEN_LENGTH) throw invalid("too long");
+
+  const segments = token.split(".");
+  if (segments.length !== 3) throw invalid("not a compact JWS");
+  const [header = "", payload = "", signature = ""] = segments;
+
+  return { header, payload, signature };
+}
+
+function readKeyId(encodedHeader: string): string {
+  const header = decodeJson(encodedHeader);
+  if (header === undefined) throw invalid("header");
+  // Pinned: the header never chooses how the token is checked.
+  if (own(header, "alg") !== "EdDSA") throw invalid("algorithm");
+  if (own(header, "crit") !== undefined) throw invalid("critical header");
+
+  const kid = own(header, "kid");
+  // Checked before it is looked up, since a caller chose it.
+  if (typeof kid !== "string" || !KEY_ID.test(kid)) throw invalid("key ID");
+
+  return kid;
+}
+
+function checkTimes(
+  payload: Record<string, unknown>,
+  key: CallerTokenKey,
+  seconds: number,
+): void {
+  const iat = own(payload, "iat");
+  const exp = own(payload, "exp");
+  if (typeof iat !== "number" || typeof exp !== "number") {
+    throw invalid("times");
+  }
+  if (exp - iat > MAX_LIFETIME_SECONDS) throw invalid("lifetime");
+  if (iat > seconds + CLOCK_TOLERANCE_SECONDS) throw invalid("issued later");
+  if (exp <= seconds - CLOCK_TOLERANCE_SECONDS) throw invalid("expired");
+  // Issued while the key signed. The edge switches keys at the moment the next starts.
+  if (iat < key.signsFrom - CLOCK_TOLERANCE_SECONDS) {
+    throw invalid("key not yet signing");
+  }
+  if (
+    key.signsUntil !== undefined &&
+    iat > key.signsUntil + CLOCK_TOLERANCE_SECONDS
+  ) {
+    throw invalid("key replaced");
+  }
+}
+
+function readCaller(payload: Record<string, unknown>): VerifiedCaller {
+  const tokenId = own(payload, "jti");
+  if (typeof tokenId !== "string" || !TOKEN_ID.test(tokenId)) {
+    throw invalid("token ID");
+  }
+
+  const claims: Record<string, string> = {};
+  for (const claim of SECURE_CLAIMS) {
+    const value = own(payload, claim);
+    if (typeof value !== "string" || value.length === 0) {
+      throw invalid(`claim ${claim}`);
+    }
+    claims[claim] = value;
+  }
+
+  return { claims: claims as SecureClaims, tokenId };
+}
+
 export function createCallerTokenVerifier(
   options: CallerTokenVerifierOptions,
 ): VerifyCallerToken {
   const now = options.now ?? Date.now;
 
   return async (token) => {
-    // A domain that forgot the token, not one that tampered with it.
-    if (token === undefined || token.length === 0) {
-      throw new GatewayError(
-        "UNAUTHENTICATED",
-        "The call carries no caller token",
-      );
-    }
-    if (token.length > MAX_TOKEN_LENGTH) throw invalid("too long");
+    const jws = splitToken(token);
+    const kid = readKeyId(jws.header);
 
-    const segments = token.split(".");
-    if (segments.length !== 3) throw invalid("not a compact JWS");
-    const [encodedHeader = "", encodedPayload = "", encodedSignature = ""] =
-      segments;
-
-    const header = decodeJson(encodedHeader);
-    if (header === undefined) throw invalid("header");
-    // Pinned: the header never chooses how the token is checked.
-    if (own(header, "alg") !== "EdDSA") throw invalid("algorithm");
-    if (own(header, "crit") !== undefined) throw invalid("critical header");
-    const kid = own(header, "kid");
-    // Checked before it is looked up, since a caller chose it.
-    if (typeof kid !== "string" || !KEY_ID.test(kid)) throw invalid("key ID");
-
-    const signature = decodeSegment(encodedSignature);
+    const signature = decodeSegment(jws.signature);
     if (signature?.length !== ED25519_SIGNATURE_BYTES)
       throw invalid("signature");
 
     const key = await options.keys.get(kid);
     if (key === undefined) throw invalid("unknown key");
-    if (
-      !verify(
-        null,
-        Buffer.from(`${encodedHeader}.${encodedPayload}`),
-        key.key,
-        signature,
-      )
-    ) {
-      throw invalid("signature");
-    }
 
-    const payload = decodeJson(encodedPayload);
+    const signed = Buffer.from(`${jws.header}.${jws.payload}`);
+    if (!verify(null, signed, key.key, signature)) throw invalid("signature");
+
+    const payload = decodeJson(jws.payload);
     if (payload === undefined) throw invalid("payload");
     if (own(payload, "aud") !== options.audience) throw invalid("audience");
 
-    const seconds = now() / 1000;
-    const iat = own(payload, "iat");
-    const exp = own(payload, "exp");
-    if (typeof iat !== "number" || typeof exp !== "number") {
-      throw invalid("times");
-    }
-    if (exp - iat > MAX_LIFETIME_SECONDS) throw invalid("lifetime");
-    if (iat > seconds + CLOCK_TOLERANCE_SECONDS) throw invalid("issued later");
-    if (exp <= seconds - CLOCK_TOLERANCE_SECONDS) throw invalid("expired");
-    // Issued while the key signed. The edge switches keys at the moment the next starts.
-    if (iat < key.signsFrom - CLOCK_TOLERANCE_SECONDS) {
-      throw invalid("key not yet signing");
-    }
-    if (
-      key.signsUntil !== undefined &&
-      iat > key.signsUntil + CLOCK_TOLERANCE_SECONDS
-    ) {
-      throw invalid("key replaced");
-    }
+    checkTimes(payload, key, now() / 1000);
 
-    const tokenId = own(payload, "jti");
-    if (typeof tokenId !== "string" || !TOKEN_ID.test(tokenId)) {
-      throw invalid("token ID");
-    }
-
-    const claims: Record<string, string> = {};
-    for (const claim of SECURE_CLAIMS) {
-      const value = own(payload, claim);
-      if (typeof value !== "string" || value.length === 0) {
-        throw invalid(`claim ${claim}`);
-      }
-      claims[claim] = value;
-    }
-    return { claims: claims as SecureClaims, tokenId };
+    return readCaller(payload);
   };
 }
 

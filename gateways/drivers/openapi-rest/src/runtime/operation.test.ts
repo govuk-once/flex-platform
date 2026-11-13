@@ -2,6 +2,7 @@ import { GatewayError } from "@repo/gateway-runtime";
 import { assert, describe, expect, it } from "vitest";
 
 import { defineHandler } from "../config/handler.ts";
+import type { OpenApiRestOperationConfig } from "./operation.ts";
 import { compileOperation } from "./operation.ts";
 
 describe("compileOperation", () => {
@@ -114,6 +115,16 @@ describe("compileOperation", () => {
     ],
   ] as const)("rejects %j at compile time", (config, message) => {
     expect(() => compileOperation("op", config)).toThrow(message);
+  });
+
+  it("rejects a handler that isn't a function at compile time", () => {
+    const config: OpenApiRestOperationConfig = { upstream: "GET /users" };
+
+    assert.isTrue(Reflect.set(config, "handler", "SYNTHETIC"));
+
+    expect(() => compileOperation("op", config)).toThrow(
+      /handler must be a function/,
+    );
   });
 
   it("lets a same-named field feed the path when another field is renamed onto it", () => {
@@ -454,6 +465,13 @@ describe("prepare", () => {
       /2 input fields are not mapped to the upstream request$/,
     );
     expect(err.message).not.toContain("SYNTHETIC_FIELD");
+  });
+
+  it("names a single unmapped field in the singular", () => {
+    const op = compileOperation("get", { upstream: "GET /users" });
+    expect(() => op.prepare({ SYNTHETIC_FIELD: 1 })).toThrow(
+      /: 1 input field is not mapped to the upstream request$/,
+    );
   });
 
   it.each([
