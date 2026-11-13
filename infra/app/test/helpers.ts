@@ -9,7 +9,9 @@ import type {
   FrontdoorConfig,
   GatewayConfig,
   NetworkConfig,
+  SharedConfig,
   StageConfig,
+  StageDomainConfig,
   ZoneConfig,
 } from "../src/config/types.ts";
 
@@ -97,16 +99,37 @@ export function domainAccount(
 
 const FIXTURE_DOMAINS = ["domain-a", "domain-b"];
 
+// One domain with a repository that may release it, and one whose repository doesn't exist yet.
+export const REPOSITORY = {
+  name: "example-org/domain-a",
+  id: "700000001",
+  ownerId: "800000001",
+};
+
+export const FIXTURE_STAGE_DOMAINS: readonly StageDomainConfig[] = [
+  { name: "domain-a", repository: REPOSITORY },
+  { name: "domain-b", repository: null },
+];
+
+// A stage's shared account, with its zone named after the account as the others are, and no test
+// user pool.
+export function shared(account: string): SharedConfig & { testUsers: null } {
+  return { account, zone: zone("shared", account), testUsers: null };
+}
+
 // The real stages' shape: two stages with one environment, one with three, and one environment
 // with two domain accounts, the second hosting no domains, so every loop is exercised. platform-prod
-// has a test user pool, which its dev environment trusts.
+// has a test user pool, which its dev environment trusts, and its environments promote one to the
+// next, as the committed platform-prod's do.
 export const FIXTURE_STAGES = [
   {
     name: "platform-dev",
-    shared: { account: "100000000001", testUsers: null },
+    shared: shared("100000000001"),
+    domains: FIXTURE_STAGE_DOMAINS,
     environments: [
       {
         name: "sandbox",
+        release: "publish",
         domainAccounts: [
           domainAccount("sandbox", "main", "100000000003", FIXTURE_DOMAINS),
         ],
@@ -116,10 +139,12 @@ export const FIXTURE_STAGES = [
   },
   {
     name: "platform-staging",
-    shared: { account: "200000000001", testUsers: null },
+    shared: shared("200000000001"),
+    domains: FIXTURE_STAGE_DOMAINS,
     environments: [
       {
         name: "sandbox",
+        release: "publish",
         domainAccounts: [
           domainAccount("sandbox", "main", "200000000003", FIXTURE_DOMAINS),
         ],
@@ -129,10 +154,12 @@ export const FIXTURE_STAGES = [
   },
   {
     name: "platform-prod",
-    shared: { account: "300000000001", testUsers: TEST_USERS },
+    shared: { ...shared("300000000001"), testUsers: TEST_USERS },
+    domains: FIXTURE_STAGE_DOMAINS,
     environments: [
       {
         name: "dev",
+        release: "publish",
         domainAccounts: [
           domainAccount(
             "dev",
@@ -146,6 +173,7 @@ export const FIXTURE_STAGES = [
       },
       {
         name: "staging",
+        release: { promoteFrom: "dev" },
         domainAccounts: [
           domainAccount(
             "staging",
@@ -159,6 +187,7 @@ export const FIXTURE_STAGES = [
       },
       {
         name: "prod",
+        release: { promoteFrom: "staging" },
         domainAccounts: [
           domainAccount(
             "prod",

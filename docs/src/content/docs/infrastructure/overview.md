@@ -156,8 +156,10 @@ written out side by side. A value is in config whenever it can be known before d
 never is: config names a secret, never holds one.
 
 ```ts
-StageConfig         { name, shared: { account, testUsers }, environments }
-EnvironmentConfig   { name, frontdoor: { account, zone, issuers, testUsers }, domainAccounts }
+StageConfig         { name, shared: { account, zone, testUsers },
+                      domains: [{ name, repository: { name, id, ownerId } | null }], environments }
+EnvironmentConfig   { name, release: "publish" | { promoteFrom },
+                      frontdoor: { account, zone, issuers, testUsers }, domainAccounts }
 DomainAccountConfig { name, account, domains: [name | { name, disabled: true }], zone,
                       network: { availabilityZones }, gateways }
 GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
@@ -168,11 +170,22 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
 - `domains` lists the domains a domain account hosts in the environment, each by its name, or
   as `{ name, disabled: true }` when it is disabled. See
   [Hosting a domain](/flex-platform/domains/hosting/).
+- A stage's own `domains` lists every domain its environments host, once each, with the GitHub
+  repository that may release it, or `null` until that repository exists. One entry serves every
+  environment, because a domain's code is uploaded once and promoted. A repository's `id` and
+  `ownerId` are GitHub's IDs for it and for its owner, in digits. A repository keeps them when it
+  is renamed or transferred, and one created later under the same name has others. Its `name`,
+  `<owner>/<repository>`, is for people to read.
+- `release` says how a domain's code reaches the environment: `"publish"`, where new code enters
+  the stage, or `{ promoteFrom }`, naming the environment whose released code it takes. Nothing
+  reads `release` or a stage's `domains` yet: see
+  [releasing a domain's function](/flex-platform/domains/hosting/#releasing-a-domains-function).
 - `zone` is the account's public hosted zone, as `{ name, id }`. The zones aren't the platform's:
   another team creates one in each account, already delegated, named
   `<environment>.flex-<account role>.once.service.gov.uk`. An account writes records only into
   its own zone. The Frontdoor answers at its zone's apex, and each domain answers at
-  `<domain>.<its domain account's zone>`.
+  `<domain>.<its domain account's zone>`. Nothing answers in a shared account's zone,
+  `shared.zone`, yet.
 - `network.availabilityZones` lists the zones the account's network uses, in any order. Each has
   its own NAT gateway. See [availability zones](/flex-platform/infrastructure/network/#availability-zones).
 - `gateways` lists the gateways deployed in the account. Each domain account runs its own copy of
@@ -210,8 +223,8 @@ Before building any stage, the app checks every stage's config:
   change to one reach the other;
 - every zone's name is a DNS name of lowercase labels with at least one dot and no trailing dot,
   and its ID is a hosted zone ID without `/hostedzone/`. A certificate's name may be at most 64
-  characters, ACM's limit, so the Frontdoor's zone name, and `*.` and each domain account's zone
-  name, must fit within it;
+  characters, ACM's limit, so the Frontdoor's zone name, the shared account's, and `*.` and each
+  domain account's zone name, must fit within it;
 - every issuer, in `issuers` and in `shared.testUsers`, is an `https` URL naming at least one app
   client;
 - no environment's `issuers` names a test user pool, its own stage's or another's;
@@ -221,6 +234,13 @@ Before building any stage, the app checks every stage's config:
 - every domain's name follows the same rule as the names above, is used once in its environment,
   across all its domain accounts, and is short enough for its execution role's name to fit IAM's
   64 characters. See [checks](/flex-platform/domains/hosting/#checks);
+- a stage's `domains` holds exactly the domains its environments host, disabled ones included,
+  each once. A domain missing from it could never be released, and one no environment hosts
+  would leave its repository named for a domain the stage no longer has. A repository's name is
+  `<owner>/<repository>`, and its IDs are digits with no leading zero;
+- every `promoteFrom` names another environment of its stage, the promotions lead back to an
+  environment that publishes, and every domain an environment hosts is also hosted in the
+  environment it is promoted from;
 - every domain account's network lists at least two availability zones, each once, and each one
   the network has a layout for;
 - every gateway's id is a name as above, used once in its account, and short enough for its

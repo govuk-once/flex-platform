@@ -29,15 +29,21 @@ export const STAGES: readonly StageConfig[] = [
     name: "platform-dev",
     shared: {
       account: "743702012480",
+      zone: {
+        name: "development.flex-shared.once.service.gov.uk",
+        id: "Z1047090331J6R3FXTKE0",
+      },
       testUsers: {
         issuer:
           "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_UCFRiLfsD",
         clientIds: ["4hurkb79cvepuo6v078ui1rdhv"],
       },
     },
+    domains: [{ name: "example", repository: null }],
     environments: [
       {
         name: "development",
+        release: "publish",
         domainAccounts: [
           {
             name: "domain00",
@@ -65,10 +71,19 @@ export const STAGES: readonly StageConfig[] = [
   },
   {
     name: "platform-staging",
-    shared: { account: "186579591752", testUsers: null },
+    shared: {
+      account: "186579591752",
+      zone: {
+        name: "staging.flex-shared.once.service.gov.uk",
+        id: "Z03533672JRTLG1VW6T1S",
+      },
+      testUsers: null,
+    },
+    domains: [],
     environments: [
       {
         name: "staging",
+        release: "publish",
         domainAccounts: [
           {
             name: "domain00",
@@ -96,10 +111,19 @@ export const STAGES: readonly StageConfig[] = [
   },
   {
     name: "platform-prod",
-    shared: { account: "706098201385", testUsers: null },
+    shared: {
+      account: "706098201385",
+      zone: {
+        name: "production.flex-shared.once.service.gov.uk",
+        id: "Z01265801EAWB10P5SLMD",
+      },
+      testUsers: null,
+    },
+    domains: [],
     environments: [
       {
         name: "development",
+        release: "publish",
         domainAccounts: [
           {
             name: "domain00",
@@ -125,6 +149,7 @@ export const STAGES: readonly StageConfig[] = [
       },
       {
         name: "staging",
+        release: { promoteFrom: "development" },
         domainAccounts: [
           {
             name: "domain00",
@@ -150,6 +175,7 @@ export const STAGES: readonly StageConfig[] = [
       },
       {
         name: "production",
+        release: { promoteFrom: "staging" },
         domainAccounts: [
           {
             name: "domain00",

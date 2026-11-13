@@ -88,8 +88,49 @@ export interface DomainAccountConfig {
   readonly gateways: readonly GatewayConfig[];
 }
 
+/**
+ * The GitHub repository whose pipeline may release a domain's code. GitHub's IDs are what is
+ * checked: a repository keeps them when it is renamed or transferred, and one created later
+ * under the same name has others.
+ */
+export interface RepositoryConfig {
+  /** `<owner>/<repository>`, for people to read. Nothing is checked against it. */
+  readonly name: string;
+  /** GitHub's ID for the repository, in digits, as its tokens' `repository_id` claim has it. */
+  readonly id: string;
+  /** GitHub's ID for the repository's owner, as its tokens' `repository_owner_id` claim has it. */
+  readonly ownerId: string;
+}
+
+/**
+ * A domain in the stage, and who may release it. The same in every environment that hosts it,
+ * since one upload goes through them all.
+ */
+export interface StageDomainConfig {
+  readonly name: string;
+  /** `null` until the domain's repository exists. Nothing can release the domain until then. */
+  readonly repository: RepositoryConfig | null;
+}
+
+/**
+ * How a domain's code reaches an environment: `"publish"` where a pipeline uploads new code and
+ * releases it, or `promoteFrom` another of the stage's environments, where only code already
+ * released there can follow.
+ */
+export type ReleaseConfig = "publish" | PromoteConfig;
+
+export interface PromoteConfig {
+  /** The environment, in the same stage, whose released code this one takes. */
+  readonly promoteFrom: string;
+}
+
 export interface SharedConfig {
   readonly account: string;
+  /**
+   * The shared account's zone. Nothing answers in it yet. Its apex is kept for a distribution of
+   * the stage's own, so its name is held to a certificate's length.
+   */
+  readonly zone: ZoneConfig;
   /**
    * The stage's test user pool and its client. Cognito generates both IDs, so this is `null`
    * until the pool exists.
@@ -109,6 +150,7 @@ export interface FrontdoorConfig {
 
 export interface EnvironmentConfig {
   readonly name: string;
+  readonly release: ReleaseConfig;
   readonly domainAccounts: readonly DomainAccountConfig[];
   readonly frontdoor: FrontdoorConfig;
 }
@@ -116,5 +158,7 @@ export interface EnvironmentConfig {
 export interface StageConfig {
   readonly name: string;
   readonly shared: SharedConfig;
+  /** Every domain an environment of the stage hosts, once each. */
+  readonly domains: readonly StageDomainConfig[];
   readonly environments: readonly EnvironmentConfig[];
 }
