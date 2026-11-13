@@ -90,14 +90,21 @@ export interface DomainAccountConfig {
 
 export interface SharedConfig {
   readonly account: string;
+  /**
+   * The stage's test user pool and its client. Cognito generates both IDs, so this is `null`
+   * until the pool exists.
+   */
+  readonly testUsers: TrustedIssuer | null;
 }
 
 export interface FrontdoorConfig {
   readonly account: string;
   /** The edge answers at this zone's apex. */
   readonly zone: ZoneConfig;
-  /** The user pools and app clients whose tokens the edge lets through. */
+  /** The user pools and app clients whose tokens the edge lets through. Never a test user pool. */
   readonly issuers: readonly TrustedIssuer[];
+  /** Whether the edge also lets the stage's test users through. */
+  readonly testUsers: boolean;
 }
 
 export interface EnvironmentConfig {

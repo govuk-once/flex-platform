@@ -1,4 +1,5 @@
 import { executionRoleName, ROLE_NAME_LENGTH } from "@repo/domain-infra";
+import type { TrustedIssuer } from "@repo/frontdoor-shared";
 import { gatewayFunctionName } from "@repo/gateway-core";
 import { gatewayRoleName } from "@repo/gateway-infra";
 import {
@@ -9,6 +10,8 @@ import {
 import { isPlatformName } from "@repo/utils/is-platform-name";
 
 import { domainName } from "./domain-name.ts";
+import { SHARED_TARGET } from "./select-target.ts";
+import { trustedIssuers } from "./trusted-issuers.ts";
 import type {
   DomainAccountConfig,
   EnvironmentConfig,
@@ -56,12 +59,26 @@ export function validateStages(stages: readonly StageConfig[]): void {
     "stage",
     stages.map((stage) => stage.name),
   );
+  // Every stage's, so no environment in any stage can name one in its issuers.
+  const testUserPools = new Set<string>();
+  for (const stage of stages) {
+    const pool = stage.shared.testUsers;
+    if (pool !== null) {
+      checkIssuer(`${stage.name} shared test users`, pool);
+      testUserPools.add(pool.issuer);
+    }
+  }
   for (const stage of stages) {
     checkNames(
       `${stage.name} environment`,
       stage.environments.map((environment) => environment.name),
     );
     for (const environment of stage.environments) {
+      if (environment.name === SHARED_TARGET) {
+        throw new Error(
+          `${stage.name}: no environment may be named ${SHARED_TARGET}, which is the target that builds the shared account's stacks`,
+        );
+      }
       checkNames(
         `${stage.name}/${environment.name} domain account`,
         environment.domainAccounts.map((domainAccount) => domainAccount.name),
@@ -73,14 +90,24 @@ export function validateStages(stages: readonly StageConfig[]): void {
         domainsOf(environment),
       );
 
-      checkEnvironment(`${stage.name}/${environment.name}`, environment);
+      checkEnvironment(
+        `${stage.name}/${environment.name}`,
+        stage,
+        environment,
+        testUserPools,
+      );
       checkDomains(`${stage.name}/${environment.name}`, environment);
     }
   }
   checkAccounts(accountUses(stages));
 }
 
-function checkEnvironment(at: string, environment: EnvironmentConfig): void {
+function checkEnvironment(
+  at: string,
+  stage: StageConfig,
+  environment: EnvironmentConfig,
+  testUserPools: ReadonlySet<string>,
+): void {
   checkZone(`${at} frontdoor zone`, environment.frontdoor.zone, (name) => name);
   for (const domainAccount of environment.domainAccounts) {
     checkZone(
@@ -98,19 +125,40 @@ function checkEnvironment(at: string, environment: EnvironmentConfig): void {
       domainAccount,
     );
   }
-  const { issuers } = environment.frontdoor;
-  if (issuers.length === 0) {
-    throw new Error(`${at}: the frontdoor needs at least one trusted issuer`);
-  }
-  for (const { issuer, clientIds } of issuers) {
-    if (!issuer.startsWith("https://")) {
+  checkTrust(at, stage, environment, testUserPools);
+}
+
+// A test user's username is whatever its creator chose, and the edge passes it on as the caller's
+// pairwise ID. So an environment trusts test users only through `frontdoor.testUsers`, never by
+// naming a test user pool in its issuers.
+function checkTrust(
+  at: string,
+  stage: StageConfig,
+  environment: EnvironmentConfig,
+  testUserPools: ReadonlySet<string>,
+): void {
+  for (const issuer of environment.frontdoor.issuers) {
+    checkIssuer(at, issuer);
+    if (testUserPools.has(issuer.issuer)) {
       throw new Error(
-        `${at}: the issuer ${JSON.stringify(issuer)} must be an https URL`,
+        `${at}: the issuer ${issuer.issuer} is a test user pool, which an environment trusts only through frontdoor.testUsers`,
       );
     }
-    if (clientIds.length === 0) {
-      throw new Error(`${at}: the issuer ${issuer} names no app client`);
-    }
+  }
+  // Refuses trust in test users where the stage has no pool.
+  if (trustedIssuers(stage, environment).length === 0) {
+    throw new Error(`${at}: the frontdoor needs at least one trusted issuer`);
+  }
+}
+
+function checkIssuer(at: string, { issuer, clientIds }: TrustedIssuer): void {
+  if (!issuer.startsWith("https://")) {
+    throw new Error(
+      `${at}: the issuer ${JSON.stringify(issuer)} must be an https URL`,
+    );
+  }
+  if (clientIds.length === 0) {
+    throw new Error(`${at}: the issuer ${issuer} names no app client`);
   }
 }
 

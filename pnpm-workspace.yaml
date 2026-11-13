@@ -8,6 +8,7 @@ packages:
   - gateways/services/*
   - gateways/infra
   - infra/*
+  - shared/*
 
 allowBuilds:
   esbuild: true

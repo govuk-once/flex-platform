@@ -5,12 +5,13 @@ description: The CDK app that deploys the platform, its stages and config, and t
 
 The platform deploys with AWS CDK, from one app in `infra/app`. It builds the
 [Frontdoor](/flex-platform/frontdoor/overview/)'s stacks, each domain account's
-[network](/flex-platform/infrastructure/network/), and the stacks that
-[host the domains](/flex-platform/domains/hosting/). This page describes the app and the rules
-every stack added to it follows.
+[network](/flex-platform/infrastructure/network/), the stacks that
+[host the domains](/flex-platform/domains/hosting/), and each stage's [test users](#test-users).
+This page describes the app and the rules every stack added to it follows.
 
 Infrastructure lives with the section it belongs to. A section's constructs are in its own
-`infra/` package, such as `frontdoor/infra`. Constructs and checks more than one section uses are in
+`infra/` package, such as `frontdoor/infra`, and the shared account's are in `shared/infra`.
+Constructs and checks more than one section uses are in
 `infra/constructs`, the network's among them, since domains and gateways both run in it. The app,
 its config and its stacks are in `infra/app`.
 
@@ -42,8 +43,9 @@ pnpm --filter @repo/infra-app diff -c stage=platform-dev
 ```
 
 Without `-c stage`, or with a name the config doesn't have, synth stops and lists the known stages.
-`-c target=<environment>` builds only that environment's stacks. A target selects what to build,
-never how it's built.
+`-c target=<environment>` builds only that environment's stacks, and `-c target=shared` only the
+shared account's, so no environment may be named `shared`. A target selects what to build, never
+how it's built.
 
 ## Stacks
 
@@ -58,6 +60,15 @@ Each environment has these stacks:
 | `domainaccount-<environment>-<account>` | Domain | eu-west-2 | Domain account | What the account's domains share: see [what a domain account provides](/flex-platform/domains/hosting/#what-a-domain-account-provides) |
 | `domain-<environment>-<domain>` | Domain | eu-west-2 | Domain | The domain's API and host, and its function's log group and roles: see [what a domain provides](/flex-platform/domains/hosting/#what-a-domain-provides) |
 | `gateway-<environment>-<account>-<id>` | Domain | eu-west-2 | Gateway in a domain account | The gateway's function, its version and `live` alias, its role and log group, and its secret if it has its own: see [Environment](/flex-platform/reference/environment/#the-lambda-function) |
+
+Each stage's shared account has one more:
+
+| Stack | Account | Region | One per | Holds |
+|---|---|---|---|---|
+| `shared-identity` | Shared | eu-west-2 | Stage | The [test user pool](#test-users) and its client |
+
+A stage deploys only to its own accounts, so the shared account's stack names hold neither a stage
+nor an environment.
 
 `frontdoor-<environment>` is in us-east-1 because CloudFront takes its web ACL, its certificate and
 its Lambda@Edge functions from there. The caller token's stack is in eu-west-2, where its keys are
@@ -83,7 +94,9 @@ take the app's entry point and its domain name with it, deleting the log stack w
 Lambda@Edge's logs nowhere to go, deleting a network would take every workload's network with it,
 and the NAT addresses upstreams allowlist, and deleting a domain account's stack would take the
 certificate every domain in it uses, and leave the account's API Gateway logging setting naming a
-deleted role. So deleting any of them takes a deliberate step first: turning the protection off. A domain's stack has none. Withdrawing a domain is
+deleted role. Deleting `shared-identity` would leave the test user pool, which is retained, out of
+the app's hands. So deleting any of them takes a deliberate step first: turning the protection
+off. A domain's stack has none. Withdrawing a domain is
 [disabling it](/flex-platform/domains/hosting/#disabling-a-domain), which keeps its stack; removing
 it from config leaves its stack to be deleted by hand, since CDK doesn't delete a stack the app no
 longer builds.
@@ -94,8 +107,8 @@ A merge to `main` deploys platform-dev, through GitHub Actions, once the quality
 person deploys from their own machine. platform-staging and platform-prod have no deploy yet.
 
 Each account is bootstrapped for CDK in each region it deploys to, so a frontdoor account is
-bootstrapped in us-east-1 and eu-west-2, and a domain account in eu-west-2. Each trusts only
-itself. The platform team bootstraps the accounts, and gives each a role the deploy assumes through
+bootstrapped in us-east-1 and eu-west-2, and a domain account and a shared account in eu-west-2.
+Each trusts only itself. The platform team bootstraps the accounts, and gives each a role the deploy assumes through
 GitHub's OIDC.
 
 Each stage has a GitHub environment of the same name, which only `main` may deploy from. It holds
@@ -113,11 +126,11 @@ reach. A wave starts once every job in the one before has succeeded.
 
 For platform-dev, that is:
 
-| Wave | Domain account | Frontdoor account |
-|---|---|---|
-| 1 | `network-<environment>-<account>`, `domainaccount-<environment>-<account>` | `frontdoor-<environment>-edge-logs-eu-west-2`, `frontdoor-<environment>-caller-token-keys` |
-| 2 | `domain-<environment>-<domain>`, `gateway-<environment>-<account>-<id>` | |
-| 3 | | `frontdoor-<environment>` |
+| Wave | Shared account | Domain account | Frontdoor account |
+|---|---|---|---|
+| 1 | `shared-identity` | `network-<environment>-<account>`, `domainaccount-<environment>-<account>` | `frontdoor-<environment>-edge-logs-eu-west-2`, `frontdoor-<environment>-caller-token-keys` |
+| 2 | | `domain-<environment>-<domain>`, `gateway-<environment>-<account>-<id>` | |
+| 3 | | | `frontdoor-<environment>` |
 
 The workflow has three wave jobs. A stage whose stacks would need a fourth fails its plan before
 anything deploys, and a test holds every stage in config to three. Adding a wave means a job in
@@ -143,8 +156,8 @@ written out side by side. A value is in config whenever it can be known before d
 never is: config names a secret, never holds one.
 
 ```ts
-StageConfig         { name, shared: { account }, environments }
-EnvironmentConfig   { name, frontdoor: { account, zone, issuers }, domainAccounts }
+StageConfig         { name, shared: { account, testUsers }, environments }
+EnvironmentConfig   { name, frontdoor: { account, zone, issuers, testUsers }, domainAccounts }
 DomainAccountConfig { name, account, domains: [name | { name, disabled: true }], zone,
                       network: { availabilityZones }, gateways }
 GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
@@ -178,9 +191,12 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
 
   The secrets and roles feed the [endpoints' policies](/flex-platform/infrastructure/network/#endpoints)
   and the gateway's role exactly.
+- `shared.testUsers` is the stage's [test user pool](#test-users), as an issuer URL and its app
+  client ID, or `null` until the pool exists.
 - `issuers` lists the Cognito user pools whose access tokens the Frontdoor accepts, each as its
   issuer URL, `https://cognito-idp.<region>.amazonaws.com/<pool ID>`, and the app client IDs it
-  accepts from that pool.
+  accepts from that pool. It never names a test user pool.
+- `frontdoor.testUsers` is `true` where the Frontdoor also accepts the stage's test users.
 
 Before building any stage, the app checks every stage's config:
 
@@ -196,8 +212,12 @@ Before building any stage, the app checks every stage's config:
   and its ID is a hosted zone ID without `/hostedzone/`. A certificate's name may be at most 64
   characters, ACM's limit, so the Frontdoor's zone name, and `*.` and each domain account's zone
   name, must fit within it;
-- every environment trusts at least one issuer, each an `https` URL naming at least one app
+- every issuer, in `issuers` and in `shared.testUsers`, is an `https` URL naming at least one app
   client;
+- no environment's `issuers` names a test user pool, its own stage's or another's;
+- an environment with `frontdoor.testUsers` is in a stage whose `shared.testUsers` is set;
+- every environment trusts at least one issuer, counting the test user pool where it trusts test
+  users;
 - every domain's name follows the same rule as the names above, is used once in its environment,
   across all its domain accounts, and is short enough for its execution role's name to fit IAM's
   64 characters. See [checks](/flex-platform/domains/hosting/#checks);
@@ -246,6 +266,38 @@ Before building any stage, the app checks every stage's config:
   reference: the consumer's template would hold a lookup instead of the value, so replacing the
   producer's resource would change no consumer. A shared resource that has to be replaced gets a
   new name, so the change reaches every consumer's template.
+
+## Test users
+
+Every stage has a Cognito user pool of test users, `shared-test-users`, in its shared account. It
+is for testing an environment from outside the platform, such as a domain's tests or a developer's
+machine: software signs in as a test user, and the Frontdoor, if its environment trusts the pool,
+lets the token through like any other. Every stage has the pool, so its stacks are the same in
+each.
+
+A test user's username is whatever its creator chose, and Lambda@Edge passes a token's username on
+as the caller's pairwise ID. So an environment trusts test users only where its config sets
+`frontdoor.testUsers`, which adds the stage's `shared.testUsers` to its issuers, and validation
+refuses a test user pool named in `issuers`. An environment real users reach never sets it.
+
+- **Only an administrator creates a user.** There is no sign-up, no hosted sign-in, no account
+  recovery and no MFA.
+- **Every password is generated,** and the pool refuses one shorter than 64 characters. Its client,
+  also `shared-test-users`, allows `USER_PASSWORD_AUTH` and refresh, and no other flow, so a test
+  user signs in only with Cognito's public `InitiateAuth`, which needs no AWS credentials. Anyone
+  may try a password there, so its length is what protects it.
+- **cdk-nag's MFA and Plus plan findings are acknowledged** on the pool. No person signs in as a
+  test user, and threat protection guards passwords people choose, while its adaptive checks would
+  flag the same automation signing in again and again.
+
+Cognito generates the pool's and the client's IDs, and the CloudFront Function and Lambda@Edge
+have their issuers built in when they are synthesized. So config can name the pool only once it
+exists. The pool is retained and protected from deletion, and the inventory snapshots hold its
+logical ID, the one change that would make CloudFormation replace it. A new stage's pool is
+created first, with `-c target=shared`, and its IDs written into `shared.testUsers` before the
+stage's first full deploy. The stack outputs both, as `TestUsersIssuer` and `TestUsersClientId`,
+and exports neither. `shared-identity` depends on nothing and nothing depends on it, so it
+never holds up an environment's deploy.
 
 ## Checks
 

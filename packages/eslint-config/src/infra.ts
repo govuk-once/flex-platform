@@ -8,8 +8,8 @@ import { base } from "./base.ts";
 //   infra/constructs  ->  a section's infra/  ->  infra/app
 //
 // infra/constructs is what every section shares. A section's infra/ (frontdoor/infra,
-// domains/infra, gateways/infra) builds on it and on its own section's code, never another
-// section's.
+// domains/infra, gateways/infra, shared/infra) builds on it and on its own section's code, never
+// another section's.
 // infra/app joins the sections, and nothing imports it. Packages outside the workspace are free.
 
 const FILES = ["src/**/*.ts", "test/**/*.ts", "bin/**/*.ts"];

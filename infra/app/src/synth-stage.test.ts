@@ -51,6 +51,14 @@ describe("synthStage", () => {
     ).toThrow('Unknown target "qa" for platform-prod');
   });
 
+  it("builds only the shared account's stacks for the shared target", () => {
+    const [, , prod] = FIXTURE_STAGES;
+    const app = cdkApp({ stage: prod.name, target: "shared" });
+    synthStage(app, FIXTURE_STAGES);
+
+    expect(stackNames(app.synth())).toEqual(["shared-identity"]);
+  });
+
   it("asks for a stage when none is given", () => {
     expect(() => synthStage(cdkApp(), FIXTURE_STAGES)).toThrow(
       "Pass the stage to build with -c stage=<name>",
