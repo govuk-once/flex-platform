@@ -975,6 +975,12 @@ importers:
 
   shared/infra:
     dependencies:
+      '@repo/infra-constructs':
+        specifier: workspace:*
+        version: link:../../infra/constructs
+      '@repo/shared-viewer-request':
+        specifier: workspace:*
+        version: link:../viewer-request
       aws-cdk-lib:
         specifier: 2.275.0
         version: 2.275.0(constructs@10.8.1)
@@ -985,9 +991,6 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
-      '@repo/infra-constructs':
-        specifier: workspace:*
-        version: link:../../infra/constructs
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig

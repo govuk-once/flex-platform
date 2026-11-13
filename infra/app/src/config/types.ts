@@ -127,8 +127,8 @@ export interface PromoteConfig {
 export interface SharedConfig {
   readonly account: string;
   /**
-   * The shared account's zone. Nothing answers in it yet. Its apex is kept for a distribution of
-   * the stage's own, so its name is held to a certificate's length.
+   * The shared account's zone. The stage's management distribution answers at its apex, so its
+   * name is held to a certificate's length.
    */
   readonly zone: ZoneConfig;
   /**

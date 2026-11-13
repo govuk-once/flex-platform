@@ -75,4 +75,8 @@ export {
   BUCKET_HTTPS_RULE,
   BucketHttpsCheck,
 } from "./validation/bucket-https-check.ts";
+export {
+  FUNCTION_URL_IAM_RULE,
+  FunctionUrlIamCheck,
+} from "./validation/function-url-iam-check.ts";
 export { LOG_GROUP_RULE, LogGroupCheck } from "./validation/log-group-check.ts";

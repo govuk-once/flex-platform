@@ -2,6 +2,7 @@ import { ORIGIN_REQUEST_LOG_REGION } from "@repo/frontdoor-infra";
 import {
   ApiIamCheck,
   BucketHttpsCheck,
+  FunctionUrlIamCheck,
   LogGroupCheck,
 } from "@repo/infra-constructs";
 import type { App } from "aws-cdk-lib";
@@ -21,6 +22,8 @@ import { FrontdoorCallerTokenKeysStack } from "./stacks/frontdoor-keys.ts";
 import { GatewayStack } from "./stacks/gateway.ts";
 import { NetworkStack } from "./stacks/network.ts";
 import { SharedIdentityStack } from "./stacks/shared-identity.ts";
+import { SharedManagementStack } from "./stacks/shared-management.ts";
+import { SharedReleaseStack } from "./stacks/shared-release.ts";
 import { StackTags } from "./tags.ts";
 
 export function buildApp(app: App, stage: StageConfig, target: Target): void {
@@ -31,10 +34,18 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
     new LogGroupCheck(),
     new BucketHttpsCheck(),
     new ApiIamCheck(),
+    new FunctionUrlIamCheck(),
   );
   Aspects.of(app).add(new StackTags(stage));
 
-  if (target.shared) new SharedIdentityStack(app, stage.shared);
+  if (target.shared) {
+    new SharedIdentityStack(app, stage.shared);
+
+    new SharedManagementStack(app, stage.shared).addStackDependency(
+      new SharedReleaseStack(app, stage.shared),
+      "The distribution reads the host of the pipeline API's function URL from SSM, where the release stack writes it.",
+    );
+  }
 
   for (const environment of target.environments) {
     const edgeLogs = new FrontdoorEdgeLogsStack(

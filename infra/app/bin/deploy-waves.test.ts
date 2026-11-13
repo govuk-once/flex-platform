@@ -39,7 +39,7 @@ describe("bin/deploy-waves.ts", () => {
     expect(readFileSync(output, "utf8")).toBe(
       [
         `wave1=${JSON.stringify([
-          { account: "100000000001", stacks: "shared-identity" },
+          { account: "100000000001", stacks: "shared-identity shared-release" },
           {
             account: "100000000002",
             stacks:
@@ -51,6 +51,7 @@ describe("bin/deploy-waves.ts", () => {
           },
         ])}`,
         `wave2=${JSON.stringify([
+          { account: "100000000001", stacks: "shared-management" },
           {
             account: "100000000003",
             stacks:

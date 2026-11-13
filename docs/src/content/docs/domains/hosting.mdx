@@ -337,16 +337,43 @@ may write to no other.
 ### The pipeline API
 
 A domain's pipeline will upload and release its code through an API of the platform's, never
-through AWS itself, so it holds no AWS credentials. The API will answer under `/ci`, at the apex
-of the stage's shared zone, behind a CloudFront distribution of its own.
+through AWS itself, so it holds no AWS credentials. The API answers under `/ci`, at the apex of
+the stage's shared zone, behind a CloudFront distribution of its own. Everything in front of the
+API is built. The API itself serves nothing yet: it answers every request that reaches it with a
+404.
 
 A job will prove which repository it runs in with the token GitHub issues it, asked for with the
-API's address, `https://<shared zone>/ci`, as its audience. It will send the token alone as
-`x-flex-ci-token`, and not as `Authorization`: CloudFront will sign each request for the API, and
-that header will hold its signature.
+API's address, `https://<shared zone>/ci`, as its audience. It sends the token alone as
+`x-flex-ci-token`, and not as `Authorization`: CloudFront signs each request for the API, and
+that header holds its signature.
 
-The first check on a request is built, in `shared/viewer-request`, and nothing deploys it yet. It
-is a CloudFront Function that checks a request's structure as
+#### The distribution
+
+Each stage has one, in its shared account, built by `ManagementEdge` in `shared/infra` from the
+constructs [the Frontdoor's](/flex-platform/frontdoor/overview/#the-distribution) is built from.
+It has the same TLS policy, sets the same security
+[headers on every response](/flex-platform/frontdoor/overview/#response-headers), has the same
+[web ACL rules](/flex-platform/frontdoor/overview/#waf), and caches nothing. Three things differ:
+
+- **The rate limits.** One token may make 100 requests in five minutes and one address 500. The
+  token's limit counts the exact value of `x-flex-ci-token`, and the web ACL keeps that header
+  out of its logs and samples.
+- **The origin.** Every path goes to the API's function, at its Lambda function URL. The URL
+  takes only requests signed with SigV4 by a caller its policy admits, and the policy admits
+  CloudFront alone, for the shared account's distributions. CloudFront signs every request it
+  forwards, so a request sent straight to the URL is refused before the function runs. A synth
+  [check](/flex-platform/infrastructure/overview/#checks) refuses a function URL with any other
+  authorisation.
+- **What the origin sees.** `x-flex-ci-token`, `content-type`, `x-amz-content-sha256` and
+  `x-correlation-id`, and no cookie or query string.
+
+Its access logs, the web ACL's logs and the function's go to log groups in us-east-1, as
+[the Frontdoor's](/flex-platform/frontdoor/overview/#logs) do.
+
+#### The first check
+
+A CloudFront Function, `shared-management-viewer-request`, runs on each request as it arrives,
+after WAF. Its code is in `shared/viewer-request`. It checks a request's structure as
 [the Frontdoor's](/flex-platform/frontdoor/cloudfront-function/) does, sharing its code for each
 check they have in common, with the same ID,
 [rejections](/flex-platform/frontdoor/cloudfront-function/#rejections) and
@@ -359,8 +386,8 @@ the function:
 2. **Checks the method.** Only `POST` passes. Anything else is a 405 with an `Allow` header.
 3. **Checks the token's shape.** `x-flex-ci-token` appears once, and is one token of at most
    8 KB in three base64url segments, each written the one way its bytes encode. The header and
-   payload are JSON objects. `alg` is `RS256`, `iss` and `aud` are the issuer and the audience
-   the function was built with, and `exp` is a finite time in the future. A failure is a 401,
+   payload are JSON objects. `alg` is `RS256`, `iss` is GitHub Actions' issuer, `aud` is the
+   API's address, and `exp` is a finite time in the future. A failure is a 401,
    before the path is looked at.
 4. **Checks the path.** It is under `/ci/`, with no empty or dot segment and no encoded `/`, `\`
    or `.`. Anything else is a 404. Which paths the API serves is for the API.
