@@ -10,8 +10,11 @@ change you are making.
 ## Code
 
 - `packages/` holds the shared TypeScript, ESLint and Vitest configuration, `@repo/release`, which
-  releases the published packages, and `@repo/utils`, a set of generic functions. `@repo/utils`
-  depends on no other workspace package, which a test holds it to, so any package can use it.
+  releases the published packages, two sets of generic functions, `@repo/utils` and
+  `@repo/cloudfront-js-utils`, and `@repo/cloudfront-function`, which builds a CloudFront
+  Function and holds what is particular to one, such as its event's types. Neither set of
+  generic functions depends on another workspace package, which a test holds each to, so any
+  package can use them.
   Gateway code lives under `gateways/`, and what gateways share lives in `gateways/shared/`.
   Frontdoor code lives under `frontdoor/`, and what its functions share lives in
   `frontdoor/shared/`. A section's CDK constructs live in its own `infra/`, such as
@@ -21,7 +24,12 @@ change you are making.
 - `@repo/utils` exports one function per module. Each is imported by its own path, such as
   `@repo/utils/sorted-entries`, so a consumer takes only what it uses. Export a module once
   something outside the package uses it. Code only the package uses lives under `src/internal/`,
-  which the package's exports refuse.
+  which the package's exports refuse. `@repo/cloudfront-js-utils` is exported the same way.
+- A generic function that a CloudFront Function uses lives in `@repo/cloudfront-js-utils`,
+  whoever else uses it. Every function there runs in the `cloudfront-js` runtime as well as in
+  Node, and lint holds the whole package to
+  [what that runtime has](/flex-platform/frontdoor/cloudfront-function/#building-the-function).
+  A function nothing in that runtime uses lives in `@repo/utils`.
 - Sort with `sortedNames` and `sortedEntries` from `@repo/utils`. They order by code unit, which
   gives the same result on every machine. `localeCompare`, which linters suggest for sorting
   "alphabetically", depends on the runtime's locale and ICU data. Generated files, the digests

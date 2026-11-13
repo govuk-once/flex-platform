@@ -1,4 +1,4 @@
-import { isPlatformName } from "@repo/utils/is-platform-name";
+import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
 import { buildSync } from "esbuild";
 
 import type { OriginRequestConfig } from "../function/types.ts";

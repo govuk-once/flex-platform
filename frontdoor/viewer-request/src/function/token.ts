@@ -6,8 +6,10 @@
 // Cognito access tokens are about 1 KB. Far larger is not one.
 const MAX_TOKEN_LENGTH = 4096;
 
+import { isCanonicalBase64url } from "@repo/cloudfront-js-utils/is-canonical-base64url";
+import { jwtSegmentObject } from "@repo/cloudfront-js-utils/jwt-segment-object";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
-import { bearerToken, isCanonicalBase64url } from "@repo/frontdoor-shared";
+import { bearerToken } from "@repo/frontdoor-shared";
 
 export type TokenEvent =
   | "viewer_request_token_missing"
@@ -35,12 +37,12 @@ export function checkToken(
   const segments = token.split(".");
   if (segments.length !== 3) return invalid("segments");
 
-  const header = decodeObject(segments[0]);
+  const header = jwtSegmentObject(segments[0]);
   if (!header) return invalid("header");
   // An allowlist, not a refusal of "none": Cognito signs access tokens with RS256 alone.
   if (header.alg !== "RS256") return invalid("algorithm");
 
-  const payload = decodeObject(segments[1]);
+  const payload = jwtSegmentObject(segments[1]);
   if (!payload) return invalid("payload");
   const signature = segments[2];
   if (signature === undefined || !isCanonicalBase64url(signature)) {
@@ -80,25 +82,4 @@ function missing(reason: string): TokenRejection {
 
 function invalid(reason: string): TokenRejection {
   return { event: "viewer_request_token_invalid", reason };
-}
-
-// A JWT segment is base64url without padding. The runtime's Buffer is given standard base64, so
-// this works whichever encodings it supports.
-function decodeObject(
-  segment: string | undefined,
-): Record<string, unknown> | undefined {
-  if (segment === undefined || !isCanonicalBase64url(segment)) return undefined;
-  const base64 = segment.replaceAll("-", "+").replaceAll("_", "/");
-  const padded = base64 + "===".slice(0, (4 - (base64.length % 4)) % 4);
-  try {
-    const value: unknown = JSON.parse(
-      Buffer.from(padded, "base64").toString("utf8"),
-    );
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      return value as Record<string, unknown>;
-    }
-  } catch {
-    // Not JSON: refused below.
-  }
-  return undefined;
 }

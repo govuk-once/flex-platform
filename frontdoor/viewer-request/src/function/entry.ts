@@ -1,6 +1,8 @@
 // What the CloudFront Functions runtime calls. Only the build bundles this module: it replaces
 // VIEWER_REQUEST_CONFIG with an environment's config, so the function needs nothing at runtime.
-import type { ViewerRequestConfig, ViewerRequestEvent } from "./types.ts";
+import type { ViewerRequestEvent } from "@repo/cloudfront-function";
+
+import type { ViewerRequestConfig } from "./types.ts";
 import { viewerRequest } from "./viewer-request.ts";
 
 declare const VIEWER_REQUEST_CONFIG: ViewerRequestConfig;

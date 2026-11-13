@@ -2,7 +2,7 @@
 // that calls it and the stack that deploys it both build the name here, so a domain is never
 // given one.
 
-import { isPlatformName } from "@repo/utils/is-platform-name";
+import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
 
 // Lambda's limit on a function's name, without its qualifier.
 const FUNCTION_NAME_LENGTH = 64;
