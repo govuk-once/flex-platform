@@ -6,8 +6,7 @@
 // Cognito access tokens are about 1 KB. Far larger is not one.
 const MAX_TOKEN_LENGTH = 4096;
 
-import { isCanonicalBase64url } from "@repo/cloudfront-js-utils/is-canonical-base64url";
-import { jwtSegmentObject } from "@repo/cloudfront-js-utils/jwt-segment-object";
+import { rs256JwtPayload } from "@repo/cloudfront-js-utils/rs256-jwt-payload";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
 import { bearerToken } from "@repo/frontdoor-shared";
 
@@ -31,23 +30,9 @@ export function checkToken(
   if (!("token" in bearer)) {
     return bearer.missing ? missing(bearer.reason) : invalid(bearer.reason);
   }
-  const token = bearer.token;
-  if (token.length > MAX_TOKEN_LENGTH) return invalid("length");
-
-  const segments = token.split(".");
-  if (segments.length !== 3) return invalid("segments");
-
-  const header = jwtSegmentObject(segments[0]);
-  if (!header) return invalid("header");
-  // An allowlist, not a refusal of "none": Cognito signs access tokens with RS256 alone.
-  if (header.alg !== "RS256") return invalid("algorithm");
-
-  const payload = jwtSegmentObject(segments[1]);
-  if (!payload) return invalid("payload");
-  const signature = segments[2];
-  if (signature === undefined || !isCanonicalBase64url(signature)) {
-    return invalid("signature");
-  }
+  // Cognito signs access tokens with RS256 alone.
+  const payload = rs256JwtPayload(bearer.token, MAX_TOKEN_LENGTH);
+  if (typeof payload === "string") return invalid(payload);
 
   const trusted = trustedIssuer(issuers, payload.iss);
   if (!trusted) return invalid("issuer");

@@ -8,6 +8,7 @@ import {
   isRepeated,
   methodNotAllowed,
   notFound,
+  removePlatformHeaders,
   unauthorized,
   unsupportedMediaType,
 } from "@repo/cloudfront-function";
@@ -17,12 +18,6 @@ import { ALLOWED_METHODS, isRoutable } from "@repo/frontdoor-shared";
 import { logEvent } from "./telemetry.ts";
 import { checkToken } from "./token.ts";
 import type { ViewerRequestConfig } from "./types.ts";
-
-// Headers only the platform sets. A caller's copy is removed before anything reads it.
-const PLATFORM_HEADER_PREFIX = "x-flex-";
-
-// Trace context a caller could send to pick the trace, or force every request to be sampled.
-const CALLER_TRACE_HEADERS = ["traceparent", "tracestate", "x-amzn-trace-id"];
 
 // The method is checked first, since its answer says nothing about the caller or the paths. The
 // token is checked before the path, so a request without a valid token gets a 401 whatever its
@@ -37,15 +32,8 @@ export function viewerRequest(
 
   const requestId = event.context.requestId;
   const traceId = traceIdFor(requestId, nowSeconds);
-  // forEach, not for...of, which the runtime lacks and esbuild can't rewrite for it.
-  Object.keys(headers).forEach((name) => {
-    if (
-      name.startsWith(PLATFORM_HEADER_PREFIX) ||
-      CALLER_TRACE_HEADERS.includes(name)
-    ) {
-      delete headers[name];
-    }
-  });
+  // The app sends no x-flex- header, so a caller's are all removed.
+  removePlatformHeaders(headers, []);
   // The edge's ID for the request, which the app reads and every later hop logs. The edge sends
   // no X-Amzn-Trace-Id: API Gateway rewrites that header before it checks a signature, so the
   // X-Ray trace starts there.

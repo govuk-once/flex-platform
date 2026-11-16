@@ -98,13 +98,15 @@ which bundles for the `cloudfront-js-2.0` runtime, parses the result to check it
 `function handler` at the top level, and refuses a function over CloudFront's 10 KB limit.
 
 What is particular to a CloudFront Function is in `@repo/cloudfront-function`: the event's types,
-the checks of a repeated header and of a JSON body, the refusals, and the log line. The generic
-functions it uses are in `@repo/cloudfront-js-utils`: the trace ID, the encoding check, the
-decoding of a token's segments, the check of a path, the rule a name follows, and what counts as a
+the checks of a repeated header and of a JSON body, the removal of the headers a caller may not
+send, the refusals, and the log line. The generic functions it uses are in
+`@repo/cloudfront-js-utils`: the trace ID, the encoding check, the decoding of a token's segments,
+the shape of an RS256 token, the check of a path, the rule a name follows, and what counts as a
 JSON content type. The reading of `Authorization`, the methods and the path rule are in
 `@repo/frontdoor-shared`. Lambda@Edge uses the trace ID, the encoding check, the JSON content
 type, and everything in `@repo/frontdoor-shared` too, so the two functions can't disagree on any
-of them.
+of them. The function built for [the pipeline API](/flex-platform/domains/hosting/#the-pipeline-api)
+uses the first two packages too.
 
 The function bundles what it imports from those packages, so that code is held to the same rules.
 esbuild rewrites syntax the runtime lacks, but not built-ins, so lint refuses what the runtime

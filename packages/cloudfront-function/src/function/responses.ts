@@ -18,6 +18,10 @@ export function methodNotAllowed(
   return response;
 }
 
+export function badRequest(traceId: string): CloudFrontResponse {
+  return rejection(400, "Bad request", "client_error", traceId);
+}
+
 // The GOV.UK app relies on the Frontdoor's 401 exactly, so it never changes.
 export function unauthorized(traceId: string): CloudFrontResponse {
   return rejection(401, "Unauthorized", "auth_error", traceId);

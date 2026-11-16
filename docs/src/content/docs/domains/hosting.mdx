@@ -333,3 +333,41 @@ Then it will publish a version and point the `live` alias at it. The deploy role
 function's name, role and network, but not its logging, environment or tracing, which only the
 release will set. A release that sets another log group loses the function's logs, since its role
 may write to no other.
+
+### The pipeline API
+
+A domain's pipeline will upload and release its code through an API of the platform's, never
+through AWS itself, so it holds no AWS credentials. The API will answer under `/ci`, at the apex
+of the stage's shared zone, behind a CloudFront distribution of its own.
+
+A job will prove which repository it runs in with the token GitHub issues it, asked for with the
+API's address, `https://<shared zone>/ci`, as its audience. It will send the token alone as
+`x-flex-ci-token`, and not as `Authorization`: CloudFront will sign each request for the API, and
+that header will hold its signature.
+
+The first check on a request is built, in `shared/viewer-request`, and nothing deploys it yet. It
+is a CloudFront Function that checks a request's structure as
+[the Frontdoor's](/flex-platform/frontdoor/cloudfront-function/) does, sharing its code for each
+check they have in common, with the same ID,
+[rejections](/flex-platform/frontdoor/cloudfront-function/#rejections) and
+[log line](/flex-platform/frontdoor/cloudfront-function/#logs). It verifies no signature: the API
+will, and will check that the token's repository may release the domain it asks for. In order,
+the function:
+
+1. **Gives the request its ID,** as `x-correlation-id`, and removes any trace context and every
+   `x-flex-` header the caller sent but the token's.
+2. **Checks the method.** Only `POST` passes. Anything else is a 405 with an `Allow` header.
+3. **Checks the token's shape.** `x-flex-ci-token` appears once, and is one token of at most
+   8 KB in three base64url segments, each written the one way its bytes encode. The header and
+   payload are JSON objects. `alg` is `RS256`, `iss` and `aud` are the issuer and the audience
+   the function was built with, and `exp` is a finite time in the future. A failure is a 401,
+   before the path is looked at.
+4. **Checks the path.** It is under `/ci/`, with no empty or dot segment and no encoded `/`, `\`
+   or `.`. Anything else is a 404. Which paths the API serves is for the API.
+5. **Checks the content type.** The body is `application/json`. Anything else is a 415.
+6. **Checks the body's hash is there.** `x-amz-content-sha256` appears once, and is 64 lowercase
+   hex digits. Anything else is a 400, `Bad request`. CloudFront can't hash a body, so it signs
+   the hash the caller sends, and the API's origin refuses a body with any other.
+
+The issuer and the audience are baked into the function by `buildViewerRequestFunction`, as the
+Frontdoor's function has [its issuers](/flex-platform/frontdoor/cloudfront-function/#building-the-function).

@@ -7,8 +7,10 @@ export type {
   ViewerRequestEvent,
 } from "./event.ts";
 export { isJsonRequest } from "./json-request.ts";
+export { removePlatformHeaders } from "./platform-headers.ts";
 export { isRepeated } from "./repeated.ts";
 export {
+  badRequest,
   methodNotAllowed,
   notFound,
   unauthorized,

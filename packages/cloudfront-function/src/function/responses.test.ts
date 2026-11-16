@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  badRequest,
   methodNotAllowed,
   notFound,
   unauthorized,
@@ -21,6 +22,7 @@ function body(message: string, type: string) {
 
 describe("a refusal", () => {
   it.each([
+    [badRequest, 400, "Bad request", "client_error"],
     [unauthorized, 401, "Unauthorized", "auth_error"],
     [notFound, 404, "Not found", "client_error"],
     [unsupportedMediaType, 415, "Unsupported media type", "client_error"],
