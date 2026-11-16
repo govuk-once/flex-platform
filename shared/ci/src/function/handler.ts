@@ -2,16 +2,20 @@ import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 import { CI_TOKEN_HEADER } from "@repo/shared-viewer-request/token-header";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
-import type { Authorise } from "./authorise.ts";
+import type { Authorise, TakesUploads } from "./authorise.ts";
+import { bundleKey, bundleOf } from "./bundle.ts";
 import {
+  badRequest,
   forbidden,
   internalError,
   methodNotAllowed,
   notFound,
-  notImplemented,
   unauthorized,
+  uploadSigned,
+  uploadsNotAccepted,
 } from "./responses.ts";
 import { ALLOWED_METHODS, uploadTarget } from "./route.ts";
+import type { SignUpload } from "./sign-upload.ts";
 import { logFailure, logOutcome, type RequestDetails } from "./telemetry.ts";
 import type { VerifyToken } from "./token.ts";
 import type { FunctionUrlEvent, FunctionUrlResult } from "./types.ts";
@@ -19,15 +23,18 @@ import type { FunctionUrlEvent, FunctionUrlResult } from "./types.ts";
 export interface CiOptions {
   readonly verifyToken: VerifyToken;
   readonly authorise: Authorise;
+  readonly takesUploads: TakesUploads;
+  readonly signUpload: SignUpload;
   /** The time now, in milliseconds. */
   readonly now: () => number;
 }
 
 const TRACE_ID = /^1-[0-9a-f]{8}-[0-9a-f]{24}$/;
 
-// Verify the token, find the route, then decide whether this pipeline may use it. The token comes
-// first, so a caller without one learns nothing of the routes, and the decision last, so nothing
-// acts for a pipeline before it is allowed. Every error is answered with a 500, so the runtime
+// Verify the token, find the route, decide whether this pipeline may use it, and only then read
+// what it asks for. The token comes first, so a caller without one learns nothing of the routes.
+// The decision comes before the request's body, so nothing a caller wrote is read, and nothing is
+// signed, for a pipeline that isn't allowed. Every error is answered with a 500, so the runtime
 // never prints one, whose text can hold a claim.
 export function createCiHandler(options: CiOptions) {
   return async (event: FunctionUrlEvent): Promise<FunctionUrlResult> => {
@@ -60,6 +67,7 @@ export function createCiHandler(options: CiOptions) {
         repositoryId: pipeline.repositoryId,
         ownerId: pipeline.ownerId,
         runId: pipeline.runId,
+        commit: pipeline.commit,
       };
 
       // The CloudFront Function's check again, since nothing here should rely on it.
@@ -80,11 +88,30 @@ export function createCiHandler(options: CiOptions) {
         return forbidden(traceId);
       }
 
-      logOutcome("ci_upload_not_implemented", request(), {
-        ...caller,
-        ...target,
+      // Allowed, so the path's names are the config's from here on.
+      const allowed = { ...caller, ...target };
+
+      if (!options.takesUploads(target.environment)) {
+        logOutcome("ci_upload_not_accepted", request(), allowed);
+        return uploadsNotAccepted(traceId);
+      }
+      const bundle = bundleOf(event);
+      if (typeof bundle === "string") {
+        logOutcome("ci_upload_invalid", request(), {
+          ...allowed,
+          reason: bundle,
+        });
+        return badRequest(traceId);
+      }
+
+      const key = bundleKey(target.domain, bundle.sha256);
+      const upload = await options.signUpload(key, bundle);
+      logOutcome("ci_upload_signed", request(), {
+        ...allowed,
+        key,
+        size: bundle.size,
       });
-      return notImplemented(traceId);
+      return uploadSigned(traceId, upload);
     } catch (error) {
       logFailure(request(), describeUnexpectedError(error));
       return internalError(traceId);

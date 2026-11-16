@@ -2,6 +2,8 @@ import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  BUNDLE,
+  COMMIT,
   CONFIG,
   fakeFetcher,
   functionUrlEvent,
@@ -13,8 +15,9 @@ import {
   token,
   TRACE_ID,
 } from "../../test/helpers.ts";
-import { createAuthoriser } from "./authorise.ts";
+import { createAuthoriser, createUploadCheck } from "./authorise.ts";
 import { createCiHandler } from "./handler.ts";
+import { createUploadSigner } from "./sign-upload.ts";
 import { createTokenVerifier } from "./token.ts";
 
 interface LogLine {
@@ -25,13 +28,34 @@ interface LogLine {
 
 const logged: LogLine[] = [];
 
+// What was signed, so a test can see nothing was.
+const signed: string[] = [];
+
+const KEY = `example/bundle/${BUNDLE.sha256}.zip`;
+
+const BUCKET_URL = `https://${CONFIG.uploads.bucket}.s3.eu-west-2.amazonaws.com`;
+
 // Each reading of the clock is 7 ms after the one before, so a request that reads it twice took 7.
 function handler(documents?: Record<string, unknown>) {
   const fake = fakeFetcher(documents);
   let now = NOW * 1000;
+  const signUpload = createUploadSigner({
+    uploads: CONFIG.uploads,
+    credentials: () => ({
+      accessKeyId: "SYNTHETIC_ACCESS_KEY_ID",
+      secretAccessKey: "SYNTHETIC_SECRET_ACCESS_KEY",
+      sessionToken: "SYNTHETIC_SESSION_TOKEN",
+    }),
+    now: () => NOW * 1000,
+  });
   const handle = createCiHandler({
     verifyToken: createTokenVerifier(CONFIG, fake.fetcher),
     authorise: createAuthoriser(CONFIG),
+    takesUploads: createUploadCheck(CONFIG),
+    signUpload: (key, bundle) => {
+      signed.push(key);
+      return signUpload(key, bundle);
+    },
     now: () => {
       const reading = now;
       now += 7;
@@ -45,6 +69,15 @@ const CALLER = {
   repositoryId: REPOSITORY_ID,
   ownerId: OWNER_ID,
   runId: "12345678901",
+  commit: COMMIT,
+};
+
+// A staging job of the registered repository's, for the environment that takes no uploads.
+const STAGING = {
+  path: "/ci/environments/staging/domains/example/uploads",
+  headers: {
+    "x-flex-ci-token": token({ payload: { environment: "staging" } }),
+  },
 };
 
 const REQUEST = {
@@ -61,6 +94,7 @@ describe("createCiHandler", () => {
   beforeEach(() => {
     vi.useFakeTimers({ now: NOW * 1000 });
     logged.length = 0;
+    signed.length = 0;
     vi.spyOn(console, "log").mockImplementation((line: string) => {
       logged.push(JSON.parse(line) as LogLine);
     });
@@ -71,33 +105,125 @@ describe("createCiHandler", () => {
     vi.restoreAllMocks();
   });
 
-  it("lets the registered repository's pipeline through to the upload, which isn't built", async () => {
+  it("answers the registered repository's pipeline with where to upload its bundle", async () => {
     const { handle } = handler();
 
-    await expect(handle(functionUrlEvent())).resolves.toEqual({
-      statusCode: 501,
+    const response = await handle(functionUrlEvent());
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers).toEqual({
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-correlation-id": TRACE_ID,
+    });
+    const answer = JSON.parse(response.body) as Record<string, unknown>;
+    expect(answer).toEqual({
+      method: "PUT",
+      url: expect.stringMatching(
+        new RegExp(`^${BUCKET_URL}/${KEY}\\?.*X-Amz-Signature=[0-9a-f]{64}`),
+      ) as unknown,
       headers: {
-        "content-type": "application/json",
-        "x-correlation-id": TRACE_ID,
-        "x-rejected-by": "pipeline-api",
+        "if-none-match": "*",
+        "x-amz-checksum-sha256": Buffer.from(BUNDLE.sha256, "hex").toString(
+          "base64",
+        ),
       },
-      body: body("Not implemented", "server_error"),
+      expiresInSeconds: 300,
     });
     expect(logged).toEqual([
       {
         level: "INFO",
         message: "telemetry",
         telemetry: {
-          event: "ci_upload_not_implemented",
+          event: "ci_upload_signed",
           details: {
             ...REQUEST,
             ...CALLER,
             environment: "development",
             domain: "example",
+            key: KEY,
+            size: BUNDLE.size,
           },
         },
       },
     ]);
+  });
+
+  // Whatever a pipeline says of its bundle, the key is under the domain it was allowed for.
+  it("signs only a key under the path's domain, named by the bundle's hash", async () => {
+    const { handle } = handler();
+
+    await handle(functionUrlEvent());
+
+    expect(signed).toEqual([KEY]);
+  });
+
+  it("answers 409 to an upload in an environment that takes its code by promotion", async () => {
+    const { handle } = handler();
+
+    await expect(handle(functionUrlEvent(STAGING))).resolves.toEqual({
+      statusCode: 409,
+      headers: {
+        "content-type": "application/json",
+        "x-correlation-id": TRACE_ID,
+        "x-rejected-by": "pipeline-api",
+      },
+      body: body("This environment takes no uploads", "client_error"),
+    });
+    expect(logged[0]?.telemetry).toEqual({
+      event: "ci_upload_not_accepted",
+      details: {
+        ...REQUEST,
+        ...CALLER,
+        environment: "staging",
+        domain: "example",
+      },
+    });
+    expect(signed).toEqual([]);
+  });
+
+  it.each([
+    ["body", { body: null }],
+    ["body", { body: "not json" }],
+    ["body", { body: JSON.stringify({ ...BUNDLE, key: "other/bundle.zip" }) }],
+    ["sha256", { body: JSON.stringify({ ...BUNDLE, sha256: "abc" }) }],
+    ["size", { body: JSON.stringify({ ...BUNDLE, size: 0 }) }],
+  ])(
+    "answers 400 to an allowed pipeline whose %s is no bundle's, signing nothing",
+    async (reason, request) => {
+      const { handle } = handler();
+
+      await expect(handle(functionUrlEvent(request))).resolves.toMatchObject({
+        statusCode: 400,
+        body: body("Bad request", "client_error"),
+      });
+      expect(logged[0]?.telemetry).toEqual({
+        event: "ci_upload_invalid",
+        details: {
+          ...REQUEST,
+          ...CALLER,
+          environment: "development",
+          domain: "example",
+          reason,
+        },
+      });
+      expect(signed).toEqual([]);
+    },
+  );
+
+  // The body is the caller's, so it is read only for a pipeline that is allowed.
+  it("answers 403, not 400, to a pipeline that isn't allowed and sends no bundle", async () => {
+    const { handle } = handler();
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          path: "/ci/environments/development/domains/elsewhere/uploads",
+          body: "not json",
+        }),
+      ),
+    ).resolves.toMatchObject({ statusCode: 403 });
+    expect(signed).toEqual([]);
   });
 
   it.each([[undefined], [""]])(
@@ -334,6 +460,10 @@ describe("createCiHandler", () => {
 
     const lines = JSON.stringify(logged);
     expect(logged).toHaveLength(4);
+    // Nor the address an upload was signed for, or the credentials it was signed with.
+    expect(lines).not.toContain("X-Amz-");
+    expect(lines).not.toContain("SYNTHETIC");
+    expect(lines).not.toContain("amazonaws.com");
     for (const segment of [...sent.split("."), ...token().split(".")]) {
       expect(lines).not.toContain(segment);
     }

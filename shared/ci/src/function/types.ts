@@ -5,6 +5,9 @@
 export interface FunctionUrlEvent {
   readonly rawPath: string;
   readonly headers: Readonly<Record<string, string | undefined>>;
+  /** As the caller sent it, or in base64 when `isBase64Encoded` says so. A request may have none. */
+  readonly body?: string;
+  readonly isBase64Encoded?: boolean;
   readonly requestContext: {
     /** Lambda's own ID for the request. */
     readonly requestId: string;
@@ -21,7 +24,19 @@ export interface FunctionUrlResult {
 /** An environment of the stage, and the domains it hosts. */
 export interface CiEnvironment {
   readonly name: string;
+  /**
+   * Whether a pipeline uploads new code here. Where it doesn't, code arrives only by promotion
+   * from another environment.
+   */
+  readonly publishes: boolean;
   readonly domains: readonly string[];
+}
+
+/** Where a domain's uploaded code is kept. */
+export interface CiUploads {
+  readonly bucket: string;
+  /** The bucket's region, which an upload's address and signature both name. */
+  readonly region: string;
 }
 
 /**
@@ -47,4 +62,5 @@ export interface CiConfig {
   readonly environments: readonly CiEnvironment[];
   /** A domain with no repository yet has no entry, so nothing can release it. */
   readonly domains: readonly CiDomain[];
+  readonly uploads: CiUploads;
 }

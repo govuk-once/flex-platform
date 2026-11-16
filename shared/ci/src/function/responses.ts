@@ -1,3 +1,4 @@
+import type { SignedUpload } from "./sign-upload.ts";
 import type { FunctionUrlResult } from "./types.ts";
 
 // The CloudFront Function's own 401, for a token that is missing or fails verification.
@@ -28,8 +29,39 @@ export function internalError(traceId: string): FunctionUrlResult {
   return answer(500, "Internal server error", "server_error", traceId);
 }
 
-export function notImplemented(traceId: string): FunctionUrlResult {
-  return answer(501, "Not implemented", "server_error", traceId);
+export function badRequest(traceId: string): FunctionUrlResult {
+  return answer(400, "Bad request", "client_error", traceId);
+}
+
+// For a pipeline that is allowed, so it is told why: the environment takes its code by promotion.
+export function uploadsNotAccepted(traceId: string): FunctionUrlResult {
+  return answer(
+    409,
+    "This environment takes no uploads",
+    "client_error",
+    traceId,
+  );
+}
+
+// Never stored: the address is the pipeline's alone, and good for five minutes.
+export function uploadSigned(
+  traceId: string,
+  upload: SignedUpload,
+): FunctionUrlResult {
+  return {
+    statusCode: 200,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-correlation-id": traceId,
+    },
+    body: JSON.stringify({
+      method: "PUT",
+      url: upload.url,
+      headers: upload.headers,
+      expiresInSeconds: upload.expiresInSeconds,
+    }),
+  };
 }
 
 function answer(

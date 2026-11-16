@@ -3,6 +3,10 @@ export {
   CiFunction,
   type CiFunctionProps,
 } from "./ci-function.ts";
+export {
+  DomainCodeBucket,
+  type DomainCodeBucketProps,
+} from "./domain-code-bucket.ts";
 export { ManagementEdge } from "./management-edge.ts";
 export { ManagementViewerRequestFunction } from "./management-viewer-request-function.ts";
 export {
@@ -10,6 +14,7 @@ export {
   CI_ORIGIN_HOST_PARAMETER,
   ciAudience,
   CROSS_REGION_WRITER_LOG_GROUP_NAME,
+  domainCodeBucketName,
   MANAGEMENT_REGION,
   SHARED_REGION,
   TEST_USER_POOL_NAME,

@@ -39,7 +39,16 @@ export const STAGES: readonly StageConfig[] = [
         clientIds: ["4hurkb79cvepuo6v078ui1rdhv"],
       },
     },
-    domains: [{ name: "example", repository: null }],
+    domains: [
+      {
+        name: "example",
+        repository: {
+          name: "govuk-once/flex-platform-domain-sandbox",
+          id: "1460189064",
+          ownerId: "241280733",
+        },
+      },
+    ],
     environments: [
       {
         name: "development",

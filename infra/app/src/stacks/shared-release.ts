@@ -3,6 +3,8 @@ import {
   CI_ORIGIN_HOST_PARAMETER,
   CiFunction,
   CROSS_REGION_WRITER_LOG_GROUP_NAME,
+  DomainCodeBucket,
+  domainCodeBucketName,
   MANAGEMENT_REGION,
   SHARED_REGION,
 } from "@repo/shared-infra";
@@ -16,9 +18,10 @@ import type { StageConfig } from "../config/types.ts";
 export const SHARED_RELEASE_STACK_NAME = "shared-release";
 
 /**
- * The stage's pipeline API: its function and the URL CloudFront reaches it at. AWS generates the
- * URL's host here, and the distribution is in us-east-1, so the stack writes the host to a
- * parameter there for the distribution's stack to read.
+ * The stage's pipeline API: its function, the URL CloudFront reaches it at, and the bucket a
+ * domain's uploaded code is kept in. AWS generates the URL's host here, and the distribution is
+ * in us-east-1, so the stack writes the host to a parameter there for the distribution's stack to
+ * read.
  *
  * The function is built with the stage's domains and the repository each is released from, so a
  * change to who may release a domain is a deploy of this stack.
@@ -32,11 +35,15 @@ export class SharedReleaseStack extends Stack {
       terminationProtection: true,
     });
 
+    const codeBucketName = domainCodeBucketName(stage.shared.account);
+
     const ci = new CiFunction(this, "Ci", {
       zoneName: stage.shared.zone.name,
+      codeBucketName,
       // A disabled domain too: its code can be released while nothing is routed to it.
       environments: stage.environments.map((environment) => ({
         name: environment.name,
+        publishes: environment.release === "publish",
         domains: domainNames(environment),
       })),
       // A domain with no repository yet has no entry, so nothing can release it.
@@ -51,6 +58,10 @@ export class SharedReleaseStack extends Stack {
               },
             ],
       ),
+    });
+    new DomainCodeBucket(this, "Code", {
+      bucketName: codeBucketName,
+      writerRoleArn: ci.role.roleArn,
     });
 
     new CrossRegionParameters(this, "CrossRegion", {

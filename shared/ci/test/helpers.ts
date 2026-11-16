@@ -19,14 +19,28 @@ export const CONFIG: CiConfig = {
   keysUri: KEYS_URI,
   audience: AUDIENCE,
   environments: [
-    { name: "development", domains: ["example", "unregistered"] },
-    { name: "staging", domains: ["example"] },
+    {
+      name: "development",
+      publishes: true,
+      domains: ["example", "unregistered"],
+    },
+    // Takes its code from development, by promotion.
+    { name: "staging", publishes: false, domains: ["example"] },
   ],
   domains: [
     { name: "example", repositoryId: REPOSITORY_ID, ownerId: OWNER_ID },
     // Registered, but no environment hosts it.
     { name: "elsewhere", repositoryId: "700000002", ownerId: OWNER_ID },
   ],
+  uploads: { bucket: "shared-domain-code-000000000000", region: "eu-west-2" },
+};
+
+export const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+// A bundle: the SHA-256 of an empty zip's bytes would do, and so does any 64 hex digits.
+export const BUNDLE = {
+  sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  size: 4096,
 };
 
 export const KID = "key-1";
@@ -103,6 +117,7 @@ export function token(
     repository_owner_id: OWNER_ID,
     environment: "development",
     run_id: "12345678901",
+    sha: COMMIT,
     ...options.payload,
   });
   const signature = sign(
@@ -120,9 +135,18 @@ export function functionUrlEvent(
     method?: string;
     path?: string;
     headers?: Record<string, string | undefined>;
+    /** The body as sent. `null` for a request with none. */
+    body?: string | null;
+    isBase64Encoded?: boolean;
   } = {},
 ): FunctionUrlEvent {
+  const body =
+    overrides.body === undefined ? JSON.stringify(BUNDLE) : overrides.body;
   return {
+    ...(body !== null && { body }),
+    ...(overrides.isBase64Encoded !== undefined && {
+      isBase64Encoded: overrides.isBase64Encoded,
+    }),
     rawPath:
       overrides.path ?? "/ci/environments/development/domains/example/uploads",
     headers: {

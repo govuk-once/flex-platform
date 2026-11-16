@@ -54,6 +54,8 @@ export interface Pipeline {
   readonly environment: string | undefined;
   /** The workflow run, for the log. */
   readonly runId: string | undefined;
+  /** The commit the job runs for, for the log. */
+  readonly commit: string | undefined;
 }
 
 export type VerifyToken = (token: string) => Promise<TokenRejection | Pipeline>;
@@ -80,6 +82,9 @@ export const KEYS_BACKOFF_MS = 5_000;
 const { jwksParser: parseKeys } = new SimpleJwksCache();
 
 const ID = /^\d{1,20}$/;
+
+// A commit's SHA-1 or SHA-256, in hex.
+const COMMIT = /^[0-9a-f]{40}$|^[0-9a-f]{64}$/;
 
 // Thrown by the claim checks below, so a refusal keeps its own code.
 class ClaimRejected extends Error {
@@ -175,7 +180,8 @@ function checkClaims(alg: string | undefined, payload: JwtPayload): void {
 
 // The claim checks have already held both IDs to digits.
 function pipelineOf(payload: JwtPayload): Pipeline | TokenRejection {
-  const { repository_id, repository_owner_id, environment, run_id } = payload;
+  const { repository_id, repository_owner_id, environment, run_id, sha } =
+    payload;
   if (!isId(repository_id) || !isId(repository_owner_id)) {
     return { reason: "repository" };
   }
@@ -184,6 +190,7 @@ function pipelineOf(payload: JwtPayload): Pipeline | TokenRejection {
     ownerId: repository_owner_id,
     environment: typeof environment === "string" ? environment : undefined,
     runId: isId(run_id) ? run_id : undefined,
+    commit: typeof sha === "string" && COMMIT.test(sha) ? sha : undefined,
   };
 }
 

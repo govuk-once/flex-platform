@@ -11,9 +11,14 @@ import {
   type CiFunctionProps,
 } from "./ci-function.ts";
 
+const BUCKET = `shared-domain-code-${ACCOUNT}`;
+
 const PROPS: CiFunctionProps = {
   zoneName: ZONE.zoneName,
-  environments: [{ name: "development", domains: ["example"] }],
+  codeBucketName: BUCKET,
+  environments: [
+    { name: "development", publishes: true, domains: ["example"] },
+  ],
   domains: [
     { name: "example", repositoryId: "700000001", ownerId: "90000001" },
   ],
@@ -74,8 +79,8 @@ describe("CiFunction", () => {
     });
   });
 
-  // No managed policy, which would let it create a log group, and nothing else yet.
-  it("runs as a role that may only write to its own log group", () => {
+  // No managed policy, which would let it create a log group.
+  it("runs as a role that may only write to its own log group and upload a bundle", () => {
     const built = template();
 
     built.hasResourceProperties("AWS::IAM::Role", {
@@ -85,7 +90,9 @@ describe("CiFunction", () => {
     const [role] = Object.values(built.findResources("AWS::IAM::Role"));
     const statements = (
       role?.Properties as {
-        Policies: { PolicyDocument: { Statement: { Action: string[] }[] } }[];
+        Policies: {
+          PolicyDocument: { Statement: { Action: string | string[] }[] };
+        }[];
       }
     ).Policies.flatMap(({ PolicyDocument }) => PolicyDocument.Statement);
 
@@ -94,8 +101,29 @@ describe("CiFunction", () => {
       "logs:PutLogEvents",
       "kms:Encrypt",
       "kms:GenerateDataKey*",
+      "s3:PutObject",
     ]);
     built.resourceCountIs("AWS::IAM::Policy", 0);
+  });
+
+  // The signature on an upload carries the role's permission and no more, so this is the most
+  // any upload can do: write a key shaped like a bundle's. Not read, list or delete.
+  it("may write only keys shaped like a bundle's, in the code bucket", () => {
+    template().hasResourceProperties("AWS::IAM::Role", {
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: "s3:PutObject",
+                Resource: `arn:aws:s3:::${BUCKET}/*/bundle/*.zip`,
+              },
+            ]),
+          },
+        },
+      ],
+    });
   });
 
   // Anything else would have Lambda run the function for whoever found the URL.
@@ -158,6 +186,14 @@ describe("CiFunction", () => {
     expect(code).toContain(`"https://${ZONE.zoneName}/ci"`);
     expect(code).toContain('repositoryId: "700000001"');
     expect(code).toContain('ownerId: "90000001"');
+  });
+
+  it("is built with the bucket uploads go to, in its own region, and where pipelines upload", () => {
+    const code = bundle();
+
+    expect(code).toContain(`bucket: "${BUCKET}"`);
+    expect(code).toContain('region: "eu-west-2"');
+    expect(code).toContain("publishes: true");
   });
 
   it("refuses to build with a repository that isn't given by GitHub's IDs", () => {

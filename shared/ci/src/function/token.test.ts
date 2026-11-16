@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AUDIENCE,
   base64url,
+  COMMIT,
   CONFIG,
   fakeFetcher,
   ISSUER,
@@ -32,6 +33,7 @@ const PIPELINE = {
   ownerId: OWNER_ID,
   environment: "development",
   runId: "12345678901",
+  commit: COMMIT,
 };
 
 function verifier(documents?: Record<string, unknown>) {
@@ -95,6 +97,21 @@ describe("createTokenVerifier", () => {
       });
     },
   );
+
+  // The commit is only for the log too.
+  it.each([
+    [undefined],
+    [42],
+    ["main"],
+    ["0123456789ABCDEF0123456789ABCDEF01234567"],
+  ])("gives no commit for the claim %j", async (sha) => {
+    const { verify } = verifier();
+
+    await expect(verify(token({ payload: { sha } }))).resolves.toEqual({
+      ...PIPELINE,
+      commit: undefined,
+    });
+  });
 
   it.each([
     ["malformed", "not-a-token"],

@@ -339,10 +339,10 @@ may write to no other.
 A domain's pipeline will upload and release its code through an API of the platform's, never
 through AWS itself, so it holds no AWS credentials. The API answers under `/ci`, at the apex of
 the stage's shared zone, behind a CloudFront distribution of its own. The distribution is built,
-and so is the API's check of who is calling and what they may release. Uploading and releasing
-are planned: a pipeline that may release a domain gets a 501 from the one route there is.
+and so are the API's check of who is calling and what they may release, and
+[uploading a bundle](#uploading-a-bundle). Releasing an uploaded bundle is planned.
 
-A job will prove which repository it runs in with the token GitHub issues it, asked for with the
+A job proves which repository it runs in with the token GitHub issues it, asked for with the
 API's address, `https://<shared zone>/ci`, as its audience. It sends the token alone as
 `x-flex-ci-token`, and not as `Authorization`: CloudFront signs each request for the API, and
 that header holds its signature.
@@ -433,13 +433,83 @@ request, in order, it:
    Nothing is decided by the token's `sub`, whose format a repository's admin can change. A
    refusal is a 403, the same whatever the reason, so a pipeline learns nothing of which
    environments and domains exist, or which repository a domain belongs to.
+4. **Checks the environment takes uploads.** New code enters a stage only where an
+   environment's `release` is `"publish"`. Anywhere else is a 409,
+   `This environment takes no uploads`: the pipeline is allowed, so it is told why.
+5. **Reads the bundle's description.** The body is
+   `{ "sha256": "<64 lowercase hex digits>", "size": <bytes> }` and nothing else, with a size
+   from 1 byte to 250 MB, the most Lambda unzips a function's code to. Anything else is a 400.
+   The body is read only now, for a pipeline that is allowed.
+6. **Signs the upload,** and answers 200 with [where to send the bundle](#uploading-a-bundle).
 
-The issuer, the audience, the environments and each domain's repository are baked into the
-function by `buildCiFunction` when the stage is synthesized. So who may release a domain changes
-only by a change to config and a deploy of `shared-release`.
+The issuer, the audience, the environments, whether each takes uploads, each domain's
+repository and the bucket are baked into the function by `buildCiFunction` when the stage is
+synthesized. So who may release a domain changes only by a change to config and a deploy of
+`shared-release`.
 
 The function writes one log line for each request: what happened as a fixed code, the request's
 trace ID, how long it took, and for a verified token GitHub's IDs for the repository, its owner
-and the workflow run. The environment and the domain are logged only for a pipeline that was
-allowed, when they are names from config. The token is never logged, and neither is anything a
-repository's admin can write, such as its name or an environment's.
+and the workflow run, and the commit the job runs for. The environment and the domain are logged
+only for a pipeline that was allowed, when they are names from config, and a signed upload's
+line adds the bundle's key and size. The token is never logged, and neither is the address an
+upload was signed for, or anything a repository's admin can write, such as its name or an
+environment's.
+
+#### Uploading a bundle
+
+A domain's code is uploaded as one zip, its bundle, in two requests. The pipeline asks the API
+where to send the bundle, saying what it will send:
+
+```http
+POST /ci/environments/<environment>/domains/<domain>/uploads
+content-type: application/json
+x-flex-ci-token: <the job's token>
+x-amz-content-sha256: <this body's SHA-256>
+
+{ "sha256": "<the zip's SHA-256, in lowercase hex>", "size": <the zip's length in bytes> }
+```
+
+The API answers with one request the pipeline may make of S3:
+
+```json
+{
+  "method": "PUT",
+  "url": "https://<bucket>.s3.eu-west-2.amazonaws.com/<domain>/bundle/<sha256>.zip?X-Amz-...",
+  "headers": {
+    "if-none-match": "*",
+    "x-amz-checksum-sha256": "<the zip's SHA-256, in base64>"
+  },
+  "expiresInSeconds": 300
+}
+```
+
+The pipeline sends the zip to `url` with those headers, within five minutes. The address carries
+the signature of the API's own role, so the pipeline needs no AWS credentials, and the signature
+is good for that one request. It covers three headers, and S3 refuses an upload that differs in
+any of them:
+
+- **`content-length`,** the size the pipeline gave, so no other length is accepted.
+- **`x-amz-checksum-sha256`,** the hash the pipeline gave. S3 checks the body against it, so
+  the object under a key is the bundle the key names.
+- **`if-none-match: *`,** so S3 writes only where there is no object. A bundle that is already
+  there gets a 412 from S3, which a pipeline takes as done: the key is the bundle's hash, so
+  what is there is the same bundle.
+
+The key is `<domain>/bundle/<sha256>.zip`. The domain is the one the pipeline was allowed for,
+so a pipeline can write only under its own domain. The API's role may write keys of that shape
+and do nothing else in the bucket, and a signature carries no more than the signer's permission.
+
+The bucket is `shared-domain-code-<account>`, in the stage's shared account, built by
+`DomainCodeBucket` in `shared/infra`. Its policy refuses, from anyone:
+
+- a write by any role but the API's. A key is the bundle's hash only because the API signs each
+  upload with that checksum, so a write it didn't sign could put other code under a bundle's key
+  before the bundle is uploaded, and the bundle's own upload would then get a 412;
+- a write that doesn't carry `If-None-Match`;
+- a request on a presigned address signed more than five minutes before, so an address lasts no
+  longer than the API says even if the API signs for longer;
+- any delete of an object or a version of one;
+- any change to the bucket's lifecycle rules, which could expire objects without a delete.
+
+So under that policy a key holds only the bundle it names, and a bundle, once uploaded, is
+neither replaced nor removed.

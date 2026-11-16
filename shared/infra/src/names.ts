@@ -39,6 +39,14 @@ export const CI_FUNCTION_NAME = "shared-ci";
 export const CI_LOG_GROUP_NAME = "/flex/shared/ci";
 
 /**
+ * The bucket every domain's uploaded code is kept in. Bucket names are global, so it ends in the
+ * shared account's ID. 31 characters, within S3's 63.
+ */
+export function domainCodeBucketName(account: string): string {
+  return `shared-domain-code-${account}`;
+}
+
+/**
  * Where the distribution's stack reads the host of the pipeline API's function URL, which AWS
  * generates in the function's region.
  */

@@ -30,6 +30,11 @@ export function buildCiFunction(config: CiConfig): string {
 
 const HTTPS_URL = /^https:\/\/[a-z0-9.-]+(?::\d{1,5})?(?:\/[A-Za-z0-9._/-]*)?$/;
 
+// A bucket's name, as it sits in an upload's address. No dots: S3's certificate covers one label.
+const BUCKET = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+
+const REGION = /^[a-z]{2}(?:-[a-z]+)+-\d$/;
+
 // GitHub's IDs, as its tokens hold them: digits, in a string.
 const ID = /^\d{1,20}$/;
 
@@ -46,6 +51,13 @@ function checkConfig(config: CiConfig): void {
         `The pipeline API's ${name}, ${JSON.stringify(value)}, is not an https address`,
       );
     }
+  }
+
+  const { bucket, region } = config.uploads;
+  if (!BUCKET.test(bucket) || !REGION.test(region)) {
+    throw new Error(
+      `The pipeline API's bucket, ${JSON.stringify(bucket)} in ${JSON.stringify(region)}, is not a bucket's name and a region`,
+    );
   }
 
   checkNames(
