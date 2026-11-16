@@ -10,7 +10,7 @@ import {
   stackIn,
   ZONE,
 } from "../test/helpers.ts";
-import { FORWARDED_HEADERS, REDACTED_HEADERS } from "./management-edge.ts";
+import { REDACTED_HEADERS, WITHHELD_HEADERS } from "./management-edge.ts";
 
 interface Rule {
   Name: string;
@@ -132,21 +132,18 @@ describe("ManagementEdge", () => {
     });
   });
 
-  it("forwards four headers to the pipeline API, and no cookies or query strings", () => {
+  // CloudFront refuses `x-amz-content-sha256` in a list of headers to forward, and signs with it.
+  // So the policy names what is withheld. The function URL answers only to its own host.
+  it("forwards every viewer header but host to the pipeline API, and no cookies or query strings", () => {
     const { template } = managementEdgeTemplate();
 
-    expect(FORWARDED_HEADERS).toEqual([
-      "x-flex-ci-token",
-      "content-type",
-      "x-amz-content-sha256",
-      "x-correlation-id",
-    ]);
+    expect(WITHHELD_HEADERS).toEqual(["host"]);
     template.hasResourceProperties("AWS::CloudFront::OriginRequestPolicy", {
       OriginRequestPolicyConfig: {
         Name: "shared-management-ci-headers",
         HeadersConfig: {
-          HeaderBehavior: "whitelist",
-          Headers: [...FORWARDED_HEADERS],
+          HeaderBehavior: "allExcept",
+          Headers: ["host"],
         },
         QueryStringsConfig: { QueryStringBehavior: "none" },
         CookiesConfig: { CookieBehavior: "none" },
@@ -161,11 +158,6 @@ describe("ManagementEdge", () => {
         }),
       }),
     });
-  });
-
-  // The function URL answers only to its own host, so the viewer's must never be forwarded.
-  it("never forwards the viewer's host", () => {
-    expect(FORWARDED_HEADERS).not.toContain("host");
   });
 
   it("runs the given CloudFront Function on every viewer request", () => {

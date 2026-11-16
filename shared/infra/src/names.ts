@@ -60,7 +60,7 @@ export const MANAGEMENT_ACCESS_LOGS_NAME = "shared-management-access-logs";
 export const MANAGEMENT_RESPONSE_HEADERS_POLICY_NAME =
   "shared-management-response-headers";
 
-/** The origin request policy, which names the viewer headers the pipeline API sees. */
+/** The origin request policy, which names the viewer headers the pipeline API never sees. */
 export const CI_ORIGIN_REQUEST_POLICY_NAME = "shared-management-ci-headers";
 
 /** The origin access control CloudFront signs requests to the pipeline API with. */
