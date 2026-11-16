@@ -63,11 +63,13 @@ Each environment has these stacks:
 | `domain-<environment>-<domain>` | Domain | eu-west-2 | Domain | The domain's API and host, and its function's log group and roles: see [what a domain provides](/flex-platform/domains/hosting/#what-a-domain-provides) |
 | `gateway-<environment>-<account>-<id>` | Domain | eu-west-2 | Gateway in a domain account | The gateway's function, its version and `live` alias, its role and log group, and its secret if it has its own: see [Environment](/flex-platform/reference/environment/#the-lambda-function) |
 
-Each stage's shared account has one more:
+Each stage's shared account has three more:
 
 | Stack | Account | Region | One per | Holds |
 |---|---|---|---|---|
 | `shared-identity` | Shared | eu-west-2 | Stage | The [test user pool](#test-users) and its client |
+| `shared-release` | Shared | eu-west-2 | Stage | The pipeline API's function, its URL, role and log group, and the writer of the URL's host to us-east-1 |
+| `shared-management` | Shared | us-east-1 | Stage | The certificate and DNS records, the distribution in front of [the pipeline API](/flex-platform/domains/hosting/#the-pipeline-api), its web ACL and CloudFront Function, and their log groups |
 
 A stage deploys only to its own accounts, so the shared account's stack names hold neither a stage
 nor an environment.
@@ -78,6 +80,11 @@ made and kept, and the gateways read them: see [the caller token](/flex-platform
 region its logs are kept: see [the Frontdoor's logs](/flex-platform/frontdoor/overview/#logs). The
 region is in the stack's name, so keeping logs in another region later is another stack beside it.
 `frontdoor-<environment>` depends on it, so it deploys first.
+
+`shared-management` is in us-east-1 for the reason `frontdoor-<environment>` is. The pipeline
+API's function is in eu-west-2, in `shared-release`, and AWS generates its URL's host there. So
+`shared-release` [writes the host](#rules-for-stacks-and-constructs) to a parameter in us-east-1,
+and `shared-management` reads it and depends on `shared-release`, so it deploys after it.
 
 A domain's stack depends on its account's, whose certificate ARN it reads and whose API Gateway
 logging setting its stage logs through, and on its network's, whose subnet and security group IDs
@@ -97,7 +104,8 @@ nowhere to go, deleting a network would take every workload's network with it, a
 addresses upstreams allowlist, and deleting a domain account's stack would take the certificate
 every domain in it uses, and leave the account's API Gateway logging setting naming a deleted
 role. Deleting `shared-identity` would leave the test user pool, which is retained, out of the
-app's hands. Deleting a gateway's stack would stop every domain's calls to its upstream, and
+app's hands. Deleting `shared-management` would take the pipeline API's address with it, and
+deleting `shared-release` the function behind it. Deleting a gateway's stack would stop every domain's calls to its upstream, and
 deleting a domain's would take the role its function runs as, and the API and host it answers at.
 So deleting any of them takes a deliberate step first: turning the protection off.
 
@@ -111,8 +119,8 @@ and deletes it. Withdrawing a domain is
 A merge to `main` deploys platform-dev, through GitHub Actions, once the quality checks pass. No
 person deploys from their own machine. platform-staging and platform-prod have no deploy yet.
 
-Each account is bootstrapped for CDK in each region it deploys to, so a frontdoor account is
-bootstrapped in us-east-1 and eu-west-2, and a domain account and a shared account in eu-west-2.
+Each account is bootstrapped for CDK in each region it deploys to, so a frontdoor account and a shared account are
+bootstrapped in us-east-1 and eu-west-2, and a domain account in eu-west-2.
 Each trusts only itself. The platform team bootstraps the accounts, and gives each a role the deploy assumes through
 GitHub's OIDC.
 
@@ -133,8 +141,8 @@ For platform-dev, that is:
 
 | Wave | Shared account | Domain account | Frontdoor account |
 |---|---|---|---|
-| 1 | `shared-identity` | `network-<environment>-<account>`, `domainaccount-<environment>-<account>` | `frontdoor-<environment>-edge-logs-eu-west-2`, `frontdoor-<environment>-caller-token-keys` |
-| 2 | | `domain-<environment>-<domain>`, `gateway-<environment>-<account>-<id>` | |
+| 1 | `shared-identity`, `shared-release` | `network-<environment>-<account>`, `domainaccount-<environment>-<account>` | `frontdoor-<environment>-edge-logs-eu-west-2`, `frontdoor-<environment>-caller-token-keys` |
+| 2 | `shared-management` | `domain-<environment>-<domain>`, `gateway-<environment>-<account>-<id>` | |
 | 3 | | | `frontdoor-<environment>` |
 
 The workflow has three wave jobs. A stage whose stacks would need a fourth fails its plan before
@@ -302,7 +310,8 @@ Before building any stage, the app checks every stage's config:
   deploys, so synth stays offline. The value is the custom resource's own property, so it is
   written again when it changes and never otherwise, and a template is the same from one synth
   to the next. The reader uses `valueForStringParameter`, declares the dependency, and deploys
-  with `--force` after the value changes.
+  with `--force` after the value changes. `shared-management` reads the host of the pipeline
+  API's function URL this way.
 
   CloudFormation holds the custom resource, not the parameter, so these parameters are the one
   thing the stacks create that the [inventory](#tests) doesn't list. Each is under
@@ -364,6 +373,7 @@ construct creates for itself, and each rule has a construct that meets it:
 | `LogGroupCheck` | `Flex-LogGroup` | `PlatformLogGroup` | Keep its logs for a year, be encrypted with a KMS key, be protected from deletion, and be retained when its stack is deleted |
 | `BucketHttpsCheck` | `Flex-BucketHttps` | `PlatformBucket` | Have a policy that denies, to anyone, every request to the bucket and its objects over plain HTTP, and over TLS older than 1.2, each in a statement with no other condition |
 | `ApiIamCheck` | `Flex-ApiIam` | `ProxyApi`, in `@repo/domain-infra` | Be an API Gateway method with IAM authorisation, so API Gateway verifies each request's SigV4 signature and holds the signer to the API's resource policy, which for a domain admits the Frontdoor's edge role alone |
+| `FunctionUrlIamCheck` | `Flex-FunctionUrlIam` | `CiFunction`, in `@repo/shared-infra` | Be a Lambda function URL with IAM authorisation, so Lambda verifies each request's SigV4 signature and holds the signer to the function's policy, which for the pipeline API admits CloudFront alone |
 
 A new rule is a `ResourceCheck`: the type it applies to, and the locations at fault in a resource
 of that type.
