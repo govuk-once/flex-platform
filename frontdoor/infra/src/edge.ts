@@ -1,9 +1,13 @@
-import { PlatformBucket, PlatformLogGroup } from "@repo/infra-constructs";
-import { RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
 import {
-  Certificate,
-  CertificateValidation,
-} from "aws-cdk-lib/aws-certificatemanager";
+  apexAliases,
+  apexCertificate,
+  ApiResponseHeadersPolicy,
+  CloudFrontWebAcl,
+  deliverAccessLogs,
+  PlatformBucket,
+} from "@repo/infra-constructs";
+import { RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
+import type { Certificate } from "aws-cdk-lib/aws-certificatemanager";
 import {
   AllowedMethods,
   CachePolicy,
@@ -18,32 +22,44 @@ import {
   ViewerProtocolPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
 import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
-import { Effect, PolicyStatement, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import type { IVersion, Version } from "aws-cdk-lib/aws-lambda";
-import {
-  CfnDelivery,
-  CfnDeliveryDestination,
-  CfnDeliverySource,
-  CfnResourcePolicy,
-  type LogGroup,
-} from "aws-cdk-lib/aws-logs";
-import {
-  AaaaRecord,
-  ARecord,
-  CaaAmazonRecord,
-  HostedZone,
-  type HostedZoneAttributes,
-  type IHostedZone,
-  RecordTarget,
-} from "aws-cdk-lib/aws-route53";
-import { CloudFrontTarget } from "aws-cdk-lib/aws-route53-targets";
+import type { LogGroup } from "aws-cdk-lib/aws-logs";
+import { HostedZone, type HostedZoneAttributes } from "aws-cdk-lib/aws-route53";
 import type { Bucket, IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
-import { accessLogsName } from "./names.ts";
+import {
+  accessLogsName,
+  responseHeadersPolicyName,
+  webAclName,
+} from "./names.ts";
 import { EdgeOriginRequestPolicy } from "./origin-request-policy.ts";
-import { EdgeResponseHeadersPolicy } from "./response-headers-policy.ts";
-import { WebAcl } from "./web-acl.ts";
+
+/** Requests one bearer token may make in five minutes before the edge turns it away. */
+export const RATE_LIMIT_PER_TOKEN = 1000;
+
+/** Requests one address may make in five minutes, above the per-token limit for shared networks. */
+export const RATE_LIMIT_PER_IP = 5000;
+
+/** Substituted in sampled requests and redacted in logs, so a credential reaches neither. */
+export const REDACTED_HEADERS: readonly string[] = ["authorization", "cookie"];
+
+/**
+ * Headers API Gateway adds that name its internals: `x-amzn-remapped-*` is the documented set,
+ * since CloudFront takes exact names only. CloudFront refuses to remove `x-amzn-requestid`.
+ */
+export const REMOVED_HEADERS = [
+  "x-amz-apigw-id",
+  "x-amzn-trace-id",
+  "x-amzn-remapped-authorization",
+  "x-amzn-remapped-connection",
+  "x-amzn-remapped-content-md5",
+  "x-amzn-remapped-date",
+  "x-amzn-remapped-max-forwards",
+  "x-amzn-remapped-server",
+  "x-amzn-remapped-user-agent",
+  "x-amzn-remapped-www-authenticate",
+] as const;
 
 export interface EdgeProps {
   readonly environment: string;
@@ -64,7 +80,7 @@ export interface EdgeProps {
  * certificate from us-east-1 only, so the edge is built there.
  */
 export class Edge extends Construct {
-  public readonly webAcl: WebAcl;
+  public readonly webAcl: CloudFrontWebAcl;
   public readonly certificate: Certificate;
   /** The default origin, which is empty and serves nothing. */
   public readonly defaultOrigin: Bucket;
@@ -89,22 +105,18 @@ export class Edge extends Construct {
     const zone = HostedZone.fromHostedZoneAttributes(this, "Zone", props.zone);
     const domainName = props.zone.zoneName;
 
-    // Only Amazon may issue for the zone. ACM checks CAA before it issues, so the record comes
-    // first.
-    const caa = new CaaAmazonRecord(this, "Caa", {
-      zone,
-      recordName: domainName,
-    });
+    // Only Amazon may issue for the zone.
+    this.certificate = apexCertificate(this, zone, domainName);
 
-    // CloudFormation writes the validation record into the zone and waits for ACM to issue.
-    this.certificate = new Certificate(this, "Certificate", {
-      domainName,
-      validation: CertificateValidation.fromDns(zone),
-    });
-    this.certificate.node.addDependency(caa);
-
-    this.webAcl = new WebAcl(this, "WebAcl", {
-      environment: props.environment,
+    // The per-token limit counts the `Authorization` header's exact value, so both of the edge's
+    // functions accept each token in one form only: `Bearer`, one space, and the token in its
+    // canonical base64url.
+    this.webAcl = new CloudFrontWebAcl(this, "WebAcl", {
+      name: webAclName(props.environment),
+      tokenHeader: "authorization",
+      rateLimitPerToken: RATE_LIMIT_PER_TOKEN,
+      rateLimitPerIp: RATE_LIMIT_PER_IP,
+      redactedHeaders: REDACTED_HEADERS,
     });
 
     this.defaultOrigin = this.createDefaultOrigin();
@@ -137,10 +149,14 @@ export class Edge extends Construct {
             environment: props.environment,
           },
         ).policy,
-        responseHeadersPolicy: new EdgeResponseHeadersPolicy(
+        // The security headers on every response, which no domain can weaken.
+        responseHeadersPolicy: new ApiResponseHeadersPolicy(
           this,
           "ResponseHeaders",
-          { environment: props.environment },
+          {
+            name: responseHeadersPolicyName(props.environment),
+            removeHeaders: REMOVED_HEADERS,
+          },
         ).policy,
         functionAssociations: [
           {
@@ -162,7 +178,10 @@ export class Edge extends Construct {
       },
       publishAdditionalMetrics: true,
     });
-    this.accessLogGroup = this.deliverAccessLogs(props.environment);
+    this.accessLogGroup = deliverAccessLogs(this, {
+      name: accessLogsName(props.environment),
+      distribution: this.distribution,
+    });
     Validations.of(this.distribution).acknowledge({
       id: "AwsSolutions-CFR3",
       reason:
@@ -178,18 +197,9 @@ export class Edge extends Construct {
       reason:
         "The S3 origin is an empty bucket that resolves for Lambda@Edge, and must refuse every request: origin access control would let CloudFront read it, and would replace the caller's Authorization header with a signature.",
     });
-    this.createAliases(zone, domainName);
+    apexAliases(this, zone, domainName, this.distribution);
 
     this.url = `https://${domainName}`;
-  }
-
-  // An alias at the apex for IPv4 and IPv6, since the distribution answers on both.
-  private createAliases(zone: IHostedZone, recordName: string): void {
-    const target = RecordTarget.fromAlias(
-      new CloudFrontTarget(this.distribution),
-    );
-    new ARecord(this, "AliasIpv4", { zone, recordName, target });
-    new AaaaRecord(this, "AliasIpv6", { zone, recordName, target });
   }
 
   // CloudFront resolves the origin's name before Lambda@Edge runs, and answers 502 if it can't, so
@@ -206,67 +216,5 @@ export class Edge extends Construct {
         "The bucket is empty and refuses every request, so its access logs would hold nothing CloudFront's don't.",
     });
     return bucket;
-  }
-
-  // Standard logging v2: CloudWatch Logs delivers the distribution's access logs to a log group,
-  // which log forwarding will carry on to the shared account. CloudFront's delivery source must
-  // be in us-east-1, as the web ACL must.
-  private deliverAccessLogs(environment: string): LogGroup {
-    const stack = Stack.of(this);
-    const name = accessLogsName(environment);
-    const { logGroup } = new PlatformLogGroup(this, "AccessLogs");
-
-    const source = new CfnDeliverySource(this, "AccessLogSource", {
-      name,
-      logType: "ACCESS_LOGS",
-      resourceArn: this.distribution.distributionArn,
-    });
-
-    // The delivery service writes to the log group under its own principal, which the account
-    // has to allow; the conditions tie the grant to this one source.
-    const policy = new CfnResourcePolicy(this, "AccessLogPolicy", {
-      policyName: name,
-      policyDocument: stack.toJsonString({
-        Version: "2012-10-17",
-        Statement: [
-          new PolicyStatement({
-            sid: "AllowLogDelivery",
-            effect: Effect.ALLOW,
-            principals: [new ServicePrincipal("delivery.logs.amazonaws.com")],
-            actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
-            resources: [logGroup.logGroupArn],
-            conditions: {
-              StringEquals: { "aws:SourceAccount": stack.account },
-              ArnLike: {
-                "aws:SourceArn": stack.formatArn({
-                  service: "logs",
-                  resource: "delivery-source",
-                  resourceName: name,
-                }),
-              },
-            },
-          }).toStatementJson(),
-        ],
-      }),
-    });
-
-    const destination = new CfnDeliveryDestination(
-      this,
-      "AccessLogDestination",
-      {
-        name,
-        deliveryDestinationType: "CWL",
-        destinationResourceArn: logGroup.logGroupArn,
-      },
-    );
-
-    const delivery = new CfnDelivery(this, "AccessLogDelivery", {
-      deliverySourceName: source.name,
-      deliveryDestinationArn: destination.attrArn,
-    });
-    delivery.addResourceDependency(source);
-    delivery.addResourceDependency(policy);
-
-    return logGroup;
   }
 }

@@ -6,49 +6,37 @@ import {
 } from "aws-cdk-lib/aws-cloudfront";
 import { Construct } from "constructs";
 
-import { responseHeadersPolicyName } from "./names.ts";
-
 /** An API's responses are never documents, so nothing may be embedded or loaded from them. */
 export const CONTENT_SECURITY_POLICY =
   "default-src 'none'; frame-ancestors 'none'";
 
-/**
- * Headers API Gateway adds that name its internals: `x-amzn-remapped-*` is the documented set,
- * since CloudFront takes exact names only. CloudFront refuses to remove `x-amzn-requestid`.
- */
-export const REMOVED_HEADERS = [
-  "x-amz-apigw-id",
-  "x-amzn-trace-id",
-  "x-amzn-remapped-authorization",
-  "x-amzn-remapped-connection",
-  "x-amzn-remapped-content-md5",
-  "x-amzn-remapped-date",
-  "x-amzn-remapped-max-forwards",
-  "x-amzn-remapped-server",
-  "x-amzn-remapped-user-agent",
-  "x-amzn-remapped-www-authenticate",
-] as const;
-
-/**
- * Every header overrides the origin's, so a domain cannot weaken them; `no-store` keeps API
- * responses, which may be personal, out of every cache between the edge and the caller.
- */
-export interface EdgeResponseHeadersPolicyProps {
-  readonly environment: string;
+export interface ApiResponseHeadersPolicyProps {
+  /** Derived from config. */
+  readonly name: string;
+  /**
+   * Headers an origin adds that name its internals, by their exact names: CloudFront takes no
+   * pattern.
+   */
+  readonly removeHeaders: readonly string[];
 }
 
-export class EdgeResponseHeadersPolicy extends Construct {
+/**
+ * The headers a distribution sets on every response from an API. Every header overrides the
+ * origin's, so an origin cannot weaken them; `no-store` keeps API responses, which may be
+ * personal, out of every cache between the edge and the caller.
+ */
+export class ApiResponseHeadersPolicy extends Construct {
   public readonly policy: ResponseHeadersPolicy;
 
   constructor(
     scope: Construct,
     id: string,
-    props: EdgeResponseHeadersPolicyProps,
+    props: ApiResponseHeadersPolicyProps,
   ) {
     super(scope, id);
 
     this.policy = new ResponseHeadersPolicy(this, "Policy", {
-      responseHeadersPolicyName: responseHeadersPolicyName(props.environment),
+      responseHeadersPolicyName: props.name,
       securityHeadersBehavior: {
         contentTypeOptions: { override: true },
         frameOptions: { frameOption: HeadersFrameOption.DENY, override: true },
@@ -81,7 +69,7 @@ export class EdgeResponseHeadersPolicy extends Construct {
           },
         ],
       },
-      removeHeaders: [...REMOVED_HEADERS],
+      removeHeaders: [...props.removeHeaders],
     });
   }
 }

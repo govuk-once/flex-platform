@@ -1,6 +1,37 @@
 export { PlatformBucket } from "./bucket.ts";
 export { cdkApp } from "./cdk-app.ts";
 export {
+  type AccessLogsProps,
+  deliverAccessLogs,
+} from "./cloudfront/access-logs.ts";
+export { apexAliases, apexCertificate } from "./cloudfront/apex.ts";
+export {
+  cloudFrontFunctionLogGroupName,
+  PlatformCloudFrontFunction,
+  type PlatformCloudFrontFunctionProps,
+} from "./cloudfront/function.ts";
+export {
+  ApiResponseHeadersPolicy,
+  type ApiResponseHeadersPolicyProps,
+  CONTENT_SECURITY_POLICY,
+} from "./cloudfront/response-headers-policy.ts";
+export {
+  BODY_INSPECTION_LIMIT,
+  BODY_SIZE_LIMIT,
+  BODY_SIZE_RULE_NAME,
+  CUSTOM_RESPONSE_BODIES,
+  type ManagedRuleGroup,
+  RATE_LIMIT_PER_IP_RULE_NAME,
+  RATE_LIMIT_PER_TOKEN_RULE_NAME,
+  webAclRules,
+  type WebAclRulesProps,
+} from "./cloudfront/waf-rules.ts";
+export {
+  CloudFrontWebAcl,
+  type CloudFrontWebAclProps,
+  wafLogGroupName,
+} from "./cloudfront/web-acl.ts";
+export {
   CROSS_REGION_PARAMETER_PATH,
   crossRegionParameterName,
   CrossRegionParameters,

@@ -12,19 +12,13 @@ export const RATE_LIMIT_PER_TOKEN_RULE_NAME = "RateLimitPerToken";
 export const RATE_LIMIT_PER_IP_RULE_NAME = "RateLimitPerIp";
 
 /**
- * The largest body the edge lets through, in bytes. It's also how much of a body WAF inspects, so
+ * The largest body an edge lets through, in bytes. It's also how much of a body WAF inspects, so
  * the managed rules see the whole of every body that reaches the origin.
  */
 export const BODY_SIZE_LIMIT = 16 * 1024;
 
 /** The web ACL's inspection limit for a CloudFront body, which must equal `BODY_SIZE_LIMIT`. */
 export const BODY_INSPECTION_LIMIT = "KB_16";
-
-/** Requests one bearer token may make in five minutes before the edge turns it away. */
-export const RATE_LIMIT_PER_TOKEN = 1000;
-
-/** Requests one address may make in five minutes, above the per-token limit for shared networks. */
-export const RATE_LIMIT_PER_IP = 5000;
 
 const RATE_LIMIT_WINDOW_SECONDS = 300;
 
@@ -47,6 +41,18 @@ export const CUSTOM_RESPONSE_BODIES = {
 } as const satisfies Record<string, CfnWebACL.CustomResponseBodyProperty>;
 
 type CustomResponseBody = keyof typeof CUSTOM_RESPONSE_BODIES;
+
+export interface WebAclRulesProps {
+  /**
+   * The header that holds a caller's token. Its exact value is the per-token limit's key, so
+   * whatever checks the header accepts each token in one form only.
+   */
+  readonly tokenHeader: string;
+  /** Requests one token may make in five minutes before the edge turns it away. */
+  readonly rateLimitPerToken: number;
+  /** Requests one address may make in five minutes, above the per-token limit for shared networks. */
+  readonly rateLimitPerIp: number;
+}
 
 function visibility(metricName: string): CfnWebACL.VisibilityConfigProperty {
   return {
@@ -133,8 +139,11 @@ function rateLimitRule(
   };
 }
 
-/** The web ACL's rules, in evaluation order, each with its priority. */
-export function wafRules(): CfnWebACL.RuleProperty[] {
+/**
+ * A CloudFront web ACL's rules, in evaluation order, each with its priority. Every edge has the
+ * same rules: only the header that holds a token and the two limits differ.
+ */
+export function webAclRules(props: WebAclRulesProps): CfnWebACL.RuleProperty[] {
   const rules: UnprioritisedRule[] = [
     bodySizeRule(),
     // The body size rule answers an oversize body with a 413 first; this rule's 8 KB limit would
@@ -147,20 +156,19 @@ export function wafRules(): CfnWebACL.RuleProperty[] {
     // Counted, not blocked: its matches show in metrics and logs, and nobody is turned away.
     managedRuleGroupRule("AWSManagedRulesAnonymousIpList", { count: true }),
     // A request without the header isn't counted here; the CloudFront Function refuses it. The
-    // header's exact value is the key, so both functions accept each token in one form only:
-    // `Bearer`, one space, and the token in its canonical base64url.
-    rateLimitRule(RATE_LIMIT_PER_TOKEN_RULE_NAME, RATE_LIMIT_PER_TOKEN, {
+    // header's exact value is the key, so the function accepts each token in one form only.
+    rateLimitRule(RATE_LIMIT_PER_TOKEN_RULE_NAME, props.rateLimitPerToken, {
       aggregateKeyType: "CUSTOM_KEYS",
       customKeys: [
         {
           header: {
-            name: "authorization",
+            name: props.tokenHeader,
             textTransformations: [{ priority: 0, type: "NONE" }],
           },
         },
       ],
     }),
-    rateLimitRule(RATE_LIMIT_PER_IP_RULE_NAME, RATE_LIMIT_PER_IP, {
+    rateLimitRule(RATE_LIMIT_PER_IP_RULE_NAME, props.rateLimitPerIp, {
       aggregateKeyType: "IP",
     }),
   ];
