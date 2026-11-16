@@ -56,17 +56,12 @@ export const REDACTED_HEADERS: readonly string[] = [
 ];
 
 /**
- * The only viewer headers the pipeline API sees: the token, the body's type and its hash, which
- * CloudFront signs, and the request's ID, which the CloudFront Function sets. No cookies, no
- * query strings, and none of CloudFront's viewer IP and location headers. Never `host`: the
- * function URL answers only to its own.
+ * The viewer headers the pipeline API never sees. `host`: the function URL answers only to its
+ * own. Every other header a viewer sends is forwarded, because CloudFront signs the body's hash
+ * the caller sends in `x-amz-content-sha256`, and refuses that header in a list of headers to
+ * forward. No cookies, no query strings, and none of CloudFront's viewer IP and location headers.
  */
-export const FORWARDED_HEADERS = [
-  CI_TOKEN_HEADER,
-  "content-type",
-  "x-amz-content-sha256",
-  "x-correlation-id",
-] as const;
+export const WITHHELD_HEADERS = ["host"] as const;
 
 /** A header Lambda adds that names its internals. CloudFront refuses to remove `x-amzn-requestid`. */
 export const REMOVED_HEADERS = ["x-amzn-trace-id"] as const;
@@ -162,8 +157,8 @@ export class ManagementEdge extends Construct {
         cachePolicy: CachePolicy.CACHING_DISABLED,
         originRequestPolicy: new OriginRequestPolicy(this, "CiOriginRequest", {
           originRequestPolicyName: CI_ORIGIN_REQUEST_POLICY_NAME,
-          headerBehavior: OriginRequestHeaderBehavior.allowList(
-            ...FORWARDED_HEADERS,
+          headerBehavior: OriginRequestHeaderBehavior.denyList(
+            ...WITHHELD_HEADERS,
           ),
           queryStringBehavior: OriginRequestQueryStringBehavior.none(),
           cookieBehavior: OriginRequestCookieBehavior.none(),

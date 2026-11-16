@@ -364,8 +364,10 @@ It has the same TLS policy, sets the same security
   forwards, so a request sent straight to the URL is refused before the function runs. A synth
   [check](/flex-platform/infrastructure/overview/#checks) refuses a function URL with any other
   authorisation.
-- **What the origin sees.** `x-flex-ci-token`, `content-type`, `x-amz-content-sha256` and
-  `x-correlation-id`, and no cookie or query string.
+- **What the origin sees.** Every header the caller sent except `host`, and the
+  `x-correlation-id` the CloudFront Function set. No cookie or query string. The function URL
+  answers only to its own host. The headers aren't held to a list, because CloudFront refuses
+  `x-amz-content-sha256` in one, and signs with it.
 
 Its access logs, the web ACL's logs and the function's go to log groups in us-east-1, as
 [the Frontdoor's](/flex-platform/frontdoor/overview/#logs) do.
