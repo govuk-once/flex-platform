@@ -15,10 +15,11 @@ import {
 } from "@repo/cloudfront-function";
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 
+import { CI_TOKEN_HEADER } from "../token-header.ts";
 import { isCiPath } from "./ci-path.ts";
 import { hasContentHash } from "./content-hash.ts";
 import { logEvent } from "./telemetry.ts";
-import { checkToken, CI_TOKEN_HEADER } from "./token.ts";
+import { checkToken } from "./token.ts";
 import type { ViewerRequestConfig } from "./types.ts";
 
 // Every route a pipeline calls is a POST.

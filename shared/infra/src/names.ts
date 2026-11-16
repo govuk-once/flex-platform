@@ -22,6 +22,9 @@ export const TEST_USER_POOL_NAME = "shared-test-users";
 export const PIPELINE_TOKEN_ISSUER =
   "https://token.actions.githubusercontent.com";
 
+/** Where GitHub publishes the keys it signs a pipeline's token with, as its discovery document says. */
+export const PIPELINE_TOKEN_KEYS_URI = `${PIPELINE_TOKEN_ISSUER}/.well-known/jwks`;
+
 /**
  * Who a pipeline's token must be for: the pipeline API's own address, at the apex of the shared
  * account's zone. A job asks GitHub for a token with this audience.

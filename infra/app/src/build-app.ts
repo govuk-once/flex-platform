@@ -41,7 +41,7 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
   if (target.shared) {
     new SharedIdentityStack(app, stage.shared);
 
-    const release = new SharedReleaseStack(app, stage.shared);
+    const release = new SharedReleaseStack(app, stage);
     const management = new SharedManagementStack(app, stage.shared);
 
     management.addStackDependency(

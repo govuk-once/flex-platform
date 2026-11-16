@@ -1,4 +1,8 @@
-export { CI_CONCURRENCY, CiFunction } from "./ci-function.ts";
+export {
+  CI_CONCURRENCY,
+  CiFunction,
+  type CiFunctionProps,
+} from "./ci-function.ts";
 export { ManagementEdge } from "./management-edge.ts";
 export { ManagementViewerRequestFunction } from "./management-viewer-request-function.ts";
 export {

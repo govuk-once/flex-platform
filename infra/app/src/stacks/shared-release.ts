@@ -9,7 +9,8 @@ import {
 import { Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 
-import type { SharedConfig } from "../config/types.ts";
+import { domainNames } from "../config/domain-name.ts";
+import type { StageConfig } from "../config/types.ts";
 
 // One per stage, in the stage's own shared account, so the name holds no stage.
 export const SHARED_RELEASE_STACK_NAME = "shared-release";
@@ -18,17 +19,39 @@ export const SHARED_RELEASE_STACK_NAME = "shared-release";
  * The stage's pipeline API: its function and the URL CloudFront reaches it at. AWS generates the
  * URL's host here, and the distribution is in us-east-1, so the stack writes the host to a
  * parameter there for the distribution's stack to read.
+ *
+ * The function is built with the stage's domains and the repository each is released from, so a
+ * change to who may release a domain is a deploy of this stack.
  */
 export class SharedReleaseStack extends Stack {
-  constructor(scope: Construct, shared: SharedConfig) {
+  constructor(scope: Construct, stage: StageConfig) {
     super(scope, SHARED_RELEASE_STACK_NAME, {
       description:
         "Flex pipeline API, which a domain's pipeline releases through",
-      env: { account: shared.account, region: SHARED_REGION },
+      env: { account: stage.shared.account, region: SHARED_REGION },
       terminationProtection: true,
     });
 
-    const ci = new CiFunction(this, "Ci");
+    const ci = new CiFunction(this, "Ci", {
+      zoneName: stage.shared.zone.name,
+      // A disabled domain too: its code can be released while nothing is routed to it.
+      environments: stage.environments.map((environment) => ({
+        name: environment.name,
+        domains: domainNames(environment),
+      })),
+      // A domain with no repository yet has no entry, so nothing can release it.
+      domains: stage.domains.flatMap(({ name, repository }) =>
+        repository === null
+          ? []
+          : [
+              {
+                name,
+                repositoryId: repository.id,
+                ownerId: repository.ownerId,
+              },
+            ],
+      ),
+    });
 
     new CrossRegionParameters(this, "CrossRegion", {
       logGroupName: CROSS_REGION_WRITER_LOG_GROUP_NAME,

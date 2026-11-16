@@ -4,6 +4,7 @@
 
 import { isCanonicalBase64url } from "@repo/cloudfront-js-utils/is-canonical-base64url";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
+import { backingOff } from "@repo/utils/backing-off";
 import {
   JwtExpiredError,
   JwtInvalidSignatureAlgorithmError,
@@ -72,31 +73,10 @@ const REJECTIONS: readonly (readonly [
   [JwtNotBeforeError, "not-yet-valid"],
 ];
 
-/** How long after a failed fetch of an issuer's keys they are not fetched again. */
-export const KEYS_BACKOFF_MS = 5_000;
-
 // The library waits before fetching again only for a key ID the keys didn't hold, not after a
 // fetch that failed. So while an issuer can't be reached, every request to an instance without
-// its keys would fetch them again, each waiting out the library's timeouts and its own retry, and
-// adding to the load on the issuer. Inside the wait a fetch fails at once instead, as one that
-// failed would, so the request still fails closed.
-export function backingOff(fetcher: Fetcher): Fetcher {
-  const failedAt = new Map<string, number>();
-  return {
-    fetch: async (uri, requestOptions, data) => {
-      const failed = failedAt.get(uri);
-      if (failed !== undefined && Date.now() - failed < KEYS_BACKOFF_MS) {
-        throw new Error("The issuer's keys failed to fetch moments ago");
-      }
-      try {
-        return await fetcher.fetch(uri, requestOptions, data);
-      } catch (error) {
-        failedAt.set(uri, Date.now());
-        throw error;
-      }
-    },
-  };
-}
+// its keys would fetch them again. For this long after a failed fetch, they are not fetched again.
+export const KEYS_BACKOFF_MS = 5_000;
 
 // One verifier per issuer, chosen by the token's own `iss`. Each fetches its issuer's keys once,
 // on first use, and again only for a key ID it hasn't seen, or once a failed fetch's wait is over.
@@ -151,7 +131,7 @@ function issuerVerifier(trusted: TrustedIssuer, fetcher: Fetcher | undefined) {
     },
     {
       jwksCache: new SimpleJwksCache({
-        fetcher: backingOff(fetcher ?? new SimpleFetcher()),
+        fetcher: backingOff(fetcher ?? new SimpleFetcher(), KEYS_BACKOFF_MS),
       }),
     },
   );
