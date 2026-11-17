@@ -1,13 +1,38 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { assert, describe, expect, it } from "vitest";
 
-import { ACCOUNT, appOf, stackIn } from "../test/helpers.ts";
-import { CI_CONCURRENCY, CiFunction } from "./ci-function.ts";
+import { ACCOUNT, appOf, stackIn, ZONE } from "../test/helpers.ts";
+import {
+  CI_CONCURRENCY,
+  CiFunction,
+  type CiFunctionProps,
+} from "./ci-function.ts";
 
-function build(region = "eu-west-2", nag = false) {
+const PROPS: CiFunctionProps = {
+  zoneName: ZONE.zoneName,
+  environments: [{ name: "development", domains: ["example"] }],
+  domains: [
+    { name: "example", repositoryId: "700000001", ownerId: "90000001" },
+  ],
+};
+
+function build(region = "eu-west-2", nag = false, props = PROPS) {
   const stack = stackIn(region, nag);
-  const ci = new CiFunction(stack, "Ci");
+  const ci = new CiFunction(stack, "Ci", props);
   return { stack, ci };
+}
+
+// The function's code as CDK staged it for upload: the one asset of the stack.
+function bundle(): string {
+  const { directory } = appOf(build().stack).synth();
+  const [asset] = readdirSync(directory).filter((name) =>
+    name.startsWith("asset."),
+  );
+  assert(asset !== undefined);
+  return readFileSync(path.join(directory, asset, "index.js"), "utf8");
 }
 
 function template(): Template {
@@ -32,7 +57,7 @@ describe("CiFunction", () => {
       Architectures: ["arm64"],
       Handler: "index.handler",
       Timeout: 10,
-      MemorySize: 256,
+      MemorySize: 1769,
       ReservedConcurrentExecutions: CI_CONCURRENCY,
     });
   });
@@ -84,7 +109,7 @@ describe("CiFunction", () => {
   });
 
   // Lambda checks both actions for a call through a URL.
-  it("admits CloudFront alone, for this account's distributions, and only through the URL", () => {
+  it("has a policy that admits CloudFront alone, for this account's distributions, and only through the URL", () => {
     const built = template();
 
     built.resourceCountIs("AWS::Lambda::Permission", 2);
@@ -116,11 +141,33 @@ describe("CiFunction", () => {
     });
   });
 
-  // Until the API is built, a request that passes every check at the edge gets an unknown
-  // path's answer.
-  it("serves nothing yet", () => {
+  it("runs the pipeline API's bundle, staged as an asset", () => {
     template().hasResourceProperties("AWS::Lambda::Function", {
-      Code: { ZipFile: Match.stringLikeRegexp("statusCode: 404") },
+      Code: { S3Key: Match.stringLikeRegexp(String.raw`\.zip$`) },
     });
+  });
+
+  // Who may release what is in the code itself, so it changes only with a deploy.
+  it("is built with GitHub as the issuer, its own address as the audience, and each domain's repository", () => {
+    const code = bundle();
+
+    expect(code).toContain('"https://token.actions.githubusercontent.com"');
+    expect(code).toContain(
+      '"https://token.actions.githubusercontent.com/.well-known/jwks"',
+    );
+    expect(code).toContain(`"https://${ZONE.zoneName}/ci"`);
+    expect(code).toContain('repositoryId: "700000001"');
+    expect(code).toContain('ownerId: "90000001"');
+  });
+
+  it("refuses to build with a repository that isn't given by GitHub's IDs", () => {
+    expect(() =>
+      build("eu-west-2", false, {
+        ...PROPS,
+        domains: [
+          { name: "example", repositoryId: "example-org/x", ownerId: "1" },
+        ],
+      }),
+    ).toThrow("GitHub's IDs");
   });
 });

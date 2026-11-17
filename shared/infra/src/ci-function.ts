@@ -1,7 +1,17 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import {
   logGroupWriteStatements,
   PlatformLogGroup,
 } from "@repo/infra-constructs";
+import {
+  buildCiFunction,
+  type CiDomain,
+  type CiEnvironment,
+  HANDLER,
+} from "@repo/shared-ci";
 import { Duration, Fn, Stack, Validations } from "aws-cdk-lib";
 import { PolicyDocument, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import {
@@ -13,7 +23,14 @@ import {
 } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
-import { CI_FUNCTION_NAME, CI_LOG_GROUP_NAME, SHARED_REGION } from "./names.ts";
+import {
+  CI_FUNCTION_NAME,
+  CI_LOG_GROUP_NAME,
+  ciAudience,
+  PIPELINE_TOKEN_ISSUER,
+  PIPELINE_TOKEN_KEYS_URI,
+  SHARED_REGION,
+} from "./names.ts";
 
 /**
  * How many requests the function serves at once. Lambda answers 429 to one more, which a pipeline
@@ -21,29 +38,40 @@ import { CI_FUNCTION_NAME, CI_LOG_GROUP_NAME, SHARED_REGION } from "./names.ts";
  */
 export const CI_CONCURRENCY = 20;
 
-// Serves nothing yet: every request that reaches it gets the answer an unknown path gets.
-const HANDLER = `exports.handler = async () => ({
-  statusCode: 404,
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({ message: "Not found", type: "client_error" }),
-});
-`;
+/**
+ * Lambda gives a function CPU in proportion to its memory, and one whole vCPU at this much. Node
+ * runs the handler on one thread, so more would buy nothing, and less would slow verifying a
+ * token's signature.
+ */
+export const CI_MEMORY_MB = 1769;
+
+export interface CiFunctionProps {
+  /** The shared account's zone, whose apex the pipeline API answers at. */
+  readonly zoneName: string;
+  /** Each environment of the stage, and the domains it hosts. */
+  readonly environments: readonly CiEnvironment[];
+  /** Each of the stage's domains that has a repository, and GitHub's IDs for it. */
+  readonly domains: readonly CiDomain[];
+}
 
 /**
- * The pipeline API's function, and the URL CloudFront reaches it at.
+ * The pipeline API's function, and the URL CloudFront reaches it at. The function is built with
+ * who may release what: the token's issuer and audience, and each domain's repository.
  *
- * The URL takes only requests signed with SigV4 by a caller its policy admits, and the policy
- * admits CloudFront alone, for this account's distributions. So a request sent straight to the
- * URL is refused by Lambda before the function runs. The policy names no one distribution: the
- * distribution is in another stack, in another region, which reads this one's URL, so naming it
- * here would make each stack wait for the other.
+ * The URL takes only requests signed with SigV4 by a caller IAM allows, and the function's
+ * policy admits CloudFront alone, for this account's distributions. So a request sent straight
+ * to the URL from outside the account is refused by Lambda before the function runs. In the
+ * account, as for any function, a principal whose own policy allows the call can make it, so
+ * the function relies on the token it verifies, never on where a request came from. The policy
+ * names no one distribution: the distribution is in another stack, in another region, which
+ * reads this one's URL, so naming it here would make each stack wait for the other.
  */
 export class CiFunction extends Construct {
   public readonly function: LambdaFunction;
   /** The function URL's host, which AWS generates. */
   public readonly urlHost: string;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, props: CiFunctionProps) {
     super(scope, id);
 
     const stack = Stack.of(this);
@@ -74,11 +102,19 @@ export class CiFunction extends Construct {
       functionName: CI_FUNCTION_NAME,
       runtime: Runtime.NODEJS_24_X,
       architecture: Architecture.ARM_64,
-      handler: "index.handler",
-      code: Code.fromInline(HANDLER),
+      handler: HANDLER,
+      code: Code.fromAsset(
+        bundleDirectory({
+          issuer: PIPELINE_TOKEN_ISSUER,
+          keysUri: PIPELINE_TOKEN_KEYS_URI,
+          audience: ciAudience(props.zoneName),
+          environments: props.environments,
+          domains: props.domains,
+        }),
+      ),
       role,
       timeout: Duration.seconds(10),
-      memorySize: 256,
+      memorySize: CI_MEMORY_MB,
       reservedConcurrentExecutions: CI_CONCURRENCY,
       logGroup,
     });
@@ -111,4 +147,13 @@ export class CiFunction extends Construct {
       sourceArn,
     });
   }
+}
+
+// The bundle is per stage, so it's built at synth, into a directory of its own for CDK to stage.
+function bundleDirectory(
+  config: Parameters<typeof buildCiFunction>[0],
+): string {
+  const directory = mkdtempSync(path.join(tmpdir(), "pipeline-api-"));
+  writeFileSync(path.join(directory, "index.js"), buildCiFunction(config));
+  return directory;
 }

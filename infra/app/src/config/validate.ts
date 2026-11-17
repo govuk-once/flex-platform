@@ -9,7 +9,7 @@ import {
   networkZones,
 } from "@repo/infra-constructs";
 
-import { domainName } from "./domain-name.ts";
+import { domainNames } from "./domain-name.ts";
 import { SHARED_TARGET } from "./select-target.ts";
 import { trustedIssuers } from "./trusted-issuers.ts";
 import type {
@@ -99,7 +99,7 @@ export function validateStages(stages: readonly StageConfig[]): void {
       // Unique across the environment, not just the account: the Frontdoor routes by name.
       checkNames(
         `${stage.name}/${environment.name} domain`,
-        domainsOf(environment),
+        domainNames(environment),
       );
 
       checkEnvironment(
@@ -127,7 +127,7 @@ function checkStageDomains(stage: StageConfig): void {
   const listed = new Set(stage.domains.map(({ name }) => name));
   const hosted = new Set<string>();
   for (const environment of stage.environments) {
-    for (const domain of domainsOf(environment)) {
+    for (const domain of domainNames(environment)) {
       if (!listed.has(domain)) {
         throw new Error(
           `${stage.name}/${environment.name}: the domain ${domain} is not in ${stage.name}'s domains, which say who may release it`,
@@ -193,8 +193,8 @@ function checkRelease(stage: StageConfig): void {
       );
     }
 
-    const promotable = new Set(domainsOf(source));
-    for (const domain of domainsOf(environment)) {
+    const promotable = new Set(domainNames(source));
+    for (const domain of domainNames(environment)) {
       if (!promotable.has(domain)) {
         throw new Error(
           `${at}: the domain ${domain} is not hosted in ${promoteFrom}, which it would be promoted from`,
@@ -280,18 +280,10 @@ function checkIssuer(at: string, { issuer, clientIds }: TrustedIssuer): void {
   }
 }
 
-// Every domain's name, disabled ones included: a disabled domain keeps its stack and its name, so
-// no other account in the environment may take it.
-function domainsOf(environment: EnvironmentConfig): string[] {
-  return environment.domainAccounts.flatMap(({ domains }) =>
-    domains.map(domainName),
-  );
-}
-
 // The environment's and the domain's names are each valid alone, but together can pass IAM's limit
 // on the execution role's name, the longest of a domain's names that Lambda or IAM limits.
 function checkDomains(at: string, environment: EnvironmentConfig): void {
-  for (const domain of domainsOf(environment)) {
+  for (const domain of domainNames(environment)) {
     const roleName = executionRoleName(environment.name, domain);
 
     if (roleName.length > ROLE_NAME_LENGTH) {

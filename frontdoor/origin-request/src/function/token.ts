@@ -4,6 +4,8 @@
 
 import { isCanonicalBase64url } from "@repo/cloudfront-js-utils/is-canonical-base64url";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
+import { backingOff } from "@repo/utils/backing-off";
+import { keptFresh } from "@repo/utils/kept-fresh";
 import {
   JwtExpiredError,
   JwtInvalidSignatureAlgorithmError,
@@ -72,38 +74,27 @@ const REJECTIONS: readonly (readonly [
   [JwtNotBeforeError, "not-yet-valid"],
 ];
 
-/** How long after a failed fetch of an issuer's keys they are not fetched again. */
-export const KEYS_BACKOFF_MS = 5_000;
+// The library keeps an issuer's keys for as long as the function's instance lives, and fetches
+// them again only for a key ID they didn't hold. So a key the issuer removed would go on
+// verifying tokens. Keys this old are fetched again before they are used, and a request whose
+// fetch fails then fails closed.
+export const KEYS_MAX_AGE_MS = 10 * 60 * 1000;
 
 // The library waits before fetching again only for a key ID the keys didn't hold, not after a
 // fetch that failed. So while an issuer can't be reached, every request to an instance without
-// its keys would fetch them again, each waiting out the library's timeouts and its own retry, and
-// adding to the load on the issuer. Inside the wait a fetch fails at once instead, as one that
-// failed would, so the request still fails closed.
-export function backingOff(fetcher: Fetcher): Fetcher {
-  const failedAt = new Map<string, number>();
-  return {
-    fetch: async (uri, requestOptions, data) => {
-      const failed = failedAt.get(uri);
-      if (failed !== undefined && Date.now() - failed < KEYS_BACKOFF_MS) {
-        throw new Error("The issuer's keys failed to fetch moments ago");
-      }
-      try {
-        return await fetcher.fetch(uri, requestOptions, data);
-      } catch (error) {
-        failedAt.set(uri, Date.now());
-        throw error;
-      }
-    },
-  };
-}
+// its keys would fetch them again. For this long after a fetch that failed, or one that answered
+// with something other than keys, they are not fetched again.
+export const KEYS_BACKOFF_MS = 5_000;
 
-// One verifier per issuer, chosen by the token's own `iss`. Each fetches its issuer's keys once,
-// on first use, and again only for a key ID it hasn't seen, or once a failed fetch's wait is over.
-// `fetcher` replaces the network in tests.
+// The library's parser of an issuer's keys, which it gives only as a cache's own.
+const { jwksParser: parseKeys } = new SimpleJwksCache();
+
+// One verifier per issuer, chosen by the token's own `iss`. Each fetches its issuer's keys on
+// first use, again once they are too old, and for a key ID it hasn't seen. `fetcher` replaces the
+// network in tests.
 export function createTokenVerifier(
   issuers: readonly TrustedIssuer[],
-  fetcher?: Fetcher,
+  fetcher: Fetcher = new SimpleFetcher(),
 ): VerifyToken {
   // A Map, because `iss` comes from the caller and an object lookup finds inherited members.
   const verifiers = new Map(
@@ -122,10 +113,10 @@ export function createTokenVerifier(
     }
     try {
       const { payload } = decomposeUnverifiedJwt(token);
-      const verifier =
+      const verify =
         payload.iss === undefined ? undefined : verifiers.get(payload.iss);
-      if (!verifier) return { reason: "issuer" };
-      const { username } = await verifier.verify(token);
+      if (!verify) return { reason: "issuer" };
+      const { username } = await verify(token);
       // The claim checks have already held it to a string that isn't empty.
       if (typeof username !== "string") return { reason: "username" };
       return { pairwiseId: username };
@@ -137,24 +128,36 @@ export function createTokenVerifier(
   };
 }
 
-function issuerVerifier(trusted: TrustedIssuer, fetcher: Fetcher | undefined) {
-  return JwtVerifier.create(
+function issuerVerifier(
+  trusted: TrustedIssuer,
+  fetcher: Fetcher,
+): (token: string) => Promise<JwtPayload> {
+  // Where the library looks for an issuer's keys by default, named so they can be kept fresh.
+  const keysUri = `${trusted.issuer}/.well-known/jwks.json`;
+  // The cache parses the keys after its fetcher answers. They are parsed inside the back-off as
+  // well, so an answer that isn't keys counts as a fetch that failed.
+  const keys = new SimpleJwksCache({
+    fetcher: backingOff(fetcher, KEYS_BACKOFF_MS, parseKeys),
+  });
+  const keysAreFresh = keptFresh((uri) => keys.getJwks(uri), KEYS_MAX_AGE_MS);
+  const verifier = JwtVerifier.create(
     {
       // Matched exactly. Cognito's verifier would also accept the pool's global issuer format,
       // which is more than the config names.
       issuer: trusted.issuer,
       // Access tokens carry the app client as `client_id`, not `aud`.
       audience: null,
+      jwksUri: keysUri,
       customJwtCheck: ({ header, payload }) => {
         checkClaims(header.alg, payload, trusted.clientIds);
       },
     },
-    {
-      jwksCache: new SimpleJwksCache({
-        fetcher: backingOff(fetcher ?? new SimpleFetcher()),
-      }),
-    },
+    { jwksCache: keys },
   );
+  return async (token) => {
+    await keysAreFresh(keysUri);
+    return verifier.verify(token);
+  };
 }
 
 // Runs after the signature is verified.
@@ -167,6 +170,8 @@ function checkClaims(
   if (alg !== "RS256") throw new ClaimRejected("algorithm");
   // The library checks `exp` only when there is one.
   if (payload.exp === undefined) throw new ClaimRejected("no-expiry");
+  // The library accepts a token in the instant it expires. The CloudFront Function refuses it.
+  if (payload.exp <= Date.now() / 1000) throw new ClaimRejected("expired");
   if (payload.token_use !== "access") throw new ClaimRejected("token-use");
   if (
     typeof payload.client_id !== "string" ||

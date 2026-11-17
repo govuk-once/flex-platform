@@ -5,12 +5,6 @@ import { rs256JwtPayload } from "@repo/cloudfront-js-utils/rs256-jwt-payload";
 
 import type { ViewerRequestConfig } from "./types.ts";
 
-/**
- * The header a pipeline sends its token in, as the token alone, with no scheme. Not
- * `Authorization`, which CloudFront replaces with its own signature for the origin.
- */
-export const CI_TOKEN_HEADER = "x-flex-ci-token";
-
 // A job's token is a few kilobytes at most. Far larger is not one.
 const MAX_TOKEN_LENGTH = 8192;
 

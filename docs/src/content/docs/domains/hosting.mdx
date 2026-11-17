@@ -338,9 +338,9 @@ may write to no other.
 
 A domain's pipeline will upload and release its code through an API of the platform's, never
 through AWS itself, so it holds no AWS credentials. The API answers under `/ci`, at the apex of
-the stage's shared zone, behind a CloudFront distribution of its own. Everything in front of the
-API is built. The API itself serves nothing yet: it answers every request that reaches it with a
-404.
+the stage's shared zone, behind a CloudFront distribution of its own. The distribution is built,
+and so is the API's check of who is calling and what they may release. Uploading and releasing
+are planned: a pipeline that may release a domain gets a 501 from the one route there is.
 
 A job will prove which repository it runs in with the token GitHub issues it, asked for with the
 API's address, `https://<shared zone>/ci`, as its audience. It sends the token alone as
@@ -359,9 +359,11 @@ It has the same TLS policy, sets the same security
   token's limit counts the exact value of `x-flex-ci-token`, and the web ACL keeps that header
   out of its logs and samples.
 - **The origin.** Every path goes to the API's function, at its Lambda function URL. The URL
-  takes only requests signed with SigV4 by a caller its policy admits, and the policy admits
+  takes only requests signed with SigV4 by a caller IAM allows, and the function's policy admits
   CloudFront alone, for the shared account's distributions. CloudFront signs every request it
-  forwards, so a request sent straight to the URL is refused before the function runs. A synth
+  forwards, so a request sent straight to the URL from outside the shared account is refused
+  before the function runs. In the account, as for any function, a principal whose own policy
+  allows the call can make it. The function relies on the token it verifies either way. A synth
   [check](/flex-platform/infrastructure/overview/#checks) refuses a function URL with any other
   authorisation.
 - **What the origin sees.** Every header the caller sent except `host`, and the
@@ -379,9 +381,8 @@ after WAF. Its code is in `shared/viewer-request`. It checks a request's structu
 [the Frontdoor's](/flex-platform/frontdoor/cloudfront-function/) does, sharing its code for each
 check they have in common, with the same ID,
 [rejections](/flex-platform/frontdoor/cloudfront-function/#rejections) and
-[log line](/flex-platform/frontdoor/cloudfront-function/#logs). It verifies no signature: the API
-will, and will check that the token's repository may release the domain it asks for. In order,
-the function:
+[log line](/flex-platform/frontdoor/cloudfront-function/#logs). It verifies no signature:
+[the API does](#what-the-api-checks). In order, the function:
 
 1. **Gives the request its ID,** as `x-correlation-id`, and removes any trace context and every
    `x-flex-` header the caller sent but the token's.
@@ -400,3 +401,45 @@ the function:
 
 The issuer and the audience are baked into the function by `buildViewerRequestFunction`, as the
 Frontdoor's function has [its issuers](/flex-platform/frontdoor/cloudfront-function/#building-the-function).
+
+#### What the API checks
+
+The API is one Lambda function, `shared-ci`, in eu-west-2. Its code is in `shared/ci`. For each
+request, in order, it:
+
+1. **Verifies the token.** It checks the signature against the keys GitHub publishes, and that
+   the token is in the one encoding the CloudFront Function accepts. `iss` is GitHub Actions'
+   issuer, `aud` is the API's address, `alg` is `RS256`, `exp` is present and in the future,
+   and `nbf`, if present, has passed. `repository_id` and `repository_owner_id` are each digits.
+   A failure is a 401. The keys are fetched, kept for 10 minutes and fetched again as
+   [Lambda@Edge keeps its issuers'](/flex-platform/frontdoor/lambda-edge/#verifying-the-token),
+   and a request that needs keys it can't fetch gets a 500, never a pass.
+2. **Checks the method and finds the route.** Anything but `POST` is a 405, and a path that is
+   no route is a 404. Both come after the token, so a caller without one learns nothing of the
+   routes. The one route is `/ci/environments/<environment>/domains/<domain>/uploads`.
+3. **Decides whether this pipeline may release that domain there.** Anyone with a GitHub
+   repository can have GitHub sign a token for the API's address, so a verified token says only
+   which repository's pipeline is calling. The pipeline is allowed when:
+   - the stage has the environment, and the environment hosts the domain;
+   - the token's `repository_id` and `repository_owner_id` are the ones the stage's
+     [config](/flex-platform/infrastructure/overview/#config) holds for the domain. Both, so a
+     repository transferred to another owner is no longer the one registered. A domain with no
+     repository in config can't be released;
+   - the token's `environment` is the path's. GitHub sets that claim only for a job that runs
+     in the GitHub environment of that name, once the repository's own protection rules for it
+     have passed. So a domain's repository has a GitHub environment named for each of the
+     platform's environments it releases to, and decides there which jobs may reach each.
+
+   Nothing is decided by the token's `sub`, whose format a repository's admin can change. A
+   refusal is a 403, the same whatever the reason, so a pipeline learns nothing of which
+   environments and domains exist, or which repository a domain belongs to.
+
+The issuer, the audience, the environments and each domain's repository are baked into the
+function by `buildCiFunction` when the stage is synthesized. So who may release a domain changes
+only by a change to config and a deploy of `shared-release`.
+
+The function writes one log line for each request: what happened as a fixed code, the request's
+trace ID, how long it took, and for a verified token GitHub's IDs for the repository, its owner
+and the workflow run. The environment and the domain are logged only for a pipeline that was
+allowed, when they are names from config. The token is never logged, and neither is anything a
+repository's admin can write, such as its name or an environment's.

@@ -1,9 +1,16 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { cdkApp } from "@repo/infra-constructs";
 import { MANAGEMENT_REGION, SHARED_REGION } from "@repo/shared-infra";
 import { Template } from "aws-cdk-lib/assertions";
 import { assert, describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
+import {
+  FIXTURE_STAGES,
+  REPOSITORY,
+  synthesizedStage,
+} from "../../test/helpers.ts";
 import { inventory } from "../inventory.ts";
 import {
   SHARED_RELEASE_STACK_NAME,
@@ -13,7 +20,24 @@ import {
 const [, , PROD] = FIXTURE_STAGES;
 
 function template(): Template {
-  return Template.fromStack(new SharedReleaseStack(cdkApp(), PROD.shared));
+  return Template.fromStack(new SharedReleaseStack(cdkApp(), PROD));
+}
+
+// The function's code as CDK staged it for upload, found by the key the function names.
+function bundle(): string {
+  const app = cdkApp();
+  const stack = new SharedReleaseStack(app, PROD);
+  const { directory } = app.synth();
+  const [fn] = Object.values(
+    Template.fromStack(stack).findResources("AWS::Lambda::Function", {
+      Properties: { FunctionName: "shared-ci" },
+    }),
+  );
+  const key = (fn?.Properties as { Code: { S3Key: string } }).Code.S3Key;
+  return readFileSync(
+    path.join(directory, `asset.${key.replace(/\.zip$/, "")}`, "index.js"),
+    "utf8",
+  );
 }
 
 describe("SharedReleaseStack", () => {
@@ -25,7 +49,7 @@ describe("SharedReleaseStack", () => {
   });
 
   it("is in the stage's shared account, in its region, protected from deletion", () => {
-    const stack = new SharedReleaseStack(cdkApp(), PROD.shared);
+    const stack = new SharedReleaseStack(cdkApp(), PROD);
 
     expect(stack.stackName).toBe("shared-release");
     expect(stack.account).toBe(PROD.shared.account);
@@ -54,6 +78,23 @@ describe("SharedReleaseStack", () => {
       Parameters: Record<string, unknown>;
     };
     expect(Object.keys(Parameters)).toEqual(["BootstrapVersion"]);
+  });
+
+  // The registry is the stage's config, so a domain's repository changes by a deploy of this stack.
+  it("builds the function with the stage's audience, environments, and each domain that has a repository", () => {
+    const code = bundle();
+
+    expect(code).toContain(`"https://${PROD.shared.zone.name}/ci"`);
+    for (const environment of PROD.environments) {
+      expect(code).toContain(`name: "${environment.name}"`);
+    }
+    expect(code).toContain(`repositoryId: "${REPOSITORY.id}"`);
+    expect(code).toContain(`ownerId: "${REPOSITORY.ownerId}"`);
+    // Hosted, but with no repository yet: listed under its environments, never registered.
+    expect(code).toContain('"domain-b"');
+    expect(code).not.toContain('name: "domain-b"');
+    // The repository's name is a label. Nothing checks it, so the function doesn't hold it.
+    expect(code).not.toContain(REPOSITORY.name);
   });
 
   // AWS generates the host, and the distribution's stack is in another region, where

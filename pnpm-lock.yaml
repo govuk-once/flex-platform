@@ -973,11 +973,48 @@ importers:
         specifier: 10.14.0
         version: 10.14.0(jiti@2.7.0)(supports-color@7.2.0)
 
+  shared/ci:
+    dependencies:
+      '@repo/cloudfront-js-utils':
+        specifier: workspace:*
+        version: link:../../packages/cloudfront-js-utils
+      '@repo/shared-viewer-request':
+        specifier: workspace:*
+        version: link:../viewer-request
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      aws-jwt-verify:
+        specifier: 5.2.1
+        version: 5.2.1
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../../packages/vitest-config
+      eslint:
+        specifier: 10.14.0
+        version: 10.14.0(jiti@2.7.0)(supports-color@7.2.0)
+      vitest:
+        specifier: 5.1.0
+        version: 5.1.0(@types/node@24.19.2)(@vitest/coverage-v8@5.1.0)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   shared/infra:
     dependencies:
       '@repo/infra-constructs':
         specifier: workspace:*
         version: link:../../infra/constructs
+      '@repo/shared-ci':
+        specifier: workspace:*
+        version: link:../ci
       '@repo/shared-viewer-request':
         specifier: workspace:*
         version: link:../viewer-request

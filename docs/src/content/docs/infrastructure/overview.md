@@ -68,7 +68,7 @@ Each stage's shared account has three more:
 | Stack | Account | Region | One per | Holds |
 |---|---|---|---|---|
 | `shared-identity` | Shared | eu-west-2 | Stage | The [test user pool](#test-users) and its client |
-| `shared-release` | Shared | eu-west-2 | Stage | The pipeline API's function, its URL, role and log group, and the writer of the URL's host to us-east-1 |
+| `shared-release` | Shared | eu-west-2 | Stage | The pipeline API's function, built with [who may release each domain](/flex-platform/domains/hosting/#what-the-api-checks), its URL, role and log group, and the writer of the URL's host to us-east-1 |
 | `shared-management` | Shared | us-east-1 | Stage | The certificate and DNS records, the distribution in front of [the pipeline API](/flex-platform/domains/hosting/#the-pipeline-api), its web ACL and CloudFront Function, and their log groups |
 
 A stage deploys only to its own accounts, so the shared account's stack names hold neither a stage
@@ -373,7 +373,7 @@ construct creates for itself, and each rule has a construct that meets it:
 | `LogGroupCheck` | `Flex-LogGroup` | `PlatformLogGroup` | Keep its logs for a year, be encrypted with a KMS key, be protected from deletion, and be retained when its stack is deleted |
 | `BucketHttpsCheck` | `Flex-BucketHttps` | `PlatformBucket` | Have a policy that denies, to anyone, every request to the bucket and its objects over plain HTTP, and over TLS older than 1.2, each in a statement with no other condition |
 | `ApiIamCheck` | `Flex-ApiIam` | `ProxyApi`, in `@repo/domain-infra` | Be an API Gateway method with IAM authorisation, so API Gateway verifies each request's SigV4 signature and holds the signer to the API's resource policy, which for a domain admits the Frontdoor's edge role alone |
-| `FunctionUrlIamCheck` | `Flex-FunctionUrlIam` | `CiFunction`, in `@repo/shared-infra` | Be a Lambda function URL with IAM authorisation, so Lambda verifies each request's SigV4 signature and holds the signer to the function's policy, which for the pipeline API admits CloudFront alone |
+| `FunctionUrlIamCheck` | `Flex-FunctionUrlIam` | `CiFunction`, in `@repo/shared-infra` | Be a Lambda function URL with IAM authorisation, so Lambda verifies each request's SigV4 signature and runs the function only for a signer IAM allows. The pipeline API's function has a policy that admits CloudFront alone |
 
 A new rule is a `ResourceCheck`: the type it applies to, and the locations at fault in a resource
 of that type.
