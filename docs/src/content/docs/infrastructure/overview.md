@@ -68,7 +68,7 @@ Each stage's shared account has three more:
 | Stack | Account | Region | One per | Holds |
 |---|---|---|---|---|
 | `shared-identity` | Shared | eu-west-2 | Stage | The [test user pool](#test-users) and its client |
-| `shared-release` | Shared | eu-west-2 | Stage | The pipeline API's function, built with [who may release each domain](/flex-platform/domains/hosting/#what-the-api-checks), its URL, role and log group, and the writer of the URL's host to us-east-1 |
+| `shared-release` | Shared | eu-west-2 | Stage | The pipeline API's function, built with [who may release each domain](/flex-platform/domains/hosting/#what-the-api-checks), its URL, role and log group, the bucket [a domain's code is uploaded to](/flex-platform/domains/hosting/#uploading-a-bundle), and the writer of the URL's host to us-east-1 |
 | `shared-management` | Shared | us-east-1 | Stage | The certificate and DNS records, the distribution in front of [the pipeline API](/flex-platform/domains/hosting/#the-pipeline-api), its web ACL and CloudFront Function, and their log groups |
 
 A stage deploys only to its own accounts, so the shared account's stack names hold neither a stage
@@ -105,7 +105,8 @@ addresses upstreams allowlist, and deleting a domain account's stack would take 
 every domain in it uses, and leave the account's API Gateway logging setting naming a deleted
 role. Deleting `shared-identity` would leave the test user pool, which is retained, out of the
 app's hands. Deleting `shared-management` would take the pipeline API's address with it, and
-deleting `shared-release` the function behind it. Deleting a gateway's stack would stop every domain's calls to its upstream, and
+deleting `shared-release` the function behind it, and leave the bucket of uploaded code, which
+is retained, out of the app's hands. Deleting a gateway's stack would stop every domain's calls to its upstream, and
 deleting a domain's would take the role its function runs as, and the API and host it answers at.
 So deleting any of them takes a deliberate step first: turning the protection off.
 

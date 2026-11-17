@@ -148,22 +148,26 @@ describe("buildCiFunction", () => {
     ],
     [
       "an environment whose name a path can't hold",
-      { environments: [{ name: "Development", domains: [] }] },
+      { environments: [{ name: "Development", publishes: true, domains: [] }] },
       'The environment "Development"',
     ],
     [
       "an environment listed twice",
       {
         environments: [
-          { name: "development", domains: [] },
-          { name: "development", domains: ["example"] },
+          { name: "development", publishes: true, domains: [] },
+          { name: "development", publishes: true, domains: ["example"] },
         ],
       },
       "The environment development is listed twice",
     ],
     [
       "a hosted domain whose name a path can't hold",
-      { environments: [{ name: "development", domains: ["a/b"] }] },
+      {
+        environments: [
+          { name: "development", publishes: true, domains: ["a/b"] },
+        ],
+      },
       'The domain of development "a/b"',
     ],
     [
@@ -188,6 +192,16 @@ describe("buildCiFunction", () => {
         ],
       },
       "GitHub's IDs",
+    ],
+    [
+      "a bucket whose name an address can't hold",
+      { uploads: { bucket: "Shared_Code", region: "eu-west-2" } },
+      "bucket",
+    ],
+    [
+      "a bucket in no region",
+      { uploads: { bucket: "shared-domain-code-000000000000", region: "" } },
+      "bucket",
     ],
     [
       "an owner with no ID",

@@ -8,12 +8,18 @@ import {
 } from "@repo/infra-constructs";
 import {
   buildCiFunction,
+  bundleKey,
   type CiDomain,
   type CiEnvironment,
   HANDLER,
 } from "@repo/shared-ci";
 import { Duration, Fn, Stack, Validations } from "aws-cdk-lib";
-import { PolicyDocument, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
+import {
+  PolicyDocument,
+  PolicyStatement,
+  Role,
+  ServicePrincipal,
+} from "aws-cdk-lib/aws-iam";
 import {
   Architecture,
   Code,
@@ -48,15 +54,20 @@ export const CI_MEMORY_MB = 1769;
 export interface CiFunctionProps {
   /** The shared account's zone, whose apex the pipeline API answers at. */
   readonly zoneName: string;
-  /** Each environment of the stage, and the domains it hosts. */
+  /** Each environment of the stage, whether pipelines upload there, and the domains it hosts. */
   readonly environments: readonly CiEnvironment[];
   /** Each of the stage's domains that has a repository, and GitHub's IDs for it. */
   readonly domains: readonly CiDomain[];
+  /** The bucket uploads go to, in this stack's account and region. */
+  readonly codeBucketName: string;
 }
 
 /**
  * The pipeline API's function, and the URL CloudFront reaches it at. The function is built with
  * who may release what: the token's issuer and audience, and each domain's repository.
+ *
+ * Its role may write a bundle's key in the code bucket and nothing else there: it signs each
+ * upload a pipeline makes, and a signature carries no more than the signer's own permission.
  *
  * The URL takes only requests signed with SigV4 by a caller IAM allows, and the function's
  * policy admits CloudFront alone, for this account's distributions. So a request sent straight
@@ -68,6 +79,8 @@ export interface CiFunctionProps {
  */
 export class CiFunction extends Construct {
   public readonly function: LambdaFunction;
+  /** The role the function runs as, and so signs uploads as. */
+  public readonly role: Role;
   /** The function URL's host, which AWS generates. */
   public readonly urlHost: string;
 
@@ -89,14 +102,36 @@ export class CiFunction extends Construct {
       logGroupKey,
     });
 
+    // Every key a bundle can have: any domain's, any hash. The function signs only the key of
+    // the domain a pipeline is allowed for.
+    const bundles = stack.formatArn({
+      service: "s3",
+      region: "",
+      account: "",
+      resource: props.codeBucketName,
+      resourceName: bundleKey("*", "*"),
+    });
     const role = new Role(this, "Role", {
       roleName: CI_FUNCTION_NAME,
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       inlinePolicies: {
-        Ci: new PolicyDocument({ statements: logs.statements }),
+        Ci: new PolicyDocument({
+          statements: [
+            ...logs.statements,
+            new PolicyStatement({
+              actions: ["s3:PutObject"],
+              resources: [bundles],
+            }),
+          ],
+        }),
       },
     });
-    Validations.of(role).acknowledge(...logs.acknowledgements);
+    this.role = role;
+    Validations.of(role).acknowledge(...logs.acknowledgements, {
+      id: `AwsSolutions-IAM5[Resource::${bundles}]`,
+      reason:
+        "A bundle's key holds its domain and its hash, which no stack knows. The grant is held to keys of that shape, and the function signs one only for the domain a pipeline is allowed for.",
+    });
 
     this.function = new LambdaFunction(this, "Function", {
       functionName: CI_FUNCTION_NAME,
@@ -110,6 +145,7 @@ export class CiFunction extends Construct {
           audience: ciAudience(props.zoneName),
           environments: props.environments,
           domains: props.domains,
+          uploads: { bucket: props.codeBucketName, region: stack.region },
         }),
       ),
       role,

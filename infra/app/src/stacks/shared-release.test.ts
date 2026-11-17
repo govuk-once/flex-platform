@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { cdkApp } from "@repo/infra-constructs";
 import { MANAGEMENT_REGION, SHARED_REGION } from "@repo/shared-infra";
-import { Template } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { assert, describe, expect, it } from "vitest";
 
 import {
@@ -95,6 +95,66 @@ describe("SharedReleaseStack", () => {
     expect(code).not.toContain('name: "domain-b"');
     // The repository's name is a label. Nothing checks it, so the function doesn't hold it.
     expect(code).not.toContain(REPOSITORY.name);
+  });
+
+  it("holds the bucket a domain's code is uploaded to, named for the shared account", () => {
+    template().hasResourceProperties("AWS::S3::Bucket", {
+      BucketName: `shared-domain-code-${PROD.shared.account}`,
+    });
+  });
+
+  // The same name in both, or the function would sign uploads to a bucket that isn't there.
+  it("builds the function with that bucket, and lets its role upload only there", () => {
+    const name = `shared-domain-code-${PROD.shared.account}`;
+
+    expect(bundle()).toContain(`bucket: "${name}"`);
+    expect(bundle()).toContain(`region: "${SHARED_REGION}"`);
+    expect(
+      JSON.stringify(template().findResources("AWS::IAM::Role")),
+    ).toContain(`:s3:::${name}/*/bundle/*.zip`);
+  });
+
+  // The role that signs uploads, so a signed upload is the only write the bucket takes.
+  it("lets the function's role, and no other, write to the bucket", () => {
+    const built = template();
+    const [roleId] = Object.keys(
+      built.findResources("AWS::IAM::Role", {
+        Properties: { RoleName: "shared-ci" },
+      }),
+    );
+    assert(roleId !== undefined);
+
+    built.hasResourceProperties("AWS::S3::BucketPolicy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Sid: "DenyWritesButThePipelineApi",
+            Condition: {
+              ArnNotEquals: {
+                "aws:PrincipalArn": { "Fn::GetAtt": [roleId, "Arn"] },
+              },
+            },
+          }),
+        ]),
+      },
+    });
+  });
+
+  // Code enters the stage only where an environment publishes.
+  it("builds the function with which environments take an upload", () => {
+    const code = bundle();
+
+    for (const environment of PROD.environments) {
+      const publishes = environment.release === "publish";
+      expect(code).toMatch(
+        new RegExp(
+          String.raw`name: "${environment.name}",\s+publishes: ${String(publishes)}`,
+        ),
+      );
+    }
+    expect(
+      PROD.environments.map(({ release }) => release === "publish"),
+    ).toEqual([true, false, false]);
   });
 
   // AWS generates the host, and the distribution's stack is in another region, where

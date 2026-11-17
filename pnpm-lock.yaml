@@ -984,6 +984,12 @@ importers:
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      '@smithy/hash-node':
+        specifier: 4.5.2
+        version: 4.5.2
+      '@smithy/signature-v4':
+        specifier: 5.7.5
+        version: 5.7.5
       aws-jwt-verify:
         specifier: 5.2.1
         version: 5.2.1

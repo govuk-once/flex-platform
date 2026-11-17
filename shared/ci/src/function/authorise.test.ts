@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CONFIG, OWNER_ID, REPOSITORY_ID } from "../../test/helpers.ts";
-import { createAuthoriser } from "./authorise.ts";
+import { createAuthoriser, createUploadCheck } from "./authorise.ts";
 import type { Pipeline } from "./token.ts";
 
 const PIPELINE: Pipeline = {
@@ -9,6 +9,7 @@ const PIPELINE: Pipeline = {
   ownerId: OWNER_ID,
   environment: "development",
   runId: "12345678901",
+  commit: undefined,
 };
 
 const TARGET = { environment: "development", domain: "example" };
@@ -52,7 +53,13 @@ describe("createAuthoriser", () => {
   // Another domain's repository can't release this one, even from the same owner.
   it("holds each domain to its own repository", () => {
     const both = createAuthoriser({
-      environments: [{ name: "development", domains: ["example", "other"] }],
+      environments: [
+        {
+          name: "development",
+          publishes: true,
+          domains: ["example", "other"],
+        },
+      ],
       domains: [
         { name: "example", repositoryId: REPOSITORY_ID, ownerId: OWNER_ID },
         { name: "other", repositoryId: "700000002", ownerId: OWNER_ID },
@@ -70,4 +77,20 @@ describe("createAuthoriser", () => {
 
     expect(none(PIPELINE, TARGET)).toBe("environment-unknown");
   });
+});
+
+describe("createUploadCheck", () => {
+  const takesUploads = createUploadCheck(CONFIG);
+
+  it("takes uploads only in an environment that publishes", () => {
+    expect(takesUploads("development")).toBe(true);
+    expect(takesUploads("staging")).toBe(false);
+  });
+
+  it.each(["production", "toString", "constructor", ""])(
+    "takes none in %j, which the config doesn't hold",
+    (environment) => {
+      expect(takesUploads(environment)).toBe(false);
+    },
+  );
 });
