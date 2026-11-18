@@ -841,6 +841,42 @@
       {
         "logicalId": "LogGroupKeyD49CF390",
         "type": "AWS::KMS::Key"
+      },
+      {
+        "logicalId": "ReleaseDeadLetters31ACEB35",
+        "type": "AWS::SQS::Queue"
+      },
+      {
+        "logicalId": "ReleaseDeadLettersPolicy6E2E9C6A",
+        "type": "AWS::SQS::QueuePolicy"
+      },
+      {
+        "logicalId": "ReleaseFunction7C47E101",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "ReleaseLogsLogGroup958B1ED2",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "ReleaseQueue8A07A36D",
+        "type": "AWS::SQS::Queue"
+      },
+      {
+        "logicalId": "ReleaseQueuePolicyEC49FAAA",
+        "type": "AWS::SQS::QueuePolicy"
+      },
+      {
+        "logicalId": "ReleaseQueueSourceEF8D0D56",
+        "type": "AWS::Lambda::EventSourceMapping"
+      },
+      {
+        "logicalId": "ReleaseRoleC5080453",
+        "type": "AWS::IAM::Role"
+      },
+      {
+        "logicalId": "ReleasesTableDDBF6907",
+        "type": "AWS::DynamoDB::Table"
       }
     ]
   }

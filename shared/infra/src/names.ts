@@ -41,6 +41,17 @@ export const CI_LOG_GROUP_NAME = "/flex/shared/ci";
 /** The release worker's function, and the role it runs as and assumes each deploy role from. */
 export const RELEASE_WORKER_NAME = "shared-release-worker";
 
+export const RELEASE_WORKER_LOG_GROUP_NAME = "/flex/shared/release-worker";
+
+/** The queue the pipeline API puts each release on. SQS requires a FIFO queue's name to end so. */
+export const RELEASE_QUEUE_NAME = "shared-release.fifo";
+
+/** Where a release goes once the worker has failed it a few times. FIFO, as its queue is. */
+export const RELEASE_DEAD_LETTER_QUEUE_NAME = "shared-release-dead-letter.fifo";
+
+/** Every release the pipeline API records, and how each went. */
+export const RELEASE_TABLE_NAME = "shared-releases";
+
 /**
  * The bucket every domain's uploaded code is kept in. Bucket names are global, so it ends in the
  * shared account's ID. 31 characters, within S3's 63.
