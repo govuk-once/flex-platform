@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@repo/cloudfront-js-utils": "workspace:*",
+    "@repo/shared-release": "workspace:*",
     "@repo/shared-viewer-request": "workspace:*",
     "@repo/utils": "workspace:*",
     "@smithy/hash-node": "4.5.2",

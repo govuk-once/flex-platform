@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { BUNDLE, functionUrlEvent } from "../../test/helpers.ts";
-import { bundleKey, bundleOf, MAX_BUNDLE_BYTES } from "./bundle.ts";
+import { bundleOf, MAX_BUNDLE_BYTES } from "./bundle.ts";
 
 function sent(body: unknown) {
   return bundleOf(functionUrlEvent({ body: JSON.stringify(body) }));
@@ -79,13 +79,5 @@ describe("bundleOf", () => {
       ),
     ).toBe("body");
     expect(sent({ size: BUNDLE.size })).toBe("sha256");
-  });
-});
-
-describe("bundleKey", () => {
-  it("puts a bundle under its domain, named by its hash", () => {
-    expect(bundleKey("example", BUNDLE.sha256)).toBe(
-      `example/bundle/${BUNDLE.sha256}.zip`,
-    );
   });
 });

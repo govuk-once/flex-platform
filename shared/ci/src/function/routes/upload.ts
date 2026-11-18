@@ -1,4 +1,6 @@
-import { bundleKey, bundleOf } from "../bundle.ts";
+import { bundleKey } from "@repo/shared-release/bundle-key";
+
+import { bundleOf } from "../bundle.ts";
 import { badRequest, uploadSigned, uploadsNotAccepted } from "../responses.ts";
 import type { RouteHandler } from "../router.ts";
 import { logOutcome } from "../telemetry.ts";

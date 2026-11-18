@@ -8,11 +8,11 @@ import {
 } from "@repo/infra-constructs";
 import {
   buildCiFunction,
-  bundleKey,
   type CiDomain,
   type CiEnvironment,
   HANDLER,
 } from "@repo/shared-ci";
+import { bundleKey } from "@repo/shared-release/bundle-key";
 import { Duration, Fn, Stack, Validations } from "aws-cdk-lib";
 import {
   PolicyDocument,
