@@ -97,6 +97,22 @@ describe("SharedReleaseStack", () => {
     expect(code).not.toContain(REPOSITORY.name);
   });
 
+  it("lets Lambda read a bundle for the domain functions of each account where a pipeline publishes", () => {
+    const [dev] = PROD.environments;
+    const policy = JSON.stringify(
+      template().findResources("AWS::S3::BucketPolicy"),
+    );
+
+    for (const { account } of dev.domainAccounts) {
+      expect(policy).toContain(
+        `arn:aws:lambda:${SHARED_REGION}:${account}:function:domain-dev-*`,
+      );
+    }
+    for (const environment of PROD.environments.slice(1)) {
+      expect(policy).not.toContain(`function:domain-${environment.name}-`);
+    }
+  });
+
   it("holds the bucket a domain's code is uploaded to, named for the shared account", () => {
     template().hasResourceProperties("AWS::S3::Bucket", {
       BucketName: `shared-domain-code-${PROD.shared.account}`,

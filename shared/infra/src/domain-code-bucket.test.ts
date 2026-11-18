@@ -13,6 +13,10 @@ function build(nag = false) {
   new DomainCodeBucket(stack, "Code", {
     bucketName: NAME,
     writerRoleArn: WRITER,
+    functionReaders: [
+      { account: "200000000001", functionNames: "domain-development-*" },
+      { account: "200000000002", functionNames: "domain-development-*" },
+    ],
   });
   return stack;
 }
@@ -157,17 +161,54 @@ describe("DomainCodeBucket", () => {
     });
   });
 
-  it("grants nothing: every statement of its policy is a refusal", () => {
+  // Lambda reads a function's code from the bucket, for as long as the function has it.
+  it("lets Lambda read bundles, by version, for domain functions in the accounts it names alone", () => {
+    for (const account of ["200000000001", "200000000002"]) {
+      template().hasResourceProperties("AWS::S3::BucketPolicy", {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            {
+              Sid: Match.stringLikeRegexp("^LambdaReadsBundles"),
+              Effect: "Allow",
+              Principal: { Service: "lambda.amazonaws.com" },
+              Action: ["s3:GetObject", "s3:GetObjectVersion"],
+              Resource: {
+                "Fn::Join": [
+                  "",
+                  [
+                    { "Fn::GetAtt": [Match.anyValue(), "Arn"] },
+                    "/*/bundle/*.zip",
+                  ],
+                ],
+              },
+              Condition: {
+                StringEquals: { "aws:SourceAccount": account },
+                ArnLike: {
+                  "aws:SourceArn": `arn:aws:lambda:eu-west-2:${account}:function:domain-development-*`,
+                },
+              },
+            },
+          ]),
+        },
+      });
+    }
+  });
+
+  it("grants nothing else: every other statement of its policy is a refusal", () => {
     const [policy] = Object.values(
       template().findResources("AWS::S3::BucketPolicy"),
     );
     const statements = (
       policy?.Properties as {
-        PolicyDocument: { Statement: { Effect: string }[] };
+        PolicyDocument: { Statement: { Effect: string; Sid?: string }[] };
       }
     ).PolicyDocument.Statement;
+    const allowed = statements.filter(({ Effect }) => Effect === "Allow");
 
-    expect(statements.length).toBeGreaterThanOrEqual(6);
-    expect(statements.map(({ Effect }) => Effect)).not.toContain("Allow");
+    expect(statements.length).toBeGreaterThanOrEqual(8);
+    expect(allowed.map(({ Sid }) => Sid)).toEqual([
+      "LambdaReadsBundles0",
+      "LambdaReadsBundles1",
+    ]);
   });
 });

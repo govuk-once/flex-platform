@@ -18,6 +18,7 @@ import {
   securityGroupIdParameterName,
   subnetIdsParameterName,
 } from "@repo/infra-constructs";
+import { RELEASE_WORKER_NAME } from "@repo/shared-infra";
 import { Stack } from "aws-cdk-lib";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
@@ -38,6 +39,8 @@ interface DomainStackProps {
   readonly environment: EnvironmentConfig;
   readonly domainAccount: DomainAccountConfig;
   readonly domain: string;
+  /** The stage's shared account, whose release worker releases the domain's function. */
+  readonly sharedAccount: string;
 }
 
 /**
@@ -47,7 +50,7 @@ interface DomainStackProps {
 export class DomainStack extends Stack {
   constructor(
     scope: Construct,
-    { environment, domainAccount, domain }: DomainStackProps,
+    { environment, domainAccount, domain, sharedAccount }: DomainStackProps,
   ) {
     super(scope, domainStackName(environment, domain), {
       description: `Flex domain ${domain} in the ${environment.name} environment`,
@@ -106,6 +109,7 @@ export class DomainStack extends Stack {
         environment.name,
         "domain",
       ),
+      releaseRole: { account: sharedAccount, name: RELEASE_WORKER_NAME },
     });
   }
 }

@@ -4,6 +4,7 @@ export { DeployRole } from "./deploy-role.ts";
 export { ExecutionRole } from "./execution-role.ts";
 export {
   certificateParameterName,
+  deployRoleName,
   DOMAIN_REGION,
   domainFunctionName,
   domainHost,

@@ -21,6 +21,7 @@ function build() {
     environment: DEV,
     domainAccount: MAIN,
     domain: DOMAIN,
+    sharedAccount: PROD.shared.account,
   });
   return { stack, template: Template.fromStack(stack) };
 }
@@ -160,6 +161,24 @@ describe("DomainStack", () => {
             Condition: { ArnEquals: { "aws:PrincipalArn": edgeRole } },
           }),
         ]),
+      },
+    });
+  });
+
+  it("lets only the stage's release worker, in the shared account, assume the deploy role", () => {
+    build().template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "domain-dev-domain-a-deploy",
+      AssumeRolePolicyDocument: {
+        Statement: [
+          Match.objectLike({
+            Principal: { AWS: `arn:aws:iam::${PROD.shared.account}:root` },
+            Condition: {
+              ArnEquals: {
+                "aws:PrincipalArn": `arn:aws:iam::${PROD.shared.account}:role/shared-release-worker`,
+              },
+            },
+          }),
+        ],
       },
     });
   });

@@ -101,6 +101,7 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
           environment,
           domainAccount,
           domain: domainName(domain),
+          sharedAccount: stage.shared.account,
         });
 
         domainStack.addStackDependency(

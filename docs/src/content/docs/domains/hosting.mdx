@@ -201,8 +201,10 @@ So it has a permission boundary that holds the same statements. Whatever policy 
 the role, by mistake or by hand, a domain's code can do no more than the boundary allows. The deploy
 role has none: it runs no one's code, and its denies already hold whatever else it is ever allowed.
 
-Each domain has a deploy role too, `domain-<environment>-<domain>-deploy`. It may be assumed only
-by principals in its own account that are themselves allowed to assume it. It may create,
+Each domain has a deploy role too, `domain-<environment>-<domain>-deploy`. Only the stage's
+release worker may assume it. The role trusts the stage's shared account, on the condition that
+the caller is the worker's role, `shared-release-worker`: IAM refuses a principal that doesn't
+exist yet, so the trust names the role by a condition. It may create,
 configure, release and read only its domain's function, with the function's versions and aliases,
 read the two network parameters above, describe the network Lambda checks a function's placement
 against, and pass only its domain's
@@ -516,4 +518,9 @@ The bucket is `shared-domain-code-<account>`, in the stage's shared account, bui
 - any change to the bucket's lifecycle rules, which could expire objects without a delete.
 
 So under that policy a key holds only the bundle it names, and a bundle, once uploaded, is
-neither replaced nor removed.
+neither replaced nor removed. A released function's code stays in the bucket, so this is also
+what keeps it running.
+
+The policy grants one thing: Lambda may read a bundle, by version, for a domain's function, in a
+domain account of an environment that publishes. It names each account with `aws:SourceAccount`
+and its functions, `domain-<environment>-*`, with `aws:SourceArn`.
