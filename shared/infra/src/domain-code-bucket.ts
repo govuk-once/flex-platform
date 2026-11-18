@@ -1,15 +1,32 @@
 import { PlatformBucket } from "@repo/infra-constructs";
 import { UPLOAD_EXPIRES_SECONDS } from "@repo/shared-ci";
-import { Validations } from "aws-cdk-lib";
-import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { bundleKey } from "@repo/shared-release/bundle-key";
+import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
+import {
+  AnyPrincipal,
+  Effect,
+  PolicyStatement,
+  ServicePrincipal,
+} from "aws-cdk-lib/aws-iam";
 import type { Bucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
+
+/**
+ * Domain functions Lambda may load a bundle for: those in one account whose names match the
+ * pattern, such as `domain-development-*`.
+ */
+export interface FunctionReader {
+  readonly account: string;
+  readonly functionNames: string;
+}
 
 export interface DomainCodeBucketProps {
   /** Named, since the pipeline API signs uploads to it by name. */
   readonly bucketName: string;
   /** The one role that may write to the bucket: the pipeline API's, which signs every upload. */
   readonly writerRoleArn: string;
+  /** The functions Lambda reads a bundle for, in place, by version. */
+  readonly functionReaders: readonly FunctionReader[];
 }
 
 /**
@@ -32,7 +49,10 @@ export interface DomainCodeBucketProps {
  * So a bundle is kept for as long as this policy stands. The policy is no protection from
  * whoever may change the policy itself.
  *
- * It grants nothing. The pipeline API's role is granted its uploads by its own policy.
+ * It grants one thing: Lambda may read a bundle, by version, for a domain's function. A release
+ * has Lambda load a function's code from the bucket in place and keep no copy, so Lambda reads
+ * the object again whenever it needs the code, and a function whose bundle is gone stops. The
+ * pipeline API's and the release worker's roles are granted what they do by their own policies.
  */
 export class DomainCodeBucket extends Construct {
   public readonly bucket: Bucket;
@@ -106,6 +126,32 @@ export class DomainCodeBucket extends Construct {
         resources: [bucket.bucketArn],
       }),
     );
+
+    // As Lambda's own service, for a function in a domain account. The two conditions say which:
+    // the function's ARN alone could name an account that isn't the platform's.
+    props.functionReaders.forEach(({ account, functionNames }, index) => {
+      bucket.addToResourcePolicy(
+        new PolicyStatement({
+          sid: `LambdaReadsBundles${String(index)}`,
+          effect: Effect.ALLOW,
+          principals: [new ServicePrincipal("lambda.amazonaws.com")],
+          actions: ["s3:GetObject", "s3:GetObjectVersion"],
+          resources: [bucket.arnForObjects(bundleKey("*", "*"))],
+          conditions: {
+            StringEquals: { "aws:SourceAccount": account },
+            ArnLike: {
+              "aws:SourceArn": Stack.of(this).formatArn({
+                service: "lambda",
+                account,
+                resource: "function",
+                resourceName: functionNames,
+                arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+              }),
+            },
+          },
+        }),
+      );
+    });
 
     Validations.of(bucket).acknowledge({
       id: "AwsSolutions-S1",

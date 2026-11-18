@@ -6,6 +6,7 @@ export {
 export {
   DomainCodeBucket,
   type DomainCodeBucketProps,
+  type FunctionReader,
 } from "./domain-code-bucket.ts";
 export { ManagementEdge } from "./management-edge.ts";
 export { ManagementViewerRequestFunction } from "./management-viewer-request-function.ts";
@@ -16,6 +17,7 @@ export {
   CROSS_REGION_WRITER_LOG_GROUP_NAME,
   domainCodeBucketName,
   MANAGEMENT_REGION,
+  RELEASE_WORKER_NAME,
   SHARED_REGION,
   TEST_USER_POOL_NAME,
 } from "./names.ts";

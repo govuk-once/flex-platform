@@ -88,8 +88,10 @@ and `shared-management` reads it and depends on `shared-release`, so it deploys 
 
 A domain's stack depends on its account's, whose certificate ARN it reads and whose API Gateway
 logging setting its stage logs through, and on its network's, whose subnet and security group IDs
-its deploy role reads. A gateway's stack depends on its network's, whose subnet, security group
-and endpoint IDs it reads. `frontdoor-<environment>` depends on every domain stack in its environment,
+its deploy role reads. Its deploy role trusts `shared-release`'s worker by account and name, not
+by reference, so neither stack waits for the other. A gateway's stack depends on its network's,
+whose subnet, security group and endpoint IDs it reads. `frontdoor-<environment>` depends on
+every domain stack in its environment,
 across accounts and regions, so it never routes to a host before the host exists. It also depends on the caller token's stack,
 whose keys the edge signs with. So an environment deploys in that order: the networks, the domain
 accounts' stacks and the caller token's, then the domains' and the gateways' stacks, then the

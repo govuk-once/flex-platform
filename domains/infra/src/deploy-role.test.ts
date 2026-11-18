@@ -8,6 +8,8 @@ import { DeployRole } from "./deploy-role.ts";
 const SUBNETS_PARAMETER = "/flex/network/sandbox/isolated-subnet-ids";
 const SECURITY_GROUP_PARAMETER = "/flex/network/sandbox/security-group/domain";
 
+const SHARED_ACCOUNT = "300000000001";
+
 function build(nag = false) {
   const stack = stackIn("eu-west-2", nag);
   new DeployRole(stack, "Deploy", {
@@ -16,6 +18,7 @@ function build(nag = false) {
     gatewayFunctions: "gateway-sandbox-*",
     subnetIdsParameterName: SUBNETS_PARAMETER,
     securityGroupIdParameterName: SECURITY_GROUP_PARAMETER,
+    releaseRole: { account: SHARED_ACCOUNT, name: "shared-release-worker" },
   });
   const app = stack.node.root;
   assert.instanceOf(app, App);
@@ -57,7 +60,7 @@ describe("DeployRole", () => {
     expect(() => build(true).app.synth()).not.toThrow();
   });
 
-  it("is assumed only by principals in its own account, with a fixed name", () => {
+  it("is assumed only by the stage's release worker, with a fixed name", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "domain-sandbox-domain-a-deploy",
       AssumeRolePolicyDocument: Match.exact({
@@ -65,7 +68,12 @@ describe("DeployRole", () => {
           {
             Action: "sts:AssumeRole",
             Effect: "Allow",
-            Principal: { AWS: `arn:aws:iam::${ACCOUNT}:root` },
+            Principal: { AWS: `arn:aws:iam::${SHARED_ACCOUNT}:root` },
+            Condition: {
+              ArnEquals: {
+                "aws:PrincipalArn": `arn:aws:iam::${SHARED_ACCOUNT}:role/shared-release-worker`,
+              },
+            },
           },
         ],
         Version: "2012-10-17",

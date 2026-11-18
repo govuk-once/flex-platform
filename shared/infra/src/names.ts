@@ -38,6 +38,9 @@ export const CI_FUNCTION_NAME = "shared-ci";
 
 export const CI_LOG_GROUP_NAME = "/flex/shared/ci";
 
+/** The release worker's function, and the role it runs as and assumes each deploy role from. */
+export const RELEASE_WORKER_NAME = "shared-release-worker";
+
 /**
  * The bucket every domain's uploaded code is kept in. Bucket names are global, so it ends in the
  * shared account's ID. 31 characters, within S3's 63.

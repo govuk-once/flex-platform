@@ -1,6 +1,6 @@
 import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
 import {
-  AccountRootPrincipal,
+  AccountPrincipal,
   Effect,
   PolicyDocument,
   PolicyStatement,
@@ -23,6 +23,8 @@ export interface DeployRoleProps {
   readonly subnetIdsParameterName: string;
   /** The SSM parameter holding the security group every function must have. */
   readonly securityGroupIdParameterName: string;
+  /** The role that releases the domain, by its account and name: the stage's release worker. */
+  readonly releaseRole: { readonly account: string; readonly name: string };
 }
 
 /**
@@ -43,6 +45,7 @@ export class DeployRole extends Construct {
       gatewayFunctions,
       subnetIdsParameterName,
       securityGroupIdParameterName,
+      releaseRole,
     }: DeployRoleProps,
   ) {
     super(scope, id);
@@ -172,9 +175,19 @@ export class DeployRole extends Construct {
       }),
     ];
 
+    const releaseRoleArn = stack.formatArn({
+      service: "iam",
+      region: "",
+      account: releaseRole.account,
+      resource: "role",
+      resourceName: releaseRole.name,
+    });
+
     const role = new Role(this, "Role", {
       roleName: deployRoleName(environment, domain),
-      assumedBy: new AccountRootPrincipal(),
+      assumedBy: new AccountPrincipal(releaseRole.account).withConditions({
+        ArnEquals: { "aws:PrincipalArn": releaseRoleArn },
+      }),
       inlinePolicies: {
         Deploy: new PolicyDocument({ statements }),
       },
