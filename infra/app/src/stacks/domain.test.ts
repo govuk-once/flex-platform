@@ -183,6 +183,26 @@ describe("DomainStack", () => {
     });
   });
 
+  // The bucket the pipeline API uploads to, so Lambda can read a bundle as the deploy role.
+  it("lets the deploy role read its own domain's bundles in the shared account's code bucket", () => {
+    build().template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "domain-dev-domain-a-deploy",
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: ["s3:GetObject", "s3:GetObjectVersion"],
+                Resource: `arn:aws:s3:::shared-domain-code-${PROD.shared.account}/domain-a/bundle/*.zip`,
+              },
+            ]),
+          },
+        },
+      ],
+    });
+  });
+
   it("holds the deploy role to the network's IDs", () => {
     const { template } = build();
     const parameters = template.toJSON().Parameters as Record<

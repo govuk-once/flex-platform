@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES } from "../../test/helpers.ts";
-import { functionReaders, releaseTargets } from "./release-targets.ts";
+import { bundleReaders, releaseTargets } from "./release-targets.ts";
 import type { StageConfig } from "./types.ts";
 
 const [DEV_STAGE, , PROD] = FIXTURE_STAGES;
@@ -52,10 +52,14 @@ describe("releaseTargets", () => {
   });
 });
 
-describe("functionReaders", () => {
-  it("names each domain account where a pipeline publishes, and its environment's functions", () => {
-    expect(functionReaders(PROD)).toEqual([
-      { account: "300000000003", functionNames: "domain-dev-*" },
+describe("bundleReaders", () => {
+  it("names each domain account where a pipeline publishes, and its environment's functions and deploy roles", () => {
+    expect(bundleReaders(PROD)).toEqual([
+      {
+        account: "300000000003",
+        functionNames: "domain-dev-*",
+        deployRoleNames: "domain-dev-*-deploy",
+      },
     ]);
   });
 });

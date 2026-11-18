@@ -20,7 +20,7 @@ import { Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 
 import { domainNames } from "../config/domain-name.ts";
-import { functionReaders, releaseTargets } from "../config/release-targets.ts";
+import { bundleReaders, releaseTargets } from "../config/release-targets.ts";
 import type { StageConfig } from "../config/types.ts";
 
 // One per stage, in the stage's own shared account, so the name holds no stage.
@@ -100,7 +100,7 @@ export class SharedReleaseStack extends Stack {
     new DomainCodeBucket(this, "Code", {
       bucketName: codeBucketName,
       writerRoleArn: ci.role.roleArn,
-      functionReaders: functionReaders(stage),
+      readers: bundleReaders(stage),
     });
 
     new CrossRegionParameters(this, "CrossRegion", {

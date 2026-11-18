@@ -25,6 +25,11 @@ export interface DeployRoleProps {
   readonly securityGroupIdParameterName: string;
   /** The role that releases the domain, by its account and name: the stage's release worker. */
   readonly releaseRole: { readonly account: string; readonly name: string };
+  /**
+   * The domain's bundles in the shared account's code bucket, as an ARN of objects. Lambda reads
+   * the bundle a function is created or updated from as the caller, so the role must read it.
+   */
+  readonly bundles: string;
 }
 
 /**
@@ -33,7 +38,8 @@ export interface DeployRoleProps {
  * can give a function another domain's role. Every function it creates or configures must be in
  * the subnets and security group the parameters hold: a deny holds whatever else the role is ever
  * allowed. A release reads the same parameters as the role, so it places a function as the denies
- * require.
+ * require. It may read only its domain's bundles: the bucket lets every deploy role read any, so
+ * this is what keeps a release to its own domain's code.
  */
 export class DeployRole extends Construct {
   constructor(
@@ -46,6 +52,7 @@ export class DeployRole extends Construct {
       subnetIdsParameterName,
       securityGroupIdParameterName,
       releaseRole,
+      bundles,
     }: DeployRoleProps,
   ) {
     super(scope, id);
@@ -136,6 +143,11 @@ export class DeployRole extends Construct {
       }),
       new PolicyStatement({
         effect: Effect.ALLOW,
+        actions: ["s3:GetObject", "s3:GetObjectVersion"],
+        resources: [bundles],
+      }),
+      new PolicyStatement({
+        effect: Effect.ALLOW,
         actions: ["iam:PassRole"],
         resources: [executionRole],
         conditions: {
@@ -198,6 +210,11 @@ export class DeployRole extends Construct {
         id: `AwsSolutions-IAM5[Resource::${domainFunction}:*]`,
         reason:
           "A release publishes versions and moves the live alias, which are named after the function's own ARN.",
+      },
+      {
+        id: `AwsSolutions-IAM5[Resource::${bundles}]`,
+        reason:
+          "A bundle's key is its hash, so the role reads any of its own domain's bundles, and only those.",
       },
       {
         id: "AwsSolutions-IAM5[Resource::*]",

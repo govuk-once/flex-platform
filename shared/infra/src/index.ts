@@ -4,9 +4,9 @@ export {
   type CiFunctionProps,
 } from "./ci-function.ts";
 export {
+  type BundleReader,
   DomainCodeBucket,
   type DomainCodeBucketProps,
-  type FunctionReader,
 } from "./domain-code-bucket.ts";
 export { ManagementEdge } from "./management-edge.ts";
 export { ManagementViewerRequestFunction } from "./management-viewer-request-function.ts";

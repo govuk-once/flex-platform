@@ -207,9 +207,11 @@ the caller is the worker's role, `shared-release-worker`: IAM refuses a principa
 exist yet, so the trust names the role by a condition. It may create,
 configure, release and read only its domain's function, with the function's versions and aliases,
 read the two network parameters above, describe the network Lambda checks a function's placement
-against, and pass only its domain's
-execution role, only to Lambda. So no release can give a function another domain's role, and with
-it another domain's log group. It denies:
+against, read its own domain's bundles in the [code bucket](#uploading-a-bundle), and pass only its
+domain's execution role, only to Lambda. Lambda reads the bundle a function is created or updated
+from as the caller, so the role must be able to read it. The bucket lets every deploy role read any
+bundle, so the role's own policy is what holds a release to its domain's code. So no release can
+give a function another domain's role, and with it another domain's log group. It denies:
 
 - every Lambda action on any function named `gateway-<environment>-*`;
 - creating or configuring a domain's function with no VPC, in any subnet but the isolated ones, or
@@ -687,9 +689,18 @@ So under that policy a key holds only the bundle it names, and a bundle, once up
 neither replaced nor removed. A released function's code stays in the bucket, so this is also
 what keeps it running.
 
-The policy grants one thing: Lambda may read a bundle, by version, for a domain's function, in a
-domain account of an environment that publishes. It names each account with `aws:SourceAccount`
-and its functions, `domain-<environment>-*`, with `aws:SourceArn`.
+The policy grants two reads of a bundle, by version, in each domain account of an environment that
+publishes:
+
+- Lambda may read one for a domain's function. It names each account with `aws:SourceAccount` and
+  its functions, `domain-<environment>-*`, with `aws:SourceArn`.
+- A domain's [deploy role](#permissions) may read one, since Lambda reads the bundle a function is
+  created or updated from as the caller. One statement names every such account, and its deploy
+  roles, `domain-<environment>-*-deploy`, with `aws:PrincipalArn`. S3 refuses a policy that names a
+  role that doesn't exist yet, and the domain stacks that create the roles deploy after this one.
+
+Both name an account's domains by pattern, never one by one, so the policy grows with the domain
+accounts and not with the domains. Each deploy role's own policy holds it to its domain's bundles.
 
 #### Releasing a bundle
 
