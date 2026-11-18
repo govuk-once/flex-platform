@@ -122,6 +122,7 @@ describe("ReleaseWorker", () => {
       FifoQueue: true,
       SqsManagedSseEnabled: true,
       MessageRetentionPeriod: 14 * 24 * 60 * 60,
+      VisibilityTimeout: 120,
     });
   });
 

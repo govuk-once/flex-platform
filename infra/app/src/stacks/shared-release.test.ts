@@ -144,6 +144,7 @@ describe("SharedReleaseStack", () => {
     const built = template();
     const role = `arn:aws:iam::${PROD.shared.account}:role/shared-ci`;
     const worker = `arn:aws:iam::${PROD.shared.account}:role/shared-release-worker`;
+    const deadLetterWorker = `arn:aws:iam::${PROD.shared.account}:role/shared-release-dead-letter-worker`;
 
     built.hasResourceProperties("AWS::IAM::Role", { RoleName: "shared-ci" });
     built.hasResourceProperties("AWS::IAM::Role", {
@@ -160,7 +161,9 @@ describe("SharedReleaseStack", () => {
             Match.objectLike({
               Sid: "DenyChangingButTheApiAndWorker",
               Condition: {
-                ArnNotEquals: { "aws:PrincipalArn": [role, worker] },
+                ArnNotEquals: {
+                  "aws:PrincipalArn": [role, worker, deadLetterWorker],
+                },
               },
             }),
           ]),
@@ -178,6 +181,23 @@ describe("SharedReleaseStack", () => {
       },
     });
     expect(bundle()).toContain('table: "shared-releases"');
+  });
+
+  // The role the table lets give a release up is the one the dead-letter worker runs as.
+  it("gives up, by its own function, each release the queue moves to the dead-letter queue", () => {
+    const built = template();
+
+    built.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "shared-release-dead-letter-worker",
+    });
+    built.hasResourceProperties("AWS::Lambda::EventSourceMapping", {
+      EventSourceArn: {
+        "Fn::GetAtt": [Match.stringLikeRegexp("^ReleaseDeadLetters"), "Arn"],
+      },
+      FunctionName: {
+        Ref: Match.stringLikeRegexp("^DeadLetterWorkerFunction"),
+      },
+    });
   });
 
   // The worker releases only where a pipeline publishes. Elsewhere code will arrive by promotion.

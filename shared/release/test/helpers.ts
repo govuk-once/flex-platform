@@ -258,6 +258,8 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 /** The release table, in memory, with the conditions DynamoDB checks. */
 export class FakeTable implements ReleaseTable {
   readonly records = new Map<string, ReleaseRecord>();
+  /** Each change made, by name. */
+  readonly calls: string[] = [];
   /** Makes the named call throw this. */
   failures = new Map<string, unknown>();
 
@@ -305,6 +307,24 @@ export class FakeTable implements ReleaseTable {
     delete next.step;
     delete next.reason;
     this.records.set(this.keyOf(key), next);
+    return Promise.resolve(true);
+  }
+
+  abandon(key: ReleaseKey, now: number): Promise<boolean> {
+    this.call("abandon");
+    const record = this.records.get(this.keyOf(key));
+    if (
+      record === undefined ||
+      !["queued", "releasing", "failed"].includes(record.status)
+    ) {
+      return Promise.resolve(false);
+    }
+    this.calls.push("abandon");
+    this.records.set(this.keyOf(key), {
+      ...record,
+      status: "abandoned",
+      updatedAt: now,
+    });
     return Promise.resolve(true);
   }
 

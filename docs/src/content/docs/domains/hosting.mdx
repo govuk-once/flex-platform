@@ -342,14 +342,15 @@ asked for, and a domain's releases list newest first. Each holds:
 |---|---|
 | `environment`, `domain`, `sha256`, `versionId` | What was asked for: the bundle by its hash, and the version of its object |
 | `runId`, `commit` | The run that asked, and its commit, when its token said |
-| `status` | `queued`, `releasing`, `released`, `failed` or `refused` |
+| `status` | `queued`, `releasing`, `released`, `failed`, `refused` or `abandoned` |
 | `requestedAt`, `updatedAt` | When the API recorded it, and when it last changed, in milliseconds |
 | `attempts` | How many times the worker has claimed it |
 | `step`, `reason` | For a release that stopped: the step, and a fixed code for why |
 | `version`, `created`, `moved` | For a release that succeeded: the version `live` points at, and whether the release created the function and moved `live` |
 
 `failed` will be tried again. `refused` never will be: nothing about the release would change.
-`released` and `refused` are final. The table is the record of each request and how it went.
+`abandoned` was tried as often as the queue tries, and won't be again: the pipeline asks again.
+`released`, `refused` and `abandoned` are final. The table is the record of each request and how it went.
 What is deployed is Lambda's to say: the worker reads it at each step, and the table follows it.
 The table is retained, with point-in-time recovery, and deletion protection is on.
 
@@ -361,12 +362,12 @@ refuse it. So a message holds only a release's key, its environment, domain and 
 worker releases what the table records under it:
 
 - **Only the API records a release.** The table's policy denies, to every principal, putting an
-  item unless it is the API's role, `shared-ci`, changing one unless it is `shared-ci`'s or
-  `shared-release-worker`'s, and deleting one. A deny in a resource's policy holds whatever any
-  other policy allows. A message that names no release in the table is logged and dropped.
+  item unless it is the API's role, `shared-ci`, changing one unless it is `shared-ci`'s,
+  `shared-release-worker`'s or `shared-release-dead-letter-worker`'s, and deleting one. A deny in
+  a resource's policy holds whatever any other policy allows. A message that names no release in the table is logged and dropped.
 - **A final release isn't run again.** Before each attempt, the worker claims the release: it
   marks it `releasing` and counts the attempt, unless it is final. So a message sent again,
-  however it was got, runs nothing that is released or refused. Any other release may be tried
+  however it was got, runs nothing that is released, refused or abandoned. Any other release may be tried
   again, even while an attempt runs: every step reads Lambda before it acts, so an attempt at what
   is done changes nothing, and Lambda refuses a change to a function it is still changing.
 - **The queue takes messages only from the API, and gives them only to the worker.** Its policy
@@ -434,9 +435,10 @@ lose the function's logs, since its role may write to no other.
 The worker records how each release went in the table. A release that fails with something that
 might go differently next time, such as an AWS error, is recorded `failed` and given back to the
 queue, which delivers it again after 20 minutes. After three attempts it is moved to the
-dead-letter queue, `shared-release-dead-letter.fifo`, and kept for 14 days. A release that can
-never succeed, such as a bundle whose bytes aren't what its key says, or a release older than
-`live`'s, is recorded `refused` and dropped.
+dead-letter queue, `shared-release-dead-letter.fifo`, where the
+[dead-letter worker](#the-dead-letter-worker) gives it up. A release that can never succeed, such
+as a bundle whose bytes aren't what its key says, or a release older than `live`'s, is recorded
+`refused` and dropped.
 
 The worker records each outcome before it lets the message go, and only over the claim it made,
 so it never overwrites what another writer recorded since. `released` is the exception: Lambda
@@ -457,6 +459,44 @@ The worker is built with each domain it may release, and everything a release of
 `buildReleaseWorker` when the stage is synthesized: every domain with a repository, in each
 environment that publishes. Its role may take the queue's messages, read and change a release in
 the table, read bundles, and assume those domains' deploy roles, and nothing else.
+
+### The dead-letter worker
+
+A function of its own, `shared-release-dead-letter-worker`, reads the dead-letter queue, so the
+release table says when no more attempts are coming. The release worker can't say so itself: an
+attempt that stopped with its function recorded nothing. For each message, it reads the release
+and, unless it is final, records it `abandoned`, keeping the step and reason its last attempt
+stopped at. It logs `release_abandoned` with how many attempts there were. A release already
+final is left as it is. An attempt still running may yet release it: Lambda says what is live,
+so the worker records `released` over `abandoned`.
+
+It records first and lets the message go after. Lambda deletes a message only once the function
+returns without giving it back, so a function that stops between the two leaves the message to
+come again, and the second time finds the release already `abandoned`. A message it can't
+record, because the table failed, it gives back, and logs `release_failed` at the step `abandon`.
+The dead-letter queue has no queue behind it: such a message comes again every two minutes, until
+it is recorded or the queue drops it after 14 days.
+
+It is a separate function from the release worker so that it needs none of the worker's access.
+Its role may take the dead-letter queue's messages and read and change a release, and nothing
+else, and the queue's policy denies taking a message to every other role. It has a 30-second
+timeout. Lambda holds a queue's visibility timeout to at least its reader's timeout, so the
+dead-letter queue's can be two minutes, rather than the release worker's 20. It is built by
+`ReleaseDeadLetterWorker` in `shared/infra`, and logs to `/flex/shared/release-dead-letter-worker`.
+
+#### When a release is abandoned
+
+Two alarms watch the dead-letter worker's log, with no action until the platform has alerting.
+Each counts lines of one event into the namespace `flex/shared/release`, and goes off on any in
+five minutes:
+
+| Alarm | Goes off on | Means |
+|---|---|---|
+| `shared-release-abandoned` | `release_abandoned` | A release was given up. The table holds the step and reason its last attempt stopped at, and the release worker's log, `/flex/shared/release-worker`, has each attempt under the release's ID. |
+| `shared-release-abandon-failed` | `release_failed` | A release couldn't be recorded as given up, so the table still says it may be tried. Its message is going round the dead-letter queue. |
+
+The pipeline that asked sees `abandoned` and can ask again, once whatever stopped the release is
+put right.
 
 ### The pipeline API
 

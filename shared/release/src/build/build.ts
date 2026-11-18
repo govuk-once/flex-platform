@@ -1,18 +1,33 @@
 import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
 import { buildSync } from "esbuild";
 
+import type { DeadLetterConfig } from "../dead-letter/types.ts";
 import type { ReleaseConfig, ReleaseTarget } from "../worker/types.ts";
 
 const WORKER_ENTRY = new URL("../worker/entry.ts", import.meta.url).pathname;
 
-// The bundle is CommonJS, deployed as `index.js` with the handler `index.handler`.
+const DEAD_LETTER_ENTRY = new URL("../dead-letter/entry.ts", import.meta.url)
+  .pathname;
+
+// Each bundle is CommonJS, deployed as `index.js` with the handler `index.handler`.
 export const RELEASE_HANDLER = "index.handler";
 
-// Synchronous, because CDK builds constructs synchronously. Returns the code of `index.js`, with
-// every dependency, the AWS SDK's clients included, bundled and the config baked in.
+// Synchronous, because CDK builds constructs synchronously. Each returns the code of `index.js`,
+// with every dependency, the AWS SDK's clients included, bundled and the config baked in.
 export function buildReleaseWorker(config: ReleaseConfig): string {
   checkConfig(config);
   return bundle(WORKER_ENTRY, { RELEASE_CONFIG: JSON.stringify(config) });
+}
+
+export function buildDeadLetterWorker(config: DeadLetterConfig): string {
+  if (!REGION.test(config.region) || !TABLE_NAME.test(config.table)) {
+    throw new Error(
+      `The dead-letter worker's table, ${JSON.stringify(config.table)} in ${JSON.stringify(config.region)}, is not a table's name and a region`,
+    );
+  }
+  return bundle(DEAD_LETTER_ENTRY, {
+    DEAD_LETTER_CONFIG: JSON.stringify(config),
+  });
 }
 
 function bundle(entry: string, define: Record<string, string>): string {

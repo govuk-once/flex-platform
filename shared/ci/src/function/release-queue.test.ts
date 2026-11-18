@@ -107,6 +107,7 @@ describe("createReleaseQueue", () => {
       },
       get: () => Promise.reject(new Error("unused")),
       claim: () => Promise.reject(new Error("unused")),
+      abandon: () => Promise.reject(new Error("unused")),
       finish: (...args) => {
         calls.push(["finish", ...args]);
         return Promise.resolve();
