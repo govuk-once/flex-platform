@@ -414,10 +414,14 @@ request, in order, it:
    A failure is a 401. The keys are fetched, kept for 10 minutes and fetched again as
    [Lambda@Edge keeps its issuers'](/flex-platform/frontdoor/lambda-edge/#verifying-the-token),
    and a request that needs keys it can't fetch gets a 500, never a pass.
-2. **Checks the method and finds the route.** Anything but `POST` is a 405, and a path that is
-   no route is a 404. Both come after the token, so a caller without one learns nothing of the
-   routes. The one route is `/ci/environments/<environment>/domains/<domain>/uploads`.
-3. **Decides whether this pipeline may release that domain there.** Anyone with a GitHub
+2. **Finds the route.** A path that is no route's is a 404, and a route's path with a method it
+   doesn't take is a 405, with an `Allow` header naming the ones it does. Both come after the
+   token, so a caller without one learns nothing of the routes. There is one, `POST`
+   `/ci/environments/<environment>/domains/<domain>/uploads`. Each route is a method, a path and
+   its handler, in `shared/ci/src/function/routes/`. Every route's path names an environment and a
+   domain, and the router refuses to start with one that doesn't.
+3. **Decides whether this pipeline may act on that domain there,** the same for every route, so no
+   route can leave it out. A caller of another kind gets a function of its own. Anyone with a GitHub
    repository can have GitHub sign a token for the API's address, so a verified token says only
    which repository's pipeline is calling. The pipeline is allowed when:
    - the stage has the environment, and the environment hosts the domain;
