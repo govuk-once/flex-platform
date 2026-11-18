@@ -1,8 +1,8 @@
 // One log line per request, in the shape of the CloudFront Function's. Every value is a fixed
 // code, an ID the platform or GitHub issued, a name from the config, a bundle's hash and length
-// once both are checked, or a source location. Never the token, a claim a repository's admin can
-// write, the caller's path, the address an upload is signed for, or a library's error text, which
-// can quote a claim.
+// once both are checked, an object's version in the bucket, or a source location. Never the
+// token, a claim a repository's admin can write, the caller's path, the address an upload is
+// signed for, or a library's error text, which can quote a claim.
 
 import type { UnexpectedErrorSummary } from "@repo/utils/describe-unexpected-error";
 
@@ -16,6 +16,10 @@ export type CiEventName =
   | "ci_upload_not_accepted"
   | "ci_upload_invalid"
   | "ci_upload_signed"
+  | "ci_release_not_accepted"
+  | "ci_release_invalid"
+  | "ci_release_bundle_missing"
+  | "ci_release_queued"
   | "ci_failed";
 
 // What joins this line to the rest of the request: the trace ID every hop logs, and Lambda's own
@@ -41,6 +45,10 @@ export interface OutcomeDetails {
   /** The bundle's key in the bucket, which holds its domain and its hash. */
   readonly key?: string;
   readonly size?: number;
+  /** The version of the bundle's object a release is for. */
+  readonly versionId?: string;
+  /** The ID the release table holds a release under. */
+  readonly releaseId?: string;
 }
 
 export function logOutcome(

@@ -108,6 +108,37 @@ describe("SharedReleaseStack", () => {
     });
   });
 
+  // The address the function is built with is the queue's, or a release would go nowhere.
+  it("builds the function with the release queue's address, and lets its role send only there", () => {
+    const built = template();
+    const [queueId] = Object.keys(
+      built.findResources("AWS::SQS::Queue", {
+        Properties: { QueueName: "shared-release.fifo" },
+      }),
+    );
+    assert(queueId !== undefined);
+
+    expect(bundle()).toContain(
+      `queueUrl: "https://sqs.${SHARED_REGION}.amazonaws.com/${PROD.shared.account}/shared-release.fifo"`,
+    );
+    built.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "shared-ci",
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: "sqs:SendMessage",
+                Resource: { "Fn::GetAtt": [queueId, "Arn"] },
+              },
+            ]),
+          },
+        },
+      ],
+    });
+  });
+
   // The roles the table and the queue name are the ones the functions run as.
   it("lets the function's role, and no other, record a release and send it, and the workers' change it", () => {
     const built = template();
@@ -146,6 +177,7 @@ describe("SharedReleaseStack", () => {
         ]),
       },
     });
+    expect(bundle()).toContain('table: "shared-releases"');
   });
 
   // The worker releases only where a pipeline publishes. Elsewhere code will arrive by promotion.

@@ -317,9 +317,9 @@ from `staging`. The repository the stage's `domains` names for a domain is the o
 release it.
 
 Where an environment publishes, the domain's pipeline [uploads a bundle](#uploading-a-bundle)
-through the [pipeline API](#the-pipeline-api), and the [release worker](#the-release-worker)
-releases it. Asking the API for a release is planned, and so is promotion, which takes released
-code from one environment to the next.
+and then [asks for its release](#releasing-a-bundle), both through the
+[pipeline API](#the-pipeline-api). Promotion, which takes released code from one environment to
+the next, is planned.
 
 ### The release worker
 
@@ -460,11 +460,9 @@ the table, read bundles, and assume those domains' deploy roles, and nothing els
 
 ### The pipeline API
 
-A domain's pipeline will upload and release its code through an API of the platform's, never
+A domain's pipeline uploads and releases its code through an API of the platform's, never
 through AWS itself, so it holds no AWS credentials. The API answers under `/ci`, at the apex of
-the stage's shared zone, behind a CloudFront distribution of its own. The distribution is built,
-and so are the API's check of who is calling and what they may release, and
-[uploading a bundle](#uploading-a-bundle). Releasing an uploaded bundle is planned.
+the stage's shared zone, behind a CloudFront distribution of its own.
 
 A job proves which repository it runs in with the token GitHub issues it, asked for with the
 API's address, `https://<shared zone>/ci`, as its audience. It sends the token alone as
@@ -540,8 +538,9 @@ request, in order, it:
    and a request that needs keys it can't fetch gets a 500, never a pass.
 2. **Finds the route.** A path that is no route's is a 404, and a route's path with a method it
    doesn't take is a 405, with an `Allow` header naming the ones it does. Both come after the
-   token, so a caller without one learns nothing of the routes. There is one, `POST`
-   `/ci/environments/<environment>/domains/<domain>/uploads`. Each route is a method, a path and
+   token, so a caller without one learns nothing of the routes. There are two, both `POST`:
+   `/ci/environments/<environment>/domains/<domain>/uploads` and
+   `/ci/environments/<environment>/domains/<domain>/releases`. Each route is a method, a path and
    its handler, in `shared/ci/src/function/routes/`. Every route's path names an environment and a
    domain, and the router refuses to start with one that doesn't.
 3. **Decides whether this pipeline may act on that domain there,** the same for every route, so no
@@ -561,25 +560,29 @@ request, in order, it:
    Nothing is decided by the token's `sub`, whose format a repository's admin can change. A
    refusal is a 403, the same whatever the reason, so a pipeline learns nothing of which
    environments and domains exist, or which repository a domain belongs to.
-4. **Checks the environment takes uploads.** New code enters a stage only where an
-   environment's `release` is `"publish"`. Anywhere else is a 409,
-   `This environment takes no uploads`: the pipeline is allowed, so it is told why.
-5. **Reads the bundle's description.** The body is
-   `{ "sha256": "<64 lowercase hex digits>", "size": <bytes> }` and nothing else, with a size
-   from 1 byte to 250 MB, the most Lambda unzips a function's code to. Anything else is a 400.
-   The body is read only now, for a pipeline that is allowed.
-6. **Signs the upload,** and answers 200 with [where to send the bundle](#uploading-a-bundle).
+4. **Checks the environment publishes.** New code enters a stage only where an environment's
+   `release` is `"publish"`. Anywhere else is a 409, `This environment takes no uploads` or
+   `This environment takes no releases`: the pipeline is allowed, so it is told why.
+5. **Reads the body.** For an upload it is
+   `{ "sha256": "<64 lowercase hex digits>", "size": <bytes> }`, with a size from 1 byte to
+   250 MB, the most Lambda unzips a function's code to. For a release it is
+   `{ "sha256": "<64 lowercase hex digits>" }`. Either holds nothing else, and anything else is a
+   400. The body is read only now, for a pipeline that is allowed.
+6. **Signs the upload,** and answers 200 with [where to send the bundle](#uploading-a-bundle),
+   or **queues the release** of a bundle that was uploaded, and answers 202. See
+   [releasing a bundle](#releasing-a-bundle).
 
-The issuer, the audience, the environments, whether each takes uploads, each domain's
-repository and the bucket are baked into the function by `buildCiFunction` when the stage is
-synthesized. So who may release a domain changes only by a change to config and a deploy of
-`shared-release`.
+The issuer, the audience, the environments, whether each publishes, each domain's repository,
+the bucket, the release table's name and the release queue's address are baked into the function
+by `buildCiFunction` when the stage is synthesized. So who may release a domain changes only by a
+change to config and a deploy of `shared-release`.
 
 The function writes one log line for each request: what happened as a fixed code, the request's
 trace ID, how long it took, and for a verified token GitHub's IDs for the repository, its owner
 and the workflow run, and the commit the job runs for. The environment and the domain are logged
-only for a pipeline that was allowed, when they are names from config, and a signed upload's
-line adds the bundle's key and size. The token is never logged, and neither is the address an
+only for a pipeline that was allowed, when they are names from config. A signed upload's line
+adds the bundle's key and size, and a queued release's the bundle's key and its object's
+version. The token is never logged, and neither is the address an
 upload was signed for, or anything a repository's admin can write, such as its name or an
 environment's.
 
@@ -624,8 +627,9 @@ any of them:
   what is there is the same bundle.
 
 The key is `<domain>/bundle/<sha256>.zip`. The domain is the one the pipeline was allowed for,
-so a pipeline can write only under its own domain. The API's role may write keys of that shape
-and do nothing else in the bucket, and a signature carries no more than the signer's permission.
+so a pipeline can write only under its own domain. The API's role may write and read keys of that
+shape, and list the bucket, and nothing else there. A signature carries no more than the signer's
+permission, and covers its method, so no address the API signs can read or delete a bundle.
 
 The bucket is `shared-domain-code-<account>`, in the stage's shared account, built by
 `DomainCodeBucket` in `shared/infra`. Its policy refuses, from anyone:
@@ -646,3 +650,37 @@ what keeps it running.
 The policy grants one thing: Lambda may read a bundle, by version, for a domain's function, in a
 domain account of an environment that publishes. It names each account with `aws:SourceAccount`
 and its functions, `domain-<environment>-*`, with `aws:SourceArn`.
+
+#### Releasing a bundle
+
+Once its bundle is uploaded, the pipeline asks for its release by the same hash:
+
+```http
+POST /ci/environments/<environment>/domains/<domain>/releases
+content-type: application/json
+x-flex-ci-token: <the job's token>
+x-amz-content-sha256: <this body's SHA-256>
+
+{ "sha256": "<the zip's SHA-256, in lowercase hex>" }
+```
+
+The API looks for `<domain>/bundle/<sha256>.zip`, under the domain the pipeline was allowed for,
+so a pipeline can release only its own domain's code. If there is no such object, it answers
+409, `No bundle with this hash has been uploaded`. Otherwise it records the release, with the
+object's version, in the [release table](#the-release-table), puts its key on the
+[release worker](#the-release-worker)'s queue, and answers 202 with the release's ID:
+
+```json
+{
+  "releaseId": "<the release's ID>",
+  "environment": "<environment>",
+  "domain": "<domain>",
+  "sha256": "<the zip's SHA-256>"
+}
+```
+
+The release is queued, not done. Each request is a release of its own: asking again for the
+bundle already on `live` publishes no new version and leaves `live` where it is. If the queue
+refuses the message, the API records the release `refused`, at the step `queue`, and answers 500:
+no message is behind it, so it will never be tried, and the pipeline asks again.
+The pipeline can't yet ask how a release went: the worker's log and the table say.

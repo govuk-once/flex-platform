@@ -194,8 +194,8 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
   is renamed or transferred, and one created later under the same name has others. Its `name`,
   `<owner>/<repository>`, is for people to read.
 - `release` says how a domain's code reaches the environment: `"publish"`, where new code enters
-  the stage, or `{ promoteFrom }`, naming the environment whose released code it takes. Nothing
-  reads `release` or a stage's `domains` yet: see
+  the stage, or `{ promoteFrom }`, naming the environment whose released code it takes. Only a
+  publishing environment takes uploads and releases from a pipeline. Promotion is planned: see
   [releasing a domain's function](/flex-platform/domains/hosting/#releasing-a-domains-function).
 - `zone` is the account's public hosted zone, as `{ name, id }`. The zones aren't the platform's:
   another team creates one in each account, already delegated, named

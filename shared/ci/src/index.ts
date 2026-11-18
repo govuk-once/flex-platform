@@ -4,5 +4,6 @@ export type {
   CiConfig,
   CiDomain,
   CiEnvironment,
+  CiReleases,
   CiUploads,
 } from "./function/types.ts";

@@ -19,6 +19,7 @@ export {
   MANAGEMENT_REGION,
   RELEASE_TABLE_NAME,
   RELEASE_WORKER_NAME,
+  releaseQueueUrl,
   SHARED_REGION,
   TEST_USER_POOL_NAME,
 } from "./names.ts";

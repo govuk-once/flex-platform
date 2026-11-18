@@ -39,6 +39,14 @@ export interface CiUploads {
   readonly region: string;
 }
 
+/** Where a release is asked for: the release table, and the release worker's queue. */
+export interface CiReleases {
+  /** The table, by name, in the bucket's region. */
+  readonly table: string;
+  /** The queue's address, in the bucket's region. */
+  readonly queueUrl: string;
+}
+
 /**
  * A domain and the GitHub repository whose pipeline may release it, by GitHub's IDs, which a
  * repository keeps when it is renamed or transferred.
@@ -63,4 +71,5 @@ export interface CiConfig {
   /** A domain with no repository yet has no entry, so nothing can release it. */
   readonly domains: readonly CiDomain[];
   readonly uploads: CiUploads;
+  readonly releases: CiReleases;
 }

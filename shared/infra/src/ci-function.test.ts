@@ -13,6 +13,12 @@ import {
 
 const BUCKET = `shared-domain-code-${ACCOUNT}`;
 
+const QUEUE_URL = `https://sqs.eu-west-2.amazonaws.com/${ACCOUNT}/shared-release.fifo`;
+
+const QUEUE_ARN = `arn:aws:sqs:eu-west-2:${ACCOUNT}:shared-release.fifo`;
+
+const TABLE_ARN = `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/shared-releases`;
+
 const PROPS: CiFunctionProps = {
   zoneName: ZONE.zoneName,
   codeBucketName: BUCKET,
@@ -22,6 +28,8 @@ const PROPS: CiFunctionProps = {
   domains: [
     { name: "example", repositoryId: "700000001", ownerId: "90000001" },
   ],
+  releaseQueue: { url: QUEUE_URL, arn: QUEUE_ARN },
+  releaseTable: { name: "shared-releases", arn: TABLE_ARN },
 };
 
 function build(region = "eu-west-2", nag = false, props = PROPS) {
@@ -80,7 +88,7 @@ describe("CiFunction", () => {
   });
 
   // No managed policy, which would let it create a log group.
-  it("runs as a role that may only write to its own log group and upload a bundle", () => {
+  it("runs as a role that may only write to its own log group, upload a bundle and ask for a release", () => {
     const built = template();
 
     built.hasResourceProperties("AWS::IAM::Role", {
@@ -101,14 +109,19 @@ describe("CiFunction", () => {
       "logs:PutLogEvents",
       "kms:Encrypt",
       "kms:GenerateDataKey*",
+      "s3:GetObject",
       "s3:PutObject",
+      "s3:ListBucket",
+      "sqs:SendMessage",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
     ]);
     built.resourceCountIs("AWS::IAM::Policy", 0);
   });
 
   // The signature on an upload carries the role's permission and no more, so this is the most
-  // any upload can do: write a key shaped like a bundle's. Not read, list or delete.
-  it("may write only keys shaped like a bundle's, in the code bucket", () => {
+  // any upload can do: write a key shaped like a bundle's. Never delete.
+  it("may write and read only keys shaped like a bundle's, in the code bucket, and list it", () => {
     template().hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
@@ -116,8 +129,49 @@ describe("CiFunction", () => {
             Statement: Match.arrayWith([
               {
                 Effect: "Allow",
-                Action: "s3:PutObject",
+                Action: ["s3:GetObject", "s3:PutObject"],
                 Resource: `arn:aws:s3:::${BUCKET}/*/bundle/*.zip`,
+              },
+              {
+                Effect: "Allow",
+                Action: "s3:ListBucket",
+                Resource: `arn:aws:s3:::${BUCKET}`,
+              },
+            ]),
+          },
+        },
+      ],
+    });
+  });
+
+  it("may record a release in the release table, and change one, and in no other table", () => {
+    template().hasResourceProperties("AWS::IAM::Role", {
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+                Resource: TABLE_ARN,
+              },
+            ]),
+          },
+        },
+      ],
+    });
+  });
+
+  it("may put a release on the release queue, and on no other", () => {
+    template().hasResourceProperties("AWS::IAM::Role", {
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: "sqs:SendMessage",
+                Resource: QUEUE_ARN,
               },
             ]),
           },
@@ -188,12 +242,14 @@ describe("CiFunction", () => {
     expect(code).toContain('ownerId: "90000001"');
   });
 
-  it("is built with the bucket uploads go to, in its own region, and where pipelines upload", () => {
+  it("is built with the bucket uploads go to, in its own region, where pipelines upload, and the release queue", () => {
     const code = bundle();
 
     expect(code).toContain(`bucket: "${BUCKET}"`);
     expect(code).toContain('region: "eu-west-2"');
     expect(code).toContain("publishes: true");
+    expect(code).toContain(`queueUrl: "${QUEUE_URL}"`);
+    expect(code).toContain('table: "shared-releases"');
   });
 
   it("refuses to build with a repository that isn't given by GitHub's IDs", () => {

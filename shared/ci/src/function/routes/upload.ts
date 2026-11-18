@@ -1,7 +1,7 @@
 import { bundleKey } from "@repo/shared-release/bundle-key";
 
 import { bundleOf } from "../bundle.ts";
-import { badRequest, uploadSigned, uploadsNotAccepted } from "../responses.ts";
+import { badRequest, notAccepted, uploadSigned } from "../responses.ts";
 import type { RouteHandler } from "../router.ts";
 import { logOutcome } from "../telemetry.ts";
 
@@ -11,9 +11,9 @@ export const upload: RouteHandler = async (
   options,
   { event, traceId, target, details, request },
 ) => {
-  if (!options.takesUploads(target.environment)) {
+  if (!options.publishes(target.environment)) {
     logOutcome("ci_upload_not_accepted", request(), details);
-    return uploadsNotAccepted(traceId);
+    return notAccepted(traceId, "uploads");
   }
   const bundle = bundleOf(event);
   if (typeof bundle === "string") {

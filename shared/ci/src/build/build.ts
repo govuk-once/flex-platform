@@ -35,6 +35,9 @@ const BUCKET = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 
 const REGION = /^[a-z]{2}(?:-[a-z]+)+-\d$/;
 
+// What DynamoDB takes as a table's name.
+const TABLE_NAME = /^[A-Za-z0-9_.-]{3,255}$/;
+
 // GitHub's IDs, as its tokens hold them: digits, in a string.
 const ID = /^\d{1,20}$/;
 
@@ -60,6 +63,17 @@ function checkConfig(config: CiConfig): void {
     );
   }
 
+  if (!TABLE_NAME.test(config.releases.table)) {
+    throw new Error(
+      `The pipeline API's release table, ${JSON.stringify(config.releases.table)}, is not a table's name`,
+    );
+  }
+  if (!queueUrlIn(config.releases.queueUrl, region)) {
+    throw new Error(
+      `The pipeline API's release queue, ${JSON.stringify(config.releases.queueUrl)}, is not a FIFO queue's address in ${region}`,
+    );
+  }
+
   checkNames(
     "environment",
     config.environments.map(({ name }) => name),
@@ -78,6 +92,15 @@ function checkConfig(config: CiConfig): void {
       );
     }
   }
+}
+
+// A FIFO queue's address, as SQS gives it: its region, its account and its name.
+function queueUrlIn(queueUrl: string, region: string): boolean {
+  const match =
+    /^https:\/\/sqs\.([a-z0-9-]+)\.amazonaws\.com\/\d{12}\/[A-Za-z0-9_-]{1,75}\.fifo$/.exec(
+      queueUrl,
+    );
+  return match?.[1] === region;
 }
 
 // Each a name a path segment can hold, once: a second entry under a name would be ignored.

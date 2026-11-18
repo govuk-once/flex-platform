@@ -34,13 +34,46 @@ export function badRequest(traceId: string): FunctionUrlResult {
 }
 
 // For a pipeline that is allowed, so it is told why: the environment takes its code by promotion.
-export function uploadsNotAccepted(traceId: string): FunctionUrlResult {
+export function notAccepted(
+  traceId: string,
+  action: "uploads" | "releases",
+): FunctionUrlResult {
   return answer(
     409,
-    "This environment takes no uploads",
+    `This environment takes no ${action}`,
     "client_error",
     traceId,
   );
+}
+
+// For a pipeline that is allowed, so it is told why: there is nothing under the key to release.
+export function bundleMissing(traceId: string): FunctionUrlResult {
+  return answer(
+    409,
+    "No bundle with this hash has been uploaded",
+    "client_error",
+    traceId,
+  );
+}
+
+// The release is queued, not done: the worker creates or updates the function, and moves `live`.
+export function releaseQueued(
+  traceId: string,
+  release: {
+    releaseId: string;
+    environment: string;
+    domain: string;
+    sha256: string;
+  },
+): FunctionUrlResult {
+  return {
+    statusCode: 202,
+    headers: {
+      "content-type": "application/json",
+      "x-correlation-id": traceId,
+    },
+    body: JSON.stringify(release),
+  };
 }
 
 // Never stored: the address is the pipeline's alone, and good for five minutes.

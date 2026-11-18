@@ -208,6 +208,49 @@ describe("buildCiFunction", () => {
       { domains: [{ name: "example", repositoryId: "1", ownerId: "" }] },
       "GitHub's IDs",
     ],
+    [
+      "a release queue that isn't FIFO",
+      {
+        releases: {
+          ...CONFIG.releases,
+          queueUrl:
+            "https://sqs.eu-west-2.amazonaws.com/000000000000/shared-release",
+        },
+      },
+      "release queue",
+    ],
+    [
+      "a release queue in another region than the bucket",
+      {
+        releases: {
+          ...CONFIG.releases,
+          queueUrl:
+            "https://sqs.us-east-1.amazonaws.com/000000000000/shared-release.fifo",
+        },
+      },
+      "release queue",
+    ],
+    [
+      "a release table given by its ARN",
+      {
+        releases: {
+          ...CONFIG.releases,
+          table:
+            "arn:aws:dynamodb:eu-west-2:000000000000:table/shared-releases",
+        },
+      },
+      "release table",
+    ],
+    [
+      "a release queue given by ARN",
+      {
+        releases: {
+          ...CONFIG.releases,
+          queueUrl: "arn:aws:sqs:eu-west-2:000000000000:shared-release.fifo",
+        },
+      },
+      "release queue",
+    ],
   ])("refuses to build with %s", (_, change, message) => {
     expect(() => buildCiFunction({ ...CONFIG, ...change })).toThrow(message);
   });

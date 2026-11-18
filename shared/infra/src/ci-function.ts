@@ -60,14 +60,19 @@ export interface CiFunctionProps {
   readonly domains: readonly CiDomain[];
   /** The bucket uploads go to, in this stack's account and region. */
   readonly codeBucketName: string;
+  /** The queue a release is put on, by the address the function is built with and by ARN. */
+  readonly releaseQueue: { readonly url: string; readonly arn: string };
+  /** The table each release is recorded in, by the name the function is built with and by ARN. */
+  readonly releaseTable: { readonly name: string; readonly arn: string };
 }
 
 /**
  * The pipeline API's function, and the URL CloudFront reaches it at. The function is built with
  * who may release what: the token's issuer and audience, and each domain's repository.
  *
- * Its role may write a bundle's key in the code bucket and nothing else there: it signs each
- * upload a pipeline makes, and a signature carries no more than the signer's own permission.
+ * Its role may write a bundle's key in the code bucket: it signs each upload a pipeline makes, and
+ * a signature carries no more than the signer's own permission. It may look for a bundle, to
+ * release only one that was uploaded, and put a release on the release worker's queue.
  *
  * The URL takes only requests signed with SigV4 by a caller IAM allows, and the function's
  * policy admits CloudFront alone, for this account's distributions. So a request sent straight
@@ -111,6 +116,12 @@ export class CiFunction extends Construct {
       resource: props.codeBucketName,
       resourceName: bundleKey("*", "*"),
     });
+    const bucket = stack.formatArn({
+      service: "s3",
+      region: "",
+      account: "",
+      resource: props.codeBucketName,
+    });
     const role = new Role(this, "Role", {
       roleName: CI_FUNCTION_NAME,
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
@@ -118,9 +129,26 @@ export class CiFunction extends Construct {
         Ci: new PolicyDocument({
           statements: [
             ...logs.statements,
+            // PutObject, to sign each upload. GetObject for HeadObject, which S3 authorises as a
+            // read, to find the version of a bundle to release. An upload's signature covers its
+            // method, so no address the function signs reads a bundle.
             new PolicyStatement({
-              actions: ["s3:PutObject"],
+              actions: ["s3:GetObject", "s3:PutObject"],
               resources: [bundles],
+            }),
+            // Without it, S3 refuses to say an object is missing, rather than saying so.
+            new PolicyStatement({
+              actions: ["s3:ListBucket"],
+              resources: [bucket],
+            }),
+            new PolicyStatement({
+              actions: ["sqs:SendMessage"],
+              resources: [props.releaseQueue.arn],
+            }),
+            // To record each release, and to record one the queue wouldn't take as failed.
+            new PolicyStatement({
+              actions: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+              resources: [props.releaseTable.arn],
             }),
           ],
         }),
@@ -146,6 +174,10 @@ export class CiFunction extends Construct {
           environments: props.environments,
           domains: props.domains,
           uploads: { bucket: props.codeBucketName, region: stack.region },
+          releases: {
+            queueUrl: props.releaseQueue.url,
+            table: props.releaseTable.name,
+          },
         }),
       ),
       role,
