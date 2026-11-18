@@ -45,6 +45,7 @@ export default defineConfig({
           label: "Domains",
           items: [
             "domains/overview",
+            "domains/configuration",
             "domains/hosting",
             "domains/designing-a-domain",
           ],
