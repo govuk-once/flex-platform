@@ -327,20 +327,25 @@ describe("createCiHandler", () => {
     },
   );
 
-  it("answers 404 to a verified pipeline's request for a path that is no route", async () => {
-    const { handle } = handler();
+  it.each(["POST", "GET"])(
+    "answers 404 to a verified pipeline's %s of a path that is no route",
+    async (method) => {
+      const { handle } = handler();
 
-    await expect(
-      handle(functionUrlEvent({ path: "/ci/environments/development" })),
-    ).resolves.toMatchObject({
-      statusCode: 404,
-      body: body("Not found", "client_error"),
-    });
-    expect(logged[0]?.telemetry).toEqual({
-      event: "ci_route_unknown",
-      details: { ...REQUEST, ...CALLER },
-    });
-  });
+      await expect(
+        handle(
+          functionUrlEvent({ method, path: "/ci/environments/development" }),
+        ),
+      ).resolves.toMatchObject({
+        statusCode: 404,
+        body: body("Not found", "client_error"),
+      });
+      expect(logged[0]?.telemetry).toEqual({
+        event: "ci_route_unknown",
+        details: { ...REQUEST, ...CALLER },
+      });
+    },
+  );
 
   // One answer whatever the reason, so a pipeline learns nothing of which environments and
   // domains exist, or which repository a domain is registered to.

@@ -1,42 +1,41 @@
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 import { CI_TOKEN_HEADER } from "@repo/shared-viewer-request/token-header";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
+import { heldValue } from "@repo/utils/held-value";
 
-import type { Authorise, TakesUploads } from "./authorise.ts";
-import { bundleKey, bundleOf } from "./bundle.ts";
+import type { CiOptions } from "./options.ts";
 import {
-  badRequest,
   forbidden,
   internalError,
   methodNotAllowed,
   notFound,
   unauthorized,
-  uploadSigned,
-  uploadsNotAccepted,
 } from "./responses.ts";
-import { ALLOWED_METHODS, uploadTarget } from "./route.ts";
-import type { SignUpload } from "./sign-upload.ts";
+import {
+  createRouter,
+  type MatchedRoute,
+  type RouteDefinition,
+} from "./router.ts";
+import { ROUTES } from "./routes/index.ts";
 import { logFailure, logOutcome, type RequestDetails } from "./telemetry.ts";
-import type { VerifyToken } from "./token.ts";
+import type { Pipeline } from "./token.ts";
 import type { FunctionUrlEvent, FunctionUrlResult } from "./types.ts";
 
-export interface CiOptions {
-  readonly verifyToken: VerifyToken;
-  readonly authorise: Authorise;
-  readonly takesUploads: TakesUploads;
-  readonly signUpload: SignUpload;
-  /** The time now, in milliseconds. */
-  readonly now: () => number;
-}
+export type { CiOptions } from "./options.ts";
 
 const TRACE_ID = /^1-[0-9a-f]{8}-[0-9a-f]{24}$/;
 
-// Verify the token, find the route, decide whether this pipeline may use it, and only then read
-// what it asks for. The token comes first, so a caller without one learns nothing of the routes.
-// The decision comes before the request's body, so nothing a caller wrote is read, and nothing is
-// signed, for a pipeline that isn't allowed. Every error is answered with a 500, so the runtime
-// never prints one, whose text can hold a claim.
-export function createCiHandler(options: CiOptions) {
+// Verify the token, find the route, decide whether this pipeline may use it, and only then run the
+// route's handler, which reads what it asks for. The token comes first, so a caller without one
+// learns nothing of the routes. The decision comes before the request's body, so nothing a caller
+// wrote is read, and nothing is signed or released, for a pipeline that isn't allowed. Every
+// error is answered with a 500, so the runtime never prints one, whose text can hold a claim.
+export function createCiHandler(
+  options: CiOptions,
+  routes: readonly RouteDefinition[] = ROUTES,
+) {
+  const router = createRouter(routes);
+
   return async (event: FunctionUrlEvent): Promise<FunctionUrlResult> => {
     const started = options.now();
     const { requestId } = event.requestContext;
@@ -70,53 +69,56 @@ export function createCiHandler(options: CiOptions) {
         commit: pipeline.commit,
       };
 
-      // The CloudFront Function's check again, since nothing here should rely on it.
-      if (!ALLOWED_METHODS.includes(event.requestContext.http.method)) {
-        logOutcome("ci_method_rejected", request(), caller);
-        return methodNotAllowed(traceId, ALLOWED_METHODS);
-      }
-      const target = uploadTarget(event.rawPath);
-      if (target === undefined) {
+      const found = router(event.requestContext.http.method, event.rawPath);
+      if (found.kind === "none") {
         logOutcome("ci_route_unknown", request(), caller);
         return notFound(traceId);
       }
+      if (found.kind === "method") {
+        logOutcome("ci_method_rejected", request(), caller);
+        return methodNotAllowed(traceId, found.allowed);
+      }
 
-      const refusal = options.authorise(pipeline, target);
-      if (refusal !== undefined) {
+      const target = authorisedTarget(options, pipeline, found.match);
+      if ("refusal" in target) {
         // Without the path's names, which are still only the caller's.
-        logOutcome("ci_forbidden", request(), { ...caller, reason: refusal });
+        logOutcome("ci_forbidden", request(), {
+          ...caller,
+          reason: target.refusal,
+        });
         return forbidden(traceId);
       }
 
       // Allowed, so the path's names are the config's from here on.
-      const allowed = { ...caller, ...target };
-
-      if (!options.takesUploads(target.environment)) {
-        logOutcome("ci_upload_not_accepted", request(), allowed);
-        return uploadsNotAccepted(traceId);
-      }
-      const bundle = bundleOf(event);
-      if (typeof bundle === "string") {
-        logOutcome("ci_upload_invalid", request(), {
-          ...allowed,
-          reason: bundle,
-        });
-        return badRequest(traceId);
-      }
-
-      const key = bundleKey(target.domain, bundle.sha256);
-      const upload = await options.signUpload(key, bundle);
-      logOutcome("ci_upload_signed", request(), {
-        ...allowed,
-        key,
-        size: bundle.size,
+      return await found.match.route.handle(options, {
+        event,
+        traceId,
+        pipeline,
+        target,
+        params: found.match.params,
+        details: { ...caller, ...target },
+        request,
       });
-      return uploadSigned(traceId, upload);
     } catch (error) {
       logFailure(request(), describeUnexpectedError(error));
       return internalError(traceId);
     }
   };
+}
+
+// Whether the pipeline may act on the path's environment and domain. The router holds every
+// route's path to naming both, so each is there.
+function authorisedTarget(
+  options: CiOptions,
+  pipeline: Pipeline,
+  { params }: MatchedRoute,
+) {
+  const target = {
+    environment: heldValue(params, "environment"),
+    domain: heldValue(params, "domain"),
+  };
+  const refusal = options.authorise(pipeline, target);
+  return refusal === undefined ? target : { refusal };
 }
 
 // The trace ID the CloudFront Function set, so every log line for the request carries the same
