@@ -7,8 +7,10 @@ import {
   DomainCodeBucket,
   domainCodeBucketName,
   MANAGEMENT_REGION,
+  RELEASE_DEAD_LETTER_WORKER_NAME,
   RELEASE_TABLE_NAME,
   RELEASE_WORKER_NAME,
+  ReleaseDeadLetterWorker,
   releaseQueueUrl,
   ReleaseTable,
   ReleaseWorker,
@@ -44,13 +46,16 @@ export class SharedReleaseStack extends Stack {
     });
 
     const codeBucketName = domainCodeBucketName(stage.shared.account);
-    // By name, since the table's policy names both roles, and each role is granted the table.
+    // By name, since the table's policy names the roles, and each role is granted the table.
     const roleArn = (name: string) =>
       `arn:aws:iam::${stage.shared.account}:role/${name}`;
 
     const { table } = new ReleaseTable(this, "Releases", {
       recorderRoleArn: roleArn(CI_FUNCTION_NAME),
-      workerRoleArns: [roleArn(RELEASE_WORKER_NAME)],
+      workerRoleArns: [
+        roleArn(RELEASE_WORKER_NAME),
+        roleArn(RELEASE_DEAD_LETTER_WORKER_NAME),
+      ],
     });
     // The name each function is built with is a plain string, unlike the table's reference.
     const releaseTable = { name: RELEASE_TABLE_NAME, arn: table.tableArn };
@@ -59,6 +64,10 @@ export class SharedReleaseStack extends Stack {
       codeBucketName,
       targets: releaseTargets(stage),
       producerRoleArn: roleArn(CI_FUNCTION_NAME),
+      releaseTable,
+    });
+    new ReleaseDeadLetterWorker(this, "DeadLetterWorker", {
+      deadLetters: worker.deadLetters,
       releaseTable,
     });
     const ci = new CiFunction(this, "Ci", {

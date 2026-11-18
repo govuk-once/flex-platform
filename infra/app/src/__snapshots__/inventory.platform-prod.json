@@ -2413,6 +2413,38 @@
         "type": "Custom::CrossRegionParameter"
       },
       {
+        "logicalId": "DeadLetterWorkerAbandonFailed031F9334",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "DeadLetterWorkerAbandonFailedMetric50586C7A",
+        "type": "AWS::Logs::MetricFilter"
+      },
+      {
+        "logicalId": "DeadLetterWorkerAbandoned8EE47605",
+        "type": "AWS::CloudWatch::Alarm"
+      },
+      {
+        "logicalId": "DeadLetterWorkerAbandonedMetricBE771C30",
+        "type": "AWS::Logs::MetricFilter"
+      },
+      {
+        "logicalId": "DeadLetterWorkerFunction988DCC8D",
+        "type": "AWS::Lambda::Function"
+      },
+      {
+        "logicalId": "DeadLetterWorkerLogsLogGroup1F9B8431",
+        "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "DeadLetterWorkerQueueSourceFAF1A766",
+        "type": "AWS::Lambda::EventSourceMapping"
+      },
+      {
+        "logicalId": "DeadLetterWorkerRoleB650E100",
+        "type": "AWS::IAM::Role"
+      },
+      {
         "logicalId": "LogGroupKeyD49CF390",
         "type": "AWS::KMS::Key"
       },

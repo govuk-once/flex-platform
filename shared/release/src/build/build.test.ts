@@ -9,7 +9,11 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CONFIG, REQUEST, TARGET } from "../../test/helpers.ts";
 import type { ReleaseConfig, ReleaseTarget } from "../worker/types.ts";
-import { buildReleaseWorker, RELEASE_HANDLER } from "./build.ts";
+import {
+  buildDeadLetterWorker,
+  buildReleaseWorker,
+  RELEASE_HANDLER,
+} from "./build.ts";
 
 const execFile = promisify(execFileCb);
 
@@ -149,5 +153,51 @@ describe("buildReleaseWorker", () => {
     expect(() =>
       buildReleaseWorker({ ...CONFIG, targets: [{ ...TARGET, ...change }] }),
     ).toThrow(message);
+  });
+});
+
+describe("buildDeadLetterWorker", () => {
+  const DEAD_LETTER_CONFIG = { region: "eu-west-2", table: "shared-releases" };
+
+  it("needs nothing but Node's builtins, and bakes in its table", () => {
+    const code = buildDeadLetterWorker(DEAD_LETTER_CONFIG);
+
+    const required = [
+      ...code.matchAll(/(?<=^|[\s=(,;])require\("([^"]+)"\)/gm),
+    ].map(([, name]) => name);
+    for (const name of required) {
+      expect(builtinModules).toContain(name?.replace(/^node:/, ""));
+    }
+    expect(code).toContain('table: "shared-releases"');
+    expect(code).not.toContain("deployRoleArn");
+  });
+
+  it("runs on its own, letting go of a message that names no release", async () => {
+    const { responses, logs } = await invoke(
+      buildDeadLetterWorker(DEAD_LETTER_CONFIG),
+      ["SYNTHETIC text"],
+    );
+
+    expect(responses).toEqual([{ batchItemFailures: [] }]);
+    expect(logs).toEqual([
+      expect.objectContaining({
+        telemetry: expect.objectContaining({
+          event: "release_invalid",
+        }) as unknown,
+      }),
+    ]);
+  });
+
+  it.each<[string, { region: string; table: string }]>([
+    ["no region", { region: "", table: "shared-releases" }],
+    [
+      "a table given by its ARN",
+      {
+        region: "eu-west-2",
+        table: "arn:aws:dynamodb:eu-west-2:000000000000:table/shared-releases",
+      },
+    ],
+  ])("refuses to build with %s", (_, config) => {
+    expect(() => buildDeadLetterWorker(config)).toThrow("dead-letter worker");
   });
 });

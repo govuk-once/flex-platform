@@ -168,6 +168,7 @@ describe("createReleaseHandler", () => {
   it.each<[string, Parameters<typeof queuedRecord>[0]]>([
     ["released", { status: "released", version: "1" }],
     ["refused", { status: "refused", reason: "bundle-hash" }],
+    ["abandoned", { status: "abandoned", reason: "EniLimitExceeded" }],
   ])(
     "runs nothing for a release that is %s, and lets it go",
     async (_, state) => {

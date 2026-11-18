@@ -9,6 +9,8 @@ export type ReleaseEventName =
   | "release_unknown"
   | "release_unknown_target"
   | "release_not_claimed"
+  | "release_abandoned"
+  | "release_not_abandoned"
   | "release_refused"
   | "release_failed";
 
@@ -23,8 +25,10 @@ export interface ReleaseDetails {
   readonly sha256?: string;
   readonly runId?: string | undefined;
   readonly commit?: string | undefined;
-  /** Where the table had the release, for one that couldn't be claimed. */
+  /** Where the table had the release, for one that couldn't be claimed or given up. */
   readonly status?: string;
+  /** How many times the worker claimed a release that was given up. */
+  readonly attempts?: number;
   readonly step?: string;
   readonly reason?: string;
   readonly version?: string;

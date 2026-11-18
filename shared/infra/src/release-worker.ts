@@ -53,6 +53,12 @@ export const RELEASE_TIMEOUT = Duration.seconds(RELEASE_TIMEOUT_SECONDS);
  */
 export const RELEASE_VISIBILITY_TIMEOUT = Duration.minutes(20);
 
+/**
+ * How long the dead-letter queue hides a message the dead-letter worker has taken. Longer than the
+ * worker may run, so a message it gives back comes again soon.
+ */
+export const DEAD_LETTER_VISIBILITY_TIMEOUT = Duration.minutes(2);
+
 /** How many times a release is tried before it is moved to the dead-letter queue. */
 export const RELEASE_ATTEMPTS = 3;
 
@@ -93,6 +99,8 @@ export interface ReleaseWorkerProps {
 export class ReleaseWorker extends Construct {
   public readonly function: LambdaFunction;
   public readonly queue: Queue;
+  /** Where the queue moves a release it has tried as often as it tries. */
+  public readonly deadLetters: Queue;
   /** The role the worker runs as, which every deploy role it assumes trusts. */
   public readonly role: Role;
 
@@ -116,6 +124,7 @@ export class ReleaseWorker extends Construct {
       encryption: QueueEncryption.SQS_MANAGED,
       enforceSSL: true,
       retentionPeriod: Duration.days(14),
+      visibilityTimeout: DEAD_LETTER_VISIBILITY_TIMEOUT,
       // By the release queue's ARN, not the queue, which names this one: each would wait for the
       // other.
       redriveAllowPolicy: {
@@ -123,6 +132,7 @@ export class ReleaseWorker extends Construct {
         sourceQueues: [Queue.fromQueueArn(this, "Source", queueArn)],
       },
     });
+    this.deadLetters = deadLetters;
     this.queue = new Queue(this, "Queue", {
       queueName: RELEASE_QUEUE_NAME,
       fifo: true,
@@ -141,7 +151,7 @@ export class ReleaseWorker extends Construct {
     Validations.of(deadLetters).acknowledge({
       id: "AwsSolutions-SQS3",
       reason:
-        "It is the release queue's dead-letter queue. Nothing reads from it, so nothing fails a message out of it.",
+        "It is the release queue's dead-letter queue. The dead-letter worker gives a message back only while it can't record the release, which an alarm on its log says, so the queue keeps it to try again.",
     });
 
     const { logGroup, key: logGroupKey } = new PlatformLogGroup(this, "Logs", {

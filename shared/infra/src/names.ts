@@ -49,6 +49,19 @@ export const RELEASE_QUEUE_NAME = "shared-release.fifo";
 /** Where a release goes once the worker has failed it a few times. FIFO, as its queue is. */
 export const RELEASE_DEAD_LETTER_QUEUE_NAME = "shared-release-dead-letter.fifo";
 
+/**
+ * The function that gives up each release whose message reaches the dead-letter queue, and the
+ * role it runs as.
+ */
+export const RELEASE_DEAD_LETTER_WORKER_NAME =
+  "shared-release-dead-letter-worker";
+
+export const RELEASE_DEAD_LETTER_WORKER_LOG_GROUP_NAME =
+  "/flex/shared/release-dead-letter-worker";
+
+/** The namespace of the metrics the release's log lines are counted into. */
+export const RELEASE_METRIC_NAMESPACE = "flex/shared/release";
+
 /** Every release the pipeline API records, and how each went. */
 export const RELEASE_TABLE_NAME = "shared-releases";
 

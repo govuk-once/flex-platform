@@ -3,7 +3,7 @@
 // worker claims it, runs it, and records how it went.
 //
 // The table's policy lets no role but the API's record a release, and none but the API's and the
-// worker's change one. So a release the worker finds here is one the API asked for.
+// workers' change one. So a release the worker finds here is one the API asked for.
 
 import {
   type AttributeValue,
@@ -19,10 +19,11 @@ import { parseReleaseRequest, type ReleaseRequest } from "./request.ts";
 
 /**
  * Where a release is. `failed` will be tried again by the queue. `refused` never will be: nothing
- * about the release would change.
+ * about the release would change. `abandoned` was tried as often as the queue tries, and won't be
+ * again: the pipeline asks again.
  */
 export type ReleaseStatus =
-  "queued" | "releasing" | "released" | "failed" | "refused";
+  "queued" | "releasing" | "released" | "failed" | "refused" | "abandoned";
 
 /** Which release: its domain in its environment, and its ID. */
 export interface ReleaseKey {
@@ -90,6 +91,11 @@ export interface ReleaseTable {
     now: number,
     from: ReleaseStatus,
   ): Promise<void>;
+  /**
+   * Gives the release up, keeping why its last attempt stopped, unless it is final. `false` for a
+   * final release.
+   */
+  abandon(key: ReleaseKey, now: number): Promise<boolean>;
 }
 
 const STATUSES: ReadonlySet<string> = new Set<ReleaseStatus>([
@@ -98,6 +104,7 @@ const STATUSES: ReadonlySet<string> = new Set<ReleaseStatus>([
   "released",
   "failed",
   "refused",
+  "abandoned",
 ]);
 
 // The attributes that hold the request, each a string, as the API wrote it.
@@ -186,6 +193,34 @@ export function createReleaseTable(
               ":failed": { S: "failed" },
               ":now": { N: String(now) },
               ":one": { N: "1" },
+            },
+          }),
+        );
+        return true;
+      } catch (error) {
+        if (error instanceof ConditionalCheckFailedException) return false;
+        throw error;
+      }
+    },
+
+    abandon: async (key, now) => {
+      try {
+        await client.send(
+          new UpdateItemCommand({
+            TableName: tableName,
+            Key: keyOf(key),
+            UpdateExpression: "SET #status = :abandoned, #updatedAt = :now",
+            ConditionExpression: "#status IN (:queued, :releasing, :failed)",
+            ExpressionAttributeNames: {
+              "#status": "status",
+              "#updatedAt": "updatedAt",
+            },
+            ExpressionAttributeValues: {
+              ":abandoned": { S: "abandoned" },
+              ":queued": { S: "queued" },
+              ":releasing": { S: "releasing" },
+              ":failed": { S: "failed" },
+              ":now": { N: String(now) },
             },
           }),
         );

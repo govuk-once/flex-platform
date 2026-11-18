@@ -185,6 +185,37 @@ describe("createReleaseTable", () => {
     });
   });
 
+  it("gives a release up unless it is final, keeping why its last attempt stopped", async () => {
+    let error: Error | undefined;
+    const { table, sent } = setUp(() => {
+      if (error !== undefined) throw error;
+      return {};
+    });
+
+    await expect(table.abandon(KEY, 5000)).resolves.toBe(true);
+    error = conditionFailed();
+    await expect(table.abandon(KEY, 5000)).resolves.toBe(false);
+    error = new TypeError("SYNTHETIC");
+    await expect(table.abandon(KEY, 5000)).rejects.toThrow(TypeError);
+    expect(sent[0]?.input).toEqual({
+      TableName: TABLE,
+      Key: ITEM_KEY,
+      UpdateExpression: "SET #status = :abandoned, #updatedAt = :now",
+      ConditionExpression: "#status IN (:queued, :releasing, :failed)",
+      ExpressionAttributeNames: {
+        "#status": "status",
+        "#updatedAt": "updatedAt",
+      },
+      ExpressionAttributeValues: {
+        ":abandoned": { S: "abandoned" },
+        ":queued": { S: "queued" },
+        ":releasing": { S: "releasing" },
+        ":failed": { S: "failed" },
+        ":now": { N: "5000" },
+      },
+    });
+  });
+
   it("throws when the condition fails", async () => {
     const { table } = setUp(() => {
       throw conditionFailed();
