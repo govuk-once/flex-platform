@@ -1,9 +1,9 @@
 import { createHash, createHmac } from "node:crypto";
 
+import { bundleKey } from "@repo/shared-release/bundle-key";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BUNDLE, CONFIG, NOW } from "../../test/helpers.ts";
-import { bundleKey } from "./bundle.ts";
 import {
   createUploadSigner,
   credentialsFromEnvironment,

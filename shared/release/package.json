@@ -1,0 +1,29 @@
+{
+  "name": "@repo/shared-release",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bundle-key": "./src/bundle-key.ts"
+  },
+  "scripts": {
+    "lint": "eslint src/ test/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-lambda": "3.1163.0",
+    "@aws-sdk/client-s3": "3.1163.0",
+    "@aws-sdk/client-ssm": "3.1163.0",
+    "@aws-sdk/credential-providers": "3.1163.0",
+    "@repo/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "eslint": "10.14.0",
+    "vitest": "5.1.0"
+  }
+}

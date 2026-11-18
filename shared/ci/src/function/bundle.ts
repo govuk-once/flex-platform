@@ -1,4 +1,4 @@
-// What a pipeline says of the bundle it is about to upload, and where the bundle is kept.
+// What a pipeline says of the bundle it is about to upload.
 
 import type { FunctionUrlEvent } from "./types.ts";
 
@@ -64,12 +64,4 @@ function bodyText(event: FunctionUrlEvent): string | undefined {
   return event.isBase64Encoded === true
     ? Buffer.from(event.body, "base64").toString("utf8")
     : event.body;
-}
-
-/**
- * A bundle's key: under its domain, named by its own hash. So the same bundle always has the same
- * key, another bundle never has it, and a pipeline can reach only its own domain's keys.
- */
-export function bundleKey(domain: string, sha256: string): string {
-  return `${domain}/bundle/${sha256}.zip`;
 }
