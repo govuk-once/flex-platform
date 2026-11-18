@@ -1,5 +1,13 @@
 import { uuidV7 } from "@repo/utils/uuid-v7";
 
+import { encodeReleaseMessage } from "../src/request.ts";
+import type {
+  ReleaseKey,
+  ReleaseOutcome,
+  ReleaseRecord,
+  ReleaseStatus,
+  ReleaseTable,
+} from "../src/table.ts";
 import type {
   AliasState,
   DeployAccess,
@@ -9,7 +17,7 @@ import type {
   ReleaseAws,
   TimeLeft,
 } from "../src/worker/release.ts";
-import type { ReleaseTarget } from "../src/worker/types.ts";
+import type { ReleaseConfig, ReleaseTarget } from "../src/worker/types.ts";
 
 export const BUCKET = "shared-domain-code-000000000000";
 
@@ -34,6 +42,13 @@ export const TARGET: ReleaseTarget = {
   logGroupName: "/flex/domain/development/example/function",
   subnetIdsParameter: "/flex/network/development/isolated-subnet-ids",
   securityGroupIdParameter: "/flex/network/development/security-group/domain",
+};
+
+export const CONFIG: ReleaseConfig = {
+  bucket: BUCKET,
+  region: "eu-west-2",
+  table: "shared-releases",
+  targets: [TARGET],
 };
 
 /** When the release in these tests was asked for, in milliseconds. */
@@ -216,4 +231,109 @@ export function awsError(name: string, message = "SYNTHETIC message"): Error {
   error.name = name;
   Object.assign(error, { $metadata: { httpStatusCode: 400 } });
   return error;
+}
+
+/** The record the API makes of the release in these tests, as the table holds it. */
+export function queuedRecord(
+  changes: Partial<ReleaseRecord> = {},
+): ReleaseRecord {
+  return {
+    ...REQUEST,
+    id: RELEASE_ID,
+    status: "queued",
+    requestedAt: REQUESTED_AT,
+    updatedAt: REQUESTED_AT,
+    attempts: 0,
+    ...changes,
+  };
+}
+
+/** The queue's message for a release. */
+export function messageFor(record: ReleaseKey = queuedRecord()): string {
+  return encodeReleaseMessage(record);
+}
+
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
+/** The release table, in memory, with the conditions DynamoDB checks. */
+export class FakeTable implements ReleaseTable {
+  readonly records = new Map<string, ReleaseRecord>();
+  /** Makes the named call throw this. */
+  failures = new Map<string, unknown>();
+
+  constructor(...records: ReleaseRecord[]) {
+    for (const record of records) this.records.set(this.keyOf(record), record);
+  }
+
+  private keyOf(key: ReleaseKey): string {
+    return `${key.environment}/${key.domain}/${key.id}`;
+  }
+
+  private call(name: string): void {
+    if (this.failures.has(name)) throw this.failures.get(name);
+  }
+
+  /** The record of the release in these tests. */
+  get record(): ReleaseRecord | undefined {
+    return this.records.get(this.keyOf(queuedRecord()));
+  }
+
+  create(): Promise<void> {
+    throw new Error("The worker never records a release");
+  }
+
+  get(key: ReleaseKey): Promise<ReleaseRecord | undefined> {
+    this.call("get");
+    return Promise.resolve(this.records.get(this.keyOf(key)));
+  }
+
+  claim(key: ReleaseKey, now: number): Promise<boolean> {
+    this.call("claim");
+    const record = this.records.get(this.keyOf(key));
+    if (
+      record === undefined ||
+      !["queued", "releasing", "failed"].includes(record.status)
+    ) {
+      return Promise.resolve(false);
+    }
+    const next: Mutable<ReleaseRecord> = {
+      ...record,
+      status: "releasing",
+      updatedAt: now,
+      attempts: record.attempts + 1,
+    };
+    delete next.step;
+    delete next.reason;
+    this.records.set(this.keyOf(key), next);
+    return Promise.resolve(true);
+  }
+
+  finish(
+    key: ReleaseKey,
+    outcome: ReleaseOutcome,
+    now: number,
+    from: ReleaseStatus,
+  ): Promise<void> {
+    this.call("finish");
+    const record = this.records.get(this.keyOf(key));
+    const recorded =
+      outcome.status === "released"
+        ? record !== undefined && record.status !== "released"
+        : record?.status === from;
+    if (record === undefined || !recorded) {
+      throw new Error("The condition failed");
+    }
+    this.records.set(this.keyOf(key), {
+      ...record,
+      updatedAt: now,
+      ...(outcome.status === "released"
+        ? outcome
+        : {
+            status: outcome.status,
+            reason: outcome.reason,
+            ...(outcome.step !== undefined && { step: outcome.step }),
+          }),
+    });
+    return Promise.resolve();
+  }
 }

@@ -97,6 +97,81 @@ describe("SharedReleaseStack", () => {
     expect(code).not.toContain(REPOSITORY.name);
   });
 
+  it("holds the release queue and the worker that takes from it", () => {
+    const built = template();
+
+    built.hasResourceProperties("AWS::SQS::Queue", {
+      QueueName: "shared-release.fifo",
+    });
+    built.hasResourceProperties("AWS::Lambda::Function", {
+      FunctionName: "shared-release-worker",
+    });
+  });
+
+  // The roles the table and the queue name are the ones the functions run as.
+  it("lets the function's role, and no other, record a release and send it, and the workers' change it", () => {
+    const built = template();
+    const role = `arn:aws:iam::${PROD.shared.account}:role/shared-ci`;
+    const worker = `arn:aws:iam::${PROD.shared.account}:role/shared-release-worker`;
+
+    built.hasResourceProperties("AWS::IAM::Role", { RoleName: "shared-ci" });
+    built.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "shared-release-worker",
+    });
+    built.hasResourceProperties("AWS::DynamoDB::Table", {
+      ResourcePolicy: {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Sid: "DenyRecordingButThePipelineApi",
+              Condition: { ArnNotEquals: { "aws:PrincipalArn": [role] } },
+            }),
+            Match.objectLike({
+              Sid: "DenyChangingButTheApiAndWorker",
+              Condition: {
+                ArnNotEquals: { "aws:PrincipalArn": [role, worker] },
+              },
+            }),
+          ]),
+        },
+      },
+    });
+    built.hasResourceProperties("AWS::SQS::QueuePolicy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Sid: "DenySendsButThePipelineApi",
+            Condition: { ArnNotEquals: { "aws:PrincipalArn": role } },
+          }),
+        ]),
+      },
+    });
+  });
+
+  // The worker releases only where a pipeline publishes. Elsewhere code will arrive by promotion.
+  // Only a domain with a repository can be released, so no other's deploy role is assumed.
+  it("lets the worker assume the deploy role of each registered domain where a pipeline publishes, and no other", () => {
+    const [dev] = PROD.environments;
+    const [main] = dev.domainAccounts;
+
+    template().hasResourceProperties("AWS::IAM::Role", {
+      RoleName: "shared-release-worker",
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: "sts:AssumeRole",
+                Resource: `arn:aws:iam::${main.account}:role/domain-dev-domain-a-deploy`,
+              },
+            ]),
+          },
+        },
+      ],
+    });
+  });
+
   it("lets Lambda read a bundle for the domain functions of each account where a pipeline publishes", () => {
     const [dev] = PROD.environments;
     const policy = JSON.stringify(

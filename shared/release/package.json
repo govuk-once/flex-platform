@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./bundle-key": "./src/bundle-key.ts"
+    "./bundle-key": "./src/bundle-key.ts",
+    "./request": "./src/request.ts",
+    "./table": "./src/table.ts"
   },
   "scripts": {
     "lint": "eslint src/ test/",
@@ -13,11 +15,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1163.0",
     "@aws-sdk/client-lambda": "3.1163.0",
     "@aws-sdk/client-s3": "3.1163.0",
     "@aws-sdk/client-ssm": "3.1163.0",
     "@aws-sdk/credential-providers": "3.1163.0",
-    "@repo/utils": "workspace:*"
+    "@repo/cloudfront-js-utils": "workspace:*",
+    "@repo/utils": "workspace:*",
+    "esbuild": "0.28.2"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

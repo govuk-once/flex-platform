@@ -17,8 +17,16 @@ export {
   CROSS_REGION_WRITER_LOG_GROUP_NAME,
   domainCodeBucketName,
   MANAGEMENT_REGION,
+  RELEASE_TABLE_NAME,
   RELEASE_WORKER_NAME,
   SHARED_REGION,
   TEST_USER_POOL_NAME,
 } from "./names.ts";
+export { ReleaseTable, type ReleaseTableProps } from "./release-table.ts";
+export {
+  RELEASE_ATTEMPTS,
+  RELEASE_TIMEOUT,
+  ReleaseWorker,
+  type ReleaseWorkerProps,
+} from "./release-worker.ts";
 export { MIN_PASSWORD_LENGTH, TestUserPool } from "./test-user-pool.ts";

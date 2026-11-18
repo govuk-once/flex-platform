@@ -309,32 +309,154 @@ The function is named `domain-<environment>-<name>`, built by `domainFunctionNam
 
 ## Releasing a domain's function
 
-<Badge text="Planned" variant="caution" />
+A domain's code is uploaded once, as a bundle, and released from the bucket it is kept in. Config
+says which way code reaches each environment, in its `release`: `"publish"` where new code enters
+the stage, or `{ promoteFrom }`, naming the environment whose released code it takes. In
+platform-prod, `development` publishes, `staging` promotes from `development`, and `production`
+from `staging`. The repository the stage's `domains` names for a domain is the only one that can
+release it.
 
-A domain's code will be uploaded once, and the same upload released to each environment in turn.
-Config already says which way code reaches each environment, in its `release`: `"publish"` where
-new code enters the stage, or `{ promoteFrom }`, naming the environment whose released code it
-takes. In platform-prod, `development` publishes, `staging` promotes from `development`, and
-`production` from `staging`. The repository the stage's `domains` names for a domain is the only
-one that will be able to release it.
+Where an environment publishes, the domain's pipeline [uploads a bundle](#uploading-a-bundle)
+through the [pipeline API](#the-pipeline-api), and the [release worker](#the-release-worker)
+releases it. Asking the API for a release is planned, and so is promotion, which takes released
+code from one environment to the next.
 
-A release will create and update a domain's function as `domain-<environment>-<name>-deploy`. It
-will set:
+### The release worker
 
-- the name, `domain-<environment>-<name>`;
-- the role, `domain-<environment>-<name>-execution`;
-- the isolated subnets and the `domain` security group, read from the network's parameters above
-  as the deploy role. The deploy role refuses a configuration with no VPC, so a release sends them
-  with every configuration update;
-- logging to `/flex/domain/<environment>/<name>/function`;
+A function in the shared account, `shared-release-worker`, does each release, so the pipeline API
+can answer one at once. A first release creates a function in a VPC, which Lambda can take
+minutes to make ready. The API puts each release on a FIFO queue, `shared-release.fifo`, grouped
+by environment and domain, so one domain's releases there run one at a time, in the order they
+were asked for, and other domains' run alongside. The worker and the queue are built by
+`ReleaseWorker` in `shared/infra`, and its code is in `shared/release`.
+
+#### The release table
+
+The API records each release in a DynamoDB table, `shared-releases`, before it queues it, and the
+worker records how it went. A release is kept under its domain in its environment, partition key
+`target` (`<environment>/<domain>`), by its ID, sort key `id`. The ID is a UUID of version 7,
+whose first 48 bits are the time the API made it, so the IDs sort in the order releases were
+asked for, and a domain's releases list newest first. Each holds:
+
+| Attribute | Holds |
+|---|---|
+| `environment`, `domain`, `sha256`, `versionId` | What was asked for: the bundle by its hash, and the version of its object |
+| `runId`, `commit` | The run that asked, and its commit, when its token said |
+| `status` | `queued`, `releasing`, `released`, `failed` or `refused` |
+| `requestedAt`, `updatedAt` | When the API recorded it, and when it last changed, in milliseconds |
+| `attempts` | How many times the worker has claimed it |
+| `step`, `reason` | For a release that stopped: the step, and a fixed code for why |
+| `version`, `created`, `moved` | For a release that succeeded: the version `live` points at, and whether the release created the function and moved `live` |
+
+`failed` will be tried again. `refused` never will be: nothing about the release would change.
+`released` and `refused` are final. The table is the record of each request and how it went.
+What is deployed is Lambda's to say: the worker reads it at each step, and the table follows it.
+The table is retained, with point-in-time recovery, and deletion protection is on.
+
+#### Who can ask for a release
+
+Only the pipeline API, for a pipeline it has [allowed](#what-the-api-checks). Anything that IAM
+lets invoke the worker can write its event, and a function's own policy holds no deny that could
+refuse it. So a message holds only a release's key, its environment, domain and ID, and the
+worker releases what the table records under it:
+
+- **Only the API records a release.** The table's policy denies, to every principal, putting an
+  item unless it is the API's role, `shared-ci`, changing one unless it is `shared-ci`'s or
+  `shared-release-worker`'s, and deleting one. A deny in a resource's policy holds whatever any
+  other policy allows. A message that names no release in the table is logged and dropped.
+- **A final release isn't run again.** Before each attempt, the worker claims the release: it
+  marks it `releasing` and counts the attempt, unless it is final. So a message sent again,
+  however it was got, runs nothing that is released or refused. Any other release may be tried
+  again, even while an attempt runs: every step reads Lambda before it acts, so an attempt at what
+  is done changes nothing, and Lambda refuses a change to a function it is still changing.
+- **The queue takes messages only from the API, and gives them only to the worker.** Its policy
+  denies, to every principal, sending a message unless it is `shared-ci`'s role, taking one
+  unless it is `shared-release-worker`'s, purging the queue, and moving messages out of either
+  queue. Only the release queue may use the dead-letter queue, and no principal may send to it:
+  SQS moves a message there itself.
+
+No release can roll a domain back. `live`'s description names the release that set it, and the
+worker changes nothing for a release whose ID sorts before that one, which is one asked for
+earlier. A rollback is a new release, of the older bundle.
+
+#### What a release does
+
+For each release it claims, the worker:
+
+1. **Assumes the domain's deploy role** in the domain account, and reads `live`. A release `live`
+   already names is done: the worker records it `released`, with `live`'s version, and changes
+   nothing. A release asked for before the one on `live` is refused.
+2. **Checks the bundle.** It reads the version of the bundle's object the API found, in full,
+   and hashes it. The key names the bundle's hash, so an object with any other is refused before
+   anything is made of it. It reads the isolated subnets and the `domain` security group from the
+   network's parameters, as the role.
+3. **Creates the function,** the first time, and waits until it is active. Otherwise it waits
+   while Lambda is making or changing the function, then updates its configuration, waits,
+   updates its code and waits again. Lambda refuses a change to a function it is still changing.
+   It updates the function whatever state it settles in: an update reactivates one idle long
+   enough to be `Inactive`, and may mend one that `Failed`.
+4. **Checks the code Lambda loaded.** Lambda's hash of the code, in base64, must be the bundle's,
+   in hex, compared as bytes.
+5. **Publishes a version,** if the code still has that hash, and waits until it is active. A
+   version's description names the bundle and the commit it was built from. A function whose code
+   and configuration haven't changed since its last version gets that version back.
+6. **Points `live` at the version,** creating the alias the first time, and names the release in
+   its description. Otherwise it checks the order again, and moves the alias only from the
+   revision it read, so a change made since is never overwritten.
+
+Nothing reaches the new code until the last step.
+
+An attempt has 15 minutes, the worker's timeout. Its waits share them, less 30 seconds kept back to
+move `live` and record how the attempt went, so a first create in a VPC, which Lambda can take
+minutes to make ready, can use most of them. A wait that runs out fails the attempt.
+
+A release sets the function's:
+
+- name, `domain-<environment>-<name>`;
+- role, `domain-<environment>-<name>-execution`;
+- isolated subnets and `domain` security group. The deploy role refuses a configuration with no
+  VPC, so a release sends them with every configuration update;
+- logging, to `/flex/domain/<environment>/<name>/function`;
 - `FLEX_ENVIRONMENT`, the environment's name, which the code uses only to build names, such as a
   gateway's function name, and never to choose what it does;
-- active tracing, so Lambda sends its traces to X-Ray.
+- tracing, active, so Lambda sends its traces to X-Ray;
+- runtime, `nodejs24.x`, on arm64, with the handler `index.handler`, 1,024 MB of memory and a
+  29-second timeout. A domain doesn't choose these. The timeout is how long the domain's API
+  waits for the function, so a function never runs on after no one is waiting;
+- code, the bundle's object by its version. Lambda reads the code from the bucket in place and
+  keeps no copy, so the bucket [lets Lambda read it](#uploading-a-bundle) for as long as the
+  function has it.
 
-Then it will publish a version and point the `live` alias at it. The deploy role can enforce the
-function's name, role and network, but not its logging, environment or tracing, which only the
-release will set. A release that sets another log group loses the function's logs, since its role
-may write to no other.
+The deploy role enforces the function's name, role and network, but not its logging,
+environment or tracing, which only the release sets. A release that set another log group would
+lose the function's logs, since its role may write to no other.
+
+The worker records how each release went in the table. A release that fails with something that
+might go differently next time, such as an AWS error, is recorded `failed` and given back to the
+queue, which delivers it again after 20 minutes. After three attempts it is moved to the
+dead-letter queue, `shared-release-dead-letter.fifo`, and kept for 14 days. A release that can
+never succeed, such as a bundle whose bytes aren't what its key says, or a release older than
+`live`'s, is recorded `refused` and dropped.
+
+The worker records each outcome before it lets the message go, and only over the claim it made,
+so it never overwrites what another writer recorded since. `released` is the exception: Lambda
+says what is live, so it is recorded over anything but `released`. A worker that stops before it
+finishes, by running out of time or memory, records nothing: the release stays `releasing`, and
+the queue delivers the message again after 20 minutes, to an attempt that picks up where Lambda
+shows the last one stopped.
+
+The worker writes one log line for each attempt at a release, to `/flex/shared/release-worker`:
+what happened as a fixed code, the queue's ID for the message, how long it took, and, once the
+table holds the release, its ID, the environment, the domain, the bundle's hash, GitHub's ID for
+the run and the commit. A release that stopped adds the step and a reason: AWS's code for the
+error, such as `AccessDeniedException`, or Lambda's for a function that won't become ready, such
+as `SubnetOutOfIPAddresses`, never a message. A release that succeeded adds the version, and
+whether it created the function and moved `live`.
+
+The worker is built with each domain it may release, and everything a release of it names, by
+`buildReleaseWorker` when the stage is synthesized: every domain with a repository, in each
+environment that publishes. Its role may take the queue's messages, read and change a release in
+the table, read bundles, and assume those domains' deploy roles, and nothing else.
 
 ### The pipeline API
 

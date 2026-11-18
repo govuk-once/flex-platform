@@ -4,6 +4,8 @@ import {
   CI_ORIGIN_HOST_PARAMETER,
   ciAudience,
   PIPELINE_TOKEN_ISSUER,
+  RELEASE_DEAD_LETTER_QUEUE_NAME,
+  RELEASE_QUEUE_NAME,
 } from "./names.ts";
 
 describe("names", () => {
@@ -24,5 +26,11 @@ describe("names", () => {
     expect(CI_ORIGIN_HOST_PARAMETER).toBe(
       "/flex/cross-region/shared/ci-origin-host",
     );
+  });
+
+  // SQS refuses a FIFO queue whose name doesn't end so.
+  it("names both release queues as FIFO queues", () => {
+    expect(RELEASE_QUEUE_NAME).toMatch(/\.fifo$/);
+    expect(RELEASE_DEAD_LETTER_QUEUE_NAME).toMatch(/\.fifo$/);
   });
 });

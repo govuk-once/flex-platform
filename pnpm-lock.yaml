@@ -754,6 +754,9 @@ importers:
       '@repo/shared-infra':
         specifier: workspace:*
         version: link:../../shared/infra
+      '@repo/shared-release':
+        specifier: workspace:*
+        version: link:../../shared/release
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils
@@ -1058,6 +1061,9 @@ importers:
 
   shared/release:
     dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: 3.1163.0
+        version: 3.1163.0
       '@aws-sdk/client-lambda':
         specifier: 3.1163.0
         version: 3.1163.0
@@ -1070,9 +1076,15 @@ importers:
       '@aws-sdk/credential-providers':
         specifier: 3.1163.0
         version: 3.1163.0
+      '@repo/cloudfront-js-utils':
+        specifier: workspace:*
+        version: link:../../packages/cloudfront-js-utils
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -4778,17 +4790,16 @@ snapshots:
 
   '@aws-sdk/client-dynamodb@3.1163.0':
     dependencies:
-      '@aws-sdk/core': 3.981.0
+      '@aws-sdk/core': 3.980.0
       '@aws-sdk/credential-provider-node': 3.972.93
       '@aws-sdk/dynamodb-codec': 3.973.58
       '@aws-sdk/middleware-endpoint-discovery': 3.972.39
       '@aws-sdk/types': 3.975.1
-      '@smithy/core': 3.40.0
+      '@smithy/core': 3.39.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.14.2
       '@smithy/types': 4.20.0
       tslib: 2.8.1
-    optional: true
 
   '@aws-sdk/client-kms@3.1163.0':
     dependencies:
@@ -4881,7 +4892,6 @@ snapshots:
       '@smithy/types': 4.20.0
       bowser: 2.14.1
       tslib: 2.8.1
-    optional: true
 
   '@aws-sdk/credential-provider-cognito-identity@3.972.80':
     dependencies:
@@ -5000,13 +5010,11 @@ snapshots:
       '@smithy/core': 3.40.0
       '@smithy/types': 4.20.0
       tslib: 2.8.1
-    optional: true
 
   '@aws-sdk/endpoint-cache@3.972.11':
     dependencies:
       mnemonist: 0.38.3
       tslib: 2.8.1
-    optional: true
 
   '@aws-sdk/middleware-endpoint-discovery@3.972.39':
     dependencies:
@@ -5015,7 +5023,6 @@ snapshots:
       '@smithy/core': 3.40.0
       '@smithy/types': 4.20.0
       tslib: 2.8.1
-    optional: true
 
   '@aws-sdk/middleware-sdk-s3@3.972.86':
     dependencies:
@@ -5062,7 +5069,6 @@ snapshots:
     dependencies:
       '@smithy/types': 4.20.0
       tslib: 2.8.1
-    optional: true
 
   '@aws-sdk/xml-builder@3.972.42':
     dependencies:
@@ -5073,7 +5079,6 @@ snapshots:
     dependencies:
       '@smithy/types': 4.20.0
       tslib: 2.8.1
-    optional: true
 
   '@aws/lambda-invoke-store@0.3.0': {}
 
@@ -5806,7 +5811,6 @@ snapshots:
     dependencies:
       '@smithy/types': 4.20.0
       tslib: 2.8.1
-    optional: true
 
   '@smithy/credential-provider-imds@4.5.2':
     dependencies:
@@ -7227,7 +7231,6 @@ snapshots:
   mnemonist@0.38.3:
     dependencies:
       obliterator: 1.6.1
-    optional: true
 
   mrmime@2.0.1: {}
 
@@ -7257,8 +7260,7 @@ snapshots:
     dependencies:
       boolbase: 1.0.0
 
-  obliterator@1.6.1:
-    optional: true
+  obliterator@1.6.1: {}
 
   obug@3.0.0: {}
 
