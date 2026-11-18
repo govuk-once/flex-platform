@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CONFIG, OWNER_ID, REPOSITORY_ID } from "../../test/helpers.ts";
-import { createAuthoriser, createUploadCheck } from "./authorise.ts";
+import { createAuthoriser, createPublishCheck } from "./authorise.ts";
 import type { Pipeline } from "./token.ts";
 
 const PIPELINE: Pipeline = {
@@ -79,18 +79,18 @@ describe("createAuthoriser", () => {
   });
 });
 
-describe("createUploadCheck", () => {
-  const takesUploads = createUploadCheck(CONFIG);
+describe("createPublishCheck", () => {
+  const publishes = createPublishCheck(CONFIG);
 
-  it("takes uploads only in an environment that publishes", () => {
-    expect(takesUploads("development")).toBe(true);
-    expect(takesUploads("staging")).toBe(false);
+  it("holds only for an environment that publishes", () => {
+    expect(publishes("development")).toBe(true);
+    expect(publishes("staging")).toBe(false);
   });
 
   it.each(["production", "toString", "constructor", ""])(
-    "takes none in %j, which the config doesn't hold",
+    "holds for none in %j, which the config doesn't hold",
     (environment) => {
-      expect(takesUploads(environment)).toBe(false);
+      expect(publishes(environment)).toBe(false);
     },
   );
 });

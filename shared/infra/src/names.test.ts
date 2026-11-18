@@ -6,6 +6,7 @@ import {
   PIPELINE_TOKEN_ISSUER,
   RELEASE_DEAD_LETTER_QUEUE_NAME,
   RELEASE_QUEUE_NAME,
+  releaseQueueUrl,
 } from "./names.ts";
 
 describe("names", () => {
@@ -32,5 +33,12 @@ describe("names", () => {
   it("names both release queues as FIFO queues", () => {
     expect(RELEASE_QUEUE_NAME).toMatch(/\.fifo$/);
     expect(RELEASE_DEAD_LETTER_QUEUE_NAME).toMatch(/\.fifo$/);
+  });
+
+  // The pipeline API is built with the address before the queue exists, so it is SQS's own form.
+  it("gives the release queue's address as SQS does, from its region, account and name", () => {
+    expect(releaseQueueUrl("123456789012")).toBe(
+      "https://sqs.eu-west-2.amazonaws.com/123456789012/shared-release.fifo",
+    );
   });
 });

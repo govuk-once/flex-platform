@@ -28,9 +28,10 @@ declared, and where it runs, is in [Hosting a domain](/flex-platform/domains/hos
 
 ## Releasing a domain
 
-A domain publishes a new version to its development environment. This development
-environment runs inside the platform's production environment. From there, the domain promotes the
-version to staging, and then to production.
+A domain's pipeline uploads its code to the platform and releases it to its development
+environment, which runs inside the platform's production stage. From there, the domain will
+promote the version to staging, and then to production: promotion is planned. See
+[releasing a domain's function](/flex-platform/domains/hosting/#releasing-a-domains-function).
 
 ## Network
 
@@ -58,7 +59,7 @@ const response = await udp.getIdentity({ serviceName, identifier });
 
 The client takes no settings, so a domain is never given a function name or an ARN. It invokes the
 function `gateway-<environment>-<id>`, through its one alias, `live`, in the domain's own account
-and region. It takes the environment from the `FLEX_ENVIRONMENT` variable, which the planned
+and region. It takes the environment from the `FLEX_ENVIRONMENT` variable, which a
 [release](/flex-platform/domains/hosting/#releasing-a-domains-function) sets on every domain's
 function, and refuses to be created without it. The name follows the
 [template every resource name follows](/flex-platform/infrastructure/overview/#rules-for-stacks-and-constructs),

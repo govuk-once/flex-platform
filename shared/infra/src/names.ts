@@ -53,6 +53,14 @@ export const RELEASE_DEAD_LETTER_QUEUE_NAME = "shared-release-dead-letter.fifo";
 export const RELEASE_TABLE_NAME = "shared-releases";
 
 /**
+ * The release queue's address, which the pipeline API is built with. SQS builds it from the
+ * queue's region, its account and its name, so it is known before the queue exists.
+ */
+export function releaseQueueUrl(account: string): string {
+  return `https://sqs.${SHARED_REGION}.amazonaws.com/${account}/${RELEASE_QUEUE_NAME}`;
+}
+
+/**
  * The bucket every domain's uploaded code is kept in. Bucket names are global, so it ends in the
  * shared account's ID. 31 characters, within S3's 63.
  */

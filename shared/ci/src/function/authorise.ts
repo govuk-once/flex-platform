@@ -55,15 +55,16 @@ export function createAuthoriser(
   };
 }
 
-export type TakesUploads = (environment: string) => boolean;
+export type Publishes = (environment: string) => boolean;
 
 /**
- * Whether a pipeline uploads new code in an environment. Elsewhere code arrives only by
- * promotion, so an upload there would be code that skipped the environments before it.
+ * Whether new code enters an environment from a pipeline, by an upload and then a release.
+ * Elsewhere code arrives only by promotion, so a pipeline's code there would be code that skipped
+ * the environments before it.
  */
-export function createUploadCheck(
+export function createPublishCheck(
   config: Pick<CiConfig, "environments">,
-): TakesUploads {
+): Publishes {
   const publishing = new Set(
     config.environments
       .filter(({ publishes }) => publishes)

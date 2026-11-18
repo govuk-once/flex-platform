@@ -33,6 +33,11 @@ export const CONFIG: CiConfig = {
     { name: "elsewhere", repositoryId: "700000002", ownerId: OWNER_ID },
   ],
   uploads: { bucket: "shared-domain-code-000000000000", region: "eu-west-2" },
+  releases: {
+    queueUrl:
+      "https://sqs.eu-west-2.amazonaws.com/000000000000/shared-release.fifo",
+    table: "shared-releases",
+  },
 };
 
 export const COMMIT = "0123456789abcdef0123456789abcdef01234567";

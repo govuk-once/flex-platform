@@ -689,7 +689,7 @@ importers:
     dependencies:
       '@aws-lambda-powertools/parameters':
         specifier: 2.36.0
-        version: 2.36.0(@aws-sdk/client-dynamodb@3.1163.0)(@aws-sdk/client-secrets-manager@3.1163.0)(@aws-sdk/client-ssm@3.1159.0)
+        version: 2.36.0(@aws-sdk/client-secrets-manager@3.1163.0)(@aws-sdk/client-ssm@3.1159.0)
       '@aws-sdk/client-s3':
         specifier: 3.1163.0
         version: 3.1163.0
@@ -978,6 +978,15 @@ importers:
 
   shared/ci:
     dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: 3.1163.0
+        version: 3.1163.0
+      '@aws-sdk/client-s3':
+        specifier: 3.1163.0
+        version: 3.1163.0
+      '@aws-sdk/client-sqs':
+        specifier: 3.1163.0
+        version: 3.1163.0
       '@repo/cloudfront-js-utils':
         specifier: workspace:*
         version: link:../../packages/cloudfront-js-utils
@@ -1402,6 +1411,10 @@ packages:
     resolution: {integrity: sha512-3pRKFiXmzIUZYvLTBNocr3GxQhxp54W1fSFcov5uSiYsjz6W+r4qM5pmAqQ9OU0db9HQczXQUh4S9rADnJ6oSw==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-sqs@3.1163.0':
+    resolution: {integrity: sha512-DmknybmkX+nk/4EKppjUPqtqmr6zK0AIlKLXC45h+YGLz5OpKt95tI1iQYJi3eKBBhabO+GtZrC3+Zjc//BhJg==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-ssm@3.1159.0':
     resolution: {integrity: sha512-zw10ZIoQGnAnKl2dI9T4QdYRA/oDIIvksJPtqmT6wScRtvOmD1k+Wp30sLmzTImFmHIMyUqDj92IOYL6OTCFvA==}
     engines: {node: '>=20.0.0'}
@@ -1472,6 +1485,10 @@ packages:
 
   '@aws-sdk/middleware-sdk-s3@3.972.86':
     resolution: {integrity: sha512-S3RunQUwvUJcuJ5VrVgvhN5OsVpK4GHRcuXaSawCbutO4piyHTmpObUKm19HdqqLBqjf6kHSeAOk/7OyAJ+hmA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/middleware-sdk-sqs@3.972.49':
+    resolution: {integrity: sha512-SA7PyVa2cZnHZcO9pZghzhcJSRBnAW4JM2zy5cSaIUnrmapWLS46FiwQne5Y/eOgvdhTU1/zymT1X9MJLP1eIA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/nested-clients@3.998.0':
@@ -4772,11 +4789,10 @@ snapshots:
     dependencies:
       '@aws/lambda-invoke-store': 0.3.0
 
-  '@aws-lambda-powertools/parameters@2.36.0(@aws-sdk/client-dynamodb@3.1163.0)(@aws-sdk/client-secrets-manager@3.1163.0)(@aws-sdk/client-ssm@3.1159.0)':
+  '@aws-lambda-powertools/parameters@2.36.0(@aws-sdk/client-secrets-manager@3.1163.0)(@aws-sdk/client-ssm@3.1159.0)':
     dependencies:
       '@aws-lambda-powertools/commons': 2.36.0
     optionalDependencies:
-      '@aws-sdk/client-dynamodb': 3.1163.0
       '@aws-sdk/client-secrets-manager': 3.1163.0
       '@aws-sdk/client-ssm': 3.1159.0
 
@@ -4848,12 +4864,24 @@ snapshots:
       '@smithy/types': 4.20.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-sqs@3.1163.0':
+    dependencies:
+      '@aws-sdk/core': 3.980.0
+      '@aws-sdk/credential-provider-node': 3.972.93
+      '@aws-sdk/middleware-sdk-sqs': 3.972.49
+      '@aws-sdk/types': 3.975.0
+      '@smithy/core': 3.39.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.14.2
+      '@smithy/types': 4.20.0
+      tslib: 2.8.1
+
   '@aws-sdk/client-ssm@3.1159.0':
     dependencies:
-      '@aws-sdk/core': 3.981.0
+      '@aws-sdk/core': 3.980.0
       '@aws-sdk/credential-provider-node': 3.972.93
       '@aws-sdk/types': 3.975.1
-      '@smithy/core': 3.40.0
+      '@smithy/core': 3.39.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.14.2
       '@smithy/types': 4.20.0
@@ -5029,6 +5057,13 @@ snapshots:
       '@aws-sdk/core': 3.980.0
       '@aws-sdk/signature-v4-multi-region': 3.996.51
       '@aws-sdk/types': 3.975.0
+      '@smithy/core': 3.39.0
+      '@smithy/types': 4.20.0
+      tslib: 2.8.1
+
+  '@aws-sdk/middleware-sdk-sqs@3.972.49':
+    dependencies:
+      '@aws-sdk/types': 3.975.1
       '@smithy/core': 3.39.0
       '@smithy/types': 4.20.0
       tslib: 2.8.1

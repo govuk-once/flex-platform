@@ -1,4 +1,5 @@
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
+import type { ReleaseRequest } from "@repo/shared-release/request";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -15,7 +16,7 @@ import {
   token,
   TRACE_ID,
 } from "../../test/helpers.ts";
-import { createAuthoriser, createUploadCheck } from "./authorise.ts";
+import { createAuthoriser, createPublishCheck } from "./authorise.ts";
 import { createCiHandler } from "./handler.ts";
 import { createUploadSigner } from "./sign-upload.ts";
 import { createTokenVerifier } from "./token.ts";
@@ -30,6 +31,18 @@ const logged: LogLine[] = [];
 
 // What was signed, so a test can see nothing was.
 const signed: string[] = [];
+
+// What was asked of the release worker.
+const queued: ReleaseRequest[] = [];
+
+// The bucket's objects, by key, and the version each holds.
+const objects = new Map<string, string>();
+
+const VERSION_ID = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
+
+const RELEASES = "/ci/environments/development/domains/example/releases";
+
+const RELEASE_ID = "0196a8f0-2c00-7000-8000-000000000000";
 
 const KEY = `example/bundle/${BUNDLE.sha256}.zip`;
 
@@ -51,10 +64,15 @@ function handler(documents?: Record<string, unknown>) {
   const handle = createCiHandler({
     verifyToken: createTokenVerifier(CONFIG, fake.fetcher),
     authorise: createAuthoriser(CONFIG),
-    takesUploads: createUploadCheck(CONFIG),
+    publishes: createPublishCheck(CONFIG),
     signUpload: (key, bundle) => {
       signed.push(key);
       return signUpload(key, bundle);
+    },
+    findBundle: (key) => Promise.resolve(objects.get(key)),
+    queueRelease: (request) => {
+      queued.push(request);
+      return Promise.resolve(RELEASE_ID);
     },
     now: () => {
       const reading = now;
@@ -95,6 +113,9 @@ describe("createCiHandler", () => {
     vi.useFakeTimers({ now: NOW * 1000 });
     logged.length = 0;
     signed.length = 0;
+    queued.length = 0;
+    objects.clear();
+    objects.set(KEY, VERSION_ID);
     vi.spyOn(console, "log").mockImplementation((line: string) => {
       logged.push(JSON.parse(line) as LogLine);
     });
@@ -224,6 +245,164 @@ describe("createCiHandler", () => {
       ),
     ).resolves.toMatchObject({ statusCode: 403 });
     expect(signed).toEqual([]);
+  });
+
+  it("queues the release of a bundle the pipeline uploaded, and answers 202", async () => {
+    const { handle } = handler();
+
+    const response = await handle(
+      functionUrlEvent({
+        path: RELEASES,
+        body: JSON.stringify({ sha256: BUNDLE.sha256 }),
+      }),
+    );
+
+    expect(response).toEqual({
+      statusCode: 202,
+      headers: {
+        "content-type": "application/json",
+        "x-correlation-id": TRACE_ID,
+      },
+      body: JSON.stringify({
+        releaseId: RELEASE_ID,
+        environment: "development",
+        domain: "example",
+        sha256: BUNDLE.sha256,
+      }),
+    });
+    expect(queued).toEqual([
+      {
+        environment: "development",
+        domain: "example",
+        sha256: BUNDLE.sha256,
+        versionId: VERSION_ID,
+        runId: "12345678901",
+        commit: COMMIT,
+      },
+    ]);
+    expect(logged).toEqual([
+      {
+        level: "INFO",
+        message: "telemetry",
+        telemetry: {
+          event: "ci_release_queued",
+          details: {
+            ...REQUEST,
+            ...CALLER,
+            environment: "development",
+            domain: "example",
+            key: KEY,
+            versionId: VERSION_ID,
+            releaseId: RELEASE_ID,
+          },
+        },
+      },
+    ]);
+  });
+
+  it("answers 409 to a release of a bundle that was never uploaded, queueing nothing", async () => {
+    const { handle } = handler();
+    objects.clear();
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          path: RELEASES,
+          body: JSON.stringify({ sha256: BUNDLE.sha256 }),
+        }),
+      ),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: body("No bundle with this hash has been uploaded", "client_error"),
+    });
+    expect(logged[0]?.telemetry).toEqual({
+      event: "ci_release_bundle_missing",
+      details: {
+        ...REQUEST,
+        ...CALLER,
+        environment: "development",
+        domain: "example",
+        key: KEY,
+      },
+    });
+    expect(queued).toEqual([]);
+  });
+
+  // Another domain's bundle is under another domain's key, which this route never looks at.
+  it("looks for the bundle only under the domain the pipeline is allowed for", async () => {
+    const { handle } = handler();
+    objects.clear();
+    objects.set(`elsewhere/bundle/${BUNDLE.sha256}.zip`, VERSION_ID);
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          path: RELEASES,
+          body: JSON.stringify({ sha256: BUNDLE.sha256 }),
+        }),
+      ),
+    ).resolves.toMatchObject({ statusCode: 409 });
+    expect(queued).toEqual([]);
+  });
+
+  it("answers 409 to a release in an environment that takes its code by promotion", async () => {
+    const { handle } = handler();
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          ...STAGING,
+          path: "/ci/environments/staging/domains/example/releases",
+          body: JSON.stringify({ sha256: BUNDLE.sha256 }),
+        }),
+      ),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: body("This environment takes no releases", "client_error"),
+    });
+    expect(logged[0]?.telemetry.event).toBe("ci_release_not_accepted");
+    expect(queued).toEqual([]);
+  });
+
+  it.each([
+    ["body", { sha256: BUNDLE.sha256, size: BUNDLE.size }],
+    ["sha256", { sha256: "abc" }],
+  ])(
+    "answers 400 to a release whose %s is no release's, queueing nothing",
+    async (reason, sent) => {
+      const { handle } = handler();
+
+      await expect(
+        handle(
+          functionUrlEvent({ path: RELEASES, body: JSON.stringify(sent) }),
+        ),
+      ).resolves.toMatchObject({ statusCode: 400 });
+      expect(logged[0]?.telemetry).toEqual({
+        event: "ci_release_invalid",
+        details: {
+          ...REQUEST,
+          ...CALLER,
+          environment: "development",
+          domain: "example",
+          reason,
+        },
+      });
+      expect(queued).toEqual([]);
+    },
+  );
+
+  it("answers 403 to a release by a pipeline that isn't allowed, looking at nothing", async () => {
+    const { handle } = handler();
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          path: "/ci/environments/development/domains/elsewhere/releases",
+          body: JSON.stringify({ sha256: BUNDLE.sha256 }),
+        }),
+      ),
+    ).resolves.toMatchObject({ statusCode: 403 });
+    expect(queued).toEqual([]);
   });
 
   it.each([[undefined], [""]])(

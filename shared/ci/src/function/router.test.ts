@@ -13,7 +13,10 @@ function route(method: string, path: string): RouteDefinition {
 const router = createRouter(ROUTES);
 
 describe("createRouter", () => {
-  it.each([["uploads", 0]])(
+  it.each([
+    ["uploads", 0],
+    ["releases", 1],
+  ])(
     "finds the %s route, with the environment and the domain its path names",
     (last, index) => {
       const found = router(

@@ -9,6 +9,7 @@ import {
   MANAGEMENT_REGION,
   RELEASE_TABLE_NAME,
   RELEASE_WORKER_NAME,
+  releaseQueueUrl,
   ReleaseTable,
   ReleaseWorker,
   SHARED_REGION,
@@ -54,7 +55,7 @@ export class SharedReleaseStack extends Stack {
     // The name each function is built with is a plain string, unlike the table's reference.
     const releaseTable = { name: RELEASE_TABLE_NAME, arn: table.tableArn };
 
-    new ReleaseWorker(this, "Release", {
+    const worker = new ReleaseWorker(this, "Release", {
       codeBucketName,
       targets: releaseTargets(stage),
       producerRoleArn: roleArn(CI_FUNCTION_NAME),
@@ -63,6 +64,11 @@ export class SharedReleaseStack extends Stack {
     const ci = new CiFunction(this, "Ci", {
       zoneName: stage.shared.zone.name,
       codeBucketName,
+      releaseQueue: {
+        url: releaseQueueUrl(stage.shared.account),
+        arn: worker.queue.queueArn,
+      },
+      releaseTable,
       // A disabled domain too: its code can be released while nothing is routed to it.
       environments: stage.environments.map((environment) => ({
         name: environment.name,
