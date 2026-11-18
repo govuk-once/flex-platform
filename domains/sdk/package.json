@@ -1,0 +1,42 @@
+{
+  "name": "@govuk-once/flex-domain-sdk",
+  "version": "0.1.0",
+  "description": "Declares a Flex domain's routes and handler types.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "directory": "dist",
+    "linkDirectory": false
+  },
+  "scripts": {
+    "build": "rolldown -c",
+    "lint": "eslint src/ test/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@govuk-once/flex-gateway-client": ">=0.1.0 <1.0.0",
+    "@hono/zod-openapi": "^1.6.3",
+    "hono": "^4.13.17",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@govuk-once/flex-gateway-client": "workspace:*",
+    "@hono/zod-openapi": "1.6.3",
+    "@repo/cloudfront-js-utils": "workspace:*",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/tsconfig": "workspace:*",
+    "@repo/utils": "workspace:*",
+    "@repo/vitest-config": "workspace:*",
+    "eslint": "10.14.0",
+    "hono": "4.13.17",
+    "rolldown": "1.3.0",
+    "rolldown-plugin-dts": "0.30.0",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0",
+    "zod": "4.6.7"
+  }
+}

@@ -34,6 +34,14 @@ export const SOURCES: readonly Source[] = [
     finalAt: "merge",
   },
   {
+    group: "Domain SDK",
+    directories: ["domains/sdk"],
+    script: "build",
+    output: "dist",
+    versioning: "declared",
+    finalAt: "merge",
+  },
+  {
     group: "Gateways",
     directories: ["gateways/services/*"],
     script: "codegen",
