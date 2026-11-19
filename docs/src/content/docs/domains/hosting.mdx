@@ -298,11 +298,13 @@ So a domain adds or changes a route by releasing its code. No change to the plat
 stacks is needed.
 
 The API invokes the function's `live` alias, by an ARN built from the function's name, through a
-role of its own. Only API Gateway in the domain account may assume the role, and it may invoke only
-that domain's `live` alias. So the function needs no resource policy, and a function created again
-under the same name needs nothing added. Each release publishes a version and moves `live` to it,
-so the API reaches only code that was deliberately released, and moving the alias back rolls a
-release back. Until the first release there is no `live`, and the API answers 500.
+role of its own. Only API Gateway may assume the role, only a principal in the domain account can
+set it on an API, and it may invoke only that domain's `live` alias. The role's trust carries no
+`aws:SourceAccount` condition: API Gateway sends none when it assumes an integration's role, so the
+condition would refuse every request. So the function needs no resource policy, and a function
+created again under the same name needs nothing added. Each release publishes a version and moves
+`live` to it, so the API reaches only code that was deliberately released, and moving the alias
+back rolls a release back. Until the first release there is no `live`, and the API answers 500.
 
 ## The domain's function
 

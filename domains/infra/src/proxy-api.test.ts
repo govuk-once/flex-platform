@@ -112,7 +112,9 @@ describe("ProxyApi", () => {
       });
     });
 
-    it("invoke through a role API Gateway in this account assumes, which may invoke only this domain's live alias", () => {
+    // Exact, so a condition can't come back: API Gateway sends no `aws:SourceAccount` when it
+    // assumes the role, and one that names it refuses every request.
+    it("invoke through a role API Gateway assumes, under no condition, which may invoke only this domain's live alias", () => {
       const { template } = build();
 
       template.resourceCountIs("AWS::IAM::Role", 1);
@@ -121,7 +123,6 @@ describe("ProxyApi", () => {
           Statement: [
             {
               Action: "sts:AssumeRole",
-              Condition: { StringEquals: { "aws:SourceAccount": ACCOUNT } },
               Effect: "Allow",
               Principal: { Service: "apigateway.amazonaws.com" },
             },
