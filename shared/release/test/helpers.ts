@@ -182,9 +182,17 @@ export class FakeLambda implements FunctionApi {
     alias: string,
     functionVersion: string,
     releaseId: string,
+    version: string,
   ): Promise<void> {
-    this.call(`createAlias ${alias} ${functionVersion} ${releaseId}`);
-    this.alias = { functionVersion, revisionId: "revision-1", releaseId };
+    this.call(
+      `createAlias ${alias} ${functionVersion} ${releaseId} ${version}`,
+    );
+    this.alias = {
+      functionVersion,
+      revisionId: "revision-1",
+      releaseId,
+      version,
+    };
     return Promise.resolve();
   }
 
@@ -194,11 +202,17 @@ export class FakeLambda implements FunctionApi {
     functionVersion: string,
     revisionId: string,
     releaseId: string,
+    version: string,
   ): Promise<void> {
     this.call(
-      `updateAlias ${alias} ${functionVersion} ${revisionId} ${releaseId}`,
+      `updateAlias ${alias} ${functionVersion} ${revisionId} ${releaseId} ${version}`,
     );
-    this.alias = { functionVersion, revisionId: "revision-2", releaseId };
+    this.alias = {
+      functionVersion,
+      revisionId: "revision-2",
+      releaseId,
+      version,
+    };
     return Promise.resolve();
   }
 }

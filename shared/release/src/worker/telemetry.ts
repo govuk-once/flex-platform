@@ -12,6 +12,7 @@ export type ReleaseEventName =
   | "release_abandoned"
   | "release_not_abandoned"
   | "release_refused"
+  | "release_superseded"
   | "release_failed";
 
 export interface ReleaseDetails {

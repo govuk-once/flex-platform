@@ -17,6 +17,7 @@ import {
   releaseIdAt,
   SHA256,
   TARGET,
+  VERSION,
   VERSION_ID,
 } from "../../test/helpers.ts";
 import { type Answer, answering } from "../../test/stub-aws.ts";
@@ -486,7 +487,7 @@ describe("versions and the alias", () => {
     ).rejects.toThrow("Lambda published no version");
   });
 
-  it("reads the alias, with the release that set it, and is undefined when there is none", async () => {
+  it("reads the alias, with the release that set it and its version, and is undefined when there is none", async () => {
     let exists = true;
     const { aws } = setUp({
       lambda: () => {
@@ -494,7 +495,7 @@ describe("versions and the alias", () => {
         return {
           FunctionVersion: "2",
           RevisionId: "revision-1",
-          Description: `Set by release ${RELEASE_ID}`,
+          Description: `Set by release ${RELEASE_ID} at version ${VERSION}`,
         };
       },
     });
@@ -504,32 +505,42 @@ describe("versions and the alias", () => {
       functionVersion: "2",
       revisionId: "revision-1",
       releaseId: RELEASE_ID,
+      version: VERSION,
     });
     exists = false;
     expect(await lambda.getAlias(DEFINITION.name, "live")).toBeUndefined();
   });
 
+  // Anything that could write the description could move the alias anyway, so one that doesn't
+  // read refuses nothing, rather than stopping the domain's releases.
   it.each([
     undefined,
     "",
     "Created by hand",
     "Set by release soon",
-    "Set by release 00000000-0000-4000-8000-000000000000",
-  ])("reads no release from an alias described as %j", async (Description) => {
-    const { aws } = setUp({
-      lambda: () => ({
-        FunctionVersion: "2",
-        RevisionId: "revision-1",
-        ...(Description !== undefined && { Description }),
-      }),
-    });
+    // As releases described it before they had versions.
+    `Set by release ${RELEASE_ID}`,
+    `Set by release 00000000-0000-4000-8000-000000000000 at version ${VERSION}`,
+    `Set by release ${RELEASE_ID} at version v1.4.2`,
+    `Set by release ${RELEASE_ID} at version ${VERSION} and more`,
+  ])(
+    "reads no release or version from an alias described as %j",
+    async (Description) => {
+      const { aws } = setUp({
+        lambda: () => ({
+          FunctionVersion: "2",
+          RevisionId: "revision-1",
+          ...(Description !== undefined && { Description }),
+        }),
+      });
 
-    const alias = await aws
-      .deployAs(TARGET.deployRoleArn, countdown())
-      .lambda.getAlias(DEFINITION.name, "live");
+      const alias = await aws
+        .deployAs(TARGET.deployRoleArn, countdown())
+        .lambda.getAlias(DEFINITION.name, "live");
 
-    expect(alias?.releaseId).toBeUndefined();
-  });
+      expect(alias).toMatchObject({ releaseId: undefined, version: undefined });
+    },
+  );
 
   it("refuses an alias described without its version", async () => {
     const { aws } = setUp({ lambda: () => ({ RevisionId: "revision-1" }) });
@@ -541,17 +552,18 @@ describe("versions and the alias", () => {
     ).rejects.toThrow(TypeError);
   });
 
-  it("creates the alias, and moves it only from the revision it was read at, naming the release that set it", async () => {
+  it("creates the alias, and moves it only from the revision it was read at, naming the release that set it and its version", async () => {
     const { aws, sent } = setUp({});
     const { lambda } = aws.deployAs(TARGET.deployRoleArn, countdown());
 
-    await lambda.createAlias(DEFINITION.name, "live", "1", RELEASE_ID);
+    await lambda.createAlias(DEFINITION.name, "live", "1", RELEASE_ID, VERSION);
     await lambda.updateAlias(
       DEFINITION.name,
       "live",
       "2",
       "revision-1",
       releaseIdAt(1),
+      "1.5.0",
     );
 
     expect(sent.lambda).toEqual([
@@ -561,7 +573,7 @@ describe("versions and the alias", () => {
           FunctionName: DEFINITION.name,
           Name: "live",
           FunctionVersion: "1",
-          Description: `Set by release ${RELEASE_ID}`,
+          Description: `Set by release ${RELEASE_ID} at version ${VERSION}`,
         },
       },
       {
@@ -571,7 +583,7 @@ describe("versions and the alias", () => {
           Name: "live",
           FunctionVersion: "2",
           RevisionId: "revision-1",
-          Description: `Set by release ${releaseIdAt(1)}`,
+          Description: `Set by release ${releaseIdAt(1)} at version 1.5.0`,
         },
       },
     ]);

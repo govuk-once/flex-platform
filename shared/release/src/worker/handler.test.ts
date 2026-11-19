@@ -82,6 +82,7 @@ describe("createReleaseHandler", () => {
       functionVersion: "1",
       revisionId: "revision-1",
       releaseId: RELEASE_ID,
+      version: VERSION,
     });
     expect(table.record).toEqual(
       queuedRecord({
@@ -224,6 +225,7 @@ describe("createReleaseHandler", () => {
         functionVersion: "1",
         revisionId: "revision-1",
         releaseId: RELEASE_ID,
+        version: VERSION,
       },
     });
     const table = new FakeTable(
@@ -348,25 +350,44 @@ describe("createReleaseHandler", () => {
     ]);
   });
 
-  it("refuses a release asked for before the one on live", async () => {
-    captureLogs();
+  // A domain that releases quickly sees releases superseded, and nothing is wrong.
+  it("refuses a release of an earlier version than live's for good, and logs it as no error", async () => {
+    const logs = captureLogs();
     const lambda = new FakeLambda({
       versions: ["1"],
       alias: {
         functionVersion: "1",
         revisionId: "revision-1",
-        releaseId: releaseIdAt(1),
+        releaseId: releaseIdAt(-1),
+        version: "1.5.0",
       },
     });
     const table = new FakeTable(queuedRecord());
 
-    await handlerWith(fakeAws(lambda).aws, table)(event(messageFor()));
+    const response = await handlerWith(
+      fakeAws(lambda).aws,
+      table,
+    )(event(messageFor()));
 
+    expect(response).toEqual({ batchItemFailures: [] });
     expect(table.record).toMatchObject({
       status: "refused",
       step: "check-order",
       reason: "superseded",
     });
+    expect(logs).toEqual([
+      expect.objectContaining({
+        level: "INFO",
+        telemetry: expect.objectContaining({
+          event: "release_superseded",
+          details: expect.objectContaining({
+            ...ASKED,
+            step: "check-order",
+            reason: "superseded",
+          }) as unknown,
+        }) as unknown,
+      }),
+    ]);
   });
 
   it("records an unexpected failure with no step", async () => {

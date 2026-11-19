@@ -15,7 +15,11 @@ import {
   ReleaseFailure,
   type TimeLeft,
 } from "./release.ts";
-import { logRelease, type ReleaseDetails } from "./telemetry.ts";
+import {
+  logRelease,
+  type ReleaseDetails,
+  type ReleaseEventName,
+} from "./telemetry.ts";
 import type {
   LambdaContext,
   ReleaseConfig,
@@ -171,7 +175,9 @@ async function handle(
     const failure = error instanceof ReleaseFailure ? error : undefined;
     const retry = failure?.retry ?? true;
     const reason = failure?.reason ?? "unexpected";
-    logRelease("ERROR", retry ? "release_failed" : "release_refused", {
+    // A domain that releases quickly sees releases superseded, and nothing is wrong.
+    const superseded = reason === "superseded";
+    logRelease(superseded ? "INFO" : "ERROR", eventOf(retry, superseded), {
       ...details(asked),
       ...(failure !== undefined && { step: failure.step }),
       reason,
@@ -184,4 +190,9 @@ async function handle(
     };
   }
   return (await finish(outcome)) && outcome.status !== "failed";
+}
+
+function eventOf(retry: boolean, superseded: boolean): ReleaseEventName {
+  if (superseded) return "release_superseded";
+  return retry ? "release_failed" : "release_refused";
 }

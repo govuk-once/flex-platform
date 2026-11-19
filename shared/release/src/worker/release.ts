@@ -10,12 +10,16 @@
 // from the function version it was read at. Two attempts at once are safe too: Lambda refuses a change to a
 // function it is still changing, and the one refused is tried again.
 //
-// `live` records the release it points at, and never moves for a release asked for before that
-// one. A release's ID holds the time it was asked for, so this compares IDs. So an old release
-// run again, however it was got, can't roll a domain back. A rollback is a new release, of the
-// older bundle.
+// `live` records the release that set it and that release's version. It never moves for a release
+// of an earlier version, or for one asked for before the release on it. The version holds a
+// pipeline to the domain's order. The time a release was asked for is in its ID, and stops a
+// release asked for before another landed from running after it: once something other than a
+// pipeline release can put an earlier version on `live`, a release asked for before that can't
+// undo it. So an old release run again, however it was got, can't roll a domain back.
 
 import { bundleKey } from "../bundle-key.ts";
+import { compareBundleVersions } from "../bundle-version.ts";
+import { releaseRequestedAt } from "../release-id.ts";
 import type { ReleaseRequest } from "../request.ts";
 import type { ReleaseTarget } from "./types.ts";
 
@@ -76,8 +80,10 @@ export interface FunctionState {
 export interface AliasState {
   readonly functionVersion: string;
   readonly revisionId: string;
-  /** The release that set it. `undefined` for an alias no release set. */
+  /** The release that set it. `undefined` for an alias no release recorded itself on. */
   readonly releaseId: string | undefined;
+  /** The version of the domain's code that release was for, `undefined` likewise. */
+  readonly version: string | undefined;
 }
 
 /** Lambda, as the domain's deploy role. Each wait throws once the function can't get there. */
@@ -104,6 +110,7 @@ export interface FunctionApi {
     alias: string,
     functionVersion: string,
     releaseId: string,
+    version: string,
   ): Promise<void>;
   /** Moves the alias, unless it changed since it was read at `revisionId`. */
   updateAlias(
@@ -112,6 +119,7 @@ export interface FunctionApi {
     functionVersion: string,
     revisionId: string,
     releaseId: string,
+    version: string,
   ): Promise<void>;
 }
 
@@ -187,8 +195,8 @@ export async function release(
   const deploy = aws.deployAs(target.deployRoleArn, timeLeft);
   const { lambda } = deploy;
 
-  // Before anything changes: a release `live` already names is done, and one asked for before
-  // the one on `live` changes nothing.
+  // Before anything changes: a release `live` already names is done, and one `live` is ahead of
+  // changes nothing.
   const current = await step("check-order", () =>
     lambda.getAlias(target.functionName, LIVE_ALIAS),
   );
@@ -199,7 +207,7 @@ export async function release(
       moved: false,
     };
   }
-  refuseIfSuperseded(current, releaseId, "check-order");
+  refuseIfSuperseded(current, request, "check-order");
 
   // The object is the version the pipeline API found, read in full. The key names the bundle's
   // hash, so the object must have it, whoever wrote it.
@@ -284,11 +292,12 @@ export async function release(
         LIVE_ALIAS,
         functionVersion,
         releaseId,
+        request.version,
       );
       return true;
     }
     // Again, since another release may have moved it while this one ran.
-    refuseIfSuperseded(alias, releaseId, "move-alias");
+    refuseIfSuperseded(alias, request, "move-alias");
     if (
       alias.functionVersion === functionVersion &&
       alias.releaseId === releaseId
@@ -301,6 +310,7 @@ export async function release(
       functionVersion,
       alias.revisionId,
       releaseId,
+      request.version,
     );
     return alias.functionVersion !== functionVersion;
   });
@@ -308,13 +318,22 @@ export async function release(
   return { functionVersion, created: existing === undefined, moved };
 }
 
-// IDs of the same form compare as text in the order they were made.
+// Refuses a release `live` is ahead of: one asked for before the release on `live`, or one of an
+// earlier version. Asked for in the same millisecond is neither: the rest of each ID is random,
+// so the queue's order decides. The same version runs, so a release can bring the platform's
+// settings to the code already on `live`. An alias with no release recorded on it refuses
+// nothing: anything that could write its description could move it anyway.
 function refuseIfSuperseded(
   alias: AliasState | undefined,
-  releaseId: string,
+  request: ReleaseRequest & { readonly id: string },
   at: ReleaseStep,
 ): void {
-  if (alias?.releaseId !== undefined && alias.releaseId > releaseId) {
+  if (
+    (alias?.releaseId !== undefined &&
+      releaseRequestedAt(alias.releaseId) > releaseRequestedAt(request.id)) ||
+    (alias?.version !== undefined &&
+      compareBundleVersions(alias.version, request.version) > 0)
+  ) {
     throw new ReleaseFailure(at, "superseded", false);
   }
 }
