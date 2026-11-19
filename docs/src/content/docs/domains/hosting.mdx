@@ -302,9 +302,8 @@ role of its own. Only API Gateway may assume the role, only a principal in the d
 set it on an API, and it may invoke only that domain's `live` alias. The role's trust carries no
 `aws:SourceAccount` condition: API Gateway sends none when it assumes an integration's role, so the
 condition would refuse every request. So the function needs no resource policy, and a function
-created again under the same name needs nothing added. Each release publishes a version and moves
-`live` to it, so the API reaches only code that was deliberately released, and moving the alias
-back rolls a release back. Until the first release there is no `live`, and the API answers 500.
+created again under the same name needs nothing added. Each release publishes a function version
+and moves `live` to it, so the API reaches only code that was deliberately released. Until the first release there is no `live`, and the API answers 500.
 
 ## The domain's function
 
@@ -387,9 +386,55 @@ worker releases what the table records under it:
   queue. Only the release queue may use the dead-letter queue, and no principal may send to it:
   SQS moves a message there itself.
 
-No release can roll a domain back. `live`'s description names the release that set it, and the
-worker changes nothing for a release whose ID sorts before that one, which is one asked for
-earlier. A rollback is a new release, of the older bundle.
+No release from a pipeline can roll a domain back. See [the order of releases](#the-order-of-releases).
+
+#### The order of releases
+
+`live`'s description names the release that set it and its version:
+
+```
+Set by release <release ID> at version <version>
+```
+
+The worker reads it before anything changes, and again just before it moves `live`, in case
+another release moved it meanwhile. The first rule that applies decides:
+
+| `live` | The release |
+|---|---|
+| Was set by this release | Is done, and recorded `released`, with `moved` false. |
+| Was set by a release asked for later | Is refused as `superseded`. |
+| Holds a later version | Is refused as `superseded`. |
+| Holds the same version | Runs. The bundle is the same, so Lambda publishes nothing new unless the configuration the platform sets has changed, and `live` moves only if the function version did. This is how a change to what the platform sets reaches the code already on `live`. |
+| Holds an earlier version, or none | Runs. |
+
+"Asked for later" compares the time in each release's ID, to the millisecond, and no further. Two
+releases asked for in the same millisecond are in no order, since the rest of each ID is random,
+so neither refuses the other, and the queue's order decides.
+
+The two rules guard different things. The version holds a pipeline to the domain's order, so a
+release of `1.2.0` that runs after `1.2.1` landed changes nothing. The time stops a release
+asked for before another landed from running after it, which matters once something other than a
+pipeline release, such as a rollback, can put an earlier version on `live`.
+
+A domain's releases in an environment run one at a time, in the order they were asked for, and a
+release that fails holds the ones after it until it succeeds or is given up. So `1.2.0` then
+`1.2.1`, with `1.2.0` failing, runs `1.2.0` until it succeeds or is given up, then `1.2.1`. The
+rules are for a release that comes back once a later one is live, such as one
+[given up](#the-dead-letter-worker) and then named again by an event the queue didn't send.
+
+A superseded release is final. Its version stays in the [artefacts table](#the-artefacts-table)
+and its bundle in the bucket, so the version could be put on `live` again by a rollback, which is
+planned.
+
+A description in any other form refuses nothing: every `live` alias set before releases had
+versions, and any written by hand. Anything that could rewrite the description, with
+`lambda:UpdateAlias` in the domain's account, could point `live` at any function version anyway,
+so refusing such an alias would protect against nobody and stop the domain releasing.
+
+A domain's pipeline should still release one at a time in each environment, with a GitHub
+`concurrency` group: a late release of an earlier version is refused, but it was still a wasted
+release. A version released by mistake, such as `99.0.0`, refuses every earlier version from the
+pipeline until a later one is released.
 
 #### What a release does
 
@@ -397,7 +442,8 @@ For each release it claims, the worker:
 
 1. **Assumes the domain's deploy role** in the domain account, and reads `live`. A release `live`
    already names is done: the worker records it `released`, with `live`'s function version, and
-   changes nothing. A release asked for before the one on `live` is refused.
+   changes nothing. A release `live` is ahead of is refused, by
+   [the order of releases](#the-order-of-releases).
 2. **Checks the bundle.** It reads the S3 version of the bundle's object the API found, in full,
    and hashes it. The key names the bundle's hash, so an object with any other is refused before
    anything is made of it. It reads the isolated subnets and the `domain` security group from the
@@ -414,9 +460,9 @@ For each release it claims, the worker:
    function whose code and configuration haven't changed since its last function version gets
    that function version back, so its description names the bundle and commit it was first
    published for.
-6. **Points `live` at the function version,** creating the alias the first time, and names the release in
-   its description. Otherwise it checks the order again, and moves the alias only from the
-   revision it read, so a change made since is never overwritten.
+6. **Points `live` at the function version,** creating the alias the first time, and names the
+   release and its version in its description. Otherwise it checks the order again, and moves the
+   alias only from the revision it read, so a change made since is never overwritten.
 
 Nothing reaches the new code until the last step.
 
@@ -450,7 +496,7 @@ might go differently next time, such as an AWS error, is recorded `failed` and g
 queue, which delivers it again after 20 minutes. After three attempts it is moved to the
 dead-letter queue, `shared-release-dead-letter.fifo`, where the
 [dead-letter worker](#the-dead-letter-worker) gives it up. A release that can never succeed, such
-as a bundle whose bytes aren't what its key says, or a release older than `live`'s, is recorded
+as a bundle whose bytes aren't what its key says, or a release `live` is ahead of, is recorded
 `refused` and dropped.
 
 The worker records each outcome before it lets the message go, and only over the claim it made,
@@ -466,7 +512,9 @@ table holds the release, its ID, the environment, the domain, the version, the b
 GitHub's ID for the run and the commit. A release that stopped adds the step and a reason: AWS's code for the
 error, such as `AccessDeniedException`, or Lambda's for a function that won't become ready, such
 as `SubnetOutOfIPAddresses`, never a message. A release that succeeded adds the function
-version, and whether it created the function and moved `live`.
+version, and whether it created the function and moved `live`. A superseded release is logged as
+`release_superseded`, at `INFO`, since a domain that releases quickly will see it, and every
+other refusal as `release_refused`, at `ERROR`.
 
 The worker is built with each domain it may release, and everything a release of it names, by
 `buildReleaseWorker` when the stage is synthesized: every domain with a repository, in each

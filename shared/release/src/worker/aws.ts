@@ -24,8 +24,10 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GetParametersCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { fromTemporaryCredentials } from "@aws-sdk/credential-providers";
 
+import { isBundleVersion } from "../bundle-version.ts";
 import { isReleaseId } from "../release-id.ts";
 import {
+  type AliasState,
   type DeployAccess,
   type FunctionApi,
   type FunctionDefinition,
@@ -283,7 +285,7 @@ function functionApi(client: LambdaClient, timeLeft: TimeLeft): FunctionApi {
         return {
           functionVersion: FunctionVersion,
           revisionId: RevisionId,
-          releaseId: releaseIdOf(Description),
+          ...setBy(Description),
         };
       } catch (error) {
         if (error instanceof ResourceNotFoundException) return undefined;
@@ -291,13 +293,13 @@ function functionApi(client: LambdaClient, timeLeft: TimeLeft): FunctionApi {
       }
     },
 
-    createAlias: async (name, alias, functionVersion, releaseId) => {
+    createAlias: async (name, alias, functionVersion, releaseId, version) => {
       await client.send(
         new CreateAliasCommand({
           FunctionName: name,
           Name: alias,
           FunctionVersion: functionVersion,
-          Description: aliasDescription(releaseId),
+          Description: aliasDescription(releaseId, version),
         }),
       );
     },
@@ -308,6 +310,7 @@ function functionApi(client: LambdaClient, timeLeft: TimeLeft): FunctionApi {
       functionVersion,
       revisionId,
       releaseId,
+      version,
     ) => {
       await client.send(
         new UpdateAliasCommand({
@@ -315,26 +318,33 @@ function functionApi(client: LambdaClient, timeLeft: TimeLeft): FunctionApi {
           Name: alias,
           FunctionVersion: functionVersion,
           RevisionId: revisionId,
-          Description: aliasDescription(releaseId),
+          Description: aliasDescription(releaseId, version),
         }),
       );
     },
   };
 }
 
-// The alias's description names the release that set it, which the next release reads to refuse
-// one asked for earlier. Nothing else writes it.
-const ALIAS_DESCRIPTION = /^Set by release ([0-9a-f-]{36})$/;
+// The alias's description names the release that set it and its version, which the next release
+// reads to refuse one `live` is ahead of. Nothing else writes it. A description in any other form,
+// such as one written before releases had versions, names neither.
+const ALIAS_DESCRIPTION = /^Set by release ([0-9a-f-]{36}) at version (\S+)$/;
 
-function aliasDescription(releaseId: string): string {
-  return `Set by release ${releaseId}`;
+function aliasDescription(releaseId: string, version: string): string {
+  return `Set by release ${releaseId} at version ${version}`;
 }
 
-function releaseIdOf(description: string | undefined): string | undefined {
-  const releaseId = ALIAS_DESCRIPTION.exec(description ?? "")?.[1];
-  return releaseId !== undefined && isReleaseId(releaseId)
-    ? releaseId
-    : undefined;
+function setBy(
+  description: string | undefined,
+): Pick<AliasState, "releaseId" | "version"> {
+  const [, releaseId, version] =
+    ALIAS_DESCRIPTION.exec(description ?? "") ?? [];
+  return releaseId !== undefined &&
+    isReleaseId(releaseId) &&
+    version !== undefined &&
+    isBundleVersion(version)
+    ? { releaseId, version }
+    : { releaseId: undefined, version: undefined };
 }
 
 // The settings CreateFunction and UpdateFunctionConfiguration share.

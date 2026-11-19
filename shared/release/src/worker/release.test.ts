@@ -14,6 +14,7 @@ import {
   SHA256,
   TARGET,
   TIME_LEFT,
+  VERSION,
   VERSION_ID,
 } from "../../test/helpers.ts";
 import {
@@ -71,7 +72,7 @@ describe("release", () => {
       `publishVersion ${CODE_SHA256} ${DESCRIPTION}`,
       "waitUntilVersionActive 1",
       "getAlias",
-      `createAlias live 1 ${RELEASE_ID}`,
+      `createAlias live 1 ${RELEASE_ID} ${VERSION}`,
     ]);
   });
 
@@ -122,6 +123,7 @@ describe("release", () => {
         functionVersion: "1",
         revisionId: "revision-1",
         releaseId: releaseIdAt(-1),
+        version: VERSION,
       },
     });
 
@@ -153,7 +155,7 @@ describe("release", () => {
       `publishVersion ${CODE_SHA256} ${DESCRIPTION}`,
       "waitUntilVersionActive 2",
       "getAlias",
-      `updateAlias live 2 revision-1 ${RELEASE_ID}`,
+      `updateAlias live 2 revision-1 ${RELEASE_ID} ${VERSION}`,
     ]);
   });
 
@@ -201,6 +203,7 @@ describe("release", () => {
         functionVersion: "2",
         revisionId: "revision-1",
         releaseId: RELEASE_ID,
+        version: VERSION,
       },
     });
     const { aws, read } = fakeAws(lambda);
@@ -233,6 +236,7 @@ describe("release", () => {
         functionVersion: "1",
         revisionId: "revision-1",
         releaseId: releaseIdAt(1),
+        version: VERSION,
       },
     });
 
@@ -257,6 +261,135 @@ describe("release", () => {
     expect(lambda.calls).toEqual(["getAlias"]);
   });
 
+  it("changes nothing for a release of an earlier version than live's, for good, though asked for later", async () => {
+    const lambda = new FakeLambda({
+      versions: ["1"],
+      alias: {
+        functionVersion: "1",
+        revisionId: "revision-1",
+        releaseId: releaseIdAt(-1),
+        version: "1.10.0",
+      },
+    });
+
+    const error = await failure(
+      release(
+        fakeAws(lambda).aws,
+        BUCKET,
+        TARGET,
+        { ...REQUEST, version: "1.9.0", id: RELEASE_ID },
+        TIME_LEFT,
+      ),
+    );
+
+    expect(error).toMatchObject({
+      step: "check-order",
+      reason: "superseded",
+      retry: false,
+    });
+    expect(lambda.calls).toEqual(["getAlias"]);
+  });
+
+  // Once something other than a pipeline release can put an earlier version on live, a release
+  // asked for before it mustn't undo it.
+  it("changes nothing for a release asked for before the one on live, though of a later version", async () => {
+    const lambda = new FakeLambda({
+      versions: ["1"],
+      alias: {
+        functionVersion: "1",
+        revisionId: "revision-1",
+        releaseId: releaseIdAt(1),
+        version: "1.0.0",
+      },
+    });
+
+    const error = await failure(
+      release(
+        fakeAws(lambda).aws,
+        BUCKET,
+        TARGET,
+        { ...REQUEST, id: RELEASE_ID },
+        TIME_LEFT,
+      ),
+    );
+
+    expect(error).toMatchObject({ step: "check-order", reason: "superseded" });
+  });
+
+  it("releases a later version than live's", async () => {
+    const lambda = new FakeLambda({
+      versions: ["1"],
+      alias: {
+        functionVersion: "1",
+        revisionId: "revision-1",
+        releaseId: releaseIdAt(-1),
+        version: "1.4.1",
+      },
+    });
+
+    const released = await release(
+      fakeAws(lambda).aws,
+      BUCKET,
+      TARGET,
+      { ...REQUEST, id: RELEASE_ID },
+      TIME_LEFT,
+    );
+
+    expect(released.moved).toBe(true);
+    expect(lambda.alias).toMatchObject({
+      releaseId: RELEASE_ID,
+      version: VERSION,
+    });
+  });
+
+  // The rest of each ID is random, so it says nothing of which was asked for first.
+  it("releases one asked for in the same millisecond as the release on live", async () => {
+    const lambda = new FakeLambda({
+      versions: ["1"],
+      alias: {
+        functionVersion: "1",
+        revisionId: "revision-1",
+        releaseId: releaseIdAt(0, 0xff),
+        version: VERSION,
+      },
+    });
+
+    const released = await release(
+      fakeAws(lambda).aws,
+      BUCKET,
+      TARGET,
+      { ...REQUEST, id: releaseIdAt(0, 0x01) },
+      TIME_LEFT,
+    );
+
+    expect(releaseIdAt(0, 0xff) > releaseIdAt(0, 0x01)).toBe(true);
+    expect(lambda.alias?.releaseId).toBe(releaseIdAt(0, 0x01));
+    expect(released).toMatchObject({ created: true });
+  });
+
+  it("leaves live alone when a later version was released while this one ran", async () => {
+    const lambda = new FakeLambda();
+    const { aws } = fakeAws(lambda);
+    const publish = lambda.publishVersion.bind(lambda);
+    lambda.publishVersion = async (name, codeSha256, description) => {
+      const functionVersion = await publish(name, codeSha256, description);
+      lambda.alias = {
+        functionVersion: "9",
+        revisionId: "revision-9",
+        releaseId: releaseIdAt(-1),
+        version: "2.0.0",
+      };
+      return functionVersion;
+    };
+
+    const error = await failure(
+      release(aws, BUCKET, TARGET, { ...REQUEST, id: RELEASE_ID }, TIME_LEFT),
+    );
+
+    expect(error).toMatchObject({ step: "move-alias", reason: "superseded" });
+    expect(lambda.alias?.functionVersion).toBe("9");
+  });
+
   it("leaves live alone when a newer release moved it while this one ran", async () => {
     const lambda = new FakeLambda();
     const { aws } = fakeAws(lambda);
@@ -267,6 +400,7 @@ describe("release", () => {
         functionVersion: "9",
         revisionId: "revision-9",
         releaseId: releaseIdAt(1),
+        version: VERSION,
       };
       return version;
     };
@@ -311,6 +445,7 @@ describe("release", () => {
       functionVersion: "1",
       revisionId: "revision-2",
       releaseId: releaseIdAt(1),
+      version: VERSION,
     });
   });
 
@@ -321,6 +456,7 @@ describe("release", () => {
         functionVersion: "1",
         revisionId: "revision-1",
         releaseId: undefined,
+        version: undefined,
       },
     });
     lambda.definition = undefined;
