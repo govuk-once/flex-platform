@@ -19,6 +19,8 @@ const QUEUE_ARN = `arn:aws:sqs:eu-west-2:${ACCOUNT}:shared-release.fifo`;
 
 const TABLE_ARN = `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/shared-releases`;
 
+const ARTEFACT_TABLE_ARN = `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/shared-release-artefacts`;
+
 const PROPS: CiFunctionProps = {
   zoneName: ZONE.zoneName,
   codeBucketName: BUCKET,
@@ -30,6 +32,7 @@ const PROPS: CiFunctionProps = {
   ],
   releaseQueue: { url: QUEUE_URL, arn: QUEUE_ARN },
   releaseTable: { name: "shared-releases", arn: TABLE_ARN },
+  artefactTable: { name: "shared-release-artefacts", arn: ARTEFACT_TABLE_ARN },
 };
 
 function build(region = "eu-west-2", nag = false, props = PROPS) {
@@ -114,6 +117,7 @@ describe("CiFunction", () => {
       "s3:ListBucket",
       "sqs:SendMessage",
       "dynamodb:PutItem",
+      "dynamodb:PutItem",
       "dynamodb:UpdateItem",
     ]);
     built.resourceCountIs("AWS::IAM::Policy", 0);
@@ -154,6 +158,25 @@ describe("CiFunction", () => {
                 Effect: "Allow",
                 Action: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
                 Resource: TABLE_ARN,
+              },
+            ]),
+          },
+        },
+      ],
+    });
+  });
+
+  // A version is recorded once, where there is none, and never changed.
+  it("may record a version in the artefacts table, and never change one", () => {
+    template().hasResourceProperties("AWS::IAM::Role", {
+      Policies: [
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              {
+                Effect: "Allow",
+                Action: "dynamodb:PutItem",
+                Resource: ARTEFACT_TABLE_ARN,
               },
             ]),
           },
@@ -250,6 +273,7 @@ describe("CiFunction", () => {
     expect(code).toContain("publishes: true");
     expect(code).toContain(`queueUrl: "${QUEUE_URL}"`);
     expect(code).toContain('table: "shared-releases"');
+    expect(code).toContain('table: "shared-release-artefacts"');
   });
 
   it("refuses to build with a repository that isn't given by GitHub's IDs", () => {

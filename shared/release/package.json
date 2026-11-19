@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./bundle-key": "./src/bundle-key.ts",
+    "./bundle-version": "./src/bundle-version.ts",
     "./request": "./src/request.ts",
     "./table": "./src/table.ts"
   },

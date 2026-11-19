@@ -64,6 +64,8 @@ export interface CiFunctionProps {
   readonly releaseQueue: { readonly url: string; readonly arn: string };
   /** The table each release is recorded in, by the name the function is built with and by ARN. */
   readonly releaseTable: { readonly name: string; readonly arn: string };
+  /** The table each uploaded version is recorded in, by name and by ARN, as above. */
+  readonly artefactTable: { readonly name: string; readonly arn: string };
 }
 
 /**
@@ -71,8 +73,9 @@ export interface CiFunctionProps {
  * who may release what: the token's issuer and audience, and each domain's repository.
  *
  * Its role may write a bundle's key in the code bucket: it signs each upload a pipeline makes, and
- * a signature carries no more than the signer's own permission. It may look for a bundle, to
- * release only one that was uploaded, and put a release on the release worker's queue.
+ * a signature carries no more than the signer's own permission. It may record each version a
+ * pipeline uploads, look for a bundle, to release only one that was uploaded, and put a release
+ * on the release worker's queue.
  *
  * The URL takes only requests signed with SigV4 by a caller IAM allows, and the function's
  * policy admits CloudFront alone, for this account's distributions. So a request sent straight
@@ -145,6 +148,11 @@ export class CiFunction extends Construct {
               actions: ["sqs:SendMessage"],
               resources: [props.releaseQueue.arn],
             }),
+            // To claim each version for its bundle. A version is never changed, so only put.
+            new PolicyStatement({
+              actions: ["dynamodb:PutItem"],
+              resources: [props.artefactTable.arn],
+            }),
             // To record each release, and to record one the queue wouldn't take as failed.
             new PolicyStatement({
               actions: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
@@ -173,7 +181,11 @@ export class CiFunction extends Construct {
           audience: ciAudience(props.zoneName),
           environments: props.environments,
           domains: props.domains,
-          uploads: { bucket: props.codeBucketName, region: stack.region },
+          uploads: {
+            bucket: props.codeBucketName,
+            region: stack.region,
+            table: props.artefactTable.name,
+          },
           releases: {
             queueUrl: props.releaseQueue.url,
             table: props.releaseTable.name,

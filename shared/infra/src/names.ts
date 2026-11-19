@@ -65,6 +65,9 @@ export const RELEASE_METRIC_NAMESPACE = "flex/shared/release";
 /** Every release the pipeline API records, and how each went. */
 export const RELEASE_TABLE_NAME = "shared-releases";
 
+/** Each version a domain has uploaded, and the bundle it names. */
+export const ARTEFACT_TABLE_NAME = "shared-release-artefacts";
+
 /**
  * The release queue's address, which the pipeline API is built with. SQS builds it from the
  * queue's region, its account and its name, so it is known before the queue exists.

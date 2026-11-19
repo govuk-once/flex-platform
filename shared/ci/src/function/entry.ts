@@ -1,5 +1,6 @@
 // What Lambda runs. Only the build bundles this module: it replaces CI_CONFIG with a stage's
 // config.
+import { createVersionClaim } from "./artefacts.ts";
 import { createAuthoriser, createPublishCheck } from "./authorise.ts";
 import { createCiHandler } from "./handler.ts";
 import { createBundleFinder, createReleaseQueue } from "./release-queue.ts";
@@ -16,6 +17,10 @@ export const handler = createCiHandler({
   verifyToken: createTokenVerifier(CI_CONFIG),
   authorise: createAuthoriser(CI_CONFIG),
   publishes: createPublishCheck(CI_CONFIG),
+  claimVersion: createVersionClaim({
+    uploads: CI_CONFIG.uploads,
+    now: () => Date.now(),
+  }),
   signUpload: createUploadSigner({
     uploads: CI_CONFIG.uploads,
     credentials: credentialsFromEnvironment,

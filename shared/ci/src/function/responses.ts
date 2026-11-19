@@ -56,6 +56,17 @@ export function bundleMissing(traceId: string): FunctionUrlResult {
   );
 }
 
+// For a pipeline that is allowed, so it is told why: a version names one bundle, and never
+// another once it is recorded.
+export function versionTaken(traceId: string): FunctionUrlResult {
+  return answer(
+    409,
+    "This version is already a different bundle",
+    "client_error",
+    traceId,
+  );
+}
+
 // The release is queued, not done: the worker creates or updates the function, and moves `live`.
 export function releaseQueued(
   traceId: string,
@@ -76,6 +87,25 @@ export function releaseQueued(
   };
 }
 
+// The bundle is in the bucket already, so there is nothing to upload.
+export function uploadPresent(
+  traceId: string,
+  upload: { version: string; sha256: string },
+): FunctionUrlResult {
+  return {
+    statusCode: 200,
+    headers: {
+      "content-type": "application/json",
+      "x-correlation-id": traceId,
+    },
+    body: JSON.stringify({
+      version: upload.version,
+      sha256: upload.sha256,
+      uploaded: true,
+    }),
+  };
+}
+
 // Never stored: the address is the pipeline's alone, and good for five minutes.
 export function uploadSigned(
   traceId: string,
@@ -89,6 +119,7 @@ export function uploadSigned(
       "x-correlation-id": traceId,
     },
     body: JSON.stringify({
+      uploaded: false,
       method: "PUT",
       url: upload.url,
       headers: upload.headers,

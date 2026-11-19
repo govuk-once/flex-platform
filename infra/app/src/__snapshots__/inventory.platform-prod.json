@@ -2369,6 +2369,10 @@
         "type": "AWS::Lambda::Function"
       },
       {
+        "logicalId": "ArtefactsTable776927FA",
+        "type": "AWS::DynamoDB::Table"
+      },
+      {
         "logicalId": "CiFunction29129BCA",
         "type": "AWS::Lambda::Function"
       },

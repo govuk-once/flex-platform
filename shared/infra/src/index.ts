@@ -1,3 +1,4 @@
+export { ArtefactTable, type ArtefactTableProps } from "./artefact-table.ts";
 export {
   CI_CONCURRENCY,
   CiFunction,
@@ -11,6 +12,7 @@ export {
 export { ManagementEdge } from "./management-edge.ts";
 export { ManagementViewerRequestFunction } from "./management-viewer-request-function.ts";
 export {
+  ARTEFACT_TABLE_NAME,
   CI_FUNCTION_NAME,
   CI_ORIGIN_HOST_PARAMETER,
   ciAudience,
