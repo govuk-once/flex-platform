@@ -9,14 +9,17 @@
 
 import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
 
+import { isBundleVersion } from "./bundle-version.ts";
 import { isReleaseId } from "./release-id.ts";
 
 export interface ReleaseRequest {
   readonly environment: string;
   readonly domain: string;
+  /** The version of the domain's code, as its pipeline named it when it uploaded the bundle. */
+  readonly version: string;
   /** The bundle's SHA-256, in lowercase hex, which its key is named by. */
   readonly sha256: string;
-  /** The version of the bundle's object, which the worker reads and Lambda loads. */
+  /** The S3 version of the bundle's object, which the worker reads and Lambda loads. */
   readonly versionId: string;
   /** GitHub's ID for the run that asked, for the log. A token may hold none. */
   readonly runId?: string | undefined;
@@ -44,6 +47,7 @@ const COMMIT = /^[0-9a-f]{40}$|^[0-9a-f]{64}$/;
 const REQUEST_FIELDS = new Set([
   "environment",
   "domain",
+  "version",
   "sha256",
   "versionId",
   "runId",
@@ -93,6 +97,7 @@ export function parseReleaseRequest(
 
   const environment = fields.get("environment");
   const domain = fields.get("domain");
+  const version = fields.get("version");
   const sha256 = fields.get("sha256");
   const versionId = fields.get("versionId");
   const runId = fields.get("runId");
@@ -100,6 +105,7 @@ export function parseReleaseRequest(
   if (
     !matches(environment, isPlatformName) ||
     !matches(domain, isPlatformName) ||
+    !matches(version, isBundleVersion) ||
     !matches(sha256, (value) => SHA256_HEX.test(value)) ||
     !matches(versionId, (value) => VERSION_ID.test(value)) ||
     !optional(runId, (value) => RUN_ID.test(value)) ||
@@ -110,6 +116,7 @@ export function parseReleaseRequest(
   return {
     environment,
     domain,
+    version,
     sha256,
     versionId,
     ...(runId !== undefined && { runId }),

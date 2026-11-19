@@ -11,6 +11,7 @@ import {
   REQUEST,
   REQUESTED_AT,
   SHA256,
+  VERSION,
   VERSION_ID,
 } from "../test/helpers.ts";
 import { type Answer, answering } from "../test/stub-aws.ts";
@@ -29,6 +30,7 @@ const ITEM: Record<string, AttributeValue> = {
   ...ITEM_KEY,
   environment: { S: "development" },
   domain: { S: "example" },
+  version: { S: VERSION },
   sha256: { S: SHA256 },
   versionId: { S: VERSION_ID },
   runId: { S: "12345678901" },
@@ -136,7 +138,12 @@ describe("createReleaseTable", () => {
 
     await table.finish(
       KEY,
-      { status: "released", version: "2", created: false, moved: true },
+      {
+        status: "released",
+        functionVersion: "2",
+        created: false,
+        moved: true,
+      },
       3000,
       "releasing",
     );
@@ -145,19 +152,19 @@ describe("createReleaseTable", () => {
       TableName: TABLE,
       Key: ITEM_KEY,
       UpdateExpression:
-        "SET #status = :status, #updatedAt = :updatedAt, #version = :version, #created = :created, #moved = :moved",
+        "SET #status = :status, #updatedAt = :updatedAt, #functionVersion = :functionVersion, #created = :created, #moved = :moved",
       ConditionExpression: "attribute_exists(id) AND #status <> :status",
       ExpressionAttributeNames: {
         "#status": "status",
         "#updatedAt": "updatedAt",
-        "#version": "version",
+        "#functionVersion": "functionVersion",
         "#created": "created",
         "#moved": "moved",
       },
       ExpressionAttributeValues: {
         ":status": { S: "released" },
         ":updatedAt": { N: "3000" },
-        ":version": { S: "2" },
+        ":functionVersion": { S: "2" },
         ":created": { BOOL: false },
         ":moved": { BOOL: true },
       },
@@ -240,14 +247,15 @@ describe("recordOf", () => {
         ...ITEM,
         status: { S: "released" },
         attempts: { N: "2" },
-        version: { S: "3" },
+        functionVersion: { S: "3" },
         created: { BOOL: false },
         moved: { BOOL: true },
       }),
     ).toMatchObject({
       status: "released",
+      version: VERSION,
       attempts: 2,
-      version: "3",
+      functionVersion: "3",
       moved: true,
     });
   });
@@ -256,6 +264,9 @@ describe("recordOf", () => {
     ["a status it doesn't know", { status: { S: "done" } }],
     ["an ID that isn't a release's", { id: { S: "1" } }],
     ["a hash that isn't one", { sha256: { S: "abc" } }],
+    // Recorded before releases had versions.
+    ["no version", { version: undefined }],
+    ["a version that isn't one", { version: { S: "v1.4.2" } }],
     ["no request time", { requestedAt: undefined }],
     ["a count that isn't whole", { attempts: { N: "0.5" } }],
     ["a name given as a number", { domain: { N: "1" } }],

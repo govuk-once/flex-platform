@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { BUNDLE, functionUrlEvent, UPLOAD } from "../../test/helpers.ts";
+import {
+  BUNDLE,
+  functionUrlEvent,
+  UPLOAD,
+  VERSION,
+} from "../../test/helpers.ts";
 import { MAX_BUNDLE_BYTES, releaseOf, uploadOf } from "./bundle.ts";
 
 function sent(body: unknown) {
@@ -97,16 +102,17 @@ describe("releaseOf", () => {
     return releaseOf(functionUrlEvent({ body: JSON.stringify(body) }));
   }
 
-  it("reads the hash of the bundle to release", () => {
-    expect(asked({ sha256: BUNDLE.sha256 })).toEqual({ sha256: BUNDLE.sha256 });
+  it("reads the version to release", () => {
+    expect(asked({ version: VERSION })).toEqual({ version: VERSION });
   });
 
   it.each([
     ["no body", null],
     ["text that isn't JSON", "release"],
-    ["a list", JSON.stringify([{ sha256: BUNDLE.sha256 }])],
-    // A release names its bundle by hash alone. The size was the upload's to say.
-    ["a field it doesn't know", JSON.stringify(BUNDLE)],
+    ["a list", JSON.stringify([{ version: VERSION }])],
+    // A release names its bundle by version alone. The hash and size were the upload's to say.
+    ["a field it doesn't know", JSON.stringify(UPLOAD)],
+    ["a hash in place of a version", JSON.stringify({ sha256: BUNDLE.sha256 })],
     ["a body far longer than a release's", `${" ".repeat(2000)}{}`],
   ])("refuses %s as no body of a release's", (_, body) => {
     expect(releaseOf(functionUrlEvent({ body }))).toBe("body");
@@ -114,9 +120,9 @@ describe("releaseOf", () => {
 
   it.each([
     ["none", undefined],
-    ["one in capitals", BUNDLE.sha256.toUpperCase()],
-    ["a path", `../${BUNDLE.sha256.slice(3)}`],
-  ])("refuses a hash that is %s", (_, sha256) => {
-    expect(asked({ sha256 })).toBe("sha256");
+    ["one with a v", "v1.4.2"],
+    ["a number", 1],
+  ])("refuses a version that is %s", (_, version) => {
+    expect(asked({ version })).toBe("version");
   });
 });

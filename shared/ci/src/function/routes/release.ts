@@ -3,15 +3,16 @@ import { bundleKey } from "@repo/shared-release/bundle-key";
 import { releaseOf } from "../bundle.ts";
 import {
   badRequest,
-  bundleMissing,
   notAccepted,
   releaseQueued,
+  versionUnknown,
 } from "../responses.ts";
 import type { RouteHandler } from "../router.ts";
 import { logOutcome } from "../telemetry.ts";
 
-// Only a bundle the domain's pipeline uploaded can be released: the key is under the domain the
-// pipeline is allowed for, and named by the hash it asks for.
+// Only a version the domain's pipeline uploaded can be released: the version is the domain's the
+// pipeline is allowed for, and names the bundle it was uploaded with, whose key is under that
+// domain.
 export const release: RouteHandler = async (
   options,
   { event, traceId, pipeline, target, details, request },
@@ -25,23 +26,31 @@ export const release: RouteHandler = async (
     logOutcome("ci_release_invalid", request(), { ...details, reason: asked });
     return badRequest(traceId);
   }
+  const logged = { ...details, version: asked.version };
 
-  const key = bundleKey(target.domain, asked.sha256);
+  const sha256 = await options.findArtefact(target.domain, asked.version);
+  if (sha256 === undefined) {
+    logOutcome("ci_release_version_unknown", request(), logged);
+    return versionUnknown(traceId);
+  }
+  // A version is claimed before its bundle is uploaded, so the bundle may never have been.
+  const key = bundleKey(target.domain, sha256);
   const versionId = await options.findBundle(key);
   if (versionId === undefined) {
-    logOutcome("ci_release_bundle_missing", request(), { ...details, key });
-    return bundleMissing(traceId);
+    logOutcome("ci_release_bundle_missing", request(), { ...logged, key });
+    return versionUnknown(traceId);
   }
 
   const releaseId = await options.queueRelease({
     ...target,
-    sha256: asked.sha256,
+    version: asked.version,
+    sha256,
     versionId,
     runId: pipeline.runId,
     commit: pipeline.commit,
   });
   logOutcome("ci_release_queued", request(), {
-    ...details,
+    ...logged,
     key,
     versionId,
     releaseId,
@@ -49,6 +58,7 @@ export const release: RouteHandler = async (
   return releaseQueued(traceId, {
     releaseId,
     ...target,
-    sha256: asked.sha256,
+    version: asked.version,
+    sha256,
   });
 };

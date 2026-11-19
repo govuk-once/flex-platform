@@ -74,8 +74,8 @@ export interface CiFunctionProps {
  *
  * Its role may write a bundle's key in the code bucket: it signs each upload a pipeline makes, and
  * a signature carries no more than the signer's own permission. It may record each version a
- * pipeline uploads, look for a bundle, to release only one that was uploaded, and put a release
- * on the release worker's queue.
+ * pipeline uploads and read one back, look for a bundle, to release only one that was uploaded,
+ * and put a release on the release worker's queue.
  *
  * The URL takes only requests signed with SigV4 by a caller IAM allows, and the function's
  * policy admits CloudFront alone, for this account's distributions. So a request sent straight
@@ -148,9 +148,10 @@ export class CiFunction extends Construct {
               actions: ["sqs:SendMessage"],
               resources: [props.releaseQueue.arn],
             }),
-            // To claim each version for its bundle. A version is never changed, so only put.
+            // To claim each version for its bundle, and to find the bundle a release names. A
+            // version is never changed, so only put and get.
             new PolicyStatement({
-              actions: ["dynamodb:PutItem"],
+              actions: ["dynamodb:GetItem", "dynamodb:PutItem"],
               resources: [props.artefactTable.arn],
             }),
             // To record each release, and to record one the queue wouldn't take as failed.

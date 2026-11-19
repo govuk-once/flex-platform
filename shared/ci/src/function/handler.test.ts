@@ -50,6 +50,8 @@ const RELEASES = "/ci/environments/development/domains/example/releases";
 
 const RELEASE_ID = "0196a8f0-2c00-7000-8000-000000000000";
 
+const RELEASE_BODY = JSON.stringify({ version: VERSION });
+
 const KEY = `example/bundle/${BUNDLE.sha256}.zip`;
 
 const BUCKET_URL = `https://${CONFIG.uploads.bucket}.s3.eu-west-2.amazonaws.com`;
@@ -82,6 +84,8 @@ function handler(documents?: Record<string, unknown>) {
       signed.push(key);
       return signUpload(key, bundle);
     },
+    findArtefact: (domain, version) =>
+      Promise.resolve(artefacts.get(`${domain}/${version}`)?.sha256),
     findBundle: (key) => Promise.resolve(objects.get(key)),
     queueRelease: (request) => {
       queued.push(request);
@@ -94,6 +98,16 @@ function handler(documents?: Record<string, unknown>) {
     },
   });
   return { handle, fetched: fake.fetched };
+}
+
+// The version in these tests, recorded for the bundle, which is in the bucket.
+function uploaded(): void {
+  artefacts.set(`example/${VERSION}`, {
+    domain: "example",
+    version: VERSION,
+    sha256: BUNDLE.sha256,
+  });
+  objects.set(KEY, VERSION_ID);
 }
 
 const CALLER = {
@@ -380,15 +394,12 @@ describe("createCiHandler", () => {
     expect(signed).toEqual([]);
   });
 
-  it("queues the release of a bundle the pipeline uploaded, and answers 202", async () => {
+  it("queues the release of a version the pipeline uploaded, and answers 202", async () => {
     const { handle } = handler();
-    objects.set(KEY, VERSION_ID);
+    uploaded();
 
     const response = await handle(
-      functionUrlEvent({
-        path: RELEASES,
-        body: JSON.stringify({ sha256: BUNDLE.sha256 }),
-      }),
+      functionUrlEvent({ path: RELEASES, body: RELEASE_BODY }),
     );
 
     expect(response).toEqual({
@@ -401,6 +412,7 @@ describe("createCiHandler", () => {
         releaseId: RELEASE_ID,
         environment: "development",
         domain: "example",
+        version: VERSION,
         sha256: BUNDLE.sha256,
       }),
     });
@@ -408,6 +420,7 @@ describe("createCiHandler", () => {
       {
         environment: "development",
         domain: "example",
+        version: VERSION,
         sha256: BUNDLE.sha256,
         versionId: VERSION_ID,
         runId: "12345678901",
@@ -425,6 +438,7 @@ describe("createCiHandler", () => {
             ...CALLER,
             environment: "development",
             domain: "example",
+            version: VERSION,
             key: KEY,
             versionId: VERSION_ID,
             releaseId: RELEASE_ID,
@@ -434,19 +448,46 @@ describe("createCiHandler", () => {
     ]);
   });
 
-  it("answers 409 to a release of a bundle that was never uploaded, queueing nothing", async () => {
+  it("answers 409 to a release of a version that was never uploaded, queueing nothing", async () => {
     const { handle } = handler();
+    objects.set(KEY, VERSION_ID);
 
     await expect(
-      handle(
-        functionUrlEvent({
-          path: RELEASES,
-          body: JSON.stringify({ sha256: BUNDLE.sha256 }),
-        }),
-      ),
+      handle(functionUrlEvent({ path: RELEASES, body: RELEASE_BODY })),
     ).resolves.toMatchObject({
       statusCode: 409,
-      body: body("No bundle with this hash has been uploaded", "client_error"),
+      body: body(
+        "No bundle with this version has been uploaded",
+        "client_error",
+      ),
+    });
+    expect(logged[0]?.telemetry).toEqual({
+      event: "ci_release_version_unknown",
+      details: {
+        ...REQUEST,
+        ...CALLER,
+        environment: "development",
+        domain: "example",
+        version: VERSION,
+      },
+    });
+    expect(queued).toEqual([]);
+  });
+
+  // A version is claimed before its bundle is uploaded, by a run that may have stopped.
+  it("answers 409 to a release of a version whose bundle never arrived, queueing nothing", async () => {
+    const { handle } = handler();
+    await handle(functionUrlEvent());
+    logged.length = 0;
+
+    await expect(
+      handle(functionUrlEvent({ path: RELEASES, body: RELEASE_BODY })),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: body(
+        "No bundle with this version has been uploaded",
+        "client_error",
+      ),
     });
     expect(logged[0]?.telemetry).toEqual({
       event: "ci_release_bundle_missing",
@@ -455,37 +496,39 @@ describe("createCiHandler", () => {
         ...CALLER,
         environment: "development",
         domain: "example",
+        version: VERSION,
         key: KEY,
       },
     });
     expect(queued).toEqual([]);
   });
 
-  // Another domain's bundle is under another domain's key, which this route never looks at.
-  it("looks for the bundle only under the domain the pipeline is allowed for", async () => {
+  // Another domain's versions are its own, which this route never looks at.
+  it("looks for the version only under the domain the pipeline is allowed for", async () => {
     const { handle } = handler();
+    artefacts.set(`elsewhere/${VERSION}`, {
+      domain: "elsewhere",
+      version: VERSION,
+      sha256: BUNDLE.sha256,
+    });
     objects.set(`elsewhere/bundle/${BUNDLE.sha256}.zip`, VERSION_ID);
 
     await expect(
-      handle(
-        functionUrlEvent({
-          path: RELEASES,
-          body: JSON.stringify({ sha256: BUNDLE.sha256 }),
-        }),
-      ),
+      handle(functionUrlEvent({ path: RELEASES, body: RELEASE_BODY })),
     ).resolves.toMatchObject({ statusCode: 409 });
     expect(queued).toEqual([]);
   });
 
   it("answers 409 to a release in an environment that takes its code by promotion", async () => {
     const { handle } = handler();
+    uploaded();
 
     await expect(
       handle(
         functionUrlEvent({
           ...STAGING,
           path: "/ci/environments/staging/domains/example/releases",
-          body: JSON.stringify({ sha256: BUNDLE.sha256 }),
+          body: RELEASE_BODY,
         }),
       ),
     ).resolves.toMatchObject({
@@ -497,12 +540,15 @@ describe("createCiHandler", () => {
   });
 
   it.each([
-    ["body", { sha256: BUNDLE.sha256, size: BUNDLE.size }],
-    ["sha256", { sha256: "abc" }],
+    ["body", UPLOAD],
+    // A release names its bundle by version alone.
+    ["body", { sha256: BUNDLE.sha256 }],
+    ["version", { version: "1.4" }],
   ])(
     "answers 400 to a release whose %s is no release's, queueing nothing",
     async (reason, sent) => {
       const { handle } = handler();
+      uploaded();
 
       await expect(
         handle(
@@ -530,7 +576,7 @@ describe("createCiHandler", () => {
       handle(
         functionUrlEvent({
           path: "/ci/environments/development/domains/elsewhere/releases",
-          body: JSON.stringify({ sha256: BUNDLE.sha256 }),
+          body: RELEASE_BODY,
         }),
       ),
     ).resolves.toMatchObject({ statusCode: 403 });

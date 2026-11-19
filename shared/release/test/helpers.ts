@@ -31,6 +31,9 @@ export const VERSION_ID = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
 
 export const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
+/** The version of the domain's code the release in these tests is for. */
+export const VERSION = "1.4.2";
+
 export const TARGET: ReleaseTarget = {
   environment: "development",
   domain: "example",
@@ -69,6 +72,7 @@ export const NETWORK: Network = {
 export const REQUEST = {
   environment: "development",
   domain: "example",
+  version: VERSION,
   sha256: SHA256,
   versionId: VERSION_ID,
   runId: "12345678901",
@@ -160,8 +164,11 @@ export class FakeLambda implements FunctionApi {
     return Promise.resolve(version);
   }
 
-  waitUntilVersionActive(_name: string, version: string): Promise<void> {
-    this.call(`waitUntilVersionActive ${version}`);
+  waitUntilVersionActive(
+    _name: string,
+    functionVersion: string,
+  ): Promise<void> {
+    this.call(`waitUntilVersionActive ${functionVersion}`);
     return Promise.resolve();
   }
 
@@ -173,23 +180,25 @@ export class FakeLambda implements FunctionApi {
   createAlias(
     _name: string,
     alias: string,
-    version: string,
+    functionVersion: string,
     releaseId: string,
   ): Promise<void> {
-    this.call(`createAlias ${alias} ${version} ${releaseId}`);
-    this.alias = { version, revisionId: "revision-1", releaseId };
+    this.call(`createAlias ${alias} ${functionVersion} ${releaseId}`);
+    this.alias = { functionVersion, revisionId: "revision-1", releaseId };
     return Promise.resolve();
   }
 
   updateAlias(
     _name: string,
     alias: string,
-    version: string,
+    functionVersion: string,
     revisionId: string,
     releaseId: string,
   ): Promise<void> {
-    this.call(`updateAlias ${alias} ${version} ${revisionId} ${releaseId}`);
-    this.alias = { version, revisionId: "revision-2", releaseId };
+    this.call(
+      `updateAlias ${alias} ${functionVersion} ${revisionId} ${releaseId}`,
+    );
+    this.alias = { functionVersion, revisionId: "revision-2", releaseId };
     return Promise.resolve();
   }
 }

@@ -344,13 +344,13 @@ asked for, and a domain's releases list newest first. Each holds:
 
 | Attribute | Holds |
 |---|---|
-| `environment`, `domain`, `sha256`, `versionId` | What was asked for: the bundle by its hash, and the version of its object |
+| `environment`, `domain`, `version`, `sha256`, `versionId` | What was asked for: the [version](#versions), the bundle it names by its hash, and the S3 version of its object |
 | `runId`, `commit` | The run that asked, and its commit, when its token said |
 | `status` | `queued`, `releasing`, `released`, `failed`, `refused` or `abandoned` |
 | `requestedAt`, `updatedAt` | When the API recorded it, and when it last changed, in milliseconds |
 | `attempts` | How many times the worker has claimed it |
 | `step`, `reason` | For a release that stopped: the step, and a fixed code for why |
-| `version`, `created`, `moved` | For a release that succeeded: the version `live` points at, and whether the release created the function and moved `live` |
+| `functionVersion`, `created`, `moved` | For a release that succeeded: the function version `live` points at, and whether the release created the function and moved `live` |
 
 `failed` will be tried again. `refused` never will be: nothing about the release would change.
 `abandoned` was tried as often as the queue tries, and won't be again: the pipeline asks again.
@@ -371,8 +371,8 @@ worker releases what the table records under it:
   denies, to every principal, putting an item unless it is the API's role, `shared-ci`, changing
   one unless it is `shared-ci`'s, `shared-release-worker`'s or
   `shared-release-dead-letter-worker`'s, and deleting one. It also denies, to every principal, an
-  update that names `environment`, `domain`, `sha256`, `versionId`, `runId`, `commit` or
-  `requestedAt`. So no writer can point a release at another domain or another bundle, and an
+  update that names `environment`, `domain`, `version`, `sha256`, `versionId`, `runId`, `commit`
+  or `requestedAt`. So no writer can point a release at another domain or another bundle, and an
   update that makes an item makes one with none of them, which isn't a release. PartiQL's writes
   are denied outright, since nothing uses them. A deny in a resource's policy holds whatever any
   other policy allows. A message that names no release in the table is logged and dropped.
@@ -396,9 +396,9 @@ earlier. A rollback is a new release, of the older bundle.
 For each release it claims, the worker:
 
 1. **Assumes the domain's deploy role** in the domain account, and reads `live`. A release `live`
-   already names is done: the worker records it `released`, with `live`'s version, and changes
-   nothing. A release asked for before the one on `live` is refused.
-2. **Checks the bundle.** It reads the version of the bundle's object the API found, in full,
+   already names is done: the worker records it `released`, with `live`'s function version, and
+   changes nothing. A release asked for before the one on `live` is refused.
+2. **Checks the bundle.** It reads the S3 version of the bundle's object the API found, in full,
    and hashes it. The key names the bundle's hash, so an object with any other is refused before
    anything is made of it. It reads the isolated subnets and the `domain` security group from the
    network's parameters, as the role.
@@ -409,10 +409,12 @@ For each release it claims, the worker:
    enough to be `Inactive`, and may mend one that `Failed`.
 4. **Checks the code Lambda loaded.** Lambda's hash of the code, in base64, must be the bundle's,
    in hex, compared as bytes.
-5. **Publishes a version,** if the code still has that hash, and waits until it is active. A
-   version's description names the bundle and the commit it was built from. A function whose code
-   and configuration haven't changed since its last version gets that version back.
-6. **Points `live` at the version,** creating the alias the first time, and names the release in
+5. **Publishes a function version,** if the code still has that hash, and waits until it is
+   active. A function version's description names the bundle and the commit it was built from. A
+   function whose code and configuration haven't changed since its last function version gets
+   that function version back, so its description names the bundle and commit it was first
+   published for.
+6. **Points `live` at the function version,** creating the alias the first time, and names the release in
    its description. Otherwise it checks the order again, and moves the alias only from the
    revision it read, so a change made since is never overwritten.
 
@@ -435,7 +437,7 @@ A release sets the function's:
 - runtime, `nodejs24.x`, on arm64, with the handler `index.handler`, 1,024 MB of memory and a
   29-second timeout. A domain doesn't choose these. The timeout is how long the domain's API
   waits for the function, so a function never runs on after no one is waiting;
-- code, the bundle's object by its version. Lambda reads the code from the bucket in place and
+- code, the bundle's object by its S3 version. Lambda reads the code from the bucket in place and
   keeps no copy, so the bucket [lets Lambda read it](#uploading-a-bundle) for as long as the
   function has it.
 
@@ -460,11 +462,11 @@ shows the last one stopped.
 
 The worker writes one log line for each attempt at a release, to `/flex/shared/release-worker`:
 what happened as a fixed code, the queue's ID for the message, how long it took, and, once the
-table holds the release, its ID, the environment, the domain, the bundle's hash, GitHub's ID for
-the run and the commit. A release that stopped adds the step and a reason: AWS's code for the
+table holds the release, its ID, the environment, the domain, the version, the bundle's hash,
+GitHub's ID for the run and the commit. A release that stopped adds the step and a reason: AWS's code for the
 error, such as `AccessDeniedException`, or Lambda's for a function that won't become ready, such
-as `SubnetOutOfIPAddresses`, never a message. A release that succeeded adds the version, and
-whether it created the function and moved `live`.
+as `SubnetOutOfIPAddresses`, never a message. A release that succeeded adds the function
+version, and whether it created the function and moved `live`.
 
 The worker is built with each domain it may release, and everything a release of it names, by
 `buildReleaseWorker` when the stage is synthesized: every domain with a repository, in each
@@ -623,8 +625,8 @@ request, in order, it:
 5. **Reads the body.** For an upload it is
    `{ "version": "<major.minor.patch>", "sha256": "<64 lowercase hex digits>", "size": <bytes> }`,
    with a [version](#versions) and a size from 1 byte to 250 MB, the most Lambda unzips a
-   function's code to. For a release it is `{ "sha256": "<64 lowercase hex digits>" }`. Either
-   holds nothing else, and anything else is a 400. The body is read only now, for a pipeline that
+   function's code to. For a release it is `{ "version": "<major.minor.patch>" }`. Either holds
+   nothing else, and anything else is a 400. The body is read only now, for a pipeline that
    is allowed.
 6. **Claims the version and signs the upload,** and answers 200 with
    [where to send the bundle](#uploading-a-bundle), or **queues the release** of a bundle that was
@@ -640,8 +642,8 @@ The function writes one log line for each request: what happened as a fixed code
 trace ID, how long it took, and for a verified token GitHub's IDs for the repository, its owner
 and the workflow run, and the commit the job runs for. The environment and the domain are logged
 only for a pipeline that was allowed, when they are names from config. An upload's line adds
-the version, the bundle's key and its size, and a queued release's the bundle's key and its
-object's S3 version. The token is never logged, and neither is the address an
+the version, the bundle's key and its size, and a release's the version, and once it is found the
+bundle's key, and for a queued release its object's S3 version. The token is never logged, and neither is the address an
 upload was signed for, or anything a repository's admin can write, such as its name or an
 environment's.
 
@@ -782,7 +784,7 @@ object. The sort key is the version as text, which doesn't sort as versions do.
 
 #### Releasing a bundle
 
-Once its bundle is uploaded, the pipeline asks for its release by the same hash:
+Once its bundle is uploaded, the pipeline asks for its release by its version:
 
 ```http
 POST /ci/environments/<environment>/domains/<domain>/releases
@@ -790,26 +792,31 @@ content-type: application/json
 x-flex-ci-token: <the job's token>
 x-amz-content-sha256: <this body's SHA-256>
 
-{ "sha256": "<the zip's SHA-256, in lowercase hex>" }
+{ "version": "<the version, such as 1.4.2>" }
 ```
 
-The API looks for `<domain>/bundle/<sha256>.zip`, under the domain the pipeline was allowed for,
-so a pipeline can release only its own domain's code. If there is no such object, it answers
-409, `No bundle with this hash has been uploaded`. Otherwise it records the release, with the
-object's version, in the [release table](#the-release-table), puts its key on the
-[release worker](#the-release-worker)'s queue, and answers 202 with the release's ID:
+The API reads the version from the [artefacts table](#the-artefacts-table), under the domain the
+pipeline was allowed for, so a pipeline can release only its own domain's code. It then looks
+for the bundle the version names, `<domain>/bundle/<sha256>.zip`: a version is claimed before
+its bundle is uploaded, so the bundle may never have arrived. If either is missing, it answers
+409, `No bundle with this version has been uploaded`. Otherwise it records the release, with the
+version, the bundle's hash and its object's S3 version, in the
+[release table](#the-release-table), puts its key on the [release worker](#the-release-worker)'s
+queue, and answers 202 with the release's ID:
 
 ```json
 {
   "releaseId": "<the release's ID>",
   "environment": "<environment>",
   "domain": "<domain>",
+  "version": "<the version>",
   "sha256": "<the zip's SHA-256>"
 }
 ```
 
 The release is queued, not done. Each request is a release of its own: asking again for the
-bundle already on `live` publishes no new version and leaves `live` where it is. If the queue
+version already on `live` publishes no new function version, unless the configuration the
+platform sets has changed, and leaves `live` where it is. If the queue
 refuses the message, the API records the release `refused`, at the step `queue`, and answers 500:
 no message is behind it, so it will never be tried, and the pipeline asks again.
 The pipeline can't yet ask how a release went: the worker's log and the table say.

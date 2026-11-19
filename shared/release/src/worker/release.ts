@@ -1,13 +1,13 @@
 // Releases one uploaded bundle to one domain's function: creates the function the first time, or
-// else brings its configuration and code up to date, then publishes a version and points `live`
-// at it. The domain's API invokes `live` and nothing else, so nothing reaches the new code until
+// else brings its configuration and code up to date, then publishes a function version and points
+// `live` at it. The domain's API invokes `live` and nothing else, so nothing reaches the new code until
 // the last step.
 //
 // Lambda is the record of what is deployed, and every step looks at it before it acts. So an
 // attempt picks up where the last stopped, and an attempt at what is done changes nothing: a
-// release `live` already names is done, the function is created once, a version with the same
-// code and configuration as the last is the one Lambda already has, and `live` moves only from
-// the version it was read at. Two attempts at once are safe too: Lambda refuses a change to a
+// release `live` already names is done, the function is created once, a function version with the
+// same code and configuration as the last is the one Lambda already has, and `live` moves only
+// from the function version it was read at. Two attempts at once are safe too: Lambda refuses a change to a
 // function it is still changing, and the one refused is tried again.
 //
 // `live` records the release it points at, and never moves for a release asked for before that
@@ -74,7 +74,7 @@ export interface FunctionState {
 }
 
 export interface AliasState {
-  readonly version: string;
+  readonly functionVersion: string;
   readonly revisionId: string;
   /** The release that set it. `undefined` for an alias no release set. */
   readonly releaseId: string | undefined;
@@ -91,25 +91,25 @@ export interface FunctionApi {
   /** Waits while Lambda is making or changing the function, whatever state it settles in. */
   waitUntilSettled(name: string): Promise<void>;
   waitUntilUpdated(name: string): Promise<void>;
-  /** Publishes the function as it is, if its code has this hash, and answers the version. */
+  /** Publishes the function as it is, if its code has this hash, and answers the function version. */
   publishVersion(
     name: string,
     codeSha256: string,
     description: string,
   ): Promise<string>;
-  waitUntilVersionActive(name: string, version: string): Promise<void>;
+  waitUntilVersionActive(name: string, functionVersion: string): Promise<void>;
   getAlias(name: string, alias: string): Promise<AliasState | undefined>;
   createAlias(
     name: string,
     alias: string,
-    version: string,
+    functionVersion: string,
     releaseId: string,
   ): Promise<void>;
   /** Moves the alias, unless it changed since it was read at `revisionId`. */
   updateAlias(
     name: string,
     alias: string,
-    version: string,
+    functionVersion: string,
     revisionId: string,
     releaseId: string,
   ): Promise<void>;
@@ -167,11 +167,11 @@ export class ReleaseFailure extends Error {
 }
 
 export interface Released {
-  /** The version `live` points at. */
-  readonly version: string;
+  /** The function version `live` points at. */
+  readonly functionVersion: string;
   /** Whether the function was created by this release. */
   readonly created: boolean;
-  /** Whether `live` moved. It doesn't when it already pointed at this version. */
+  /** Whether `live` moved. It doesn't when it already pointed at this function version. */
   readonly moved: boolean;
 }
 
@@ -193,7 +193,11 @@ export async function release(
     lambda.getAlias(target.functionName, LIVE_ALIAS),
   );
   if (current?.releaseId === releaseId) {
-    return { version: current.version, created: false, moved: false };
+    return {
+      functionVersion: current.functionVersion,
+      created: false,
+      moved: false,
+    };
   }
   refuseIfSuperseded(current, releaseId, "check-order");
 
@@ -260,7 +264,7 @@ export async function release(
     throw new ReleaseFailure("check-code", "code-hash", false);
   }
 
-  const version = await step("publish-version", async () => {
+  const functionVersion = await step("publish-version", async () => {
     // Lambda publishes only if the code still has this hash, so nothing that changed the
     // function since is published.
     const published = await lambda.publishVersion(
@@ -275,25 +279,33 @@ export async function release(
   const moved = await step("move-alias", async () => {
     const alias = await lambda.getAlias(definition.name, LIVE_ALIAS);
     if (alias === undefined) {
-      await lambda.createAlias(definition.name, LIVE_ALIAS, version, releaseId);
+      await lambda.createAlias(
+        definition.name,
+        LIVE_ALIAS,
+        functionVersion,
+        releaseId,
+      );
       return true;
     }
     // Again, since another release may have moved it while this one ran.
     refuseIfSuperseded(alias, releaseId, "move-alias");
-    if (alias.version === version && alias.releaseId === releaseId) {
+    if (
+      alias.functionVersion === functionVersion &&
+      alias.releaseId === releaseId
+    ) {
       return false;
     }
     await lambda.updateAlias(
       definition.name,
       LIVE_ALIAS,
-      version,
+      functionVersion,
       alias.revisionId,
       releaseId,
     );
-    return alias.version !== version;
+    return alias.functionVersion !== functionVersion;
   });
 
-  return { version, created: existing === undefined, moved };
+  return { functionVersion, created: existing === undefined, moved };
 }
 
 // IDs of the same form compare as text in the order they were made.
@@ -307,7 +319,8 @@ function refuseIfSuperseded(
   }
 }
 
-// What a version says it is: the bundle, and the commit it was built from when the run said.
+// What a function version says it is: the bundle, and the commit it was built from when the run
+// said.
 function versionDescription(request: ReleaseRequest): string {
   const bundle = `bundle ${request.sha256}`;
   return request.commit === undefined

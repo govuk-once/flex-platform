@@ -51,7 +51,11 @@ describe("release", () => {
       TIME_LEFT,
     );
 
-    expect(released).toEqual({ version: "1", created: true, moved: true });
+    expect(released).toEqual({
+      functionVersion: "1",
+      created: true,
+      moved: true,
+    });
     expect(read).toEqual([
       `${BUCKET}/example/bundle/${SHA256}.zip?versionId=${VERSION_ID}`,
     ]);
@@ -115,7 +119,7 @@ describe("release", () => {
       },
       versions: ["1"],
       alias: {
-        version: "1",
+        functionVersion: "1",
         revisionId: "revision-1",
         releaseId: releaseIdAt(-1),
       },
@@ -132,7 +136,11 @@ describe("release", () => {
       TIME_LEFT,
     );
 
-    expect(released).toEqual({ version: "2", created: false, moved: true });
+    expect(released).toEqual({
+      functionVersion: "2",
+      created: false,
+      moved: true,
+    });
     expect(lambda.calls).toEqual([
       "getAlias",
       "getFunction",
@@ -175,7 +183,11 @@ describe("release", () => {
       TIME_LEFT,
     );
 
-    expect(released).toEqual({ version: "1", created: false, moved: false });
+    expect(released).toEqual({
+      functionVersion: "1",
+      created: false,
+      moved: false,
+    });
     expect(lambda.calls).not.toContainEqual(
       expect.stringMatching(/^(?:create|update)Alias/),
     );
@@ -185,7 +197,11 @@ describe("release", () => {
   it("does nothing for a release live already names, not even reading the bundle", async () => {
     const lambda = new FakeLambda({
       versions: ["1", "2"],
-      alias: { version: "2", revisionId: "revision-1", releaseId: RELEASE_ID },
+      alias: {
+        functionVersion: "2",
+        revisionId: "revision-1",
+        releaseId: RELEASE_ID,
+      },
     });
     const { aws, read } = fakeAws(lambda);
 
@@ -200,7 +216,11 @@ describe("release", () => {
       TIME_LEFT,
     );
 
-    expect(released).toEqual({ version: "2", created: false, moved: false });
+    expect(released).toEqual({
+      functionVersion: "2",
+      created: false,
+      moved: false,
+    });
     expect(read).toEqual([]);
     expect(lambda.calls).toEqual(["getAlias"]);
   });
@@ -210,7 +230,7 @@ describe("release", () => {
     const lambda = new FakeLambda({
       versions: ["1"],
       alias: {
-        version: "1",
+        functionVersion: "1",
         revisionId: "revision-1",
         releaseId: releaseIdAt(1),
       },
@@ -244,7 +264,7 @@ describe("release", () => {
     lambda.publishVersion = async (name, codeSha256, description) => {
       const version = await publish(name, codeSha256, description);
       lambda.alias = {
-        version: "9",
+        functionVersion: "9",
         revisionId: "revision-9",
         releaseId: releaseIdAt(1),
       };
@@ -256,7 +276,7 @@ describe("release", () => {
     );
 
     expect(error).toMatchObject({ step: "move-alias", reason: "superseded" });
-    expect(lambda.alias?.version).toBe("9");
+    expect(lambda.alias?.functionVersion).toBe("9");
   });
 
   it("records a newer release on live without moving it when the version is the same", async () => {
@@ -282,9 +302,13 @@ describe("release", () => {
       TIME_LEFT,
     );
 
-    expect(released).toEqual({ version: "1", created: false, moved: false });
+    expect(released).toEqual({
+      functionVersion: "1",
+      created: false,
+      moved: false,
+    });
     expect(lambda.alias).toEqual({
-      version: "1",
+      functionVersion: "1",
       revisionId: "revision-2",
       releaseId: releaseIdAt(1),
     });
@@ -293,7 +317,11 @@ describe("release", () => {
   it("moves an alias no release recorded itself on", async () => {
     const lambda = new FakeLambda({
       versions: ["1"],
-      alias: { version: "1", revisionId: "revision-1", releaseId: undefined },
+      alias: {
+        functionVersion: "1",
+        revisionId: "revision-1",
+        releaseId: undefined,
+      },
     });
     lambda.definition = undefined;
 

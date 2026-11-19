@@ -14,6 +14,7 @@ import {
   REQUEST,
   REQUESTED_AT,
   SHA256,
+  VERSION,
 } from "../../test/helpers.ts";
 import { createReleaseHandler } from "./handler.ts";
 import type { ReleaseAws } from "./release.ts";
@@ -55,6 +56,7 @@ const ASKED = {
   releaseId: RELEASE_ID,
   environment: "development",
   domain: "example",
+  version: VERSION,
   sha256: SHA256,
   runId: "12345678901",
   commit: COMMIT,
@@ -77,7 +79,7 @@ describe("createReleaseHandler", () => {
 
     expect(response).toEqual({ batchItemFailures: [] });
     expect(lambda.alias).toEqual({
-      version: "1",
+      functionVersion: "1",
       revisionId: "revision-1",
       releaseId: RELEASE_ID,
     });
@@ -86,7 +88,7 @@ describe("createReleaseHandler", () => {
         status: "released",
         attempts: 1,
         updatedAt: NOW,
-        version: "1",
+        functionVersion: "1",
         created: true,
         moved: true,
       }),
@@ -101,7 +103,7 @@ describe("createReleaseHandler", () => {
             messageId: MESSAGE_ID,
             durationMs: 0,
             ...ASKED,
-            version: "1",
+            functionVersion: "1",
             created: true,
             moved: true,
           },
@@ -166,7 +168,7 @@ describe("createReleaseHandler", () => {
 
   // A message sent again, however it was got, runs nothing a second time.
   it.each<[string, Parameters<typeof queuedRecord>[0]]>([
-    ["released", { status: "released", version: "1" }],
+    ["released", { status: "released", functionVersion: "1" }],
     ["refused", { status: "refused", reason: "bundle-hash" }],
   ])(
     "runs nothing for a release that is %s, and lets it go",
@@ -218,7 +220,11 @@ describe("createReleaseHandler", () => {
     captureLogs();
     const lambda = new FakeLambda({
       versions: ["1"],
-      alias: { version: "1", revisionId: "revision-1", releaseId: RELEASE_ID },
+      alias: {
+        functionVersion: "1",
+        revisionId: "revision-1",
+        releaseId: RELEASE_ID,
+      },
     });
     const table = new FakeTable(
       queuedRecord({ status: "releasing", attempts: 1 }),
@@ -233,7 +239,7 @@ describe("createReleaseHandler", () => {
     expect(lambda.calls).toEqual(["getAlias"]);
     expect(table.record).toMatchObject({
       status: "released",
-      version: "1",
+      functionVersion: "1",
       moved: false,
     });
   });
@@ -246,7 +252,7 @@ describe("createReleaseHandler", () => {
     table.finish = (key, outcome, now, from) => {
       table.records.set(
         `development/example/${RELEASE_ID}`,
-        queuedRecord({ status: "released", version: "9" }),
+        queuedRecord({ status: "released", functionVersion: "9" }),
       );
       return finish(
         key,
@@ -264,7 +270,10 @@ describe("createReleaseHandler", () => {
     expect(response).toEqual({
       batchItemFailures: [{ itemIdentifier: MESSAGE_ID }],
     });
-    expect(table.record).toMatchObject({ status: "released", version: "9" });
+    expect(table.record).toMatchObject({
+      status: "released",
+      functionVersion: "9",
+    });
     expect(logs).toContainEqual(
       expect.objectContaining({
         telemetry: expect.objectContaining({
@@ -344,7 +353,7 @@ describe("createReleaseHandler", () => {
     const lambda = new FakeLambda({
       versions: ["1"],
       alias: {
-        version: "1",
+        functionVersion: "1",
         revisionId: "revision-1",
         releaseId: releaseIdAt(1),
       },

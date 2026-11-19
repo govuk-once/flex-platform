@@ -7,6 +7,7 @@ import {
   queuedRecord,
   RELEASE_ID,
   REQUESTED_AT,
+  VERSION,
 } from "../../test/helpers.ts";
 import type { ReleaseRecord } from "../table.ts";
 import type { SqsEvent } from "../worker/types.ts";
@@ -72,6 +73,7 @@ describe("createDeadLetterHandler", () => {
             event: "release_abandoned",
             details: expect.objectContaining({
               releaseId: RELEASE_ID,
+              version: VERSION,
               status: state.status,
               attempts: state.attempts ?? 0,
             }) as unknown,

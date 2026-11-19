@@ -8,6 +8,7 @@
 import {
   ConditionalCheckFailedException,
   DynamoDBClient,
+  GetItemCommand,
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
 
@@ -30,6 +31,12 @@ export interface Artefact {
  * names: this one's if it was recorded now, or the one recorded before.
  */
 export type ClaimVersion = (artefact: Artefact) => Promise<string>;
+
+/** The hash of the bundle a domain's version names, or `undefined` for a version not recorded. */
+export type FindArtefact = (
+  domain: string,
+  version: string,
+) => Promise<string | undefined>;
 
 export interface VersionClaimOptions {
   readonly uploads: CiUploads;
@@ -69,15 +76,40 @@ export function createVersionClaim(options: VersionClaimOptions): ClaimVersion {
       return artefact.sha256;
     } catch (error) {
       if (!(error instanceof ConditionalCheckFailedException)) throw error;
-      const held = error.Item?.sha256?.S;
-      // Only this function records a version, always with a hash. Anything else isn't one to
-      // compare with, so the request fails rather than taking it as either answer.
-      if (held === undefined || !SHA256_HEX.test(held)) {
-        throw new Error("The version's record holds no bundle's hash", {
-          cause: error,
-        });
-      }
-      return held;
+      return heldHash(error.Item?.sha256?.S);
     }
   };
+}
+
+export interface ArtefactFinderOptions {
+  readonly uploads: CiUploads;
+  readonly client?: DynamoDBClient;
+}
+
+export function createArtefactFinder(
+  options: ArtefactFinderOptions,
+): FindArtefact {
+  const { table, region } = options.uploads;
+  const client = options.client ?? new DynamoDBClient({ region });
+
+  return async (domain, version) => {
+    const { Item } = await client.send(
+      new GetItemCommand({
+        TableName: table,
+        Key: { domain: { S: domain }, version: { S: version } },
+        // A pipeline releases a version as soon as it uploads it.
+        ConsistentRead: true,
+      }),
+    );
+    return Item === undefined ? undefined : heldHash(Item.sha256?.S);
+  };
+}
+
+// Only this function records a version, always with a hash. Anything else isn't one to use, so
+// the request fails rather than taking it as an answer.
+function heldHash(sha256: string | undefined): string {
+  if (sha256 === undefined || !SHA256_HEX.test(sha256)) {
+    throw new Error("The version's record holds no bundle's hash");
+  }
+  return sha256;
 }

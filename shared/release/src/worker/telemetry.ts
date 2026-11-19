@@ -1,6 +1,6 @@
 // One log line per release, in the pipeline API's shape. Every value is a fixed code, an ID AWS,
-// GitHub or the pipeline API issued, a name from the table, a bundle's hash, a version, or a
-// source location. Never an AWS error's message, which can quote a request, or a message the
+// GitHub or the pipeline API issued, a name from the table, a bundle's version or hash, a function
+// version, or a source location. Never an AWS error's message, which can quote a request, or a message the
 // worker couldn't read.
 
 export type ReleaseEventName =
@@ -22,6 +22,8 @@ export interface ReleaseDetails {
   readonly releaseId?: string;
   readonly environment?: string;
   readonly domain?: string;
+  /** The version of the domain's code the release is for. */
+  readonly version?: string;
   readonly sha256?: string;
   readonly runId?: string | undefined;
   readonly commit?: string | undefined;
@@ -31,7 +33,8 @@ export interface ReleaseDetails {
   readonly attempts?: number;
   readonly step?: string;
   readonly reason?: string;
-  readonly version?: string;
+  /** The function version `live` points at, once released. */
+  readonly functionVersion?: string;
   readonly created?: boolean;
   readonly moved?: boolean;
   readonly frames?: readonly string[];
