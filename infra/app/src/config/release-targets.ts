@@ -8,7 +8,7 @@ import {
   securityGroupIdParameterName,
   subnetIdsParameterName,
 } from "@repo/infra-constructs";
-import type { FunctionReader } from "@repo/shared-infra";
+import type { BundleReader } from "@repo/shared-infra";
 import type { ReleaseTarget } from "@repo/shared-release";
 
 import { domainName } from "./domain-name.ts";
@@ -63,14 +63,16 @@ export function releaseTargets(stage: StageConfig): ReleaseTarget[] {
 }
 
 /**
- * The functions Lambda may load a bundle from the code bucket for: every domain's, in each
- * domain account of each environment a pipeline publishes to.
+ * What may read a bundle from the code bucket: every domain's function, and every domain's deploy
+ * role, in each domain account of each environment a pipeline publishes to. By pattern, so the
+ * bucket's policy holds one entry per account, however many domains each hosts.
  */
-export function functionReaders(stage: StageConfig): FunctionReader[] {
+export function bundleReaders(stage: StageConfig): BundleReader[] {
   return publishing(stage).flatMap((environment) =>
     environment.domainAccounts.map(({ account }) => ({
       account,
       functionNames: domainFunctionName(environment.name, "*"),
+      deployRoleNames: deployRoleName(environment.name, "*"),
     })),
   );
 }

@@ -13,10 +13,11 @@ function build(nag = false) {
   new DomainCodeBucket(stack, "Code", {
     bucketName: NAME,
     writerRoleArn: WRITER,
-    functionReaders: [
-      { account: "200000000001", functionNames: "domain-development-*" },
-      { account: "200000000002", functionNames: "domain-development-*" },
-    ],
+    readers: ["200000000001", "200000000002"].map((account) => ({
+      account,
+      functionNames: "domain-development-*",
+      deployRoleNames: "domain-development-*-deploy",
+    })),
   });
   return stack;
 }
@@ -194,6 +195,45 @@ describe("DomainCodeBucket", () => {
     }
   });
 
+  // Lambda reads the code a function is created or updated from as the caller. One statement for
+  // every account, so the policy grows with the accounts and never with the domains.
+  it("lets the deploy roles in the accounts it names read bundles, by version, in one statement", () => {
+    template().hasResourceProperties("AWS::S3::BucketPolicy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          {
+            Sid: "DeployRolesReadBundles",
+            Effect: "Allow",
+            Principal: {
+              AWS: [
+                "arn:aws:iam::200000000001:root",
+                "arn:aws:iam::200000000002:root",
+              ],
+            },
+            Action: ["s3:GetObject", "s3:GetObjectVersion"],
+            Resource: {
+              "Fn::Join": [
+                "",
+                [
+                  { "Fn::GetAtt": [Match.anyValue(), "Arn"] },
+                  "/*/bundle/*.zip",
+                ],
+              ],
+            },
+            Condition: {
+              ArnLike: {
+                "aws:PrincipalArn": [
+                  "arn:aws:iam::200000000001:role/domain-development-*-deploy",
+                  "arn:aws:iam::200000000002:role/domain-development-*-deploy",
+                ],
+              },
+            },
+          },
+        ]),
+      },
+    });
+  });
+
   it("grants nothing else: every other statement of its policy is a refusal", () => {
     const [policy] = Object.values(
       template().findResources("AWS::S3::BucketPolicy"),
@@ -209,6 +249,7 @@ describe("DomainCodeBucket", () => {
     expect(allowed.map(({ Sid }) => Sid)).toEqual([
       "LambdaReadsBundles0",
       "LambdaReadsBundles1",
+      "DeployRolesReadBundles",
     ]);
   });
 });

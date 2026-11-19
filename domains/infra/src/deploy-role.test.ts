@@ -10,6 +10,8 @@ const SECURITY_GROUP_PARAMETER = "/flex/network/sandbox/security-group/domain";
 
 const SHARED_ACCOUNT = "300000000001";
 
+const BUNDLES = `arn:aws:s3:::shared-domain-code-${SHARED_ACCOUNT}/domain-a/bundle/*.zip`;
+
 function build(nag = false) {
   const stack = stackIn("eu-west-2", nag);
   new DeployRole(stack, "Deploy", {
@@ -19,6 +21,7 @@ function build(nag = false) {
     subnetIdsParameterName: SUBNETS_PARAMETER,
     securityGroupIdParameterName: SECURITY_GROUP_PARAMETER,
     releaseRole: { account: SHARED_ACCOUNT, name: "shared-release-worker" },
+    bundles: BUNDLES,
   });
   const app = stack.node.root;
   assert.instanceOf(app, App);
@@ -98,7 +101,7 @@ describe("DeployRole", () => {
     });
   });
 
-  it("may release its domain's function, read its placement, pass that domain's execution role to Lambda, never touch a gateway, and place every function as the parameters it reads say", () => {
+  it("may release its domain's function, read its own domain's bundles and its placement, pass that domain's execution role to Lambda, never touch a gateway, and place every function as the parameters it reads say", () => {
     const { template } = build();
     const subnets = parameterReading(template, SUBNETS_PARAMETER);
     const securityGroup = parameterReading(template, SECURITY_GROUP_PARAMETER);
@@ -141,6 +144,11 @@ describe("DeployRole", () => {
                   `arn:aws:ssm:eu-west-2:${ACCOUNT}:parameter${SUBNETS_PARAMETER}`,
                   `arn:aws:ssm:eu-west-2:${ACCOUNT}:parameter${SECURITY_GROUP_PARAMETER}`,
                 ],
+              },
+              {
+                Action: ["s3:GetObject", "s3:GetObjectVersion"],
+                Effect: "Allow",
+                Resource: BUNDLES,
               },
               {
                 Action: "iam:PassRole",

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { deployRoleName } from "@repo/domain-infra";
 import { cdkApp } from "@repo/infra-constructs";
 import { MANAGEMENT_REGION, SHARED_REGION } from "@repo/shared-infra";
 import { Match, Template } from "aws-cdk-lib/assertions";
@@ -237,6 +238,23 @@ describe("SharedReleaseStack", () => {
     }
     for (const environment of PROD.environments.slice(1)) {
       expect(policy).not.toContain(`function:domain-${environment.name}-`);
+    }
+  });
+
+  // The names the domain stacks give their deploy roles, so Lambda can read a bundle as one.
+  it("lets the deploy roles of each account where a pipeline publishes read a bundle", () => {
+    const [dev] = PROD.environments;
+    const policy = JSON.stringify(
+      template().findResources("AWS::S3::BucketPolicy"),
+    );
+
+    for (const { account } of dev.domainAccounts) {
+      expect(policy).toContain(
+        `arn:aws:iam::${account}:role/${deployRoleName("dev", "*")}`,
+      );
+    }
+    for (const environment of PROD.environments.slice(1)) {
+      expect(policy).not.toContain(`role/domain-${environment.name}-`);
     }
   });
 

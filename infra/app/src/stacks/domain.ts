@@ -18,7 +18,8 @@ import {
   securityGroupIdParameterName,
   subnetIdsParameterName,
 } from "@repo/infra-constructs";
-import { RELEASE_WORKER_NAME } from "@repo/shared-infra";
+import { domainCodeBucketName, RELEASE_WORKER_NAME } from "@repo/shared-infra";
+import { bundleKey } from "@repo/shared-release/bundle-key";
 import { Stack } from "aws-cdk-lib";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
@@ -110,6 +111,7 @@ export class DomainStack extends Stack {
         "domain",
       ),
       releaseRole: { account: sharedAccount, name: RELEASE_WORKER_NAME },
+      bundles: `arn:aws:s3:::${domainCodeBucketName(sharedAccount)}/${bundleKey(domain, "*")}`,
     });
   }
 }

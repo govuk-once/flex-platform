@@ -3,6 +3,7 @@ import { UPLOAD_EXPIRES_SECONDS } from "@repo/shared-ci";
 import { bundleKey } from "@repo/shared-release/bundle-key";
 import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
 import {
+  AccountPrincipal,
   AnyPrincipal,
   Effect,
   PolicyStatement,
@@ -12,12 +13,13 @@ import type { Bucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
 /**
- * Domain functions Lambda may load a bundle for: those in one account whose names match the
- * pattern, such as `domain-development-*`.
+ * A domain account a release may load bundles into: the domain functions Lambda may read a bundle
+ * for, and the deploy roles that release them, each a name pattern such as `domain-development-*`.
  */
-export interface FunctionReader {
+export interface BundleReader {
   readonly account: string;
   readonly functionNames: string;
+  readonly deployRoleNames: string;
 }
 
 export interface DomainCodeBucketProps {
@@ -25,8 +27,8 @@ export interface DomainCodeBucketProps {
   readonly bucketName: string;
   /** The one role that may write to the bucket: the pipeline API's, which signs every upload. */
   readonly writerRoleArn: string;
-  /** The functions Lambda reads a bundle for, in place, by version. */
-  readonly functionReaders: readonly FunctionReader[];
+  /** The domain accounts whose functions and deploy roles read bundles. */
+  readonly readers: readonly BundleReader[];
 }
 
 /**
@@ -49,10 +51,14 @@ export interface DomainCodeBucketProps {
  * So a bundle is kept for as long as this policy stands. The policy is no protection from
  * whoever may change the policy itself.
  *
- * It grants one thing: Lambda may read a bundle, by version, for a domain's function. A release
- * has Lambda load a function's code from the bucket in place and keep no copy, so Lambda reads
- * the object again whenever it needs the code, and a function whose bundle is gone stops. The
- * pipeline API's and the release worker's roles are granted what they do by their own policies.
+ * It grants two reads of a bundle, by version. Lambda may read one for a domain's function: a
+ * release has Lambda load a function's code from the bucket in place and keep no copy, so Lambda
+ * reads the object again whenever it needs the code, and a function whose bundle is gone stops. A
+ * domain's deploy role may read one, since Lambda reads the code a function is created or updated
+ * from as the caller. The bucket names each reader by account and name pattern, never by domain,
+ * so its policy grows with the accounts and not the domains: each deploy role's own policy holds
+ * it to its domain's bundles. The pipeline API's and the release worker's roles are granted what
+ * they do by their own policies.
  */
 export class DomainCodeBucket extends Construct {
   public readonly bucket: Bucket;
@@ -129,7 +135,7 @@ export class DomainCodeBucket extends Construct {
 
     // As Lambda's own service, for a function in a domain account. The two conditions say which:
     // the function's ARN alone could name an account that isn't the platform's.
-    props.functionReaders.forEach(({ account, functionNames }, index) => {
+    props.readers.forEach(({ account, functionNames }, index) => {
       bucket.addToResourcePolicy(
         new PolicyStatement({
           sid: `LambdaReadsBundles${String(index)}`,
@@ -152,6 +158,31 @@ export class DomainCodeBucket extends Construct {
         }),
       );
     });
+
+    // As the account, on the role's ARN, as the deploy role's own trust names the worker: S3
+    // refuses a policy naming a role that doesn't exist yet, and the domain stacks that create
+    // the roles deploy after this one.
+    if (props.readers.length > 0) {
+      bucket.addToResourcePolicy(
+        new PolicyStatement({
+          sid: "DeployRolesReadBundles",
+          effect: Effect.ALLOW,
+          principals: props.readers.map(
+            ({ account }) => new AccountPrincipal(account),
+          ),
+          actions: ["s3:GetObject", "s3:GetObjectVersion"],
+          resources: [bucket.arnForObjects(bundleKey("*", "*"))],
+          conditions: {
+            ArnLike: {
+              "aws:PrincipalArn": props.readers.map(
+                ({ account, deployRoleNames }) =>
+                  `arn:aws:iam::${account}:role/${deployRoleNames}`,
+              ),
+            },
+          },
+        }),
+      );
+    }
 
     Validations.of(bucket).acknowledge({
       id: "AwsSolutions-S1",
