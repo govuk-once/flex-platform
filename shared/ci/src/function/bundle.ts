@@ -39,9 +39,7 @@ export function uploadOf(event: FunctionUrlEvent): Upload | BundleFault {
   if (fields === "body") return fields;
 
   const version = fields.get("version");
-  if (typeof version !== "string" || !isBundleVersion(version)) {
-    return "version";
-  }
+  if (!isVersion(version)) return "version";
   const sha256 = fields.get("sha256");
   if (!isSha256(sha256)) return "sha256";
   const size = fields.get("size");
@@ -56,19 +54,19 @@ export function uploadOf(event: FunctionUrlEvent): Upload | BundleFault {
   return { version, sha256, size };
 }
 
-/** The bundle a pipeline asks to release, by the hash it was uploaded with. */
+/** The bundle a pipeline asks to release, by the version it was uploaded as. */
 export interface Release {
-  readonly sha256: string;
+  readonly version: string;
 }
 
-// `{ "sha256": "<64 hex digits>" }`, and nothing else, for the same reason.
+// `{ "version": "<major.minor.patch>" }`, and nothing else, for the same reason.
 export function releaseOf(event: FunctionUrlEvent): Release | BundleFault {
   const fields = fieldsOf(event, RELEASE_FIELDS);
   if (fields === "body") return fields;
 
-  const sha256 = fields.get("sha256");
-  if (!isSha256(sha256)) return "sha256";
-  return { sha256 };
+  const version = fields.get("version");
+  if (!isVersion(version)) return "version";
+  return { version };
 }
 
 const UPLOAD_FIELDS: ReadonlySet<string> = new Set([
@@ -77,7 +75,7 @@ const UPLOAD_FIELDS: ReadonlySet<string> = new Set([
   "size",
 ]);
 
-const RELEASE_FIELDS: ReadonlySet<string> = new Set(["sha256"]);
+const RELEASE_FIELDS: ReadonlySet<string> = new Set(["version"]);
 
 // The body's fields, if it is a JSON object of short length that names no others.
 function fieldsOf(
@@ -100,6 +98,10 @@ function fieldsOf(
   const fields = new Map<string, unknown>(Object.entries(parsed));
   if ([...fields.keys()].some((name) => !allowed.has(name))) return "body";
   return fields;
+}
+
+function isVersion(value: unknown): value is string {
+  return typeof value === "string" && isBundleVersion(value);
 }
 
 function isSha256(value: unknown): value is string {

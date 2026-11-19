@@ -120,6 +120,7 @@ async function handle(
     releaseId: record.id,
     environment: record.environment,
     domain: record.domain,
+    version: record.version,
     sha256: record.sha256,
     runId: record.runId,
     commit: record.commit,

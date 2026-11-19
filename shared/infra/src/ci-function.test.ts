@@ -116,6 +116,7 @@ describe("CiFunction", () => {
       "s3:PutObject",
       "s3:ListBucket",
       "sqs:SendMessage",
+      "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
@@ -167,7 +168,7 @@ describe("CiFunction", () => {
   });
 
   // A version is recorded once, where there is none, and never changed.
-  it("may record a version in the artefacts table, and never change one", () => {
+  it("may record a version in the artefacts table, and read one, and never change one", () => {
     template().hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
@@ -175,7 +176,7 @@ describe("CiFunction", () => {
             Statement: Match.arrayWith([
               {
                 Effect: "Allow",
-                Action: "dynamodb:PutItem",
+                Action: ["dynamodb:GetItem", "dynamodb:PutItem"],
                 Resource: ARTEFACT_TABLE_ARN,
               },
             ]),

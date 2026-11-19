@@ -20,6 +20,7 @@ export type CiEventName =
   | "ci_upload_signed"
   | "ci_release_not_accepted"
   | "ci_release_invalid"
+  | "ci_release_version_unknown"
   | "ci_release_bundle_missing"
   | "ci_release_queued"
   | "ci_failed";

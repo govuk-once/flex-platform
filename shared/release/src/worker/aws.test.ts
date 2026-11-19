@@ -501,7 +501,7 @@ describe("versions and the alias", () => {
     const { lambda } = aws.deployAs(TARGET.deployRoleArn, countdown());
 
     expect(await lambda.getAlias(DEFINITION.name, "live")).toEqual({
-      version: "2",
+      functionVersion: "2",
       revisionId: "revision-1",
       releaseId: RELEASE_ID,
     });

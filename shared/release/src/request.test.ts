@@ -62,8 +62,10 @@ describe("parseReleaseRequest", () => {
       "a hash in capitals",
       { ...REQUEST, sha256: REQUEST.sha256.toUpperCase() },
     ],
-    ["no version", { ...REQUEST, versionId: undefined }],
-    ["a version with a space in it", { ...REQUEST, versionId: "a b" }],
+    ["no version", { ...REQUEST, version: undefined }],
+    ["a version that isn't one", { ...REQUEST, version: "1.4" }],
+    ["no S3 version", { ...REQUEST, versionId: undefined }],
+    ["an S3 version with a space in it", { ...REQUEST, versionId: "a b" }],
     ["a run's ID that isn't digits", { ...REQUEST, runId: "1a" }],
     ["a commit that isn't a hash", { ...REQUEST, commit: "main" }],
   ])("refuses %s", (_, value) => {

@@ -1,6 +1,6 @@
 // What Lambda runs. Only the build bundles this module: it replaces CI_CONFIG with a stage's
 // config.
-import { createVersionClaim } from "./artefacts.ts";
+import { createArtefactFinder, createVersionClaim } from "./artefacts.ts";
 import { createAuthoriser, createPublishCheck } from "./authorise.ts";
 import { createCiHandler } from "./handler.ts";
 import { createBundleFinder, createReleaseQueue } from "./release-queue.ts";
@@ -21,6 +21,7 @@ export const handler = createCiHandler({
     uploads: CI_CONFIG.uploads,
     now: () => Date.now(),
   }),
+  findArtefact: createArtefactFinder({ uploads: CI_CONFIG.uploads }),
   signUpload: createUploadSigner({
     uploads: CI_CONFIG.uploads,
     credentials: credentialsFromEnvironment,

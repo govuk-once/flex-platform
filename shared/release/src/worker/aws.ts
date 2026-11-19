@@ -261,15 +261,15 @@ function functionApi(client: LambdaClient, timeLeft: TimeLeft): FunctionApi {
       return Version;
     },
 
-    waitUntilVersionActive: (name, version) =>
+    waitUntilVersionActive: (name, functionVersion) =>
       waitFor(
         (options) =>
           waitUntilPublishedVersionActive(options, {
             FunctionName: name,
-            Qualifier: version,
+            Qualifier: functionVersion,
           }),
         name,
-        version,
+        functionVersion,
       ),
 
     getAlias: async (name, alias) => {
@@ -281,7 +281,7 @@ function functionApi(client: LambdaClient, timeLeft: TimeLeft): FunctionApi {
           throw new TypeError("Lambda described the alias without its version");
         }
         return {
-          version: FunctionVersion,
+          functionVersion: FunctionVersion,
           revisionId: RevisionId,
           releaseId: releaseIdOf(Description),
         };
@@ -291,23 +291,29 @@ function functionApi(client: LambdaClient, timeLeft: TimeLeft): FunctionApi {
       }
     },
 
-    createAlias: async (name, alias, version, releaseId) => {
+    createAlias: async (name, alias, functionVersion, releaseId) => {
       await client.send(
         new CreateAliasCommand({
           FunctionName: name,
           Name: alias,
-          FunctionVersion: version,
+          FunctionVersion: functionVersion,
           Description: aliasDescription(releaseId),
         }),
       );
     },
 
-    updateAlias: async (name, alias, version, revisionId, releaseId) => {
+    updateAlias: async (
+      name,
+      alias,
+      functionVersion,
+      revisionId,
+      releaseId,
+    ) => {
       await client.send(
         new UpdateAliasCommand({
           FunctionName: name,
           Name: alias,
-          FunctionVersion: version,
+          FunctionVersion: functionVersion,
           RevisionId: revisionId,
           Description: aliasDescription(releaseId),
         }),
@@ -350,8 +356,8 @@ function configuration(definition: FunctionDefinition) {
   } satisfies Partial<CreateFunctionCommandInput>;
 }
 
-// Lambda reads the code from the bucket, by version, and keeps no copy of its own. So a bundle a
-// version uses must stay in the bucket, which refuses to delete one. Left out, the mode is a copy.
+// Lambda reads the code from the bucket, by S3 version, and keeps no copy of its own. So a bundle
+// a function version uses must stay in the bucket, which refuses to delete one. Left out, the mode is a copy.
 function code(definition: FunctionDefinition) {
   return {
     S3Bucket: definition.code.bucket,

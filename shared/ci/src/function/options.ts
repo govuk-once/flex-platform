@@ -1,4 +1,4 @@
-import type { ClaimVersion } from "./artefacts.ts";
+import type { ClaimVersion, FindArtefact } from "./artefacts.ts";
 import type { Authorise, Publishes } from "./authorise.ts";
 import type { FindBundle, QueueRelease } from "./release-queue.ts";
 import type { SignUpload } from "./sign-upload.ts";
@@ -10,6 +10,7 @@ export interface CiOptions {
   readonly authorise: Authorise;
   readonly publishes: Publishes;
   readonly claimVersion: ClaimVersion;
+  readonly findArtefact: FindArtefact;
   readonly signUpload: SignUpload;
   readonly findBundle: FindBundle;
   readonly queueRelease: QueueRelease;

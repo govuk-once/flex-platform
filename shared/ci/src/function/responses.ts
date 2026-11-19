@@ -46,11 +46,12 @@ export function notAccepted(
   );
 }
 
-// For a pipeline that is allowed, so it is told why: there is nothing under the key to release.
-export function bundleMissing(traceId: string): FunctionUrlResult {
+// For a pipeline that is allowed, so it is told why: there is no version to release, or no bundle
+// for it.
+export function versionUnknown(traceId: string): FunctionUrlResult {
   return answer(
     409,
-    "No bundle with this hash has been uploaded",
+    "No bundle with this version has been uploaded",
     "client_error",
     traceId,
   );
@@ -74,6 +75,7 @@ export function releaseQueued(
     releaseId: string;
     environment: string;
     domain: string;
+    version: string;
     sha256: string;
   },
 ): FunctionUrlResult {

@@ -47,18 +47,18 @@ export interface ReleaseRecord extends ReleaseRequest {
   readonly step?: string;
   /** A fixed code for why it stopped. Never an error's text. */
   readonly reason?: string;
-  /** The version `live` points at, once released. */
-  readonly version?: string;
+  /** The function version `live` points at, once released. */
+  readonly functionVersion?: string;
   /** Whether the release created the function. */
   readonly created?: boolean;
-  /** Whether `live` moved. It doesn't when it already pointed at the version. */
+  /** Whether `live` moved. It doesn't when it already pointed at the function version. */
   readonly moved?: boolean;
 }
 
 export type ReleaseOutcome =
   | {
       readonly status: "released";
-      readonly version: string;
+      readonly functionVersion: string;
       readonly created: boolean;
       readonly moved: boolean;
     }
@@ -114,6 +114,7 @@ const STATUSES: ReadonlySet<string> = new Set<ReleaseStatus>([
 const REQUEST_ATTRIBUTES = [
   "environment",
   "domain",
+  "version",
   "sha256",
   "versionId",
   "runId",
@@ -156,6 +157,7 @@ export function createReleaseTable(
             ...keyOf({ ...request, id }),
             environment: { S: request.environment },
             domain: { S: request.domain },
+            version: { S: request.version },
             sha256: { S: request.sha256 },
             versionId: { S: request.versionId },
             ...(request.runId !== undefined && { runId: { S: request.runId } }),
@@ -251,7 +253,7 @@ export function createReleaseTable(
         updatedAt: { N: String(now) },
         ...(outcome.status === "released"
           ? {
-              version: { S: outcome.version },
+              functionVersion: { S: outcome.functionVersion },
               created: { BOOL: outcome.created },
               moved: { BOOL: outcome.moved },
             }
@@ -324,7 +326,7 @@ export function recordOf(
   }
   const step = text("step");
   const reason = text("reason");
-  const version = text("version");
+  const functionVersion = text("functionVersion");
   const created = flag("created");
   const moved = flag("moved");
   return {
@@ -336,7 +338,7 @@ export function recordOf(
     attempts,
     ...(step !== undefined && { step }),
     ...(reason !== undefined && { reason }),
-    ...(version !== undefined && { version }),
+    ...(functionVersion !== undefined && { functionVersion }),
     ...(created !== undefined && { created }),
     ...(moved !== undefined && { moved }),
   };

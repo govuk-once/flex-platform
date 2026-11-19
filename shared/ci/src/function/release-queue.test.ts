@@ -8,7 +8,13 @@ import type { ReleaseTable } from "@repo/shared-release/table";
 import { uuidV7 } from "@repo/utils/uuid-v7";
 import { assert, describe, expect, it } from "vitest";
 
-import { answering, BUNDLE, COMMIT, CONFIG } from "../../test/helpers.ts";
+import {
+  answering,
+  BUNDLE,
+  COMMIT,
+  CONFIG,
+  VERSION,
+} from "../../test/helpers.ts";
 import { createBundleFinder, createReleaseQueue } from "./release-queue.ts";
 
 const KEY = `example/bundle/${BUNDLE.sha256}.zip`;
@@ -58,6 +64,7 @@ describe("createReleaseQueue", () => {
   const request: ReleaseRequest = {
     environment: "development",
     domain: "example",
+    version: VERSION,
     sha256: BUNDLE.sha256,
     versionId: VERSION_ID,
     runId: "12345678901",

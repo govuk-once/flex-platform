@@ -12,7 +12,7 @@ import {
   CONFIG,
   VERSION,
 } from "../../test/helpers.ts";
-import { createVersionClaim } from "./artefacts.ts";
+import { createArtefactFinder, createVersionClaim } from "./artefacts.ts";
 
 const RECORDED_AT = 1_800_000_000_000;
 
@@ -117,5 +117,51 @@ describe("createVersionClaim", () => {
     });
 
     await expect(claimVersion(ARTEFACT)).rejects.toThrow(TypeError);
+  });
+});
+
+describe("createArtefactFinder", () => {
+  function find(answer: () => object) {
+    const client = new DynamoDBClient({ region: "eu-west-2" });
+    const sent = answering(client, answer);
+    return {
+      findArtefact: createArtefactFinder({ uploads: CONFIG.uploads, client }),
+      sent,
+    };
+  }
+
+  // Consistently, since a pipeline releases a version as soon as it uploads it.
+  it("reads the hash a domain's version names, consistently", async () => {
+    const { findArtefact, sent } = find(() => ({
+      Item: { domain: { S: "example" }, sha256: { S: BUNDLE.sha256 } },
+    }));
+
+    await expect(findArtefact("example", VERSION)).resolves.toBe(BUNDLE.sha256);
+    expect(sent).toEqual([
+      {
+        command: "GetItemCommand",
+        input: {
+          TableName: "shared-release-artefacts",
+          Key: { domain: { S: "example" }, version: { S: VERSION } },
+          ConsistentRead: true,
+        },
+      },
+    ]);
+  });
+
+  it("finds nothing for a version not recorded", async () => {
+    const { findArtefact } = find(() => ({}));
+
+    await expect(findArtefact("example", VERSION)).resolves.toBeUndefined();
+  });
+
+  it("fails for a version recorded without a hash", async () => {
+    const { findArtefact } = find(() => ({
+      Item: { sha256: { S: "abc" } },
+    }));
+
+    await expect(findArtefact("example", VERSION)).rejects.toThrow(
+      "holds no bundle's hash",
+    );
   });
 });

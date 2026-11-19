@@ -76,6 +76,7 @@ describe("ReleaseTable", () => {
                   "dynamodb:Attributes": [
                     "environment",
                     "domain",
+                    "version",
                     "sha256",
                     "versionId",
                     "runId",
