@@ -37,6 +37,25 @@ describe("createRouter", () => {
     },
   );
 
+  it("finds the status route, with the release's ID its path names", () => {
+    const found = router(
+      "GET",
+      "/ci/environments/development/domains/example/releases/an-id",
+    );
+
+    expect(found).toEqual({
+      kind: "route",
+      match: {
+        route: ROUTES[2],
+        params: new Map([
+          ["environment", "development"],
+          ["domain", "example"],
+          ["releaseId", "an-id"],
+        ]),
+      },
+    });
+  });
+
   it.each([
     "/",
     "/ci",

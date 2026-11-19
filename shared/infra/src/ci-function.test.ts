@@ -118,6 +118,7 @@ describe("CiFunction", () => {
       "sqs:SendMessage",
       "dynamodb:GetItem",
       "dynamodb:PutItem",
+      "dynamodb:GetItem",
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
     ]);
@@ -149,7 +150,7 @@ describe("CiFunction", () => {
     });
   });
 
-  it("may record a release in the release table, and change one, and in no other table", () => {
+  it("may record a release in the release table, change one and read one, and in no other table", () => {
     template().hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
@@ -157,7 +158,11 @@ describe("CiFunction", () => {
             Statement: Match.arrayWith([
               {
                 Effect: "Allow",
-                Action: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+                Action: [
+                  "dynamodb:GetItem",
+                  "dynamodb:PutItem",
+                  "dynamodb:UpdateItem",
+                ],
                 Resource: TABLE_ARN,
               },
             ]),

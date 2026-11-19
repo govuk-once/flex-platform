@@ -615,7 +615,8 @@ check they have in common, with the same ID,
 
 1. **Gives the request its ID,** as `x-correlation-id`, and removes any trace context and every
    `x-flex-` header the caller sent but the token's.
-2. **Checks the method.** Only `POST` passes. Anything else is a 405 with an `Allow` header.
+2. **Checks the method.** Only `GET` and `POST` pass. Anything else is a 405 with an `Allow`
+   header.
 3. **Checks the token's shape.** `x-flex-ci-token` appears once, and is one token of at most
    8 KB in three base64url segments, each written the one way its bytes encode. The header and
    payload are JSON objects. `alg` is `RS256`, `iss` is GitHub Actions' issuer, `aud` is the
@@ -623,10 +624,12 @@ check they have in common, with the same ID,
    before the path is looked at.
 4. **Checks the path.** It is under `/ci/`, with no empty or dot segment and no encoded `/`, `\`
    or `.`. Anything else is a 404. Which paths the API serves is for the API.
-5. **Checks the content type.** The body is `application/json`. Anything else is a 415.
-6. **Checks the body's hash is there.** `x-amz-content-sha256` appears once, and is 64 lowercase
-   hex digits. Anything else is a 400, `Bad request`. CloudFront can't hash a body, so it signs
-   the hash the caller sends, and the API's origin refuses a body with any other.
+5. **Checks the content type** of a `POST`. The body is `application/json`. Anything else is a
+   415.
+6. **Checks the body's hash is there,** for a `POST`. `x-amz-content-sha256` appears once, and is
+   64 lowercase hex digits. Anything else is a 400, `Bad request`. CloudFront can't hash a body,
+   so it signs the hash the caller sends, and the API's origin refuses a body with any other. A
+   `GET` has no body, and CloudFront signs it with none.
 
 The issuer and the audience are baked into the function by `buildViewerRequestFunction`, as the
 Frontdoor's function has [its issuers](/flex-platform/frontdoor/cloudfront-function/#building-the-function).
@@ -645,9 +648,10 @@ request, in order, it:
    and a request that needs keys it can't fetch gets a 500, never a pass.
 2. **Finds the route.** A path that is no route's is a 404, and a route's path with a method it
    doesn't take is a 405, with an `Allow` header naming the ones it does. Both come after the
-   token, so a caller without one learns nothing of the routes. There are two, both `POST`:
-   `/ci/environments/<environment>/domains/<domain>/uploads` and
-   `/ci/environments/<environment>/domains/<domain>/releases`. Each route is a method, a path and
+   token, so a caller without one learns nothing of the routes. There are three:
+   `POST /ci/environments/<environment>/domains/<domain>/uploads`,
+   `POST /ci/environments/<environment>/domains/<domain>/releases` and
+   `GET /ci/environments/<environment>/domains/<domain>/releases/<release ID>`. Each route is a method, a path and
    its handler, in `shared/ci/src/function/routes/`. Every route's path names an environment and a
    domain, and the router refuses to start with one that doesn't.
 3. **Decides whether this pipeline may act on that domain there,** the same for every route, so no
@@ -667,8 +671,8 @@ request, in order, it:
    Nothing is decided by the token's `sub`, whose format a repository's admin can change. A
    refusal is a 403, the same whatever the reason, so a pipeline learns nothing of which
    environments and domains exist, or which repository a domain belongs to.
-4. **Checks the environment publishes.** New code enters a stage only where an environment's
-   `release` is `"publish"`. Anywhere else is a 409, `This environment takes no uploads` or
+4. **Checks the environment publishes,** for an upload or a release. New code enters a stage only
+   where an environment's `release` is `"publish"`. Anywhere else is a 409, `This environment takes no uploads` or
    `This environment takes no releases`: the pipeline is allowed, so it is told why.
 5. **Reads the body.** For an upload it is
    `{ "version": "<major.minor.patch>", "sha256": "<64 lowercase hex digits>", "size": <bytes> }`,
@@ -678,7 +682,8 @@ request, in order, it:
    is allowed.
 6. **Claims the version and signs the upload,** and answers 200 with
    [where to send the bundle](#uploading-a-bundle), or **queues the release** of a bundle that was
-   uploaded, and answers 202. See [releasing a bundle](#releasing-a-bundle).
+   uploaded, and answers 202. See [releasing a bundle](#releasing-a-bundle). A `GET` of a release
+   answers [how it went](#how-a-release-went).
 
 The issuer, the audience, the environments, whether each publishes, each domain's repository,
 the bucket, the artefacts and release tables' names and the release queue's address are baked
@@ -691,7 +696,8 @@ trace ID, how long it took, and for a verified token GitHub's IDs for the reposi
 and the workflow run, and the commit the job runs for. The environment and the domain are logged
 only for a pipeline that was allowed, when they are names from config. An upload's line adds
 the version, the bundle's key and its size, and a release's the version, and once it is found the
-bundle's key, and for a queued release its object's S3 version. The token is never logged, and neither is the address an
+bundle's key, and for a queued release its object's S3 version. A release's status adds its ID,
+once it has a release ID's form, and where the table has it. The token is never logged, and neither is the address an
 upload was signed for, or anything a repository's admin can write, such as its name or an
 environment's.
 
@@ -867,4 +873,46 @@ version already on `live` publishes no new function version, unless the configur
 platform sets has changed, and leaves `live` where it is. If the queue
 refuses the message, the API records the release `refused`, at the step `queue`, and answers 500:
 no message is behind it, so it will never be tried, and the pipeline asks again.
-The pipeline can't yet ask how a release went: the worker's log and the table say.
+
+#### How a release went
+
+The pipeline asks how a release went by its ID:
+
+```http
+GET /ci/environments/<environment>/domains/<domain>/releases/<release ID>
+x-flex-ci-token: <the job's token>
+```
+
+The API reads the release from the [release table](#the-release-table), under the environment and
+domain the pipeline was allowed for, so a pipeline sees only its own domain's releases. It
+answers 200, with `cache-control: no-store`, since the record changes until the release is final:
+
+```json
+{
+  "releaseId": "<the release's ID>",
+  "environment": "<environment>",
+  "domain": "<domain>",
+  "version": "<the version>",
+  "sha256": "<the zip's SHA-256>",
+  "status": "released",
+  "requestedAt": "2027-01-15T08:00:00.000Z",
+  "updatedAt": "2027-01-15T08:01:30.000Z",
+  "attempts": 1,
+  "functionVersion": "3",
+  "created": false,
+  "moved": true,
+  "runId": "<GitHub's ID for the run>",
+  "commit": "<the commit>"
+}
+```
+
+`status` is one of the [release table](#the-release-table)'s. A release that stopped has `step`
+and `reason` in place of `functionVersion`, `created` and `moved`, such as `check-order` and
+`superseded` for one [`live` is ahead of](#the-order-of-releases). `runId` and `commit` are there
+when the token that asked held them. A pipeline waits for `released`, `refused` or `abandoned`,
+and asks again until then.
+
+It answers in any environment, publishing or not, since every release is recorded. An ID that
+isn't a release ID, or names no release the table holds for that domain there, is a 404,
+`Not found`. So is a release recorded before
+releases had versions, which the API can't read.

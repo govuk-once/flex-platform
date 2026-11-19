@@ -1,5 +1,6 @@
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 import type { ReleaseRequest } from "@repo/shared-release/request";
+import type { ReleaseRecord } from "@repo/shared-release/table";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -44,6 +45,9 @@ const objects = new Map<string, string>();
 // Each version recorded, by its domain and version.
 const artefacts = new Map<string, Artefact>();
 
+// Each release recorded, by its environment, domain and ID.
+const releases = new Map<string, ReleaseRecord>();
+
 const VERSION_ID = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
 
 const RELEASES = "/ci/environments/development/domains/example/releases";
@@ -51,6 +55,30 @@ const RELEASES = "/ci/environments/development/domains/example/releases";
 const RELEASE_ID = "0196a8f0-2c00-7000-8000-000000000000";
 
 const RELEASE_BODY = JSON.stringify({ version: VERSION });
+
+// A release the table holds, as it was asked for, and once it went live.
+const ASKED: ReleaseRecord = {
+  id: RELEASE_ID,
+  environment: "development",
+  domain: "example",
+  version: VERSION,
+  sha256: BUNDLE.sha256,
+  versionId: VERSION_ID,
+  runId: "12345678901",
+  commit: COMMIT,
+  status: "queued",
+  requestedAt: Date.parse("2027-01-15T08:00:00.000Z"),
+  updatedAt: Date.parse("2027-01-15T08:01:30.000Z"),
+  attempts: 1,
+};
+
+const RECORD: ReleaseRecord = {
+  ...ASKED,
+  status: "released",
+  functionVersion: "3",
+  created: false,
+  moved: true,
+};
 
 const KEY = `example/bundle/${BUNDLE.sha256}.zip`;
 
@@ -91,6 +119,10 @@ function handler(documents?: Record<string, unknown>) {
       queued.push(request);
       return Promise.resolve(RELEASE_ID);
     },
+    findRelease: (key) =>
+      Promise.resolve(
+        releases.get(`${key.environment}/${key.domain}/${key.id}`),
+      ),
     now: () => {
       const reading = now;
       now += 7;
@@ -143,6 +175,7 @@ describe("createCiHandler", () => {
     queued.length = 0;
     objects.clear();
     artefacts.clear();
+    releases.clear();
     vi.spyOn(console, "log").mockImplementation((line: string) => {
       logged.push(JSON.parse(line) as LogLine);
     });
@@ -568,6 +601,176 @@ describe("createCiHandler", () => {
       expect(queued).toEqual([]);
     },
   );
+
+  it("answers how a release went, as the table has it, never to be kept", async () => {
+    const { handle } = handler();
+    releases.set(`development/example/${RELEASE_ID}`, RECORD);
+
+    const response = await handle(
+      functionUrlEvent({
+        method: "GET",
+        path: `${RELEASES}/${RELEASE_ID}`,
+        body: null,
+      }),
+    );
+
+    expect(response).toEqual({
+      statusCode: 200,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "x-correlation-id": TRACE_ID,
+      },
+      body: JSON.stringify({
+        releaseId: RELEASE_ID,
+        environment: "development",
+        domain: "example",
+        version: VERSION,
+        sha256: BUNDLE.sha256,
+        status: "released",
+        requestedAt: "2027-01-15T08:00:00.000Z",
+        updatedAt: "2027-01-15T08:01:30.000Z",
+        attempts: 1,
+        functionVersion: "3",
+        created: false,
+        moved: true,
+        runId: "12345678901",
+        commit: COMMIT,
+      }),
+    });
+    expect(logged).toEqual([
+      {
+        level: "INFO",
+        message: "telemetry",
+        telemetry: {
+          event: "ci_release_status",
+          details: {
+            ...REQUEST,
+            ...CALLER,
+            environment: "development",
+            domain: "example",
+            releaseId: RELEASE_ID,
+            status: "released",
+          },
+        },
+      },
+    ]);
+  });
+
+  it("answers why a release stopped", async () => {
+    const { handle } = handler();
+    releases.set(`development/example/${RELEASE_ID}`, {
+      ...ASKED,
+      status: "refused",
+      step: "check-order",
+      reason: "superseded",
+    });
+
+    const response = await handle(
+      functionUrlEvent({ method: "GET", path: `${RELEASES}/${RELEASE_ID}` }),
+    );
+
+    expect(JSON.parse(response.body)).toMatchObject({
+      status: "refused",
+      step: "check-order",
+      reason: "superseded",
+    });
+    expect(JSON.parse(response.body)).not.toHaveProperty("functionVersion");
+  });
+
+  // Every release is recorded, where it was asked for or promoted to.
+  it("answers in an environment that takes its code by promotion", async () => {
+    const { handle } = handler();
+    releases.set(`staging/example/${RELEASE_ID}`, {
+      ...RECORD,
+      environment: "staging",
+    });
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          ...STAGING,
+          method: "GET",
+          path: `/ci/environments/staging/domains/example/releases/${RELEASE_ID}`,
+        }),
+      ),
+    ).resolves.toMatchObject({ statusCode: 200 });
+  });
+
+  it.each([
+    ["no release with that ID", "development/example"],
+    ["only another domain's", "development/elsewhere"],
+    ["only another environment's", "staging/example"],
+  ])("answers 404 for a release the table holds %s", async (_, holder) => {
+    const { handle } = handler();
+    releases.set(`${holder}/${RELEASE_ID}`, RECORD);
+    releases.delete(`development/example/${RELEASE_ID}`);
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          method: "GET",
+          path: `${RELEASES}/${RELEASE_ID}`,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      statusCode: 404,
+      body: body("Not found", "client_error"),
+    });
+    expect(logged[0]?.telemetry).toEqual({
+      event: "ci_release_status_unknown",
+      details: {
+        ...REQUEST,
+        ...CALLER,
+        environment: "development",
+        domain: "example",
+        releaseId: RELEASE_ID,
+      },
+    });
+  });
+
+  // The ID is the caller's, so it is never looked up or logged unless it is one.
+  it.each(["caller-chosen-text", RELEASE_ID.toUpperCase()])(
+    "answers 404 for %s, which is no release's ID, looking nothing up",
+    async (releaseId) => {
+      const { handle } = handler();
+      releases.set(`development/example/${releaseId}`, RECORD);
+
+      await expect(
+        handle(
+          functionUrlEvent({
+            method: "GET",
+            path: `${RELEASES}/${releaseId}`,
+          }),
+        ),
+      ).resolves.toMatchObject({ statusCode: 404 });
+      expect(logged[0]?.telemetry).toEqual({
+        event: "ci_release_status_unknown",
+        details: {
+          ...REQUEST,
+          ...CALLER,
+          environment: "development",
+          domain: "example",
+          reason: "release-id",
+        },
+      });
+      expect(JSON.stringify(logged)).not.toContain(releaseId);
+    },
+  );
+
+  it("answers 403 for a release of a domain the pipeline isn't allowed, looking nothing up", async () => {
+    const { handle } = handler();
+    releases.set(`development/elsewhere/${RELEASE_ID}`, RECORD);
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          method: "GET",
+          path: `/ci/environments/development/domains/elsewhere/releases/${RELEASE_ID}`,
+        }),
+      ),
+    ).resolves.toMatchObject({ statusCode: 403 });
+  });
 
   it("answers 403 to a release by a pipeline that isn't allowed, looking at nothing", async () => {
     const { handle } = handler();

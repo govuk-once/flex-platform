@@ -18,6 +18,8 @@ import {
 } from "@repo/shared-release/request";
 import {
   createReleaseTable,
+  type ReleaseKey,
+  type ReleaseRecord,
   type ReleaseTable,
 } from "@repo/shared-release/table";
 import { uuidV7 } from "@repo/utils/uuid-v7";
@@ -29,6 +31,11 @@ export type FindBundle = (key: string) => Promise<string | undefined>;
 
 /** Records the release and queues it, and answers its ID. */
 export type QueueRelease = (request: ReleaseRequest) => Promise<string>;
+
+/** The release table's record of a release, or `undefined` for none it can read. */
+export type FindRelease = (
+  key: ReleaseKey,
+) => Promise<ReleaseRecord | undefined>;
 
 export function createBundleFinder(
   uploads: CiUploads,

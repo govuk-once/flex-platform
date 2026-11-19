@@ -1,3 +1,5 @@
+import type { ReleaseRecord } from "@repo/shared-release/table";
+
 import type { SignedUpload } from "./sign-upload.ts";
 import type { FunctionUrlResult } from "./types.ts";
 
@@ -86,6 +88,41 @@ export function releaseQueued(
       "x-correlation-id": traceId,
     },
     body: JSON.stringify(release),
+  };
+}
+
+// How a release went, as the table has it now, which changes until it is final.
+export function releaseStatus(
+  traceId: string,
+  record: ReleaseRecord,
+): FunctionUrlResult {
+  return {
+    statusCode: 200,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "x-correlation-id": traceId,
+    },
+    body: JSON.stringify({
+      releaseId: record.id,
+      environment: record.environment,
+      domain: record.domain,
+      version: record.version,
+      sha256: record.sha256,
+      status: record.status,
+      requestedAt: new Date(record.requestedAt).toISOString(),
+      updatedAt: new Date(record.updatedAt).toISOString(),
+      attempts: record.attempts,
+      ...(record.step !== undefined && { step: record.step }),
+      ...(record.reason !== undefined && { reason: record.reason }),
+      ...(record.functionVersion !== undefined && {
+        functionVersion: record.functionVersion,
+      }),
+      ...(record.created !== undefined && { created: record.created }),
+      ...(record.moved !== undefined && { moved: record.moved }),
+      ...(record.runId !== undefined && { runId: record.runId }),
+      ...(record.commit !== undefined && { commit: record.commit }),
+    }),
   };
 }
 

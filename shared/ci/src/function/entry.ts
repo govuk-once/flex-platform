@@ -1,5 +1,8 @@
 // What Lambda runs. Only the build bundles this module: it replaces CI_CONFIG with a stage's
 // config.
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { createReleaseTable } from "@repo/shared-release/table";
+
 import { createArtefactFinder, createVersionClaim } from "./artefacts.ts";
 import { createAuthoriser, createPublishCheck } from "./authorise.ts";
 import { createCiHandler } from "./handler.ts";
@@ -12,6 +15,11 @@ import { createTokenVerifier } from "./token.ts";
 import type { CiConfig } from "./types.ts";
 
 declare const CI_CONFIG: CiConfig;
+
+const releases = createReleaseTable(
+  new DynamoDBClient({ region: CI_CONFIG.uploads.region }),
+  CI_CONFIG.releases.table,
+);
 
 export const handler = createCiHandler({
   verifyToken: createTokenVerifier(CI_CONFIG),
@@ -32,6 +40,8 @@ export const handler = createCiHandler({
     releases: CI_CONFIG.releases,
     region: CI_CONFIG.uploads.region,
     now: () => Date.now(),
+    table: releases,
   }),
+  findRelease: (key) => releases.get(key),
   now: () => Date.now(),
 });

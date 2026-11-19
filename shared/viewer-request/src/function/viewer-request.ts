@@ -22,8 +22,9 @@ import { logEvent } from "./telemetry.ts";
 import { checkToken } from "./token.ts";
 import type { ViewerRequestConfig } from "./types.ts";
 
-// Every route a pipeline calls is a POST.
-const ALLOWED_METHODS = ["POST"];
+// A pipeline sends what it uploads and releases with a POST, and reads how a release went with a
+// GET, which has no body.
+const ALLOWED_METHODS = ["GET", "POST"];
 
 // The method is checked first, since its answer says nothing about the caller or the paths. The
 // token is checked before the path, so a request without a valid token gets a 401 whatever its
@@ -63,14 +64,17 @@ export function viewerRequest(
     return notFound(traceId);
   }
 
-  if (!isJsonRequest(request)) {
-    logEvent("viewer_request_content_type_rejected", ids);
-    return unsupportedMediaType(traceId);
-  }
+  // Only a POST sends a body. CloudFront signs a GET for the origin with no body's hash.
+  if (request.method === "POST") {
+    if (!isJsonRequest(request)) {
+      logEvent("viewer_request_content_type_rejected", ids);
+      return unsupportedMediaType(traceId);
+    }
 
-  if (!hasContentHash(request)) {
-    logEvent("viewer_request_content_hash_rejected", ids);
-    return badRequest(traceId);
+    if (!hasContentHash(request)) {
+      logEvent("viewer_request_content_hash_rejected", ids);
+      return badRequest(traceId);
+    }
   }
 
   logEvent("viewer_request_token_validated", ids);
