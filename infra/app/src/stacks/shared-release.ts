@@ -1,5 +1,7 @@
 import { CrossRegionParameters } from "@repo/infra-constructs";
 import {
+  ARTEFACT_TABLE_NAME,
+  ArtefactTable,
   CI_FUNCTION_NAME,
   CI_ORIGIN_HOST_PARAMETER,
   CiFunction,
@@ -28,9 +30,9 @@ export const SHARED_RELEASE_STACK_NAME = "shared-release";
 
 /**
  * The stage's pipeline API: its function, the URL CloudFront reaches it at, the bucket a domain's
- * uploaded code is kept in, and the queue and worker that release it. AWS generates the URL's host
- * here, and the distribution is in us-east-1, so the stack writes the host to a parameter there
- * for the distribution's stack to read.
+ * uploaded code is kept in, the table each version of it is recorded in, and the queue and worker
+ * that release it. AWS generates the URL's host here, and the distribution is in us-east-1, so the
+ * stack writes the host to a parameter there for the distribution's stack to read.
  *
  * The function is built with the stage's domains and the repository each is released from, and
  * the worker with what each domain's release names, so a change to who may release a domain, or
@@ -59,6 +61,9 @@ export class SharedReleaseStack extends Stack {
     });
     // The name each function is built with is a plain string, unlike the table's reference.
     const releaseTable = { name: RELEASE_TABLE_NAME, arn: table.tableArn };
+    const artefacts = new ArtefactTable(this, "Artefacts", {
+      recorderRoleArn: roleArn(CI_FUNCTION_NAME),
+    });
 
     const worker = new ReleaseWorker(this, "Release", {
       codeBucketName,
@@ -78,6 +83,10 @@ export class SharedReleaseStack extends Stack {
         arn: worker.queue.queueArn,
       },
       releaseTable,
+      artefactTable: {
+        name: ARTEFACT_TABLE_NAME,
+        arn: artefacts.table.tableArn,
+      },
       // A disabled domain too: its code can be released while nothing is routed to it.
       environments: stage.environments.map((environment) => ({
         name: environment.name,

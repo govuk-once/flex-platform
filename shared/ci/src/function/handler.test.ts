@@ -15,7 +15,10 @@ import {
   REPOSITORY_ID,
   token,
   TRACE_ID,
+  UPLOAD,
+  VERSION,
 } from "../../test/helpers.ts";
+import type { Artefact } from "./artefacts.ts";
 import { createAuthoriser, createPublishCheck } from "./authorise.ts";
 import { createCiHandler } from "./handler.ts";
 import { createUploadSigner } from "./sign-upload.ts";
@@ -37,6 +40,9 @@ const queued: ReleaseRequest[] = [];
 
 // The bucket's objects, by key, and the version each holds.
 const objects = new Map<string, string>();
+
+// Each version recorded, by its domain and version.
+const artefacts = new Map<string, Artefact>();
 
 const VERSION_ID = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
 
@@ -65,6 +71,13 @@ function handler(documents?: Record<string, unknown>) {
     verifyToken: createTokenVerifier(CONFIG, fake.fetcher),
     authorise: createAuthoriser(CONFIG),
     publishes: createPublishCheck(CONFIG),
+    claimVersion: (artefact) => {
+      const key = `${artefact.domain}/${artefact.version}`;
+      const held = artefacts.get(key);
+      if (held !== undefined) return Promise.resolve(held.sha256);
+      artefacts.set(key, artefact);
+      return Promise.resolve(artefact.sha256);
+    },
     signUpload: (key, bundle) => {
       signed.push(key);
       return signUpload(key, bundle);
@@ -115,7 +128,7 @@ describe("createCiHandler", () => {
     signed.length = 0;
     queued.length = 0;
     objects.clear();
-    objects.set(KEY, VERSION_ID);
+    artefacts.clear();
     vi.spyOn(console, "log").mockImplementation((line: string) => {
       logged.push(JSON.parse(line) as LogLine);
     });
@@ -139,6 +152,7 @@ describe("createCiHandler", () => {
     });
     const answer = JSON.parse(response.body) as Record<string, unknown>;
     expect(answer).toEqual({
+      uploaded: false,
       method: "PUT",
       url: expect.stringMatching(
         new RegExp(`^${BUCKET_URL}/${KEY}\\?.*X-Amz-Signature=[0-9a-f]{64}`),
@@ -162,12 +176,127 @@ describe("createCiHandler", () => {
             ...CALLER,
             environment: "development",
             domain: "example",
+            version: VERSION,
             key: KEY,
             size: BUNDLE.size,
           },
         },
       },
     ]);
+  });
+
+  // The domain's, not the environment's: the same bundle goes to each environment in turn.
+  it("records the version as the domain's bundle, with the run that uploaded it", async () => {
+    const { handle } = handler();
+
+    await handle(functionUrlEvent());
+
+    expect([...artefacts.values()]).toEqual([
+      {
+        domain: "example",
+        version: VERSION,
+        sha256: BUNDLE.sha256,
+        runId: CALLER.runId,
+        commit: COMMIT,
+      },
+    ]);
+  });
+
+  // A run that stopped before its upload, run again.
+  it("signs the upload again for a version recorded with the same bundle, which isn't there yet", async () => {
+    const { handle } = handler();
+    await handle(functionUrlEvent());
+
+    await expect(handle(functionUrlEvent())).resolves.toMatchObject({
+      statusCode: 200,
+    });
+    expect(signed).toEqual([KEY, KEY]);
+  });
+
+  it("answers that there is nothing to upload when the bundle is there already, signing nothing", async () => {
+    const { handle } = handler();
+    objects.set(KEY, VERSION_ID);
+
+    await expect(handle(functionUrlEvent())).resolves.toEqual({
+      statusCode: 200,
+      headers: {
+        "content-type": "application/json",
+        "x-correlation-id": TRACE_ID,
+      },
+      body: JSON.stringify({
+        version: VERSION,
+        sha256: BUNDLE.sha256,
+        uploaded: true,
+      }),
+    });
+    expect(logged[0]?.telemetry).toEqual({
+      event: "ci_upload_present",
+      details: {
+        ...REQUEST,
+        ...CALLER,
+        environment: "development",
+        domain: "example",
+        version: VERSION,
+        key: KEY,
+        size: BUNDLE.size,
+      },
+    });
+    expect(signed).toEqual([]);
+  });
+
+  // Two versions with the same bytes share one object.
+  it("answers that there is nothing to upload for a new version of a bundle that is there", async () => {
+    const { handle } = handler();
+    objects.set(KEY, VERSION_ID);
+    await handle(functionUrlEvent());
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          body: JSON.stringify({ ...UPLOAD, version: "1.4.3" }),
+        }),
+      ),
+    ).resolves.toMatchObject({ statusCode: 200 });
+    expect(artefacts.size).toBe(2);
+    expect(signed).toEqual([]);
+  });
+
+  it("answers 409 to a version recorded with another bundle, signing nothing and keeping the record", async () => {
+    const { handle } = handler();
+    await handle(functionUrlEvent());
+    signed.length = 0;
+    logged.length = 0;
+    const other = "0".repeat(64);
+
+    await expect(
+      handle(
+        functionUrlEvent({
+          body: JSON.stringify({ ...UPLOAD, sha256: other }),
+        }),
+      ),
+    ).resolves.toEqual({
+      statusCode: 409,
+      headers: {
+        "content-type": "application/json",
+        "x-correlation-id": TRACE_ID,
+        "x-rejected-by": "pipeline-api",
+      },
+      body: body("This version is already a different bundle", "client_error"),
+    });
+    expect(logged[0]?.telemetry).toEqual({
+      event: "ci_upload_version_taken",
+      details: {
+        ...REQUEST,
+        ...CALLER,
+        environment: "development",
+        domain: "example",
+        version: VERSION,
+        key: `example/bundle/${other}.zip`,
+        size: BUNDLE.size,
+      },
+    });
+    expect(signed).toEqual([]);
+    expect(artefacts.get(`example/${VERSION}`)?.sha256).toBe(BUNDLE.sha256);
   });
 
   // Whatever a pipeline says of its bundle, the key is under the domain it was allowed for.
@@ -201,14 +330,17 @@ describe("createCiHandler", () => {
       },
     });
     expect(signed).toEqual([]);
+    expect(artefacts.size).toBe(0);
   });
 
   it.each([
     ["body", { body: null }],
     ["body", { body: "not json" }],
-    ["body", { body: JSON.stringify({ ...BUNDLE, key: "other/bundle.zip" }) }],
-    ["sha256", { body: JSON.stringify({ ...BUNDLE, sha256: "abc" }) }],
-    ["size", { body: JSON.stringify({ ...BUNDLE, size: 0 }) }],
+    ["body", { body: JSON.stringify({ ...UPLOAD, key: "other/bundle.zip" }) }],
+    ["version", { body: JSON.stringify(BUNDLE) }],
+    ["version", { body: JSON.stringify({ ...UPLOAD, version: "v1.4.2" }) }],
+    ["sha256", { body: JSON.stringify({ ...UPLOAD, sha256: "abc" }) }],
+    ["size", { body: JSON.stringify({ ...UPLOAD, size: 0 }) }],
   ])(
     "answers 400 to an allowed pipeline whose %s is no bundle's, signing nothing",
     async (reason, request) => {
@@ -229,6 +361,7 @@ describe("createCiHandler", () => {
         },
       });
       expect(signed).toEqual([]);
+      expect(artefacts.size).toBe(0);
     },
   );
 
@@ -249,6 +382,7 @@ describe("createCiHandler", () => {
 
   it("queues the release of a bundle the pipeline uploaded, and answers 202", async () => {
     const { handle } = handler();
+    objects.set(KEY, VERSION_ID);
 
     const response = await handle(
       functionUrlEvent({
@@ -302,7 +436,6 @@ describe("createCiHandler", () => {
 
   it("answers 409 to a release of a bundle that was never uploaded, queueing nothing", async () => {
     const { handle } = handler();
-    objects.clear();
 
     await expect(
       handle(
@@ -331,7 +464,6 @@ describe("createCiHandler", () => {
   // Another domain's bundle is under another domain's key, which this route never looks at.
   it("looks for the bundle only under the domain the pipeline is allowed for", async () => {
     const { handle } = handler();
-    objects.clear();
     objects.set(`elsewhere/bundle/${BUNDLE.sha256}.zip`, VERSION_ID);
 
     await expect(

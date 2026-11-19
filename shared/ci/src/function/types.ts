@@ -32,11 +32,13 @@ export interface CiEnvironment {
   readonly domains: readonly string[];
 }
 
-/** Where a domain's uploaded code is kept. */
+/** Where a domain's uploaded code is kept, and each version of it is recorded. */
 export interface CiUploads {
   readonly bucket: string;
   /** The bucket's region, which an upload's address and signature both name. */
   readonly region: string;
+  /** The artefacts table, by name, in the bucket's region. */
+  readonly table: string;
 }
 
 /** Where a release is asked for: the release table, and the release worker's queue. */

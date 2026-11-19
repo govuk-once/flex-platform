@@ -32,7 +32,11 @@ export const CONFIG: CiConfig = {
     // Registered, but no environment hosts it.
     { name: "elsewhere", repositoryId: "700000002", ownerId: OWNER_ID },
   ],
-  uploads: { bucket: "shared-domain-code-000000000000", region: "eu-west-2" },
+  uploads: {
+    bucket: "shared-domain-code-000000000000",
+    region: "eu-west-2",
+    table: "shared-release-artefacts",
+  },
   releases: {
     queueUrl:
       "https://sqs.eu-west-2.amazonaws.com/000000000000/shared-release.fifo",
@@ -47,6 +51,11 @@ export const BUNDLE = {
   sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
   size: 4096,
 };
+
+export const VERSION = "1.4.2";
+
+// What a pipeline says of the bundle it is about to upload.
+export const UPLOAD = { version: VERSION, ...BUNDLE };
 
 export const KID = "key-1";
 
@@ -146,7 +155,7 @@ export function functionUrlEvent(
   } = {},
 ): FunctionUrlEvent {
   const body =
-    overrides.body === undefined ? JSON.stringify(BUNDLE) : overrides.body;
+    overrides.body === undefined ? JSON.stringify(UPLOAD) : overrides.body;
   return {
     ...(body !== null && { body }),
     ...(overrides.isBase64Encoded !== undefined && {
@@ -168,4 +177,34 @@ export function functionUrlEvent(
       http: { method: overrides.method ?? "POST" },
     },
   };
+}
+
+export interface Sent {
+  readonly command: string;
+  readonly input: unknown;
+}
+
+// Any of the SDK's clients: each takes middleware at the start of a call.
+interface Client {
+  readonly middlewareStack: {
+    add(middleware: unknown, options: unknown): void;
+  };
+}
+
+// Answers each call the client sends in place of AWS, before anything is signed or sent, and
+// records it. An answer that throws is AWS's error.
+export function answering(client: Client, answer: () => object): Sent[] {
+  const sent: Sent[] = [];
+  client.middlewareStack.add(
+    (_next: unknown, context: { commandName: string }) =>
+      (args: { input: unknown }) => {
+        sent.push({ command: context.commandName, input: args.input });
+        return Promise.resolve().then(() => ({
+          output: { $metadata: {}, ...answer() },
+          response: {},
+        }));
+      },
+    { step: "initialize", priority: "high" },
+  );
+  return sent;
 }

@@ -195,12 +195,12 @@ describe("buildCiFunction", () => {
     ],
     [
       "a bucket whose name an address can't hold",
-      { uploads: { bucket: "Shared_Code", region: "eu-west-2" } },
+      { uploads: { ...CONFIG.uploads, bucket: "Shared_Code" } },
       "bucket",
     ],
     [
       "a bucket in no region",
-      { uploads: { bucket: "shared-domain-code-000000000000", region: "" } },
+      { uploads: { ...CONFIG.uploads, region: "" } },
       "bucket",
     ],
     [
@@ -229,6 +229,17 @@ describe("buildCiFunction", () => {
         },
       },
       "release queue",
+    ],
+    [
+      "an artefacts table given by its ARN",
+      {
+        uploads: {
+          ...CONFIG.uploads,
+          table:
+            "arn:aws:dynamodb:eu-west-2:000000000000:table/shared-release-artefacts",
+        },
+      },
+      "artefacts table",
     ],
     [
       "a release table given by its ARN",

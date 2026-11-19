@@ -63,6 +63,11 @@ function checkConfig(config: CiConfig): void {
     );
   }
 
+  if (!TABLE_NAME.test(config.uploads.table)) {
+    throw new Error(
+      `The pipeline API's artefacts table, ${JSON.stringify(config.uploads.table)}, is not a table's name`,
+    );
+  }
   if (!TABLE_NAME.test(config.releases.table)) {
     throw new Error(
       `The pipeline API's release table, ${JSON.stringify(config.releases.table)}, is not a table's name`,

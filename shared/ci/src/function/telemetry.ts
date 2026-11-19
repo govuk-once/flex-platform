@@ -1,6 +1,6 @@
 // One log line per request, in the shape of the CloudFront Function's. Every value is a fixed
-// code, an ID the platform or GitHub issued, a name from the config, a bundle's hash and length
-// once both are checked, an object's version in the bucket, or a source location. Never the
+// code, an ID the platform or GitHub issued, a name from the config, a bundle's version, hash and
+// length once each is checked, an object's version in the bucket, or a source location. Never the
 // token, a claim a repository's admin can write, the caller's path, the address an upload is
 // signed for, or a library's error text, which can quote a claim.
 
@@ -15,6 +15,8 @@ export type CiEventName =
   | "ci_forbidden"
   | "ci_upload_not_accepted"
   | "ci_upload_invalid"
+  | "ci_upload_version_taken"
+  | "ci_upload_present"
   | "ci_upload_signed"
   | "ci_release_not_accepted"
   | "ci_release_invalid"
@@ -42,10 +44,12 @@ export interface OutcomeDetails {
   readonly commit?: string | undefined;
   readonly environment?: string;
   readonly domain?: string;
+  /** The version of the domain's code, as its pipeline names it. */
+  readonly version?: string;
   /** The bundle's key in the bucket, which holds its domain and its hash. */
   readonly key?: string;
   readonly size?: number;
-  /** The version of the bundle's object a release is for. */
+  /** The S3 version of the bundle's object a release is for. */
   readonly versionId?: string;
   /** The ID the release table holds a release under. */
   readonly releaseId?: string;

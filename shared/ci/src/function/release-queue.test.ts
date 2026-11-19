@@ -8,42 +8,12 @@ import type { ReleaseTable } from "@repo/shared-release/table";
 import { uuidV7 } from "@repo/utils/uuid-v7";
 import { assert, describe, expect, it } from "vitest";
 
-import { BUNDLE, COMMIT, CONFIG } from "../../test/helpers.ts";
+import { answering, BUNDLE, COMMIT, CONFIG } from "../../test/helpers.ts";
 import { createBundleFinder, createReleaseQueue } from "./release-queue.ts";
 
 const KEY = `example/bundle/${BUNDLE.sha256}.zip`;
 
 const VERSION_ID = "3HL4kqtJlcpXroDTDmJ.rmSpXd3dIbrHY";
-
-interface Sent {
-  readonly command: string;
-  readonly input: unknown;
-}
-
-// Any of the SDK's clients: each takes middleware at the start of a call.
-interface Client {
-  readonly middlewareStack: {
-    add(middleware: unknown, options: unknown): void;
-  };
-}
-
-// Answers each call the client sends in place of AWS, before anything is signed or sent, and
-// records it. An answer that throws is AWS's error.
-function answering(client: Client, answer: () => object): Sent[] {
-  const sent: Sent[] = [];
-  client.middlewareStack.add(
-    (_next: unknown, context: { commandName: string }) =>
-      (args: { input: unknown }) => {
-        sent.push({ command: context.commandName, input: args.input });
-        return Promise.resolve().then(() => ({
-          output: { $metadata: {}, ...answer() },
-          response: {},
-        }));
-      },
-    { step: "initialize", priority: "high" },
-  );
-  return sent;
-}
 
 describe("createBundleFinder", () => {
   it("finds the version of the object under the key", async () => {

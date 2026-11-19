@@ -1,32 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { BUNDLE, functionUrlEvent } from "../../test/helpers.ts";
-import { bundleOf, MAX_BUNDLE_BYTES, releaseOf } from "./bundle.ts";
+import { BUNDLE, functionUrlEvent, UPLOAD } from "../../test/helpers.ts";
+import { MAX_BUNDLE_BYTES, releaseOf, uploadOf } from "./bundle.ts";
 
 function sent(body: unknown) {
-  return bundleOf(functionUrlEvent({ body: JSON.stringify(body) }));
+  return uploadOf(functionUrlEvent({ body: JSON.stringify(body) }));
 }
 
-describe("bundleOf", () => {
-  it("reads a bundle's hash and length from the body", () => {
-    expect(bundleOf(functionUrlEvent())).toEqual(BUNDLE);
+describe("uploadOf", () => {
+  it("reads a bundle's version, hash and length from the body", () => {
+    expect(uploadOf(functionUrlEvent())).toEqual(UPLOAD);
   });
 
   it("reads a body Lambda gives in base64", () => {
     expect(
-      bundleOf(
+      uploadOf(
         functionUrlEvent({
-          body: Buffer.from(JSON.stringify(BUNDLE)).toString("base64"),
+          body: Buffer.from(JSON.stringify(UPLOAD)).toString("base64"),
           isBase64Encoded: true,
         }),
       ),
-    ).toEqual(BUNDLE);
+    ).toEqual(UPLOAD);
   });
 
   it("takes a bundle of one byte, and of the most Lambda unzips", () => {
-    expect(sent({ ...BUNDLE, size: 1 })).toEqual({ ...BUNDLE, size: 1 });
-    expect(sent({ ...BUNDLE, size: MAX_BUNDLE_BYTES })).toEqual({
-      ...BUNDLE,
+    expect(sent({ ...UPLOAD, size: 1 })).toEqual({ ...UPLOAD, size: 1 });
+    expect(sent({ ...UPLOAD, size: MAX_BUNDLE_BYTES })).toEqual({
+      ...UPLOAD,
       size: MAX_BUNDLE_BYTES,
     });
   });
@@ -35,13 +35,23 @@ describe("bundleOf", () => {
     ["no body", null],
     ["an empty body", ""],
     ["text that isn't JSON", "sha256=abc"],
-    ["a list", JSON.stringify([BUNDLE])],
+    ["a list", JSON.stringify([UPLOAD])],
     ["null", "null"],
     ["a string", JSON.stringify("bundle")],
-    ["a field it doesn't know", JSON.stringify({ ...BUNDLE, key: "a/b.zip" })],
+    ["a field it doesn't know", JSON.stringify({ ...UPLOAD, key: "a/b.zip" })],
     ["a body far longer than a bundle's", `${" ".repeat(2000)}{}`],
   ])("refuses %s as no body of a bundle's", (_, body) => {
-    expect(bundleOf(functionUrlEvent({ body }))).toBe("body");
+    expect(uploadOf(functionUrlEvent({ body }))).toBe("body");
+  });
+
+  // What a version may be is `isBundleVersion`'s to say, and tested there.
+  it.each([
+    ["none", undefined],
+    ["one with a v", "v1.4.2"],
+    ["a pre-release", "1.4.2-rc.1"],
+    ["a number", 1.4],
+  ])("refuses a version that is %s", (_, version) => {
+    expect(sent({ ...UPLOAD, version })).toBe("version");
   });
 
   it.each([
@@ -53,7 +63,7 @@ describe("bundleOf", () => {
     ["a path", `../${BUNDLE.sha256.slice(3)}`],
     ["a number", 9],
   ])("refuses a hash that is %s", (_, sha256) => {
-    expect(sent({ ...BUNDLE, sha256 })).toBe("sha256");
+    expect(sent({ ...UPLOAD, sha256 })).toBe("sha256");
   });
 
   it.each([
@@ -65,20 +75,20 @@ describe("bundleOf", () => {
     ["more than Lambda unzips", MAX_BUNDLE_BYTES + 1],
     ["beyond a safe integer", 2 ** 60],
   ])("refuses a length that is %s", (_, size) => {
-    expect(sent({ ...BUNDLE, size })).toBe("size");
+    expect(sent({ ...UPLOAD, size })).toBe("size");
   });
 
   // `JSON.parse` makes `__proto__` an own field, so it is refused as any unknown field is, and a
   // field the prototype answers to is not read from it.
   it("reads no field from the prototype", () => {
     expect(
-      bundleOf(
+      uploadOf(
         functionUrlEvent({
-          body: `{"__proto__":${JSON.stringify(BUNDLE)}}`,
+          body: `{"__proto__":${JSON.stringify(UPLOAD)}}`,
         }),
       ),
     ).toBe("body");
-    expect(sent({ size: BUNDLE.size })).toBe("sha256");
+    expect(sent({ version: UPLOAD.version, size: BUNDLE.size })).toBe("sha256");
   });
 });
 

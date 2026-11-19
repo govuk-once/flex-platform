@@ -1,5 +1,7 @@
 // What a pipeline says of the bundle it is about to upload, or asks to release.
 
+import { isBundleVersion } from "@repo/shared-release/bundle-version";
+
 import type { FunctionUrlEvent } from "./types.ts";
 
 /**
@@ -8,7 +10,7 @@ import type { FunctionUrlEvent } from "./types.ts";
  */
 export const MAX_BUNDLE_BYTES = 250 * 1024 * 1024;
 
-// The request's body is at most two short fields. Far longer is not one.
+// The request's body is at most three short fields. Far longer is not one.
 const MAX_BODY_LENGTH = 1024;
 
 // A SHA-256 in hex, in lowercase, so one bundle has one key.
@@ -21,15 +23,25 @@ export interface Bundle {
   readonly size: number;
 }
 
-// The part of a body that isn't a bundle's description, as a fixed code for the log.
-export type BundleFault = "body" | "sha256" | "size";
+/** A bundle a pipeline is about to upload, and the version it names it. */
+export interface Upload extends Bundle {
+  readonly version: string;
+}
 
-// `{ "sha256": "<64 hex digits>", "size": <bytes> }`, and nothing else: a field the API doesn't
-// know is refused, so a pipeline never believes it said something that was ignored.
-export function bundleOf(event: FunctionUrlEvent): Bundle | BundleFault {
+// The part of a body that isn't a bundle's description, as a fixed code for the log.
+export type BundleFault = "body" | "version" | "sha256" | "size";
+
+// `{ "version": "<major.minor.patch>", "sha256": "<64 hex digits>", "size": <bytes> }`, and
+// nothing else: a field the API doesn't know is refused, so a pipeline never believes it said
+// something that was ignored.
+export function uploadOf(event: FunctionUrlEvent): Upload | BundleFault {
   const fields = fieldsOf(event, UPLOAD_FIELDS);
   if (fields === "body") return fields;
 
+  const version = fields.get("version");
+  if (typeof version !== "string" || !isBundleVersion(version)) {
+    return "version";
+  }
   const sha256 = fields.get("sha256");
   if (!isSha256(sha256)) return "sha256";
   const size = fields.get("size");
@@ -41,7 +53,7 @@ export function bundleOf(event: FunctionUrlEvent): Bundle | BundleFault {
   ) {
     return "size";
   }
-  return { sha256, size };
+  return { version, sha256, size };
 }
 
 /** The bundle a pipeline asks to release, by the hash it was uploaded with. */
@@ -59,7 +71,11 @@ export function releaseOf(event: FunctionUrlEvent): Release | BundleFault {
   return { sha256 };
 }
 
-const UPLOAD_FIELDS: ReadonlySet<string> = new Set(["sha256", "size"]);
+const UPLOAD_FIELDS: ReadonlySet<string> = new Set([
+  "version",
+  "sha256",
+  "size",
+]);
 
 const RELEASE_FIELDS: ReadonlySet<string> = new Set(["sha256"]);
 

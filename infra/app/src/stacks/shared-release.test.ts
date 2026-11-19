@@ -184,6 +184,27 @@ describe("SharedReleaseStack", () => {
     expect(bundle()).toContain('table: "shared-releases"');
   });
 
+  // The role the table names is the one the function runs as.
+  it("lets the function's role, and no other, record each version a domain uploads", () => {
+    const built = template();
+    const role = `arn:aws:iam::${PROD.shared.account}:role/shared-ci`;
+
+    built.hasResourceProperties("AWS::DynamoDB::Table", {
+      TableName: "shared-release-artefacts",
+      ResourcePolicy: {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Sid: "DenyRecordingButThePipelineApi",
+              Condition: { ArnNotEquals: { "aws:PrincipalArn": [role] } },
+            }),
+          ]),
+        },
+      },
+    });
+    expect(bundle()).toContain('table: "shared-release-artefacts"');
+  });
+
   // The role the table lets give a release up is the one the dead-letter worker runs as.
   it("gives up, by its own function, each release the queue moves to the dead-letter queue", () => {
     const built = template();
