@@ -17,6 +17,14 @@ export interface S3Object {
   readonly account: string;
 }
 
+/** Private API Gateway APIs, and the accounts a call to one may be signed in. */
+export interface PrivateApiAccess {
+  /** Each API by ARN, with no stage or path. It may be in an upstream's account. */
+  readonly apiArns: readonly string[];
+  /** The accounts of the upstream roles a call is signed as, such as an upstream's own. */
+  readonly callerAccounts: readonly string[];
+}
+
 export interface InterfaceEndpointsProps {
   readonly vpc: IVpc;
   /** The isolated subnets: the endpoints are how they reach AWS. */
@@ -40,19 +48,28 @@ export interface InterfaceEndpointsProps {
    * pattern such as `gateway-dev-*-execution`.
    */
   readonly gatewayRoles: string;
+  /** The private APIs the `execute-api` endpoint may invoke, and who may invoke them. */
+  readonly invokableApis: PrivateApiAccess;
 }
 
 /**
  * The AWS APIs the isolated subnets reach, each through an endpoint with private DNS, so the
  * SDK's usual hostname resolves to it. No endpoint lets anything in until a workload's security
- * group is let in with `WorkloadSecurityGroup`, and each refuses any principal outside this account,
- * any resource it doesn't name, and any action but its own. One with no resource to name refuses
- * everything.
+ * group is let in with `WorkloadSecurityGroup`, and each refuses any resource it doesn't name and
+ * any action but its own. One with no resource to name refuses everything.
  *
  * - `lambda`: invoking the functions named.
  * - `secretsmanager`: reading the secrets named, as a gateway's role.
  * - `sts`: assuming the roles named, as a gateway's role.
  * - `s3`: reading the objects named.
+ * - `execute-api`: invoking the private APIs named, as a principal of an account named with them.
+ *
+ * Every endpoint but `execute-api` refuses any principal outside this account. A private API is
+ * called as its upstream's own role, which a gateway assumes to sign with, so that endpoint lets
+ * through the accounts those roles are in instead.
+ *
+ * Private DNS on `execute-api` answers for every name API Gateway gives an API in the region,
+ * so nothing in the VPC reaches a public API at such a name, by NAT or any other way.
  *
  * An endpoint costs the same whether it's used or not, so one is added when something calls its
  * API. Traces need none: Lambda's X-Ray daemon sends from outside the VPC.
@@ -69,6 +86,7 @@ export class InterfaceEndpoints extends Construct {
   public readonly secretsManager: InterfaceVpcEndpoint;
   public readonly sts: InterfaceVpcEndpoint;
   public readonly s3: InterfaceVpcEndpoint;
+  public readonly executeApi: InterfaceVpcEndpoint;
 
   readonly #byService: Record<string, InterfaceVpcEndpoint> = {};
   readonly #hostnames: string[] = [];
@@ -94,69 +112,142 @@ export class InterfaceEndpoints extends Construct {
       props,
       "Lambda",
       InterfaceVpcEndpointAwsService.LAMBDA,
-      {
+      this.inAccount({
         actions: ["lambda:InvokeFunction"],
         // The pattern names an alias, so a function is reached by that alone: not without a
         // qualifier, and not by a version's number.
         resources: [functions],
-      },
+      }),
     );
     this.secretsManager = this.endpoint(
       props,
       "SecretsManager",
       InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
-      {
+      this.inAccount({
         actions: ["secretsmanager:GetSecretValue"],
         resources: [...props.readableSecrets],
         principals: gatewayRoles,
-      },
+      }),
     );
-    this.sts = this.endpoint(props, "Sts", InterfaceVpcEndpointAwsService.STS, {
-      actions: ["sts:AssumeRole"],
-      resources: [...props.assumableRoles],
-      principals: gatewayRoles,
-    });
-    this.s3 = this.endpoint(props, "S3", InterfaceVpcEndpointAwsService.S3, {
-      actions: ["s3:GetObject"],
-      resources: props.readableObjects.map(
-        ({ bucket, key }) => `arn:${stack.partition}:s3:::${bucket}/${key}`,
-      ),
+    this.sts = this.endpoint(
+      props,
+      "Sts",
+      InterfaceVpcEndpointAwsService.STS,
+      this.inAccount({
+        actions: ["sts:AssumeRole"],
+        resources: [...props.assumableRoles],
+        principals: gatewayRoles,
+      }),
+    );
+    this.s3 = this.endpoint(
+      props,
+      "S3",
+      InterfaceVpcEndpointAwsService.S3,
+      this.inAccount({
+        actions: ["s3:GetObject"],
+        resources: props.readableObjects.map(
+          ({ bucket, key }) => `arn:${stack.partition}:s3:::${bucket}/${key}`,
+        ),
+        // Bucket names are global, so a bucket of the same name in another account is refused.
+        resourceAccounts: [
+          ...new Set(props.readableObjects.map(({ account }) => account)),
+        ],
+      }),
       // The SDK calls S3 at the bucket's own name, which private DNS answers too.
-      hostnames: props.readableObjects.map(
+      props.readableObjects.map(
         ({ bucket }) => `${bucket}.s3.${stack.region}.amazonaws.com`,
       ),
-      // Bucket names are global, so a bucket of the same name in another account is refused.
-      resourceAccounts: [
-        ...new Set(props.readableObjects.map(({ account }) => account)),
-      ],
-    });
+    );
+    this.executeApi = this.endpoint(
+      props,
+      "ExecuteApi",
+      InterfaceVpcEndpointAwsService.APIGATEWAY,
+      this.privateApis(props.invokableApis),
+      // Nothing calls API Gateway at the region's name: an API is called at its own, which is
+      // its gateway's to list in config.
+      [],
+    );
 
     this.byService = this.#byService;
     this.hostnames = this.#hostnames;
+  }
+
+  // One statement for every private API, so the policy grows by an API's ARN and not by a
+  // statement for each gateway: an endpoint's policy has a fixed limit on its size.
+  private privateApis({
+    apiArns,
+    callerAccounts,
+  }: PrivateApiAccess): PolicyStatement[] {
+    if (apiArns.length === 0) return [];
+    if (callerAccounts.length === 0) {
+      throw new Error(
+        "A private API is named with no account a call to it may be signed in.",
+      );
+    }
+    return [
+      new PolicyStatement({
+        principals: [new AnyPrincipal()], // NOSONAR: the condition holds it to the accounts named
+        actions: ["execute-api:Invoke"],
+        // Any stage, method and path of the API: which of them a role may call is its upstream's
+        // to say, in the role's own policy.
+        resources: apiArns.map((arn) => `${arn}/*`),
+        // A call is signed as an upstream's role, in the upstream's account, so the account
+        // can't be held to this one. Which upstream's role a gateway signs as is held by its own
+        // role, which may assume only those it names, so this names only the accounts. A call
+        // with no signature has no account, so is refused.
+        conditions: {
+          StringEquals: { "aws:PrincipalAccount": [...callerAccounts] },
+        },
+      }),
+    ];
+  }
+
+  // What a principal in this account may do through an endpoint, or nothing where there is no
+  // resource to name.
+  private inAccount({
+    actions,
+    resources,
+    resourceAccounts,
+    principals,
+  }: {
+    actions: string[];
+    resources: string[];
+    /** The accounts the resources must be in, where their names don't say. */
+    resourceAccounts?: string[];
+    /** The roles that may call it, by ARN pattern, where not every one in the account may. */
+    principals?: string;
+  }): PolicyStatement[] {
+    if (resources.length === 0) return [];
+    return [
+      new PolicyStatement({
+        principals: [new AnyPrincipal()], // NOSONAR: the condition holds it to this account
+        actions,
+        resources,
+        conditions: {
+          StringEquals: {
+            "aws:PrincipalAccount": Stack.of(this).account,
+            ...(resourceAccounts !== undefined && {
+              "aws:ResourceAccount": resourceAccounts,
+            }),
+          },
+          ...(principals !== undefined && {
+            ArnLike: { "aws:PrincipalArn": principals },
+          }),
+        },
+      }),
+    ];
   }
 
   private endpoint(
     { vpc, subnets }: InterfaceEndpointsProps,
     id: string,
     service: InterfaceVpcEndpointAwsService,
-    {
-      actions,
-      resources,
-      // The SDK's regional endpoint, such as lambda.eu-west-2.amazonaws.com.
-      hostnames = [
-        `${service.shortName}.${Stack.of(this).region}.amazonaws.com`,
-      ],
-      resourceAccounts,
-      principals,
-    }: {
-      actions: string[];
-      resources: string[];
-      hostnames?: string[];
-      /** The accounts the resources must be in, where their names don't say. */
-      resourceAccounts?: string[];
-      /** The roles that may call it, by ARN pattern, where not every one in the account may. */
-      principals?: string;
-    },
+    /** What it lets through. With none, it refuses everything. */
+    statements: readonly PolicyStatement[],
+    // The SDK's regional endpoint, such as lambda.eu-west-2.amazonaws.com.
+    hostnames: readonly string[] = [
+      `${service.shortName}.${Stack.of(this).region}.amazonaws.com`,
+    ],
   ): InterfaceVpcEndpoint {
     // An endpoint only answers, so its group lets nothing out, and nothing in until a workload's
     // group is let in. CDK's own would let the whole VPC in, and allow everything out.
@@ -180,31 +271,17 @@ export class InterfaceEndpoints extends Construct {
       open: false,
     });
     // A policy with no statement would leave the endpoint's default, which allows everything.
-    endpoint.addToPolicy(
-      resources.length === 0
-        ? new PolicyStatement({
-            effect: Effect.DENY,
-            principals: [new AnyPrincipal()],
-            actions: ["*"],
-            resources: ["*"],
-          })
-        : new PolicyStatement({
-            principals: [new AnyPrincipal()], // NOSONAR: the condition holds it to this account
-            actions,
-            resources,
-            conditions: {
-              StringEquals: {
-                "aws:PrincipalAccount": Stack.of(this).account,
-                ...(resourceAccounts !== undefined && {
-                  "aws:ResourceAccount": resourceAccounts,
-                }),
-              },
-              ...(principals !== undefined && {
-                ArnLike: { "aws:PrincipalArn": principals },
-              }),
-            },
-          }),
-    );
+    if (statements.length === 0) {
+      endpoint.addToPolicy(
+        new PolicyStatement({
+          effect: Effect.DENY,
+          principals: [new AnyPrincipal()],
+          actions: ["*"],
+          resources: ["*"],
+        }),
+      );
+    }
+    for (const statement of statements) endpoint.addToPolicy(statement);
     this.#byService[service.shortName] = endpoint;
     this.#hostnames.push(...hostnames);
     return endpoint;

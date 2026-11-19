@@ -61,13 +61,14 @@ only on TCP port 443:
 | Workload | Tier | May reach |
 |---|---|---|
 | `domain` | `isolated` | The `lambda` endpoint |
-| `isolated-gateway` | `isolated` | The `secretsmanager`, `sts` and `s3` endpoints |
+| `isolated-gateway` | `isolated` | The `secretsmanager`, `sts`, `s3` and `execute-api` endpoints |
 | `private-gateway` | `private` | The `secretsmanager`, `sts` and `s3` endpoints, and its zone's NAT gateway |
 
 A domain uses the `lambda` endpoint to invoke gateways. A gateway uses `secretsmanager` to read its
 secret, `sts` to assume an upstream's role for
 [`sigV4`](/flex-platform/drivers/openapi-rest/authentication/), and `s3` to read the
-[caller token's keys](#the-caller-tokens-keys). Each endpoint's own security group
+[caller token's keys](#the-caller-tokens-keys). An isolated gateway uses `execute-api` to call an
+upstream's [private API](#private-apis). Each endpoint's own security group
 lets in only the workloads that may reach it, and lets nothing out. What a workload may call is its
 role's to decide: an endpoint's policy applies to the requests sent through that endpoint.
 
@@ -79,9 +80,10 @@ off a group with no other.
 ### Endpoints
 
 The isolated subnets reach AWS through interface endpoints, each with private DNS, so the SDK's
-usual hostname resolves to the endpoint. Each endpoint's policy refuses any principal outside the
-account, any resource it doesn't name, and any action but its own. An endpoint with nothing to name
-refuses everything, since one with no policy would allow everything:
+usual hostname resolves to the endpoint. Each endpoint's policy refuses any resource it doesn't
+name and any action but its own. Each but `execute-api` refuses any principal outside the account
+too. An endpoint with nothing to name refuses everything, since one with no policy would allow
+everything:
 
 | Endpoint | Allows |
 |---|---|
@@ -89,6 +91,7 @@ refuses everything, since one with no policy would allow everything:
 | `secretsmanager` | `secretsmanager:GetSecretValue` on the account's gateways' secrets, by a gateway's role alone |
 | `sts` | `sts:AssumeRole` on each role the account's gateways sign as, by a gateway's role alone |
 | `s3` | `s3:GetObject` on the caller token's public keys alone, in a bucket the frontdoor account owns |
+| `execute-api` | `execute-api:Invoke` on each private API a gateway names, by a principal of the account of a role a gateway signs as |
 
 An upstream's secret and roles come from each gateway's entry in the
 [config](/flex-platform/infrastructure/overview/#config), exactly, so a gateway whose upstream
@@ -120,6 +123,51 @@ An endpoint costs the same whether it's used or not, so one is added when someth
 Tracing needs none: Lambda's X-Ray daemon sends from outside the VPC, so neither the X-Ray SDK nor
 an OpenTelemetry exporter sending to it over UDP does. An exporter sending to X-Ray over HTTPS
 would need an `xray` endpoint.
+
+### Private APIs
+
+An upstream whose API in API Gateway is private is reached through the `execute-api` endpoint, by
+an isolated gateway. The upstream's API has a policy of its own, which names the endpoints it
+takes calls from. So the upstream is given this network's endpoint, by its ID, which the stack
+outputs as `ExecuteApiEndpointId`, with the domain account's ID. Each environment's network has
+its own.
+
+The gateway's entry in [config](/flex-platform/infrastructure/overview/#config) then names the API:
+
+```ts
+gateways: [
+  {
+    id: "udp",
+    hostnames: ["a1b2c3d4e5.execute-api.eu-west-2.amazonaws.com"],
+    placement: "isolated",
+    roleArns: ["arn:aws:iam::111122223333:role/flex-consumer"],
+    privateApiArns: ["arn:aws:execute-api:eu-west-2:111122223333:a1b2c3d4e5"],
+    // and its secret and target
+  },
+],
+```
+
+A call to a private API is signed as the upstream's own role, in the upstream's account, which the
+gateway assumes for [`sigV4`](/flex-platform/drivers/openapi-rest/authentication/). So this
+endpoint's policy can't hold the caller to the domain account, as every other endpoint's does. It
+lets through a principal of any account a gateway's `roleArns` names, to any API a gateway lists in
+`privateApiArns`, at any stage, method and path. A call with no signature has no account, so is
+refused. Which of those the role may call is the upstream's to decide.
+
+The policy is one statement for every gateway, which grows by an API's ARN and by an upstream's
+account, since an endpoint's policy can be no longer than 20,480 characters. It doesn't pair each
+gateway with its own upstream, because the gateway's role already does: a gateway signs as an
+upstream's role only by assuming it, and its role may assume only the roles it lists in
+`roleArns`.
+
+The endpoint's private DNS answers for every name API Gateway gives an API in eu-west-2,
+`<api>.execute-api.eu-west-2.amazonaws.com`, whoever owns the API and whether it is private or not.
+The endpoint reaches only private APIs, so nothing in the network can call a public API at a name
+of that form, in either tier. An upstream with a public API is called at its custom domain name.
+
+Config is checked when any stage is built. A gateway that lists a private API must be `isolated`,
+list a role, and list the API's name among its `hostnames`. Any other hostname of that form is
+refused, since the endpoint would answer for it and refuse the call.
 
 ### NAT addresses
 
@@ -212,6 +260,8 @@ gateway in the domain account declares:
 - `<bucket>.s3.eu-west-2.amazonaws.com` for each bucket the `s3` endpoint names: the SDK calls S3
   at the bucket's own name, which private DNS answers too. `s3.eu-west-2.amazonaws.com` itself
   isn't listed, since nothing calls it.
+- Nothing for the `execute-api` endpoint itself. A [private API](#private-apis) is called at its
+  own name, which is one of its gateway's.
 - Each gateway's names, from its entry in `gateways` on its domain account in
   [config](/flex-platform/infrastructure/overview/#config): the names it connects to, its
   upstream's API and any host it takes a token from.

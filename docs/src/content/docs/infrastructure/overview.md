@@ -189,7 +189,7 @@ EnvironmentConfig   { name, release: "publish" | { promoteFrom },
 DomainAccountConfig { name, account, domains: [DomainConfig & { disabled?: true }], zone,
                       network: { availabilityZones }, gateways }
 DomainConfig        { name, repository: { name, id, ownerId } | null }
-GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
+GatewayConfig       { id, hostnames, placement, secret, target, roleArns, privateApiArns }
 ```
 
 - A domain account's `name` goes into its stacks' and resources' names. Every stage names its
@@ -228,9 +228,12 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
   - `target`, which becomes `FLEX_UPSTREAM_TARGET`, or `null` where the driver takes the target from
     the secret.
   - `roleArns`, the roles it assumes to sign as, such as an upstream's for `sigV4`.
+  - `privateApiArns`, the private APIs in API Gateway that it calls, each by ARN with no stage or
+    path, or none. See [private APIs](/flex-platform/infrastructure/network/#private-apis).
 
-  The secrets and roles feed the [endpoints' policies](/flex-platform/infrastructure/network/#endpoints)
-  and the gateway's role exactly.
+  The secrets, roles and private APIs feed the
+  [endpoints' policies](/flex-platform/infrastructure/network/#endpoints), and the secrets and roles
+  feed the gateway's role, exactly.
 - `issuers` lists the Cognito user pools whose access tokens the Frontdoor accepts, each as its
   issuer URL, `https://cognito-idp.<region>.amazonaws.com/<pool ID>`, and the app client IDs it
   accepts from that pool. It never names a test user pool. Each pool is defined once, in

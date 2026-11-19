@@ -62,6 +62,16 @@ export const UDP = {
   },
   target: null,
   roleArns: ["arn:aws:iam::200000000001:role/udp-flex-consumer"],
+  privateApiArns: [],
+} as const satisfies GatewayConfig;
+
+// The same gateway where its upstream's API is private: in the isolated tier, calling the API at
+// the name API Gateway gives it, through the network's endpoint.
+export const PRIVATE_API_GATEWAY = {
+  ...UDP,
+  hostnames: ["a1b2c3d4e5.execute-api.eu-west-2.amazonaws.com"],
+  placement: "isolated",
+  privateApiArns: ["arn:aws:execute-api:eu-west-2:200000000001:a1b2c3d4e5"],
 } as const satisfies GatewayConfig;
 
 // The same gateway with a secret its stack creates, so it assumes no upstream role, and its target

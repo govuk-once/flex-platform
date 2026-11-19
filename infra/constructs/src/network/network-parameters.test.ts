@@ -43,6 +43,7 @@ describe("NetworkParameters", () => {
       });
     }
     for (const [service, endpoint] of [
+      ["execute-api", "ExecuteApi"],
       ["lambda", "Lambda"],
       ["s3", "S3"],
       ["secretsmanager", "SecretsManager"],
@@ -56,7 +57,7 @@ describe("NetworkParameters", () => {
         },
       });
     }
-    template.resourceCountIs("AWS::SSM::Parameter", 9);
+    template.resourceCountIs("AWS::SSM::Parameter", 10);
   });
 });
 

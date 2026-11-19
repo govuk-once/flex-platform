@@ -50,6 +50,7 @@ export { dnsAllowlist } from "./network/dns-names.ts";
 export { FlowLogs } from "./network/flow-logs.ts";
 export {
   InterfaceEndpoints,
+  type PrivateApiAccess,
   type S3Object,
 } from "./network/interface-endpoints.ts";
 export {
