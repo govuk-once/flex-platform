@@ -2,8 +2,9 @@
 // a domain's releases list newest first. The pipeline API records a release as `queued`, and the
 // worker claims it, runs it, and records how it went.
 //
-// The table's policy lets no role but the API's record a release, and none but the API's and the
-// workers' change one. So a release the worker finds here is one the API asked for.
+// The table's policy lets no role but the API's record a release, none but the API's and the
+// workers' change one, and none change what was asked for. So a release the worker finds here is
+// one the API asked for, as it was asked.
 
 import {
   type AttributeValue,
@@ -115,6 +116,15 @@ const REQUEST_ATTRIBUTES = [
   "versionId",
   "runId",
   "commit",
+] as const;
+
+/**
+ * What the API records of a release that nothing changes after: the request, and when it was
+ * asked for. The table's policy refuses any change to them, so a release runs as it was asked.
+ */
+export const FIXED_ATTRIBUTES: readonly string[] = [
+  ...REQUEST_ATTRIBUTES,
+  "requestedAt",
 ];
 
 function isReleaseStatus(value: string): value is ReleaseStatus {

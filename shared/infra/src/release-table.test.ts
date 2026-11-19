@@ -42,7 +42,7 @@ describe("ReleaseTable", () => {
   });
 
   // An admin of the account can't either: a deny in the table's policy holds over any allow.
-  it("lets no role but the API's record a release, none but the API's and the worker's change one, and none delete one", () => {
+  it("lets no role but the API's record a release, none but the API's and the worker's change one, none change what was asked for, and none delete one", () => {
     Template.fromStack(build()).hasResourceProperties("AWS::DynamoDB::Table", {
       ResourcePolicy: {
         PolicyDocument: {
@@ -51,7 +51,7 @@ describe("ReleaseTable", () => {
               Sid: "DenyRecordingButThePipelineApi",
               Effect: "Deny",
               Principal: { AWS: "*" },
-              Action: ["dynamodb:PartiQLInsert", "dynamodb:PutItem"],
+              Action: "dynamodb:PutItem",
               Resource: TABLE_ARN,
               Condition: { ArnNotEquals: { "aws:PrincipalArn": [RECORDER] } },
             },
@@ -59,11 +59,38 @@ describe("ReleaseTable", () => {
               Sid: "DenyChangingButTheApiAndWorker",
               Effect: "Deny",
               Principal: { AWS: "*" },
-              Action: ["dynamodb:PartiQLUpdate", "dynamodb:UpdateItem"],
+              Action: "dynamodb:UpdateItem",
               Resource: TABLE_ARN,
               Condition: {
                 ArnNotEquals: { "aws:PrincipalArn": [RECORDER, WORKER] },
               },
+            },
+            {
+              Sid: "DenyChangingWhatWasAsked",
+              Effect: "Deny",
+              Principal: { AWS: "*" },
+              Action: "dynamodb:UpdateItem",
+              Resource: TABLE_ARN,
+              Condition: {
+                "ForAnyValue:StringEquals": {
+                  "dynamodb:Attributes": [
+                    "environment",
+                    "domain",
+                    "sha256",
+                    "versionId",
+                    "runId",
+                    "commit",
+                    "requestedAt",
+                  ],
+                },
+              },
+            },
+            {
+              Sid: "DenyPartiQLChanges",
+              Effect: "Deny",
+              Principal: { AWS: "*" },
+              Action: ["dynamodb:PartiQLInsert", "dynamodb:PartiQLUpdate"],
+              Resource: TABLE_ARN,
             },
             {
               Sid: "DenyDeleting",

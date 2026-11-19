@@ -363,10 +363,15 @@ lets invoke the worker can write its event, and a function's own policy holds no
 refuse it. So a message holds only a release's key, its environment, domain and ID, and the
 worker releases what the table records under it:
 
-- **Only the API records a release.** The table's policy denies, to every principal, putting an
-  item unless it is the API's role, `shared-ci`, changing one unless it is `shared-ci`'s,
-  `shared-release-worker`'s or `shared-release-dead-letter-worker`'s, and deleting one. A deny in
-  a resource's policy holds whatever any other policy allows. A message that names no release in the table is logged and dropped.
+- **Only the API records a release, and nothing changes what it asked for.** The table's policy
+  denies, to every principal, putting an item unless it is the API's role, `shared-ci`, changing
+  one unless it is `shared-ci`'s, `shared-release-worker`'s or
+  `shared-release-dead-letter-worker`'s, and deleting one. It also denies, to every principal, an
+  update that names `environment`, `domain`, `sha256`, `versionId`, `runId`, `commit` or
+  `requestedAt`. So no writer can point a release at another domain or another bundle, and an
+  update that makes an item makes one with none of them, which isn't a release. PartiQL's writes
+  are denied outright, since nothing uses them. A deny in a resource's policy holds whatever any
+  other policy allows. A message that names no release in the table is logged and dropped.
 - **A final release isn't run again.** Before each attempt, the worker claims the release: it
   marks it `releasing` and counts the attempt, unless it is final. So a message sent again,
   however it was got, runs nothing that is released, refused or abandoned. Any other release may be tried
