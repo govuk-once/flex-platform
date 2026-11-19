@@ -23,7 +23,7 @@ export default defineGateway({
     // Pinned to a commit UDP has deployed to production, not to a branch: the schemas are derived
     // from what this names, and a branch names something else tomorrow. Moving it on to a later
     // one is how this gateway takes a newer UDP.
-    spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/7ed6c9a3c57c06a64995eaae00195189f533926b/docs/openapi.yml",
+    spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/8472d85dbb8028300de71fb867b9a3e17d578196/docs/openapi.yml",
     // Where UDP is and what Flex authenticates with are UDP's, in a secret UDP provides in its own
     // shape. Its API Gateway takes the key and a signature as the role UDP grants Flex, assumed
     // through STS; the key is set first, so the signature covers it.
@@ -43,11 +43,15 @@ export default defineGateway({
       }),
     ],
   }),
-  // Every operation UDP describes under a path of its own; and then what Flex keeps in UDP's data
-  // store, which UDP describes once for any path, "/v1/{resourcePath+}", and any shape. Each of
-  // those names its path in full, says that the template serves it, and states the shape Flex
-  // keeps there, which is Flex's and not UDP's to describe. No caller chooses a path: what can be
-  // reached is what is written here.
+  // Every operation UDP describes under a path of its own and serves in production; and then what
+  // Flex keeps in UDP's data store, which UDP describes once for any path, "/v1/{resourcePath+}",
+  // and any shape. Each of those names its path in full, says that the template serves it, and
+  // states the shape Flex keeps there, which is Flex's and not UDP's to describe. No caller chooses
+  // a path: what can be reached is what is written here.
+  //
+  // UDP's SAR and DSAR operations are left out: it describes them, and gives none of them a route
+  // on its API. An operation can be added once UDP serves it, and never taken away once a caller
+  // has it.
   operations: {
     createUser: {
       description: "Create User Record",
@@ -101,18 +105,6 @@ export default defineGateway({
       },
       secure: FOR_CALLER_BY_IDENTIFIER,
     },
-    startDsar: {
-      description: "Start a DSAR Request",
-      upstream: "POST /v1/dsar",
-      parameters: REQUESTING,
-      secure: FOR_CALLER,
-    },
-    startSar: {
-      description: "Start a SAR Request",
-      upstream: "POST /v1/sar",
-      parameters: REQUESTING,
-      secure: FOR_CALLER,
-    },
     getNotificationPreferences: {
       description: "Read a user's notification preferences",
       upstream: "GET /v1/notifications",
@@ -157,15 +149,6 @@ export default defineGateway({
         payload: stored(GROUP_SUBSCRIPTIONS),
         outcomes: { ok: stored(GROUP_SUBSCRIPTIONS) },
       },
-    },
-    getSarStatus: {
-      description: "Get SAR Status",
-      upstream: "GET /v1/sar/{sarId}",
-      parameters: {
-        sarId: { in: "path" },
-        ...REQUESTING,
-      },
-      secure: FOR_CALLER,
     },
   },
 });

@@ -17,7 +17,7 @@ export default defineGateway({
   id: "udp",
   description: "User Data Platform gateway",
   driver: openapiRest({
-    spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/7ed6c9a3c57c06a64995eaae00195189f533926b/docs/openapi.yml",
+    spec: "https://raw.githubusercontent.com/govuk-once/user-data-platform/8472d85dbb8028300de71fb867b9a3e17d578196/docs/openapi.yml",
     target: fromSecret("apiUrl"),
     auth: [
       apiKey({ header: "x-api-key", key: fromSecret("apiKey") }),
