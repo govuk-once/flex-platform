@@ -319,12 +319,11 @@ export class ProxyApi extends Construct {
       arnFormat: ArnFormat.COLON_RESOURCE_NAME,
     });
 
+    // With no condition on `aws:SourceAccount`: API Gateway doesn't send it when it assumes an
+    // integration's role, so the condition refuses the role and every request gets a 500. A role
+    // is set on an integration only by someone who may pass it, which no other account can.
     const role = new Role(this, "IntegrationRole", {
-      assumedBy: new ServicePrincipal("apigateway.amazonaws.com", {
-        conditions: {
-          StringEquals: { "aws:SourceAccount": stack.account },
-        },
-      }),
+      assumedBy: new ServicePrincipal("apigateway.amazonaws.com"),
       inlinePolicies: {
         Invoke: new PolicyDocument({
           statements: [
