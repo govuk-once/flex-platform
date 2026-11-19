@@ -2,8 +2,9 @@
 // a domain's releases list newest first. The pipeline API records a release as `queued`, and the
 // worker claims it, runs it, and records how it went.
 //
-// The table's policy lets no role but the API's record a release, and none but the API's and the
-// workers' change one. So a release the worker finds here is one the API asked for.
+// The table's policy lets no role but the API's record a release, none but the API's and the
+// workers' change one, and none change what was asked for. So a release the worker finds here is
+// one the API asked for, as it was asked.
 
 import {
   type AttributeValue,
@@ -20,7 +21,9 @@ import { parseReleaseRequest, type ReleaseRequest } from "./request.ts";
 /**
  * Where a release is. `failed` will be tried again by the queue. `refused` never will be: nothing
  * about the release would change. `abandoned` was tried as often as the queue tries, and won't be
- * again: the pipeline asks again.
+ * again: the pipeline asks again. `released` and `refused` are final. `abandoned` isn't: anything
+ * IAM lets invoke the dead-letter worker could write its event, so a release the queue still holds
+ * is claimed and run however it was recorded.
  */
 export type ReleaseStatus =
   "queued" | "releasing" | "released" | "failed" | "refused" | "abandoned";
@@ -92,8 +95,8 @@ export interface ReleaseTable {
     from: ReleaseStatus,
   ): Promise<void>;
   /**
-   * Gives the release up, keeping why its last attempt stopped, unless it is final. `false` for a
-   * final release.
+   * Gives the release up, keeping why its last attempt stopped, unless it is final or given up
+   * already. `false` for one that is.
    */
   abandon(key: ReleaseKey, now: number): Promise<boolean>;
 }
@@ -115,6 +118,15 @@ const REQUEST_ATTRIBUTES = [
   "versionId",
   "runId",
   "commit",
+] as const;
+
+/**
+ * What the API records of a release that nothing changes after: the request, and when it was
+ * asked for. The table's policy refuses any change to them, so a release runs as it was asked.
+ */
+export const FIXED_ATTRIBUTES: readonly string[] = [
+  ...REQUEST_ATTRIBUTES,
+  "requestedAt",
 ];
 
 function isReleaseStatus(value: string): value is ReleaseStatus {
@@ -179,7 +191,8 @@ export function createReleaseTable(
             Key: keyOf(key),
             UpdateExpression:
               "SET #status = :releasing, #updatedAt = :now ADD #attempts :one REMOVE #step, #reason",
-            ConditionExpression: "#status IN (:queued, :releasing, :failed)",
+            ConditionExpression:
+              "#status IN (:queued, :releasing, :failed, :abandoned)",
             ExpressionAttributeNames: {
               "#status": "status",
               "#updatedAt": "updatedAt",
@@ -191,6 +204,7 @@ export function createReleaseTable(
               ":releasing": { S: "releasing" },
               ":queued": { S: "queued" },
               ":failed": { S: "failed" },
+              ":abandoned": { S: "abandoned" },
               ":now": { N: String(now) },
               ":one": { N: "1" },
             },

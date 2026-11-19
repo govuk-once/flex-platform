@@ -112,7 +112,8 @@ describe("createReleaseTable", () => {
         Key: ITEM_KEY,
         UpdateExpression:
           "SET #status = :releasing, #updatedAt = :now ADD #attempts :one REMOVE #step, #reason",
-        ConditionExpression: "#status IN (:queued, :releasing, :failed)",
+        ConditionExpression:
+          "#status IN (:queued, :releasing, :failed, :abandoned)",
         ExpressionAttributeValues: { ":now": { N: "1000" } },
       },
     });

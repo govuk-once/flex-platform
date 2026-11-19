@@ -294,7 +294,7 @@ export class FakeTable implements ReleaseTable {
     const record = this.records.get(this.keyOf(key));
     if (
       record === undefined ||
-      !["queued", "releasing", "failed"].includes(record.status)
+      !["queued", "releasing", "failed", "abandoned"].includes(record.status)
     ) {
       return Promise.resolve(false);
     }
