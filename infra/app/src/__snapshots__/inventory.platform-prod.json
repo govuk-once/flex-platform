@@ -679,6 +679,14 @@
         "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
+        "logicalId": "EndpointsExecuteApiA07D90CA",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsExecuteApiSecurityGroupF3E6CA39",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsLambda776D48EF",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -739,6 +747,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoExecuteApi2058DBA7",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoS33F4809B8",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -753,6 +765,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToExecuteApiCFA98F8E",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToS31C21682F",
@@ -1092,6 +1108,10 @@
       },
       {
         "logicalId": "ParametersdomainSecurityGroupId74503CBC",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersexecuteapiEndpointId7D8666EF",
         "type": "AWS::SSM::Parameter"
       },
       {
@@ -1227,6 +1247,14 @@
         "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
+        "logicalId": "EndpointsExecuteApiA07D90CA",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsExecuteApiSecurityGroupF3E6CA39",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsLambda776D48EF",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -1287,6 +1315,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoExecuteApi2058DBA7",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoS33F4809B8",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -1301,6 +1333,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToExecuteApiCFA98F8E",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToS31C21682F",
@@ -1640,6 +1676,10 @@
       },
       {
         "logicalId": "ParametersdomainSecurityGroupId74503CBC",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersexecuteapiEndpointId7D8666EF",
         "type": "AWS::SSM::Parameter"
       },
       {
@@ -1775,6 +1815,14 @@
         "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
+        "logicalId": "EndpointsExecuteApiA07D90CA",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsExecuteApiSecurityGroupF3E6CA39",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsLambda776D48EF",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -1835,6 +1883,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoExecuteApi2058DBA7",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoS33F4809B8",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -1849,6 +1901,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToExecuteApiCFA98F8E",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToS31C21682F",
@@ -2188,6 +2244,10 @@
       },
       {
         "logicalId": "ParametersdomainSecurityGroupId74503CBC",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersexecuteapiEndpointId7D8666EF",
         "type": "AWS::SSM::Parameter"
       },
       {

@@ -179,7 +179,7 @@ EnvironmentConfig   { name, release: "publish" | { promoteFrom },
                       frontdoor: { account, zone, issuers, testUsers }, domainAccounts }
 DomainAccountConfig { name, account, domains: [name | { name, disabled: true }], zone,
                       network: { availabilityZones }, gateways }
-GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
+GatewayConfig       { id, hostnames, placement, secret, target, roleArns, privateApiArns }
 ```
 
 - A domain account's `name` goes into its stacks' and resources' names. Every stage names its
@@ -218,9 +218,12 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
   - `target`, which becomes `FLEX_UPSTREAM_TARGET`, or `null` where the driver takes the target from
     the secret.
   - `roleArns`, the roles it assumes to sign as, such as an upstream's for `sigV4`.
+  - `privateApiArns`, the private APIs in API Gateway that it calls, each by ARN with no stage or
+    path, or none. See [private APIs](/flex-platform/infrastructure/network/#private-apis).
 
-  The secrets and roles feed the [endpoints' policies](/flex-platform/infrastructure/network/#endpoints)
-  and the gateway's role exactly.
+  The secrets, roles and private APIs feed the
+  [endpoints' policies](/flex-platform/infrastructure/network/#endpoints), and the secrets and roles
+  feed the gateway's role, exactly.
 - `shared.testUsers` is the stage's [test user pool](#test-users), as an issuer URL and its app
   client ID, or `null` until the pool exists.
 - `issuers` lists the Cognito user pools whose access tokens the Frontdoor accepts, each as its
