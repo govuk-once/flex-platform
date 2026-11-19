@@ -16,6 +16,8 @@ import { viewerRequest } from "./viewer-request.ts";
 
 const TRACE_ID = traceIdFor(REQUEST_ID, NOW);
 
+const RELEASES = "/ci/environments/development/domains/example/releases";
+
 let logLines: string[];
 
 beforeEach(() => {
@@ -74,7 +76,7 @@ const METHOD_NOT_ALLOWED = rejection(
   405,
   "Method not allowed",
   "client_error",
-  { allow: { value: "POST" } },
+  { allow: { value: "GET, POST" } },
 );
 const BAD_REQUEST = rejection(400, "Bad request", "client_error");
 const UNAUTHORIZED = rejection(401, "Unauthorized", "auth_error");
@@ -224,7 +226,7 @@ describe("viewerRequest", () => {
     },
     {
       case: "a method no route takes",
-      method: "GET",
+      method: "PUT",
       headers: pipelineHeaders(),
       response: METHOD_NOT_ALLOWED,
       event: "viewer_request_method_rejected",
@@ -319,7 +321,7 @@ describe("viewerRequest", () => {
   // token's, and only a caller with a token learns anything of the paths.
   describe("the order of the checks", () => {
     it("answers a wrong method before a missing token", () => {
-      expect(run({ method: "GET", uri: "/nowhere", headers: {} })).toEqual(
+      expect(run({ method: "PUT", uri: "/nowhere", headers: {} })).toEqual(
         METHOD_NOT_ALLOWED,
       );
     });
@@ -354,10 +356,45 @@ describe("viewerRequest", () => {
   describe("the methods", () => {
     // CloudFront passes on any method a viewer sends, in any case, and HTTP methods are
     // case-sensitive.
-    it.each(["GET", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "post"])(
-      "refuses %s with a 405 naming the one it serves",
+    it.each(["PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "get", "post"])(
+      "refuses %s with a 405 naming the ones it serves",
       (method) => {
         expect(run({ method })).toEqual(METHOD_NOT_ALLOWED);
+      },
+    );
+
+    // A GET has no body, so it says nothing of one.
+    it("passes a GET with no content type or body's hash", () => {
+      const result = run({
+        method: "GET",
+        uri: `${RELEASES}/0196a8f0-2c00-7000-8000-000000000000`,
+        headers: { "x-flex-ci-token": token() },
+      });
+
+      expect(result).not.toHaveProperty("statusCode");
+      expect(loggedEvents()).toEqual([
+        telemetry("viewer_request_token_validated"),
+      ]);
+    });
+
+    it.each<[string, TestHeaders, string | undefined, CloudFrontResponse]>([
+      ["no token", {}, undefined, UNAUTHORIZED],
+      [
+        "a path outside the API",
+        { "x-flex-ci-token": token() },
+        "/nowhere",
+        NOT_FOUND,
+      ],
+    ])(
+      "holds a GET with %s to the same checks",
+      (_, headers, uri, response) => {
+        expect(
+          run({
+            method: "GET",
+            headers,
+            ...(uri === undefined ? {} : { uri }),
+          }),
+        ).toEqual(response);
       },
     );
   });

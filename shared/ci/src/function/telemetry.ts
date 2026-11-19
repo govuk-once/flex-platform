@@ -23,6 +23,8 @@ export type CiEventName =
   | "ci_release_version_unknown"
   | "ci_release_bundle_missing"
   | "ci_release_queued"
+  | "ci_release_status"
+  | "ci_release_status_unknown"
   | "ci_failed";
 
 // What joins this line to the rest of the request: the trace ID every hop logs, and Lambda's own
@@ -54,6 +56,8 @@ export interface OutcomeDetails {
   readonly versionId?: string;
   /** The ID the release table holds a release under. */
   readonly releaseId?: string;
+  /** Where the release table has the release. */
+  readonly status?: string;
 }
 
 export function logOutcome(
