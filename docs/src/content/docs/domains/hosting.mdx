@@ -352,7 +352,9 @@ asked for, and a domain's releases list newest first. Each holds:
 
 `failed` will be tried again. `refused` never will be: nothing about the release would change.
 `abandoned` was tried as often as the queue tries, and won't be again: the pipeline asks again.
-`released`, `refused` and `abandoned` are final. The table is the record of each request and how it went.
+`released` and `refused` are final. `abandoned` isn't, because the worker still runs a release
+its queue gives it (see [the dead-letter worker](#the-dead-letter-worker)). The table is the
+record of each request and how it went.
 What is deployed is Lambda's to say: the worker reads it at each step, and the table follows it.
 The table is retained, with point-in-time recovery, and deletion protection is on.
 
@@ -374,7 +376,7 @@ worker releases what the table records under it:
   other policy allows. A message that names no release in the table is logged and dropped.
 - **A final release isn't run again.** Before each attempt, the worker claims the release: it
   marks it `releasing` and counts the attempt, unless it is final. So a message sent again,
-  however it was got, runs nothing that is released, refused or abandoned. Any other release may be tried
+  however it was got, runs nothing that is released or refused. Any other release may be tried
   again, even while an attempt runs: every step reads Lambda before it acts, so an attempt at what
   is done changes nothing, and Lambda refuses a change to a function it is still changing.
 - **The queue takes messages only from the API, and gives them only to the worker.** Its policy
@@ -472,10 +474,16 @@ the table, read bundles, and assume those domains' deploy roles, and nothing els
 A function of its own, `shared-release-dead-letter-worker`, reads the dead-letter queue, so the
 release table says when no more attempts are coming. The release worker can't say so itself: an
 attempt that stopped with its function recorded nothing. For each message, it reads the release
-and, unless it is final, records it `abandoned`, keeping the step and reason its last attempt
-stopped at. It logs `release_abandoned` with how many attempts there were. A release already
-final is left as it is. An attempt still running may yet release it: Lambda says what is live,
-so the worker records `released` over `abandoned`.
+and, unless it is final or given up already, records it `abandoned`, keeping the step and reason
+its last attempt stopped at. It logs `release_abandoned` with how many attempts there were. A
+release final or given up already is left as it is. An attempt still running may yet release it:
+Lambda says what is live, so the worker records `released` over `abandoned`.
+
+Anything that IAM lets invoke the function can write its event, and nothing in an event shows that
+the queue gave the release up. So `abandoned` isn't final: the release worker still claims and runs
+a release its queue gives it. A release given up by an event the queue didn't send is still run, and
+the alarm is all that shows it was given up. A message the queue really moves to the dead-letter
+queue never returns to the release queue, since no principal may move one back.
 
 It records first and lets the message go after. Lambda deletes a message only once the function
 returns without giving it back, so a function that stops between the two leaves the message to

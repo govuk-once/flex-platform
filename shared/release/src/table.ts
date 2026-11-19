@@ -21,7 +21,9 @@ import { parseReleaseRequest, type ReleaseRequest } from "./request.ts";
 /**
  * Where a release is. `failed` will be tried again by the queue. `refused` never will be: nothing
  * about the release would change. `abandoned` was tried as often as the queue tries, and won't be
- * again: the pipeline asks again.
+ * again: the pipeline asks again. `released` and `refused` are final. `abandoned` isn't: anything
+ * IAM lets invoke the dead-letter worker could write its event, so a release the queue still holds
+ * is claimed and run however it was recorded.
  */
 export type ReleaseStatus =
   "queued" | "releasing" | "released" | "failed" | "refused" | "abandoned";
@@ -93,8 +95,8 @@ export interface ReleaseTable {
     from: ReleaseStatus,
   ): Promise<void>;
   /**
-   * Gives the release up, keeping why its last attempt stopped, unless it is final. `false` for a
-   * final release.
+   * Gives the release up, keeping why its last attempt stopped, unless it is final or given up
+   * already. `false` for one that is.
    */
   abandon(key: ReleaseKey, now: number): Promise<boolean>;
 }
@@ -189,7 +191,8 @@ export function createReleaseTable(
             Key: keyOf(key),
             UpdateExpression:
               "SET #status = :releasing, #updatedAt = :now ADD #attempts :one REMOVE #step, #reason",
-            ConditionExpression: "#status IN (:queued, :releasing, :failed)",
+            ConditionExpression:
+              "#status IN (:queued, :releasing, :failed, :abandoned)",
             ExpressionAttributeNames: {
               "#status": "status",
               "#updatedAt": "updatedAt",
@@ -201,6 +204,7 @@ export function createReleaseTable(
               ":releasing": { S: "releasing" },
               ":queued": { S: "queued" },
               ":failed": { S: "failed" },
+              ":abandoned": { S: "abandoned" },
               ":now": { N: String(now) },
               ":one": { N: "1" },
             },

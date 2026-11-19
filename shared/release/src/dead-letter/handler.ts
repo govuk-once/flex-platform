@@ -15,8 +15,13 @@ export interface DeadLetterHandlerOptions {
 // Gives up each release whose message the queue moved to the dead-letter queue, after the worker
 // tried it as often as the queue allows, or stopped each time without finishing. The table then
 // says no more attempts are coming, which the release worker alone can't: an attempt that stopped
-// with its function recorded nothing. A final release is left as it is. An attempt still running
-// may yet release it, and `released` is recorded over `abandoned`, since Lambda says what is live.
+// with its function recorded nothing. A release final or given up already is left as it is. An
+// attempt still running may yet release it, and `released` is recorded over `abandoned`, since
+// Lambda says what is live.
+//
+// Anything IAM lets invoke the function could write the event, and nothing in it shows that the
+// queue gave the release up. So giving a release up stops nothing: the release worker still claims
+// and runs a release its queue gives it.
 //
 // The release is recorded as given up before the message is let go, and Lambda deletes a message
 // only once the handler returns without giving it back. So a handler that stops after recording
@@ -88,7 +93,7 @@ async function giveUp(
   } catch (error) {
     return failed(error, asked);
   }
-  // Already final, such as by the last attempt, or this worker before it stopped.
+  // Final or given up already, such as by the last attempt, or by this worker before it stopped.
   if (!abandoned) {
     logRelease("INFO", "release_not_abandoned", details(asked));
     return true;

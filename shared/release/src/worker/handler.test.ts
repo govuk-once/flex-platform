@@ -168,7 +168,6 @@ describe("createReleaseHandler", () => {
   it.each<[string, Parameters<typeof queuedRecord>[0]]>([
     ["released", { status: "released", version: "1" }],
     ["refused", { status: "refused", reason: "bundle-hash" }],
-    ["abandoned", { status: "abandoned", reason: "EniLimitExceeded" }],
   ])(
     "runs nothing for a release that is %s, and lets it go",
     async (_, state) => {
@@ -201,6 +200,9 @@ describe("createReleaseHandler", () => {
     // An attempt that stopped with its function, or one still running: either way Lambda says
     // what is done.
     ["releasing", { status: "releasing" }],
+    // Anything that can invoke the dead-letter worker could have it give up a release the queue
+    // still holds.
+    ["abandoned", { status: "abandoned", reason: "EniLimitExceeded" }],
   ])("tries a release again that is %s", async (_, state) => {
     captureLogs();
     const lambda = new FakeLambda();
