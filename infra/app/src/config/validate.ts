@@ -41,6 +41,15 @@ const KEY_ARN = new RegExp(
 // A role's ARN, with no wildcard.
 const ROLE_ARN = /^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/;
 
+// A REST API's ARN in the gateways' region, by its ID, with no stage, method or path after it.
+const PRIVATE_API_ARN = new RegExp(
+  String.raw`^arn:aws:execute-api:${NETWORK_REGION}:\d{12}:([a-z0-9]{10})$`,
+);
+
+// The names API Gateway gives its APIs in the gateways' region. The network's `execute-api`
+// endpoint has private DNS, so every one of them resolves to it, whichever API it names.
+const API_GATEWAY_NAMES = `.execute-api.${NETWORK_REGION}.amazonaws.com`;
+
 // A Route 53 hosted zone ID, as the console shows it, without `/hostedzone/`.
 const ZONE_ID = /^Z[0-9A-Z]{1,31}$/;
 
@@ -337,6 +346,7 @@ function checkGateways(
       });
     }
     checkUpstreamAccess(`${at} ${id} gateway`, gateway);
+    checkPrivateApis(`${at} ${id} gateway`, gateway);
   }
 }
 
@@ -370,6 +380,55 @@ function checkUpstreamAccess(
   }
   if (new Set(roleArns).size !== roleArns.length) {
     throw new Error(`${at}: a role ARN is listed more than once`);
+  }
+}
+
+// A private API is reached through the network's `execute-api` endpoint and no other way, so
+// everything that route needs is checked together: a gateway in the tier that reaches the
+// endpoint, a role the endpoint lets through, and the API's name on the DNS allowlist. The
+// endpoint answers for every name API Gateway gives an API, so one that isn't a private API named
+// here would be refused by it, with nothing to say why.
+function checkPrivateApis(
+  at: string,
+  { hostnames, placement, roleArns, privateApiArns }: GatewayConfig,
+): void {
+  // As the allowlist holds them: lowercased, with no trailing dot.
+  const names = dnsAllowlist(hostnames);
+  const privateNames = new Set<string>();
+  for (const arn of privateApiArns) {
+    const apiId = PRIVATE_API_ARN.exec(arn)?.[1];
+    if (apiId === undefined) {
+      throw new Error(
+        `${at}: ${JSON.stringify(arn)} is not a private API's ARN in ${NETWORK_REGION}, by its ID alone, such as arn:aws:execute-api:${NETWORK_REGION}:111122223333:a1b2c3d4e5`,
+      );
+    }
+    const name = `${apiId}${API_GATEWAY_NAMES}`;
+    if (privateNames.has(name)) {
+      throw new Error(`${at}: a private API's ARN is listed more than once`);
+    }
+    privateNames.add(name);
+    if (!names.includes(name)) {
+      throw new Error(
+        `${at}: it calls the private API ${apiId}, so its hostnames must list ${name}`,
+      );
+    }
+  }
+  if (privateApiArns.length > 0 && placement !== "isolated") {
+    throw new Error(
+      `${at}: it calls a private API, which only an isolated gateway reaches`,
+    );
+  }
+  if (privateApiArns.length > 0 && roleArns.length === 0) {
+    throw new Error(
+      `${at}: it calls a private API, which is reached only as a role it names in roleArns`,
+    );
+  }
+  for (const name of names) {
+    if (name.endsWith(API_GATEWAY_NAMES) && !privateNames.has(name)) {
+      throw new Error(
+        `${at}: ${JSON.stringify(name)} resolves to the network's execute-api endpoint, which reaches only the private APIs named in privateApiArns. A public API is called at its custom domain name`,
+      );
+    }
   }
 }
 

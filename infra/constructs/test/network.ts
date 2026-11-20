@@ -39,7 +39,11 @@ export interface UpstreamNames {
 /** An upstream's secret and the role its gateway signs as, both in the upstream's account. */
 export const UPSTREAM_SECRET =
   "arn:aws:secretsmanager:eu-west-2:200000000001:secret:udp/consumer-AbCdEf";
-export const UPSTREAM_ROLE = "arn:aws:iam::200000000001:role/udp-consumer";
+export const UPSTREAM_ACCOUNT = "200000000001";
+export const UPSTREAM_ROLE = `arn:aws:iam::${UPSTREAM_ACCOUNT}:role/udp-consumer`;
+/** The upstream's private API, in its account too. */
+export const UPSTREAM_API =
+  "arn:aws:execute-api:eu-west-2:200000000001:a1b2c3d4e5";
 
 /** The caller token's public keys, in the frontdoor account's bucket. */
 export const KEYS_OBJECT = {
@@ -93,6 +97,10 @@ export function buildNetwork(
     readableSecrets: [UPSTREAM_SECRET],
     assumableRoles: [UPSTREAM_ROLE],
     gatewayRoles: "gateway-sandbox-*-execution",
+    invokableApis: {
+      apiArns: [UPSTREAM_API],
+      callerAccounts: [UPSTREAM_ACCOUNT],
+    },
   });
   new DnsFirewall(stack, "DnsFirewall", {
     environment: "sandbox",
