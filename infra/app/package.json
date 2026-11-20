@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "synth": "cdk synth",
-    "diff": "cdk diff"
+    "diff": "cdk diff",
+    "call-domain": "tsx bin/call-domain.ts"
   },
   "dependencies": {
     "@repo/cloudfront-js-utils": "workspace:*",
