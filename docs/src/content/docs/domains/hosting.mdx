@@ -294,6 +294,12 @@ The domain's API answers every path and method under the domain's root, with `AN
 Frontdoor signed the request, and nothing about the path, method or body. The domain's code decides
 which routes exist and how each is handled, and answers anything else itself, such as with a 404.
 
+Two paths never reach a domain: `/ping` and `/sping`, at its root. API Gateway keeps both for its
+own health check at the root of a custom domain name, and answers them itself, without checking a
+signature or running the domain's code. So the Frontdoor answers `/app/<domain>/ping` and
+`/app/<domain>/sping` with its own 404, and a domain names such a route something else, or puts it
+under another segment, such as `/v1/ping`.
+
 So a domain adds or changes a route by releasing its code. No change to the platform's config or
 stacks is needed.
 

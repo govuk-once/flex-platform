@@ -33,8 +33,10 @@ In order, it:
 5. **Checks the path.** It is `/app/<domain>/...`, where `<domain>` follows the rule for domain
    names in config (1 to 32 lowercase letters, digits and hyphens, checked by the same
    `isPlatformName` the config uses), with no empty or dot segment and no encoded `/`, `\` or
-   `.`. Anything else is a 404. Whether the domain exists is for Lambda@Edge, which holds the
-   list. The name becomes part of an origin hostname, so it can never carry a dot or a port.
+   `.`. Anything else is a 404. So is `/app/<domain>/ping` and `/app/<domain>/sping`, which
+   [no domain is ever asked for](/flex-platform/domains/hosting/#routing-a-request). Whether the
+   domain exists is for Lambda@Edge, which holds the list. The name becomes part of an origin
+   hostname, so it can never carry a dot or a port.
 6. **Checks the content type.** A `POST`, `PUT` or `PATCH`, or any request announcing a body by
    `content-length` or `transfer-encoding`, says `application/json`. The method counts on its own
    because HTTP/2 and HTTP/3 can send a body without either header. Anything else is a 415, and
