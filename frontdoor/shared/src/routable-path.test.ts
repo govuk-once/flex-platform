@@ -11,6 +11,12 @@ describe("isRoutable", () => {
     `/app/a${"b".repeat(31)}/v1`,
     "/app/udp/v1/name.with.dots",
     "/app/udp/v1/encoded%20space",
+    "/app/udp/v1/ping",
+    "/app/udp/ping/status",
+    "/app/udp/pings",
+    "/app/udp/PING",
+    "/app/ping",
+    "/app/sping/v1",
   ])("routes %s", (uri) => {
     expect(isRoutable(uri)).toBe(true);
   });
@@ -35,6 +41,8 @@ describe("isRoutable", () => {
     ["an encoded backslash", "/app/udp/v1%5cidentity"],
     ["an encoded dot", "/app/udp/%2e%2e/travel"],
     ["a backslash", "/app/udp/v1\\identity"],
+    ["API Gateway's own /ping", "/app/udp/ping"],
+    ["API Gateway's own /sping", "/app/udp/sping"],
   ])("refuses %s", (_, uri) => {
     expect(isRoutable(uri)).toBe(false);
   });
