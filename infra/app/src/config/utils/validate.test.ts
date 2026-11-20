@@ -262,94 +262,118 @@ describe("validateStages", () => {
   });
 
   describe("test users", () => {
-    const WITH_POOL: StageConfig = {
-      ...STAGE,
-      shared: { ...STAGE.shared, testUsers: TEST_USERS },
-    };
-
     function trusting(
       stage: StageConfig,
       frontdoor: Partial<FrontdoorConfig>,
+      environment = ENVIRONMENT.name,
     ): StageConfig {
       return {
         ...stage,
         environments: [
-          { ...ENVIRONMENT, frontdoor: { ...FRONTDOOR, ...frontdoor } },
+          {
+            ...ENVIRONMENT,
+            name: environment,
+            frontdoor: { ...FRONTDOOR, ...frontdoor },
+          },
         ],
       };
     }
 
-    it("accepts an environment that trusts its stage's test users", () => {
-      expect(() =>
-        validateStages([trusting(WITH_POOL, { trustsTestUsers: true })]),
-      ).not.toThrow();
+    const WITH_POOL = trusting(STAGE, { testUserIssuer: TEST_USERS });
+
+    it("accepts an environment that trusts test users", () => {
+      expect(() => validateStages([WITH_POOL])).not.toThrow();
     });
 
     it("accepts an environment that trusts test users alone", () => {
       expect(() =>
         validateStages([
-          trusting(WITH_POOL, { issuers: [], trustsTestUsers: true }),
+          trusting(STAGE, { issuers: [], testUserIssuer: TEST_USERS }),
         ]),
       ).not.toThrow();
     });
 
-    it("holds a stage's test user pool to the rule every issuer is held to", () => {
+    it("holds a test user issuer to the rule every issuer is held to", () => {
       const http = { ...TEST_USERS, issuer: "http://example" };
       expect(() =>
-        validateStages([
-          { ...STAGE, shared: { ...STAGE.shared, testUsers: http } },
-        ]),
+        validateStages([trusting(STAGE, { testUserIssuer: http })]),
       ).toThrow(
-        'platform-dev shared test users: the issuer "http://example" must be an https URL',
+        'platform-dev/sandbox test user issuer: the issuer "http://example" must be an https URL',
       );
 
       const noClient = { ...TEST_USERS, clientIds: [] };
       expect(() =>
-        validateStages([
-          { ...STAGE, shared: { ...STAGE.shared, testUsers: noClient } },
-        ]),
+        validateStages([trusting(STAGE, { testUserIssuer: noClient })]),
       ).toThrow(
-        `platform-dev shared test users: the issuer ${TEST_USERS.issuer} names no app client`,
+        `platform-dev/sandbox test user issuer: the issuer ${TEST_USERS.issuer} names no app client`,
       );
     });
 
-    it("refuses its stage's test user pool in an environment's issuers", () => {
+    it("refuses a test user pool in an environment's issuers, its own stage's or another's", () => {
+      const asIssuer = { issuers: [...FRONTDOOR.issuers, TEST_USERS] };
       expect(() =>
         validateStages([
-          trusting(WITH_POOL, { issuers: [...FRONTDOOR.issuers, TEST_USERS] }),
+          {
+            ...STAGE,
+            environments: [
+              ...WITH_POOL.environments,
+              {
+                ...ENVIRONMENT,
+                name: "other",
+                frontdoor: { ...FRONTDOOR, ...asIssuer },
+              },
+            ],
+          },
         ]),
       ).toThrow(
-        `platform-dev/sandbox: the issuer ${TEST_USERS.issuer} is a test user pool, which an environment trusts only through frontdoor.trustsTestUsers`,
+        `platform-dev/other: the issuer ${TEST_USERS.issuer} is a test user pool, which an environment trusts only as its frontdoor.testUserIssuer`,
       );
-    });
-
-    it("refuses another stage's test user pool in an environment's issuers", () => {
-      const other: StageConfig = {
-        ...OTHER_STAGE,
-        shared: { ...OTHER_STAGE.shared, testUsers: TEST_USERS },
-      };
       expect(() =>
         validateStages([
-          trusting(STAGE, { issuers: [...FRONTDOOR.issuers, TEST_USERS] }),
-          other,
+          trusting(STAGE, asIssuer),
+          trusting(OTHER_STAGE, { testUserIssuer: TEST_USERS }, "prod"),
         ]),
       ).toThrow(
         `platform-dev/sandbox: the issuer ${TEST_USERS.issuer} is a test user pool`,
       );
     });
 
-    it("refuses trust in test users where the stage has no pool", () => {
+    // A stage has one pool, in its shared account.
+    it("refuses two test user pools in one stage", () => {
+      const another = { ...TEST_USERS, issuer: `${TEST_USERS.issuer}2` };
       expect(() =>
-        validateStages([trusting(STAGE, { trustsTestUsers: true })]),
+        validateStages([
+          {
+            ...STAGE,
+            environments: [
+              ...WITH_POOL.environments,
+              {
+                ...ENVIRONMENT,
+                name: "other",
+                frontdoor: { ...FRONTDOOR, testUserIssuer: another },
+              },
+            ],
+          },
+        ]),
       ).toThrow(
-        "platform-dev/sandbox: the frontdoor trusts test users, but platform-dev names no test user pool",
+        "platform-dev/other: its test user issuer is not the one platform-dev's other environments name, and a stage has one test user pool",
+      );
+    });
+
+    // So one stage's test users can never reach another's environments.
+    it("refuses one test user pool in two stages", () => {
+      expect(() =>
+        validateStages([
+          WITH_POOL,
+          trusting(OTHER_STAGE, { testUserIssuer: TEST_USERS }, "prod"),
+        ]),
+      ).toThrow(
+        `platform-prod: its test user issuer ${TEST_USERS.issuer} is platform-dev's too, and each stage's test user pool is its own`,
       );
     });
 
     it("needs an issuer when the environment doesn't trust test users", () => {
-      expect(() =>
-        validateStages([trusting(WITH_POOL, { issuers: [] })]),
-      ).toThrow(
+      expect(() => validateStages([trusting(STAGE, { issuers: [] })])).toThrow(
         "platform-dev/sandbox: the frontdoor needs at least one trusted issuer",
       );
     });

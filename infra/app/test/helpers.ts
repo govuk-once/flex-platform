@@ -1,3 +1,4 @@
+import type { TrustedIssuer } from "@repo/frontdoor-shared";
 import { cdkApp } from "@repo/infra-constructs";
 import type { CloudAssembly } from "aws-cdk-lib/cx-api";
 
@@ -25,11 +26,11 @@ export const FRONTDOOR: FrontdoorConfig = {
       clientIds: ["example-app-client"],
     },
   ],
-  trustsTestUsers: false,
+  testUserIssuer: null,
 };
 
 // A stage's test user pool, which one fixture environment trusts.
-export const TEST_USERS = {
+export const TEST_USERS: TrustedIssuer = {
   issuer: "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_testusers",
   clientIds: ["test-users-client"],
 };
@@ -76,13 +77,13 @@ export const OWN_SECRET_GATEWAY = {
 function frontdoor(
   environment: string,
   account: string,
-  trustsTestUsers = false,
+  testUserIssuer: TrustedIssuer | null = null,
 ): FrontdoorConfig {
   return {
     ...FRONTDOOR,
     account,
     zone: zone(environment, account),
-    trustsTestUsers,
+    testUserIssuer,
   };
 }
 
@@ -123,16 +124,15 @@ const FIXTURE_DOMAINS: readonly DomainConfig[] = [
   domain("domain-b"),
 ];
 
-// A stage's shared account, with its zone named after the account as the others are, and no test
-// user pool.
-export function shared(account: string): SharedConfig & { testUsers: null } {
-  return { account, zone: zone("shared", account), testUsers: null };
+// A stage's shared account, with its zone named after the account as the others are.
+export function shared(account: string): SharedConfig {
+  return { account, zone: zone("shared", account) };
 }
 
 // The real stages' shape: two stages with one environment, one with three, and one environment
-// with two domain accounts, the second hosting no domains, so every loop is exercised. platform-prod
-// has a test user pool, which its dev environment trusts, and its environments promote one to the
-// next, as the committed platform-prod's do.
+// with two domain accounts, the second hosting no domains, so every loop is exercised. platform-prod's
+// dev environment trusts a test user pool, and its environments promote one to the next, as the
+// committed platform-prod's do.
 export const FIXTURE_STAGES = [
   {
     name: "platform-dev",
@@ -164,7 +164,7 @@ export const FIXTURE_STAGES = [
   },
   {
     name: "platform-prod",
-    shared: { ...shared("300000000001"), testUsers: TEST_USERS },
+    shared: shared("300000000001"),
     environments: [
       {
         name: "dev",
@@ -178,7 +178,7 @@ export const FIXTURE_STAGES = [
             THREE_ZONES,
           ),
         ],
-        frontdoor: frontdoor("dev", "300000000002", true),
+        frontdoor: frontdoor("dev", "300000000002", TEST_USERS),
       },
       {
         name: "staging",

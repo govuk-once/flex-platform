@@ -25,11 +25,11 @@ export class SharedIdentityStack extends Stack {
     const testUsers = new TestUserPool(this, "TestUsers");
 
     new CfnOutput(this, "TestUsersIssuer", {
-      description: "The issuer shared.testUsers takes",
+      description: "The issuer a Frontdoor's testUserIssuer takes",
       value: testUsers.userPool.userPoolProviderUrl,
     });
     new CfnOutput(this, "TestUsersClientId", {
-      description: "The client ID shared.testUsers takes",
+      description: "The client ID a Frontdoor's testUserIssuer takes",
       value: testUsers.client.userPoolClientId,
     });
   }

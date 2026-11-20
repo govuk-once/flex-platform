@@ -129,11 +129,6 @@ export interface SharedConfig {
    * name is held to a certificate's length.
    */
   readonly zone: ZoneConfig;
-  /**
-   * The stage's test user pool and its client. Cognito generates both IDs, so this is `null`
-   * until the pool exists.
-   */
-  readonly testUsers: TrustedIssuer | null;
 }
 
 export interface FrontdoorConfig {
@@ -142,8 +137,12 @@ export interface FrontdoorConfig {
   readonly zone: ZoneConfig;
   /** The user pools and app clients whose tokens the edge lets through. Never a test user pool. */
   readonly issuers: readonly TrustedIssuer[];
-  /** Whether the edge also lets the stage's test users through. */
-  readonly trustsTestUsers: boolean;
+  /**
+   * The stage's test user pool and its client, whose users the edge lets through too, or `null`.
+   * The pool is in the stage's shared account, and Cognito generates both IDs, so it can be named
+   * only once it exists. Never set where real users reach the environment.
+   */
+  readonly testUserIssuer: TrustedIssuer | null;
 }
 
 export interface EnvironmentConfig {

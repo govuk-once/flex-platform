@@ -59,7 +59,7 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
     const frontdoor = new FrontdoorStack(
       app,
       environment,
-      trustedIssuers(stage, environment),
+      trustedIssuers(environment),
     );
 
     frontdoor.addStackDependency(

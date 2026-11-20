@@ -21,7 +21,6 @@ export const STAGES: readonly StageConfig[] = [
     shared: {
       account: "743702012480",
       zone: zones.DEVELOPMENT_FLEX_SHARED,
-      testUsers: userPools.PLATFORM_DEV_TEST_USERS,
     },
     environments: [
       {
@@ -41,7 +40,7 @@ export const STAGES: readonly StageConfig[] = [
           account: "553915472156",
           zone: zones.DEVELOPMENT_FLEX_PLATFORMEDGE,
           issuers: [],
-          trustsTestUsers: true,
+          testUserIssuer: userPools.PLATFORM_DEV_TEST_USERS,
         },
       },
     ],
@@ -51,7 +50,6 @@ export const STAGES: readonly StageConfig[] = [
     shared: {
       account: "186579591752",
       zone: zones.STAGING_FLEX_SHARED,
-      testUsers: null,
     },
     environments: [
       {
@@ -71,7 +69,7 @@ export const STAGES: readonly StageConfig[] = [
           account: "224399154937",
           zone: zones.STAGING_FLEX_PLATFORMEDGE,
           issuers: [userPools.STAGING],
-          trustsTestUsers: false,
+          testUserIssuer: null,
         },
       },
     ],
@@ -81,7 +79,6 @@ export const STAGES: readonly StageConfig[] = [
     shared: {
       account: "706098201385",
       zone: zones.PRODUCTION_FLEX_SHARED,
-      testUsers: null,
     },
     environments: [
       {
@@ -102,7 +99,7 @@ export const STAGES: readonly StageConfig[] = [
           zone: zones.DEVELOPMENT_FLEX_DOMAINEDGE,
           // The staging pool, until this environment has a test pool of its own.
           issuers: [userPools.STAGING],
-          trustsTestUsers: false,
+          testUserIssuer: null,
         },
       },
       {
@@ -122,7 +119,7 @@ export const STAGES: readonly StageConfig[] = [
           account: "792037778504",
           zone: zones.STAGING_FLEX_DOMAINEDGE,
           issuers: [userPools.STAGING],
-          trustsTestUsers: false,
+          testUserIssuer: null,
         },
       },
       {
@@ -142,7 +139,7 @@ export const STAGES: readonly StageConfig[] = [
           account: "367273783987",
           zone: zones.PRODUCTION_FLEX_DOMAINEDGE,
           issuers: [userPools.PRODUCTION],
-          trustsTestUsers: false,
+          testUserIssuer: null,
         },
       },
     ],

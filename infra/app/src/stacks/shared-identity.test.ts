@@ -55,7 +55,7 @@ describe("SharedIdentityStack", () => {
     expect(Object.keys(Parameters)).toEqual(["BootstrapVersion"]);
   });
 
-  // A person copies these into shared.testUsers. An export would let a stack depend on this one.
+  // A person copies these into user-pools.ts. An export would let a stack depend on this one.
   it("outputs the pool's issuer and client ID, and exports nothing", () => {
     const template = Template.fromStack(
       new SharedIdentityStack(cdkApp(), PROD.shared),
@@ -69,11 +69,11 @@ describe("SharedIdentityStack", () => {
 
     expect(template.toJSON().Outputs).toEqual({
       TestUsersIssuer: {
-        Description: "The issuer shared.testUsers takes",
+        Description: "The issuer a Frontdoor's testUserIssuer takes",
         Value: { "Fn::GetAtt": [pool, "ProviderURL"] },
       },
       TestUsersClientId: {
-        Description: "The client ID shared.testUsers takes",
+        Description: "The client ID a Frontdoor's testUserIssuer takes",
         Value: { Ref: client },
       },
     });

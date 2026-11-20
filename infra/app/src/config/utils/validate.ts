@@ -72,14 +72,7 @@ export function validateStages(stages: readonly StageConfig[]): void {
     stages.map((stage) => stage.name),
   );
   // Every stage's, so no environment in any stage can name one in its issuers.
-  const testUserPools = new Set<string>();
-  for (const stage of stages) {
-    const pool = stage.shared.testUsers;
-    if (pool !== null) {
-      checkIssuer(`${stage.name} shared test users`, pool);
-      testUserPools.add(pool.issuer);
-    }
-  }
+  const testUserPools = checkTestUserPools(stages);
   for (const stage of stages) {
     checkZone(`${stage.name} shared zone`, stage.shared.zone, (name) => name);
     checkNames(
@@ -105,7 +98,6 @@ export function validateStages(stages: readonly StageConfig[]): void {
 
       checkEnvironment(
         `${stage.name}/${environment.name}`,
-        stage,
         environment,
         testUserPools,
       );
@@ -225,7 +217,6 @@ function promotesInACircle(
 
 function checkEnvironment(
   at: string,
-  stage: StageConfig,
   environment: EnvironmentConfig,
   testUserPools: ReadonlySet<string>,
 ): void {
@@ -246,15 +237,14 @@ function checkEnvironment(
       domainAccount,
     );
   }
-  checkTrust(at, stage, environment, testUserPools);
+  checkTrust(at, environment, testUserPools);
 }
 
 // A test user's username is whatever its creator chose, and the edge passes it on as the caller's
-// pairwise ID. So an environment trusts test users only through `frontdoor.trustsTestUsers`, never by
-// naming a test user pool in its issuers.
+// pairwise ID. So an environment trusts test users only as its `frontdoor.testUserIssuer`, never
+// by naming a test user pool in its issuers.
 function checkTrust(
   at: string,
-  stage: StageConfig,
   environment: EnvironmentConfig,
   testUserPools: ReadonlySet<string>,
 ): void {
@@ -262,14 +252,44 @@ function checkTrust(
     checkIssuer(at, issuer);
     if (testUserPools.has(issuer.issuer)) {
       throw new Error(
-        `${at}: the issuer ${issuer.issuer} is a test user pool, which an environment trusts only through frontdoor.trustsTestUsers`,
+        `${at}: the issuer ${issuer.issuer} is a test user pool, which an environment trusts only as its frontdoor.testUserIssuer`,
       );
     }
   }
-  // Refuses trust in test users where the stage has no pool.
-  if (trustedIssuers(stage, environment).length === 0) {
+  if (trustedIssuers(environment).length === 0) {
     throw new Error(`${at}: the frontdoor needs at least one trusted issuer`);
   }
+}
+
+// Each stage has one test user pool, in its shared account. So every environment of a stage that
+// trusts test users names the same pool, and no two stages name one, which would let one stage's
+// test users into another. Answers every stage's pool, by issuer.
+function checkTestUserPools(stages: readonly StageConfig[]): Set<string> {
+  const stageOf = new Map<string, string>();
+  for (const stage of stages) {
+    let pool: string | undefined;
+    for (const environment of stage.environments) {
+      const { testUserIssuer } = environment.frontdoor;
+      if (testUserIssuer === null) continue;
+      const at = `${stage.name}/${environment.name}`;
+      checkIssuer(`${at} test user issuer`, testUserIssuer);
+      if (pool !== undefined && pool !== testUserIssuer.issuer) {
+        throw new Error(
+          `${at}: its test user issuer is not the one ${stage.name}'s other environments name, and a stage has one test user pool`,
+        );
+      }
+      pool = testUserIssuer.issuer;
+    }
+    if (pool === undefined) continue;
+    const other = stageOf.get(pool);
+    if (other !== undefined) {
+      throw new Error(
+        `${stage.name}: its test user issuer ${pool} is ${other}'s too, and each stage's test user pool is its own`,
+      );
+    }
+    stageOf.set(pool, stage.name);
+  }
+  return new Set(stageOf.keys());
 }
 
 function checkIssuer(at: string, { issuer, clientIds }: TrustedIssuer): void {

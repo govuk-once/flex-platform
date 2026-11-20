@@ -6,6 +6,7 @@ import {
   domain,
   FIXTURE_STAGES,
   synthesizedStage,
+  TEST_USERS,
 } from "../../test/helpers.ts";
 import { buildApp } from "../build-app.ts";
 import type { HostedDomainConfig, StageConfig } from "../config/types.ts";
@@ -100,7 +101,7 @@ describe("FrontdoorStack", () => {
   });
 
   // The CloudFront Function's code holds its issuers, as Lambda@Edge's bundle does.
-  it("trusts the stage's test users only in an environment that opts in", () => {
+  it("trusts test users only in an environment that names a test user issuer", () => {
     const assembly = synthesizedStage(PROD);
     const functionCode = (environment: string) =>
       JSON.stringify(
@@ -111,15 +112,15 @@ describe("FrontdoorStack", () => {
       );
 
     expect(
-      PROD.environments.map((e) => [e.name, e.frontdoor.trustsTestUsers]),
+      PROD.environments.map((e) => [e.name, e.frontdoor.testUserIssuer]),
     ).toEqual([
-      ["dev", true],
-      ["staging", false],
-      ["prod", false],
+      ["dev", TEST_USERS],
+      ["staging", null],
+      ["prod", null],
     ]);
-    expect(functionCode("dev")).toContain(PROD.shared.testUsers.issuer);
-    expect(functionCode("staging")).not.toContain(PROD.shared.testUsers.issuer);
-    expect(functionCode("prod")).not.toContain(PROD.shared.testUsers.issuer);
+    expect(functionCode("dev")).toContain(TEST_USERS.issuer);
+    expect(functionCode("staging")).not.toContain(TEST_USERS.issuer);
+    expect(functionCode("prod")).not.toContain(TEST_USERS.issuer);
   });
 
   it("routes each domain the environment hosts to its host, whichever account and order config lists it in", () => {

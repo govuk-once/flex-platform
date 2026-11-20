@@ -183,9 +183,9 @@ config/
 ```
 
 ```ts
-StageConfig         { name, shared: { account, zone, testUsers }, environments }
+StageConfig         { name, shared: { account, zone }, environments }
 EnvironmentConfig   { name, release: "publish" | { promoteFrom },
-                      frontdoor: { account, zone, issuers, trustsTestUsers }, domainAccounts }
+                      frontdoor: { account, zone, issuers, testUserIssuer }, domainAccounts }
 DomainAccountConfig { name, account, domains: [DomainConfig & { disabled?: true }], zone,
                       network: { availabilityZones }, gateways }
 DomainConfig        { name, repository: { name, id, ownerId } | null }
@@ -231,12 +231,12 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
 
   The secrets and roles feed the [endpoints' policies](/flex-platform/infrastructure/network/#endpoints)
   and the gateway's role exactly.
-- `shared.testUsers` is the stage's [test user pool](#test-users), as an issuer URL and its app
-  client ID, or `null` until the pool exists.
 - `issuers` lists the Cognito user pools whose access tokens the Frontdoor accepts, each as its
   issuer URL, `https://cognito-idp.<region>.amazonaws.com/<pool ID>`, and the app client IDs it
-  accepts from that pool. It never names a test user pool.
-- `frontdoor.trustsTestUsers` is `true` where the Frontdoor also accepts the stage's test users.
+  accepts from that pool. It never names a test user pool. Each pool is defined once, in
+  `user-pools.ts`.
+- `testUserIssuer` is the stage's [test user pool](#test-users), in the same form, where the
+  Frontdoor also accepts its test users, or `null`.
 
 Before building any stage, the app checks every stage's config:
 
@@ -252,10 +252,11 @@ Before building any stage, the app checks every stage's config:
   and its ID is a hosted zone ID without `/hostedzone/`. A certificate's name may be at most 64
   characters, ACM's limit, so the Frontdoor's zone name, the shared account's, and `*.` and each
   domain account's zone name, must fit within it;
-- every issuer, in `issuers` and in `shared.testUsers`, is an `https` URL naming at least one app
+- every issuer, in `issuers` and as `testUserIssuer`, is an `https` URL naming at least one app
   client;
 - no environment's `issuers` names a test user pool, its own stage's or another's;
-- an environment with `frontdoor.trustsTestUsers` is in a stage whose `shared.testUsers` is set;
+- every environment of a stage that trusts test users names the same `testUserIssuer`, and no two
+  stages name one, since each stage's pool is in its own shared account;
 - every environment trusts at least one issuer, counting the test user pool where it trusts test
   users;
 - every domain's name follows the same rule as the names above, is used once in its environment,
@@ -342,8 +343,8 @@ lets the token through like any other. Every stage has the pool, so its stacks a
 each.
 
 A test user's username is whatever its creator chose, and Lambda@Edge passes a token's username on
-as the caller's pairwise ID. So an environment trusts test users only where its config sets
-`frontdoor.trustsTestUsers`, which adds the stage's `shared.testUsers` to its issuers, and validation
+as the caller's pairwise ID. So an environment trusts test users only where its config names the
+pool as `frontdoor.testUserIssuer`, which adds it to the Frontdoor's issuers, and validation
 refuses a test user pool named in `issuers`. An environment real users reach never sets it.
 
 - **Only an administrator creates a user.** There is no sign-up, no hosted sign-in, no account
@@ -360,8 +361,8 @@ Cognito generates the pool's and the client's IDs, and the CloudFront Function a
 have their issuers built in when they are synthesized. So config can name the pool only once it
 exists. The pool is retained and protected from deletion, and the inventory snapshots hold its
 logical ID, the one change that would make CloudFormation replace it. A new stage's pool is
-created first, with `-c target=shared`, and its IDs written into `shared.testUsers` before the
-stage's first full deploy. The stack outputs both, as `TestUsersIssuer` and `TestUsersClientId`,
+created first, with `-c target=shared`, and its IDs written into `user-pools.ts`, for the
+environments that trust it to name, before the stage's first full deploy. The stack outputs both, as `TestUsersIssuer` and `TestUsersClientId`,
 and exports neither. `shared-identity` depends on nothing and nothing depends on it, so it
 never holds up an environment's deploy.
 
