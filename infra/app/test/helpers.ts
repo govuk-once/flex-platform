@@ -1,19 +1,21 @@
+import type { TrustedIssuer } from "@repo/frontdoor-shared";
 import { cdkApp } from "@repo/infra-constructs";
 import type { CloudAssembly } from "aws-cdk-lib/cx-api";
 
 import { buildApp } from "../src/build-app.ts";
-import { selectTarget } from "../src/config/select-target.ts";
 import type {
   DomainAccountConfig,
   DomainConfig,
   FrontdoorConfig,
   GatewayConfig,
+  HostedDomainConfig,
   NetworkConfig,
+  RepositoryConfig,
   SharedConfig,
   StageConfig,
-  StageDomainConfig,
   ZoneConfig,
 } from "../src/config/types.ts";
+import { selectTarget } from "../src/config/utils/select-target.ts";
 
 export const FRONTDOOR: FrontdoorConfig = {
   account: "100000000002",
@@ -24,11 +26,11 @@ export const FRONTDOOR: FrontdoorConfig = {
       clientIds: ["example-app-client"],
     },
   ],
-  testUsers: false,
+  testUserIssuer: null,
 };
 
 // A stage's test user pool, which one fixture environment trusts.
-export const TEST_USERS = {
+export const TEST_USERS: TrustedIssuer = {
   issuer: "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_testusers",
   clientIds: ["test-users-client"],
 };
@@ -75,16 +77,21 @@ export const OWN_SECRET_GATEWAY = {
 function frontdoor(
   environment: string,
   account: string,
-  testUsers = false,
+  testUserIssuer: TrustedIssuer | null = null,
 ): FrontdoorConfig {
-  return { ...FRONTDOOR, account, zone: zone(environment, account), testUsers };
+  return {
+    ...FRONTDOOR,
+    account,
+    zone: zone(environment, account),
+    testUserIssuer,
+  };
 }
 
 export function domainAccount(
   environment: string,
   name: string,
   account: string,
-  domains: readonly DomainConfig[] = [],
+  domains: readonly HostedDomainConfig[] = [],
   network: NetworkConfig = TWO_ZONES,
 ): DomainAccountConfig {
   return {
@@ -97,7 +104,13 @@ export function domainAccount(
   };
 }
 
-const FIXTURE_DOMAINS = ["domain-a", "domain-b"];
+/** A domain with no repository yet, or with the one given. */
+export function domain(
+  name: string,
+  repository: RepositoryConfig | null = null,
+): DomainConfig {
+  return { name, repository };
+}
 
 // One domain with a repository that may release it, and one whose repository doesn't exist yet.
 export const REPOSITORY = {
@@ -106,26 +119,24 @@ export const REPOSITORY = {
   ownerId: "800000001",
 };
 
-export const FIXTURE_STAGE_DOMAINS: readonly StageDomainConfig[] = [
-  { name: "domain-a", repository: REPOSITORY },
-  { name: "domain-b", repository: null },
+const FIXTURE_DOMAINS: readonly DomainConfig[] = [
+  domain("domain-a", REPOSITORY),
+  domain("domain-b"),
 ];
 
-// A stage's shared account, with its zone named after the account as the others are, and no test
-// user pool.
-export function shared(account: string): SharedConfig & { testUsers: null } {
-  return { account, zone: zone("shared", account), testUsers: null };
+// A stage's shared account, with its zone named after the account as the others are.
+export function shared(account: string): SharedConfig {
+  return { account, zone: zone("shared", account) };
 }
 
 // The real stages' shape: two stages with one environment, one with three, and one environment
-// with two domain accounts, the second hosting no domains, so every loop is exercised. platform-prod
-// has a test user pool, which its dev environment trusts, and its environments promote one to the
-// next, as the committed platform-prod's do.
+// with two domain accounts, the second hosting no domains, so every loop is exercised. platform-prod's
+// dev environment trusts a test user pool, and its environments promote one to the next, as the
+// committed platform-prod's do.
 export const FIXTURE_STAGES = [
   {
     name: "platform-dev",
     shared: shared("100000000001"),
-    domains: FIXTURE_STAGE_DOMAINS,
     environments: [
       {
         name: "sandbox",
@@ -140,7 +151,6 @@ export const FIXTURE_STAGES = [
   {
     name: "platform-staging",
     shared: shared("200000000001"),
-    domains: FIXTURE_STAGE_DOMAINS,
     environments: [
       {
         name: "sandbox",
@@ -154,8 +164,7 @@ export const FIXTURE_STAGES = [
   },
   {
     name: "platform-prod",
-    shared: { ...shared("300000000001"), testUsers: TEST_USERS },
-    domains: FIXTURE_STAGE_DOMAINS,
+    shared: shared("300000000001"),
     environments: [
       {
         name: "dev",
@@ -169,7 +178,7 @@ export const FIXTURE_STAGES = [
             THREE_ZONES,
           ),
         ],
-        frontdoor: frontdoor("dev", "300000000002", true),
+        frontdoor: frontdoor("dev", "300000000002", TEST_USERS),
       },
       {
         name: "staging",

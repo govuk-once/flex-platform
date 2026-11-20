@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES } from "../../test/helpers.ts";
+import { FIXTURE_STAGES } from "../../../test/helpers.ts";
 import { selectTarget } from "./select-target.ts";
 
 const PROD = FIXTURE_STAGES[2];

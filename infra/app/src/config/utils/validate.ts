@@ -9,17 +9,18 @@ import {
   networkZones,
 } from "@repo/infra-constructs";
 
-import { domainNames } from "./domain-name.ts";
-import { SHARED_TARGET } from "./select-target.ts";
-import { trustedIssuers } from "./trusted-issuers.ts";
 import type {
   DomainAccountConfig,
+  DomainConfig,
   EnvironmentConfig,
   GatewayConfig,
   RepositoryConfig,
   StageConfig,
   ZoneConfig,
-} from "./types.ts";
+} from "../types.ts";
+import { domainNames } from "./domains.ts";
+import { SHARED_TARGET } from "./select-target.ts";
+import { trustedIssuers } from "./trusted-issuers.ts";
 
 const ACCOUNT_ID = /^\d{12}$/;
 
@@ -71,14 +72,7 @@ export function validateStages(stages: readonly StageConfig[]): void {
     stages.map((stage) => stage.name),
   );
   // Every stage's, so no environment in any stage can name one in its issuers.
-  const testUserPools = new Set<string>();
-  for (const stage of stages) {
-    const pool = stage.shared.testUsers;
-    if (pool !== null) {
-      checkIssuer(`${stage.name} shared test users`, pool);
-      testUserPools.add(pool.issuer);
-    }
-  }
+  const testUserPools = checkTestUserPools(stages);
   for (const stage of stages) {
     checkZone(`${stage.name} shared zone`, stage.shared.zone, (name) => name);
     checkNames(
@@ -104,7 +98,6 @@ export function validateStages(stages: readonly StageConfig[]): void {
 
       checkEnvironment(
         `${stage.name}/${environment.name}`,
-        stage,
         environment,
         testUserPools,
       );
@@ -116,36 +109,38 @@ export function validateStages(stages: readonly StageConfig[]): void {
   checkAccounts(accountUses(stages));
 }
 
-// The stage's domains say who may release each one, so they are exactly the domains its
-// environments host. One missing could never be released. One no environment hosts would leave
-// its repository trusted to upload code for a domain the stage no longer has.
+// One domain, one repository, wherever the stage hosts it: one upload goes through every
+// environment, so whoever may release it in one may release it in all.
 function checkStageDomains(stage: StageConfig): void {
-  checkNames(
-    `${stage.name} domain`,
-    stage.domains.map(({ name }) => name),
-  );
-  const listed = new Set(stage.domains.map(({ name }) => name));
-  const hosted = new Set<string>();
+  const byName = new Map<string, DomainConfig>();
   for (const environment of stage.environments) {
-    for (const domain of domainNames(environment)) {
-      if (!listed.has(domain)) {
-        throw new Error(
-          `${stage.name}/${environment.name}: the domain ${domain} is not in ${stage.name}'s domains, which say who may release it`,
-        );
+    for (const { domains } of environment.domainAccounts) {
+      for (const domain of domains) {
+        const first = byName.get(domain.name);
+        if (first === undefined) {
+          byName.set(domain.name, domain);
+        } else if (!sameRepository(first.repository, domain.repository)) {
+          throw new Error(
+            `${stage.name}/${environment.name}: the domain ${domain.name} has a repository other than the one ${stage.name} gives it elsewhere, and one repository releases it everywhere`,
+          );
+        }
       }
-      hosted.add(domain);
     }
   }
-  for (const { name, repository } of stage.domains) {
-    if (!hosted.has(name)) {
-      throw new Error(
-        `${stage.name}: the domain ${name} is in its domains, but no environment hosts it`,
-      );
-    }
+  for (const { name, repository } of byName.values()) {
     if (repository !== null) {
       checkRepository(`${stage.name} ${name} domain`, repository);
     }
   }
+}
+
+function sameRepository(
+  a: RepositoryConfig | null,
+  b: RepositoryConfig | null,
+): boolean {
+  return a === null || b === null
+    ? a === b
+    : a.name === b.name && a.id === b.id && a.ownerId === b.ownerId;
 }
 
 function checkRepository(
@@ -222,7 +217,6 @@ function promotesInACircle(
 
 function checkEnvironment(
   at: string,
-  stage: StageConfig,
   environment: EnvironmentConfig,
   testUserPools: ReadonlySet<string>,
 ): void {
@@ -243,15 +237,14 @@ function checkEnvironment(
       domainAccount,
     );
   }
-  checkTrust(at, stage, environment, testUserPools);
+  checkTrust(at, environment, testUserPools);
 }
 
 // A test user's username is whatever its creator chose, and the edge passes it on as the caller's
-// pairwise ID. So an environment trusts test users only through `frontdoor.testUsers`, never by
-// naming a test user pool in its issuers.
+// pairwise ID. So an environment trusts test users only as its `frontdoor.testUserIssuer`, never
+// by naming a test user pool in its issuers.
 function checkTrust(
   at: string,
-  stage: StageConfig,
   environment: EnvironmentConfig,
   testUserPools: ReadonlySet<string>,
 ): void {
@@ -259,14 +252,44 @@ function checkTrust(
     checkIssuer(at, issuer);
     if (testUserPools.has(issuer.issuer)) {
       throw new Error(
-        `${at}: the issuer ${issuer.issuer} is a test user pool, which an environment trusts only through frontdoor.testUsers`,
+        `${at}: the issuer ${issuer.issuer} is a test user pool, which an environment trusts only as its frontdoor.testUserIssuer`,
       );
     }
   }
-  // Refuses trust in test users where the stage has no pool.
-  if (trustedIssuers(stage, environment).length === 0) {
+  if (trustedIssuers(environment).length === 0) {
     throw new Error(`${at}: the frontdoor needs at least one trusted issuer`);
   }
+}
+
+// Each stage has one test user pool, in its shared account. So every environment of a stage that
+// trusts test users names the same pool, and no two stages name one, which would let one stage's
+// test users into another. Answers every stage's pool, by issuer.
+function checkTestUserPools(stages: readonly StageConfig[]): Set<string> {
+  const stageOf = new Map<string, string>();
+  for (const stage of stages) {
+    let pool: string | undefined;
+    for (const environment of stage.environments) {
+      const { testUserIssuer } = environment.frontdoor;
+      if (testUserIssuer === null) continue;
+      const at = `${stage.name}/${environment.name}`;
+      checkIssuer(`${at} test user issuer`, testUserIssuer);
+      if (pool !== undefined && pool !== testUserIssuer.issuer) {
+        throw new Error(
+          `${at}: its test user issuer is not the one ${stage.name}'s other environments name, and a stage has one test user pool`,
+        );
+      }
+      pool = testUserIssuer.issuer;
+    }
+    if (pool === undefined) continue;
+    const other = stageOf.get(pool);
+    if (other !== undefined) {
+      throw new Error(
+        `${stage.name}: its test user issuer ${pool} is ${other}'s too, and each stage's test user pool is its own`,
+      );
+    }
+    stageOf.set(pool, stage.name);
+  }
+  return new Set(stageOf.keys());
 }
 
 function checkIssuer(at: string, { issuer, clientIds }: TrustedIssuer): void {

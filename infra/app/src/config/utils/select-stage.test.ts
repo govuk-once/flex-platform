@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES } from "../../test/helpers.ts";
+import { FIXTURE_STAGES } from "../../../test/helpers.ts";
 import { selectStage } from "./select-stage.ts";
 
 describe("selectStage", () => {

@@ -1,54 +1,20 @@
-import type { TrustedIssuer } from "@repo/frontdoor-shared";
+import * as domains from "./domains.ts";
+import type { StageConfig } from "./types.ts";
+import * as userPools from "./user-pools.ts";
+import * as zones from "./zones.ts";
 
-import type { NetworkConfig, StageConfig } from "./types.ts";
-
-const STAGING_POOL: TrustedIssuer = {
-  issuer: "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_2d00uk68K",
-  clientIds: ["7r88bunbmdsvihr2cdb43lasun"],
-};
-
-const PRODUCTION_POOL: TrustedIssuer = {
-  issuer: "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_vn7u4bWbc",
-  clientIds: ["40grlhknon5palderi2j1a1bte"],
-};
-
+// Every stage and its environments. Each domain is defined once, in domains.ts, and listed by the
+// domain accounts that host it.
+//
 // A NAT gateway is per availability zone, so the stages that only the platform team uses run in
 // two. The environments domain teams use run in all three.
-const TWO_ZONES: NetworkConfig = {
-  availabilityZones: ["eu-west-2a", "eu-west-2b"],
-};
-
-const THREE_ZONES: NetworkConfig = {
-  availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
-};
-
-// platform-prod's development environment trusts the staging pool until it has a test pool of its
-// own.
 export const STAGES: readonly StageConfig[] = [
   {
     name: "platform-dev",
     shared: {
       account: "743702012480",
-      zone: {
-        name: "development.flex-shared.once.service.gov.uk",
-        id: "Z1047090331J6R3FXTKE0",
-      },
-      testUsers: {
-        issuer:
-          "https://cognito-idp.eu-west-2.amazonaws.com/eu-west-2_UCFRiLfsD",
-        clientIds: ["4hurkb79cvepuo6v078ui1rdhv"],
-      },
+      zone: zones.DEVELOPMENT_FLEX_SHARED,
     },
-    domains: [
-      {
-        name: "example",
-        repository: {
-          name: "govuk-once/flex-platform-domain-sandbox",
-          id: "1460189064",
-          ownerId: "241280733",
-        },
-      },
-    ],
     environments: [
       {
         name: "development",
@@ -57,23 +23,17 @@ export const STAGES: readonly StageConfig[] = [
           {
             name: "domain00",
             account: "098640806149",
-            domains: ["example"],
-            zone: {
-              name: "development.flex-platform.once.service.gov.uk",
-              id: "Z0835542Q6J8ILWJ1RGR",
-            },
-            network: TWO_ZONES,
+            domains: [domains.example],
+            zone: zones.DEVELOPMENT_FLEX_PLATFORM,
+            network: { availabilityZones: ["eu-west-2a", "eu-west-2b"] },
             gateways: [],
           },
         ],
         frontdoor: {
           account: "553915472156",
-          zone: {
-            name: "development.flex-platformedge.once.service.gov.uk",
-            id: "Z031433615ESLO5K1AH7F",
-          },
+          zone: zones.DEVELOPMENT_FLEX_PLATFORMEDGE,
           issuers: [],
-          testUsers: true,
+          testUserIssuer: userPools.PLATFORM_DEV_TEST_USERS,
         },
       },
     ],
@@ -82,13 +42,8 @@ export const STAGES: readonly StageConfig[] = [
     name: "platform-staging",
     shared: {
       account: "186579591752",
-      zone: {
-        name: "staging.flex-shared.once.service.gov.uk",
-        id: "Z03533672JRTLG1VW6T1S",
-      },
-      testUsers: null,
+      zone: zones.STAGING_FLEX_SHARED,
     },
-    domains: [],
     environments: [
       {
         name: "staging",
@@ -98,22 +53,16 @@ export const STAGES: readonly StageConfig[] = [
             name: "domain00",
             account: "179512357753",
             domains: [],
-            zone: {
-              name: "staging.flex-platform.once.service.gov.uk",
-              id: "Z0085548AFKTJHKTHK3P",
-            },
-            network: TWO_ZONES,
+            zone: zones.STAGING_FLEX_PLATFORM,
+            network: { availabilityZones: ["eu-west-2a", "eu-west-2b"] },
             gateways: [],
           },
         ],
         frontdoor: {
           account: "224399154937",
-          zone: {
-            name: "staging.flex-platformedge.once.service.gov.uk",
-            id: "Z0462383HSDK7C8IQ6HN",
-          },
-          issuers: [STAGING_POOL],
-          testUsers: false,
+          zone: zones.STAGING_FLEX_PLATFORMEDGE,
+          issuers: [userPools.STAGING],
+          testUserIssuer: null,
         },
       },
     ],
@@ -122,13 +71,8 @@ export const STAGES: readonly StageConfig[] = [
     name: "platform-prod",
     shared: {
       account: "706098201385",
-      zone: {
-        name: "production.flex-shared.once.service.gov.uk",
-        id: "Z01265801EAWB10P5SLMD",
-      },
-      testUsers: null,
+      zone: zones.PRODUCTION_FLEX_SHARED,
     },
-    domains: [],
     environments: [
       {
         name: "development",
@@ -138,22 +82,19 @@ export const STAGES: readonly StageConfig[] = [
             name: "domain00",
             account: "168789041282",
             domains: [],
-            zone: {
-              name: "development.flex-domain00.once.service.gov.uk",
-              id: "Z05812543BRVPCL728ND0",
+            zone: zones.DEVELOPMENT_FLEX_DOMAIN00,
+            network: {
+              availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
             },
-            network: THREE_ZONES,
             gateways: [],
           },
         ],
         frontdoor: {
           account: "991575850800",
-          zone: {
-            name: "development.flex-domainedge.once.service.gov.uk",
-            id: "Z08635081XAI47LT6BSJQ",
-          },
-          issuers: [STAGING_POOL],
-          testUsers: false,
+          zone: zones.DEVELOPMENT_FLEX_DOMAINEDGE,
+          // The staging pool, until this environment has a test pool of its own.
+          issuers: [userPools.STAGING],
+          testUserIssuer: null,
         },
       },
       {
@@ -164,22 +105,18 @@ export const STAGES: readonly StageConfig[] = [
             name: "domain00",
             account: "187157282680",
             domains: [],
-            zone: {
-              name: "staging.flex-domain00.once.service.gov.uk",
-              id: "Z02914492HOQJQ6UXSZ9B",
+            zone: zones.STAGING_FLEX_DOMAIN00,
+            network: {
+              availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
             },
-            network: THREE_ZONES,
             gateways: [],
           },
         ],
         frontdoor: {
           account: "792037778504",
-          zone: {
-            name: "staging.flex-domainedge.once.service.gov.uk",
-            id: "Z0490122CGGKQPL28DUH",
-          },
-          issuers: [STAGING_POOL],
-          testUsers: false,
+          zone: zones.STAGING_FLEX_DOMAINEDGE,
+          issuers: [userPools.STAGING],
+          testUserIssuer: null,
         },
       },
       {
@@ -190,22 +127,18 @@ export const STAGES: readonly StageConfig[] = [
             name: "domain00",
             account: "105322542531",
             domains: [],
-            zone: {
-              name: "production.flex-domain00.once.service.gov.uk",
-              id: "Z0411378AOM55J0BQQZI",
+            zone: zones.PRODUCTION_FLEX_DOMAIN00,
+            network: {
+              availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
             },
-            network: THREE_ZONES,
             gateways: [],
           },
         ],
         frontdoor: {
           account: "367273783987",
-          zone: {
-            name: "production.flex-domainedge.once.service.gov.uk",
-            id: "Z04221372NJE375QTYYDR",
-          },
-          issuers: [PRODUCTION_POOL],
-          testUsers: false,
+          zone: zones.PRODUCTION_FLEX_DOMAINEDGE,
+          issuers: [userPools.PRODUCTION],
+          testUserIssuer: null,
         },
       },
     ],

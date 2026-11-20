@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES, synthesizedStage } from "../test/helpers.ts";
 import { STAGES } from "./config/stages.ts";
-import { validateStages } from "./config/validate.ts";
+import { validateStages } from "./config/utils/validate.ts";
 import { synthStage } from "./synth-stage.ts";
 
 const stackNames = (assembly: CloudAssembly) =>

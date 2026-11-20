@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import { synthesizedStage } from "../test/helpers.ts";
 import { buildApp } from "./build-app.ts";
-import { selectTarget } from "./config/select-target.ts";
 import { STAGES } from "./config/stages.ts";
 import type { EnvironmentConfig, StageConfig } from "./config/types.ts";
+import { selectTarget } from "./config/utils/select-target.ts";
 
 // Which environment a stack belongs to: its name, its accounts and their zones. Everything else in
 // an environment's config is what it builds.
