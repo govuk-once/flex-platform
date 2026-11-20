@@ -1,20 +1,13 @@
 import * as domains from "./domains.ts";
-import type { NetworkConfig, StageConfig } from "./types.ts";
+import type { StageConfig } from "./types.ts";
 import * as userPools from "./user-pools.ts";
 import * as zones from "./zones.ts";
 
-// A NAT gateway is per availability zone, so the stages that only the platform team uses run in
-// two. The environments domain teams use run in all three.
-const TWO_ZONES: NetworkConfig = {
-  availabilityZones: ["eu-west-2a", "eu-west-2b"],
-};
-
-const THREE_ZONES: NetworkConfig = {
-  availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
-};
-
 // Every stage and its environments. Each domain is defined once, in domains.ts, and listed by the
 // domain accounts that host it.
+//
+// A NAT gateway is per availability zone, so the stages that only the platform team uses run in
+// two. The environments domain teams use run in all three.
 export const STAGES: readonly StageConfig[] = [
   {
     name: "platform-dev",
@@ -32,7 +25,7 @@ export const STAGES: readonly StageConfig[] = [
             account: "098640806149",
             domains: [domains.example],
             zone: zones.DEVELOPMENT_FLEX_PLATFORM,
-            network: TWO_ZONES,
+            network: { availabilityZones: ["eu-west-2a", "eu-west-2b"] },
             gateways: [],
           },
         ],
@@ -61,7 +54,7 @@ export const STAGES: readonly StageConfig[] = [
             account: "179512357753",
             domains: [],
             zone: zones.STAGING_FLEX_PLATFORM,
-            network: TWO_ZONES,
+            network: { availabilityZones: ["eu-west-2a", "eu-west-2b"] },
             gateways: [],
           },
         ],
@@ -90,7 +83,9 @@ export const STAGES: readonly StageConfig[] = [
             account: "168789041282",
             domains: [],
             zone: zones.DEVELOPMENT_FLEX_DOMAIN00,
-            network: THREE_ZONES,
+            network: {
+              availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
+            },
             gateways: [],
           },
         ],
@@ -111,7 +106,9 @@ export const STAGES: readonly StageConfig[] = [
             account: "187157282680",
             domains: [],
             zone: zones.STAGING_FLEX_DOMAIN00,
-            network: THREE_ZONES,
+            network: {
+              availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
+            },
             gateways: [],
           },
         ],
@@ -131,7 +128,9 @@ export const STAGES: readonly StageConfig[] = [
             account: "105322542531",
             domains: [],
             zone: zones.PRODUCTION_FLEX_DOMAIN00,
-            network: THREE_ZONES,
+            network: {
+              availabilityZones: ["eu-west-2a", "eu-west-2b", "eu-west-2c"],
+            },
             gateways: [],
           },
         ],
