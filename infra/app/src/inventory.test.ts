@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES, synthesizedStage } from "../test/helpers.ts";
 import { buildApp } from "./build-app.ts";
-import { selectTarget } from "./config/select-target.ts";
 import { STAGES } from "./config/stages.ts";
 import type { StageConfig } from "./config/types.ts";
+import { selectTarget } from "./config/utils/select-target.ts";
 import { inventory, type StackInventory } from "./inventory.ts";
 
 // A version's logical ID carries its code's hash, and Lambda@Edge's code bakes in each

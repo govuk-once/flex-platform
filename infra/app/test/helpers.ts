@@ -2,18 +2,19 @@ import { cdkApp } from "@repo/infra-constructs";
 import type { CloudAssembly } from "aws-cdk-lib/cx-api";
 
 import { buildApp } from "../src/build-app.ts";
-import { selectTarget } from "../src/config/select-target.ts";
 import type {
   DomainAccountConfig,
   DomainConfig,
   FrontdoorConfig,
   GatewayConfig,
+  HostedDomainConfig,
   NetworkConfig,
+  RepositoryConfig,
   SharedConfig,
   StageConfig,
-  StageDomainConfig,
   ZoneConfig,
 } from "../src/config/types.ts";
+import { selectTarget } from "../src/config/utils/select-target.ts";
 
 export const FRONTDOOR: FrontdoorConfig = {
   account: "100000000002",
@@ -24,7 +25,7 @@ export const FRONTDOOR: FrontdoorConfig = {
       clientIds: ["example-app-client"],
     },
   ],
-  testUsers: false,
+  trustsTestUsers: false,
 };
 
 // A stage's test user pool, which one fixture environment trusts.
@@ -75,16 +76,21 @@ export const OWN_SECRET_GATEWAY = {
 function frontdoor(
   environment: string,
   account: string,
-  testUsers = false,
+  trustsTestUsers = false,
 ): FrontdoorConfig {
-  return { ...FRONTDOOR, account, zone: zone(environment, account), testUsers };
+  return {
+    ...FRONTDOOR,
+    account,
+    zone: zone(environment, account),
+    trustsTestUsers,
+  };
 }
 
 export function domainAccount(
   environment: string,
   name: string,
   account: string,
-  domains: readonly DomainConfig[] = [],
+  domains: readonly HostedDomainConfig[] = [],
   network: NetworkConfig = TWO_ZONES,
 ): DomainAccountConfig {
   return {
@@ -97,7 +103,13 @@ export function domainAccount(
   };
 }
 
-const FIXTURE_DOMAINS = ["domain-a", "domain-b"];
+/** A domain with no repository yet, or with the one given. */
+export function domain(
+  name: string,
+  repository: RepositoryConfig | null = null,
+): DomainConfig {
+  return { name, repository };
+}
 
 // One domain with a repository that may release it, and one whose repository doesn't exist yet.
 export const REPOSITORY = {
@@ -106,9 +118,9 @@ export const REPOSITORY = {
   ownerId: "800000001",
 };
 
-export const FIXTURE_STAGE_DOMAINS: readonly StageDomainConfig[] = [
-  { name: "domain-a", repository: REPOSITORY },
-  { name: "domain-b", repository: null },
+const FIXTURE_DOMAINS: readonly DomainConfig[] = [
+  domain("domain-a", REPOSITORY),
+  domain("domain-b"),
 ];
 
 // A stage's shared account, with its zone named after the account as the others are, and no test
@@ -125,7 +137,6 @@ export const FIXTURE_STAGES = [
   {
     name: "platform-dev",
     shared: shared("100000000001"),
-    domains: FIXTURE_STAGE_DOMAINS,
     environments: [
       {
         name: "sandbox",
@@ -140,7 +151,6 @@ export const FIXTURE_STAGES = [
   {
     name: "platform-staging",
     shared: shared("200000000001"),
-    domains: FIXTURE_STAGE_DOMAINS,
     environments: [
       {
         name: "sandbox",
@@ -155,7 +165,6 @@ export const FIXTURE_STAGES = [
   {
     name: "platform-prod",
     shared: { ...shared("300000000001"), testUsers: TEST_USERS },
-    domains: FIXTURE_STAGE_DOMAINS,
     environments: [
       {
         name: "dev",

@@ -1,6 +1,6 @@
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
 
-import type { EnvironmentConfig, StageConfig } from "./types.ts";
+import type { EnvironmentConfig, StageConfig } from "../types.ts";
 
 /**
  * The issuers an environment's edge lets through: its own, and the stage's test user pool when the
@@ -11,8 +11,8 @@ export function trustedIssuers(
   stage: StageConfig,
   environment: EnvironmentConfig,
 ): readonly TrustedIssuer[] {
-  const { issuers, testUsers } = environment.frontdoor;
-  if (!testUsers) return issuers;
+  const { issuers, trustsTestUsers } = environment.frontdoor;
+  if (!trustsTestUsers) return issuers;
   const pool = stage.shared.testUsers;
   if (pool === null) {
     throw new Error(

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES, TEST_USERS } from "../../test/helpers.ts";
+import { FIXTURE_STAGES, TEST_USERS } from "../../../test/helpers.ts";
+import type { EnvironmentConfig, StageConfig } from "../types.ts";
 import { trustedIssuers } from "./trusted-issuers.ts";
-import type { EnvironmentConfig, StageConfig } from "./types.ts";
 
 const [DEV_STAGE, , PROD] = FIXTURE_STAGES;
 const [TRUSTING, NOT_TRUSTING] = PROD.environments;

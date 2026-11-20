@@ -1,4 +1,4 @@
-import type { StageConfig } from "./types.ts";
+import type { StageConfig } from "../types.ts";
 
 // A deploy targets one stage, so the app builds only the stage it's asked for. That selects what
 // to build; it never changes how a stage is built.

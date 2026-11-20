@@ -65,22 +65,20 @@ export interface UpstreamSecretConfig {
 }
 
 /**
- * A domain the account hosts: its name, or the domain disabled. A disabled domain keeps its stack,
- * and with it its API, its host, its logs and its name, but the Frontdoor routes nothing to it: a
- * request for it gets the 404 an unknown domain gets. Enabling it again recreates nothing.
+ * A domain an account hosts: the domain as `domains.ts` defines it, or with `disabled: true`. A
+ * disabled domain keeps its stack, and with it its API, its host, its logs and its name, but the
+ * Frontdoor routes nothing to it: a request for it gets the 404 an unknown domain gets. Enabling it
+ * again recreates nothing.
  */
-export type DomainConfig = string | DisabledDomainConfig;
-
-export interface DisabledDomainConfig {
-  readonly name: string;
-  readonly disabled: true;
+export interface HostedDomainConfig extends DomainConfig {
+  readonly disabled?: true;
 }
 
 export interface DomainAccountConfig {
   readonly name: string;
   readonly account: string;
   /** The domains the account hosts in this environment, disabled ones included. */
-  readonly domains: readonly DomainConfig[];
+  readonly domains: readonly HostedDomainConfig[];
   /** Each domain answers at `<domain>.<zone>`, under one wildcard certificate. */
   readonly zone: ZoneConfig;
   readonly network: NetworkConfig;
@@ -103,10 +101,10 @@ export interface RepositoryConfig {
 }
 
 /**
- * A domain in the stage, and who may release it. The same in every environment that hosts it,
- * since one upload goes through them all.
+ * A domain, and who may release it. The same wherever a stage hosts it, since one upload goes
+ * through every environment that does.
  */
-export interface StageDomainConfig {
+export interface DomainConfig {
   readonly name: string;
   /** `null` until the domain's repository exists. Nothing can release the domain until then. */
   readonly repository: RepositoryConfig | null;
@@ -145,7 +143,7 @@ export interface FrontdoorConfig {
   /** The user pools and app clients whose tokens the edge lets through. Never a test user pool. */
   readonly issuers: readonly TrustedIssuer[];
   /** Whether the edge also lets the stage's test users through. */
-  readonly testUsers: boolean;
+  readonly trustsTestUsers: boolean;
 }
 
 export interface EnvironmentConfig {
@@ -158,7 +156,5 @@ export interface EnvironmentConfig {
 export interface StageConfig {
   readonly name: string;
   readonly shared: SharedConfig;
-  /** Every domain an environment of the stage hosts, once each. */
-  readonly domains: readonly StageDomainConfig[];
   readonly environments: readonly EnvironmentConfig[];
 }

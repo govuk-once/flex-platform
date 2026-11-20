@@ -9,17 +9,18 @@ import {
   networkZones,
 } from "@repo/infra-constructs";
 
-import { domainNames } from "./domain-name.ts";
-import { SHARED_TARGET } from "./select-target.ts";
-import { trustedIssuers } from "./trusted-issuers.ts";
 import type {
   DomainAccountConfig,
+  DomainConfig,
   EnvironmentConfig,
   GatewayConfig,
   RepositoryConfig,
   StageConfig,
   ZoneConfig,
-} from "./types.ts";
+} from "../types.ts";
+import { domainNames } from "./domains.ts";
+import { SHARED_TARGET } from "./select-target.ts";
+import { trustedIssuers } from "./trusted-issuers.ts";
 
 const ACCOUNT_ID = /^\d{12}$/;
 
@@ -116,36 +117,38 @@ export function validateStages(stages: readonly StageConfig[]): void {
   checkAccounts(accountUses(stages));
 }
 
-// The stage's domains say who may release each one, so they are exactly the domains its
-// environments host. One missing could never be released. One no environment hosts would leave
-// its repository trusted to upload code for a domain the stage no longer has.
+// One domain, one repository, wherever the stage hosts it: one upload goes through every
+// environment, so whoever may release it in one may release it in all.
 function checkStageDomains(stage: StageConfig): void {
-  checkNames(
-    `${stage.name} domain`,
-    stage.domains.map(({ name }) => name),
-  );
-  const listed = new Set(stage.domains.map(({ name }) => name));
-  const hosted = new Set<string>();
+  const byName = new Map<string, DomainConfig>();
   for (const environment of stage.environments) {
-    for (const domain of domainNames(environment)) {
-      if (!listed.has(domain)) {
-        throw new Error(
-          `${stage.name}/${environment.name}: the domain ${domain} is not in ${stage.name}'s domains, which say who may release it`,
-        );
+    for (const { domains } of environment.domainAccounts) {
+      for (const domain of domains) {
+        const first = byName.get(domain.name);
+        if (first === undefined) {
+          byName.set(domain.name, domain);
+        } else if (!sameRepository(first.repository, domain.repository)) {
+          throw new Error(
+            `${stage.name}/${environment.name}: the domain ${domain.name} has a repository other than the one ${stage.name} gives it elsewhere, and one repository releases it everywhere`,
+          );
+        }
       }
-      hosted.add(domain);
     }
   }
-  for (const { name, repository } of stage.domains) {
-    if (!hosted.has(name)) {
-      throw new Error(
-        `${stage.name}: the domain ${name} is in its domains, but no environment hosts it`,
-      );
-    }
+  for (const { name, repository } of byName.values()) {
     if (repository !== null) {
       checkRepository(`${stage.name} ${name} domain`, repository);
     }
   }
+}
+
+function sameRepository(
+  a: RepositoryConfig | null,
+  b: RepositoryConfig | null,
+): boolean {
+  return a === null || b === null
+    ? a === b
+    : a.name === b.name && a.id === b.id && a.ownerId === b.ownerId;
 }
 
 function checkRepository(
@@ -247,7 +250,7 @@ function checkEnvironment(
 }
 
 // A test user's username is whatever its creator chose, and the edge passes it on as the caller's
-// pairwise ID. So an environment trusts test users only through `frontdoor.testUsers`, never by
+// pairwise ID. So an environment trusts test users only through `frontdoor.trustsTestUsers`, never by
 // naming a test user pool in its issuers.
 function checkTrust(
   at: string,
@@ -259,7 +262,7 @@ function checkTrust(
     checkIssuer(at, issuer);
     if (testUserPools.has(issuer.issuer)) {
       throw new Error(
-        `${at}: the issuer ${issuer.issuer} is a test user pool, which an environment trusts only through frontdoor.testUsers`,
+        `${at}: the issuer ${issuer.issuer} is a test user pool, which an environment trusts only through frontdoor.trustsTestUsers`,
       );
     }
   }

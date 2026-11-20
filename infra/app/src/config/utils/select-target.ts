@@ -1,4 +1,4 @@
-import type { EnvironmentConfig, StageConfig } from "./types.ts";
+import type { EnvironmentConfig, StageConfig } from "../types.ts";
 
 /** The target that builds only the shared account's stacks. No environment may take its name. */
 export const SHARED_TARGET = "shared";

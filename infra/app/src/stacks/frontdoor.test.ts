@@ -2,11 +2,14 @@ import { cdkApp } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
+import {
+  domain,
+  FIXTURE_STAGES,
+  synthesizedStage,
+} from "../../test/helpers.ts";
 import { buildApp } from "../build-app.ts";
-import { domainName } from "../config/domain-name.ts";
-import { selectTarget } from "../config/select-target.ts";
-import type { DomainConfig, StageConfig } from "../config/types.ts";
+import type { HostedDomainConfig, StageConfig } from "../config/types.ts";
+import { selectTarget } from "../config/utils/select-target.ts";
 import { domainStackName } from "./domain.ts";
 import {
   domainRoutes,
@@ -18,7 +21,7 @@ const PROD = FIXTURE_STAGES[2];
 const [DEV] = PROD.environments;
 
 // PROD, with one domain disabled in every environment that hosts it.
-function disabling(domain: string): StageConfig {
+function disabling(name: string): StageConfig {
   return {
     ...PROD,
     environments: PROD.environments.map((environment) => ({
@@ -26,9 +29,7 @@ function disabling(domain: string): StageConfig {
       domainAccounts: environment.domainAccounts.map((domainAccount) => ({
         ...domainAccount,
         domains: domainAccount.domains.map((entry) =>
-          domainName(entry) === domain
-            ? { name: domain, disabled: true as const }
-            : entry,
+          entry.name === name ? { ...entry, disabled: true as const } : entry,
         ),
       })),
     })),
@@ -110,7 +111,7 @@ describe("FrontdoorStack", () => {
       );
 
     expect(
-      PROD.environments.map((e) => [e.name, e.frontdoor.testUsers]),
+      PROD.environments.map((e) => [e.name, e.frontdoor.trustsTestUsers]),
     ).toEqual([
       ["dev", true],
       ["staging", false],
@@ -127,8 +128,8 @@ describe("FrontdoorStack", () => {
     const routes = domainRoutes({
       ...prodEnvironment,
       domainAccounts: [
-        { ...main, domains: ["domain-b"] },
-        { ...second, domains: ["domain-a"] },
+        { ...main, domains: [domain("domain-b")] },
+        { ...second, domains: [domain("domain-a")] },
       ],
     });
 
@@ -142,7 +143,7 @@ describe("FrontdoorStack", () => {
   it("routes nothing to a disabled domain, and nothing at all when every domain is", () => {
     const [, , prodEnvironment] = PROD.environments;
     const [main] = prodEnvironment.domainAccounts;
-    const routesWith = (domains: readonly DomainConfig[]) =>
+    const routesWith = (domains: readonly HostedDomainConfig[]) =>
       domainRoutes({
         ...prodEnvironment,
         domainAccounts: [{ ...main, domains }],
@@ -152,14 +153,16 @@ describe("FrontdoorStack", () => {
       "domain-b": `domain-b.${main.zone.name}`,
     };
 
-    expect(routesWith(["domain-a", "domain-b"])).toEqual(routes);
-    expect(
-      routesWith(["domain-a", { name: "domain-b", disabled: true }]),
-    ).toEqual({ "domain-a": routes["domain-a"] });
+    const [a, b] = [domain("domain-a"), domain("domain-b")];
+
+    expect(routesWith([a, b])).toEqual(routes);
+    expect(routesWith([a, { ...b, disabled: true }])).toEqual({
+      "domain-a": routes["domain-a"],
+    });
     expect(
       routesWith([
-        { name: "domain-a", disabled: true },
-        { name: "domain-b", disabled: true },
+        { ...a, disabled: true },
+        { ...b, disabled: true },
       ]),
     ).toEqual({});
   });

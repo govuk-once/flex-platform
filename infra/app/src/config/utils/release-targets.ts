@@ -11,8 +11,8 @@ import {
 import type { BundleReader } from "@repo/shared-infra";
 import type { ReleaseTarget } from "@repo/shared-release";
 
-import { domainName } from "./domain-name.ts";
-import type { EnvironmentConfig, StageConfig } from "./types.ts";
+import type { EnvironmentConfig, StageConfig } from "../types.ts";
+import { stageDomains } from "./domains.ts";
 
 // Where a pipeline publishes: the environments new code enters by a release. Elsewhere it will
 // arrive by promotion, which the release worker doesn't do yet.
@@ -27,14 +27,14 @@ function publishing(stage: StageConfig): EnvironmentConfig[] {
  */
 export function releaseTargets(stage: StageConfig): ReleaseTarget[] {
   const registered = new Set(
-    stage.domains
+    stageDomains(stage)
       .filter(({ repository }) => repository !== null)
       .map(({ name }) => name),
   );
   return publishing(stage).flatMap((environment) =>
     environment.domainAccounts.flatMap(({ account, domains }) =>
       domains
-        .map(domainName)
+        .map(({ name }) => name)
         .filter((domain) => registered.has(domain))
         .map((domain) => ({
           environment: environment.name,

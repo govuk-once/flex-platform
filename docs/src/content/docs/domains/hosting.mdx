@@ -14,18 +14,28 @@ The constructs and the names they use are in `domains/infra` (`@repo/domain-infr
 
 ## Declaring a domain
 
-Each domain account in an environment lists the domains it hosts in that environment, each by its
-name, or as `{ name, disabled: true }` when it is [disabled](#disabling-a-domain):
+A domain is defined once, in `infra/app/src/config/domains.ts`. The definition
+names the GitHub repository that may [release](#releasing-a-domains-function) the domain, by
+GitHub's IDs for the repository and its owner, or `null` until the repository exists:
+
+```ts title="config/domains.ts"
+export const domainA: DomainConfig = {
+  name: "domain-a",
+  repository: { name: "example-org/domain-a", id: "700000001", ownerId: "800000001" },
+};
+```
+
+`gh api repos/<owner>/<repository> --jq '.id, .owner.id'` prints the two IDs.
+
+Each domain account in an environment then lists the domains it hosts in that environment, each
+as defined, or with `disabled: true` added when it is [disabled](#disabling-a-domain):
 
 ```ts
 domainAccounts: [
   {
     name: "domain00",
     account: "098640806149",
-    domains: [
-      "domain-a",
-      { name: "domain-b", disabled: true },
-    ],
+    domains: [domains.domainA, { ...domains.domainB, disabled: true }],
     zone: {
       name: "development.flex-platform.once.service.gov.uk",
       id: "Z0835542Q6J8ILWJ1RGR",
@@ -41,36 +51,20 @@ Config holds no routes, and nothing else about what the domain does. See
 [routing a request](#routing-a-request).
 
 A domain is hosted only in the environments that list it. Moving it to another domain account is
-moving its name to that account's list.
-
-The stage lists the domain too, once, in its own `domains`, whichever of its environments host
-it. The entry names the GitHub repository that may [release](#releasing-a-domains-function) the
-domain, by GitHub's IDs for the repository and its owner, or `null` until the repository exists:
-
-```ts
-domains: [
-  {
-    name: "domain-a",
-    repository: { name: "example-org/domain-a", id: "700000001", ownerId: "800000001" },
-  },
-  { name: "domain-b", repository: null },
-],
-```
-
-`gh api repos/<owner>/<repository> --jq '.id, .owner.id'` prints the two IDs.
+moving it to that account's list.
 
 <Aside type="caution" title="Moving a domain between accounts">
-Moving a domain's name does not move its function or code. The destination account gets a new
+Moving a domain does not move its function or code. The destination account gets a new
 domain stack, and the domain team must release the function there before it can serve requests.
 The previous account's domain stack and its resources must be removed separately.
 </Aside>
 
 ### Disabling a domain
 
-List a domain as `{ name, disabled: true }` to stop routing to it. Its stack stays as it is, with
+List a domain with `disabled: true` added to stop routing to it. Its stack stays as it is, with
 its API, its host, its log groups and its name, which no other account in the environment may
 take. The Frontdoor's routes leave it out, so a request for it, once its token is verified, gets
-the 404 an unknown domain gets, and never reaches its API. Listing it by its name again restores
+the 404 an unknown domain gets, and never reaches its API. Listing it as defined again restores
 the route and recreates nothing. Release the function the route will reach before enabling it.
 
 Disabling withdraws the route and nothing else: it doesn't stop an invocation already running, or
@@ -91,8 +85,7 @@ Before building any stage, the app checks every domain, disabled ones included:
   ending with a hyphen;
 - its name is used once in its environment, across all of the environment's domain accounts,
   since the Frontdoor routes by name alone;
-- it is in its stage's `domains`, once, and every domain there is hosted in at least one of the
-  stage's environments;
+- it has the same repository, or none, wherever its stage hosts it;
 - it is hosted in the environment its own environment's `release` promotes from, if it promotes;
 - its execution role's name, `domain-<environment>-<name>-execution`, is within IAM's 64
   characters. It is the longest of the names Lambda and IAM limit, so the others fit too. Each name
@@ -322,7 +315,7 @@ A domain's code is uploaded once, as a bundle, and released from the bucket it i
 says which way code reaches each environment, in its `release`: `"publish"` where new code enters
 the stage, or `{ promoteFrom }`, naming the environment whose released code it takes. In
 platform-prod, `development` publishes, `staging` promotes from `development`, and `production`
-from `staging`. The repository the stage's `domains` names for a domain is the only one that can
+from `staging`. The repository a domain's definition names is the only one that can
 release it.
 
 Where an environment publishes, the domain's pipeline [uploads a bundle](#uploading-a-bundle)

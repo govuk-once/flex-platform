@@ -21,9 +21,12 @@ import {
 import { Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 
-import { domainNames } from "../config/domain-name.ts";
-import { bundleReaders, releaseTargets } from "../config/release-targets.ts";
 import type { StageConfig } from "../config/types.ts";
+import { domainNames, stageDomains } from "../config/utils/domains.ts";
+import {
+  bundleReaders,
+  releaseTargets,
+} from "../config/utils/release-targets.ts";
 
 // One per stage, in the stage's own shared account, so the name holds no stage.
 export const SHARED_RELEASE_STACK_NAME = "shared-release";
@@ -94,7 +97,7 @@ export class SharedReleaseStack extends Stack {
         domains: domainNames(environment),
       })),
       // A domain with no repository yet has no entry, so nothing can release it.
-      domains: stage.domains.flatMap(({ name, repository }) =>
+      domains: stageDomains(stage).flatMap(({ name, repository }) =>
         repository === null
           ? []
           : [
