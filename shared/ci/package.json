@@ -12,9 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "3.1163.0",
-    "@aws-sdk/client-s3": "3.1163.0",
-    "@aws-sdk/client-sqs": "3.1163.0",
+    "@aws-sdk/client-dynamodb": "3.1168.0",
+    "@aws-sdk/client-s3": "3.1168.0",
+    "@aws-sdk/client-sqs": "3.1168.0",
     "@repo/cloudfront-js-utils": "workspace:*",
     "@repo/shared-release": "workspace:*",
     "@repo/shared-viewer-request": "workspace:*",

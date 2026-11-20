@@ -17,11 +17,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "3.1163.0",
-    "@aws-sdk/client-lambda": "3.1163.0",
-    "@aws-sdk/client-s3": "3.1163.0",
-    "@aws-sdk/client-ssm": "3.1163.0",
-    "@aws-sdk/credential-providers": "3.1163.0",
+    "@aws-sdk/client-dynamodb": "3.1168.0",
+    "@aws-sdk/client-lambda": "3.1168.0",
+    "@aws-sdk/client-s3": "3.1168.0",
+    "@aws-sdk/client-ssm": "3.1168.0",
+    "@aws-sdk/credential-providers": "3.1168.0",
     "@repo/cloudfront-js-utils": "workspace:*",
     "@repo/utils": "workspace:*",
     "esbuild": "0.28.2"
