@@ -7,7 +7,7 @@ The packages domains install are published to GitHub Packages, in the `@govuk-on
 is published unless a release records it. A release is a pull request: `pnpm release` prepares it,
 a person reviews it, and once it is merged the pipeline publishes it:
 
-- **The client:** its final, as the release merges.
+- **The client and the domain SDK:** their finals, as the release merges.
 - **Each gateway's package:** a release candidate as the release merges, so it can be tried, and
   its final once production serves the gateway's schema. Publishing that final is
   [planned](#publishing): until then, a gateway's package has candidates only.
@@ -18,6 +18,7 @@ Nothing is published from a laptop. `@repo/release`, in `packages/release`, does
 | Package | Built by | Versioned | Final published |
 |---|---|---|---|
 | `@govuk-once/flex-gateway-client` | its `build` script, into `dist/` | declared | as the release merges |
+| `@govuk-once/flex-domain-sdk` | its `build` script, into `dist/` | declared | as the release merges |
 | Each gateway's [client package](/flex-platform/codegen/overview/#the-client-package) | `codegen`, into `.gen/client/package/` | derived | at production (planned) |
 
 A gateway's package is listed by being in `gateways/services/`, with nothing to add.
@@ -56,8 +57,8 @@ The Release check on each pull request refuses a change that breaks either rule.
 ## Candidates
 
 Only gateway packages have candidates, because only their finals wait: for production to serve the
-gateway's schema. A candidate stands in for the final until then. The client is only ever published
-as a final, since nothing it does depends on a deployment.
+gateway's schema. A candidate stands in for the final until then. The client and the SDK are only
+ever published as finals, since nothing either does depends on a deployment.
 
 A candidate is the version its release recorded, with `-rc.<n>`, where `<n>` is the number of
 commits `main` has when it is published. It names the client its build names, which is the
@@ -121,8 +122,8 @@ pnpm exec release publish <dir> --stage merge   # then, at production, --stage p
 `pack` builds every package and asks the registry what it holds of each recorded package. It packs
 each recorded version the registry does not have, in two stages, by when each is published:
 
-- **`merge`:** the client's final, under `latest`, and a candidate of each gateway package, under
-  `rc`, unless one of its recorded version is already published.
+- **`merge`:** the client's and the SDK's finals, under `latest`, and a candidate of each gateway
+  package, under `rc`, unless one of its recorded version is already published.
 - **`production`:** each gateway package's final, under `latest`. The final is the same build as
   its candidate, under its own version, so what is published is what was tested.
 

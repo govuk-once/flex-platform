@@ -1,0 +1,300 @@
+---
+title: Building a domain
+description: The domain SDK's public API, what a route does with a request, and what a domain installs with it.
+---
+
+import { Aside, Badge } from "@astrojs/starlight/components";
+
+The domain SDK is `@govuk-once/flex-domain-sdk`, in `domains/sdk`. A domain installs it from
+GitHub Packages with its two peer dependencies, Zod and the
+[gateway client](/flex-platform/domains/overview/#calling-gateways). They are peers so that a
+domain has one copy of each: its schemas are read by the Zod it writes them with, and its gateway
+calls carry the one caller context the client holds. The SDK is versioned and published as
+[Releasing packages](/flex-platform/start/releasing/) describes, as a final when its release
+merges.
+
+This page describes what the SDK does today: the `route()` factory, and everything that happens to
+a request between the router matching it and the response leaving. Two neighbouring parts are
+planned and labelled as such below: the full configuration, and the function that routes requests
+to the routes. Neither changes what is written here about a route.
+
+## Declaring a domain
+
+A domain declares its routes once, in a configuration, and `domain()` returns a `route` bound to
+it. The configuration keeps the previous platform's shape: routes nested by version, path and
+method, with the schemas each route is held to.
+
+```ts
+// domain.config.ts
+import { domain } from "@govuk-once/flex-domain-sdk";
+import { z } from "zod";
+
+const Todo = z.object({ id: z.string(), title: z.string() });
+
+export const { config, route, routeContext } = domain({
+  name: "todos",
+  common: {
+    headers: { exampleId: { name: "X-Example-Id", required: false } },
+    logging: { level: "info" },
+  },
+  routes: {
+    v1: {
+      "/todos": {
+        POST: {
+          body: Todo.omit({ id: true }),
+          responses: { 201: Todo },
+          errors: ["conflict"],
+        },
+      },
+      "/todos/:id": {
+        GET: {
+          params: z.object({ id: z.string().min(1) }),
+          responses: { 200: Todo, 204: null },
+          errors: ["not_found"],
+        },
+      },
+    },
+  },
+});
+```
+
+A route declares what it reads and what it answers with, each as a Zod schema:
+
+| Field | What it holds |
+|---|---|
+| `params` | The path's parameters, which the router matched against the `:name` segments of the path. Without it, a handler sees none. |
+| `query` | The query string, each value a string. |
+| `headers` | Headers by the alias a handler reads them as, each with its `name` on the wire and whether it is `required` (it is unless `required: false`). Names are matched without regard to case. `common.headers` are declared for every route, and a route's own header of the same alias replaces one. |
+| `body` | The request body, parsed from JSON. A route with a body requires `Content-Type: application/json`. |
+| `responses` | A schema for the body of each status the route answers with, or `null` for a status with no body. |
+| `errors` | The [failures](#responses-and-failures) the handler may answer with by name. |
+
+<Aside type="caution" title="Planned: the full configuration">
+What `domain()` accepts today is the least that typing `route()` needs. The full configuration is
+planned, and will add a name for each route, the checks a configuration is held to as it loads
+(a duplicate route, a schema that does not match its path), path parameters inferred from the
+key without a `params` schema, the OpenAPI document written from the configuration, and a
+serialised form. None of those is implemented, so a configuration is not checked when it loads
+beyond its types, and a route's `params` schema is the only description of its parameters.
+</Aside>
+
+## Writing a handler
+
+`route()` takes a key, `METHOD /version/path`, which the types hold to the routes the
+configuration declares, and a handler. It returns a route handler object: the key, the method, the
+path with its version, and `run`, which takes a matched request through the pipeline below. A
+route declared at the path `/` has the key `METHOD /version/`.
+
+```ts
+// src/handlers/v1/todos/[id]/get.ts
+import { route } from "../../../../domain.config.ts";
+
+export const handler = route("GET /v1/todos/:id", async ({ params, caller, log, fail }) => {
+  const todo = await store.get(caller.pairwiseId, params.id);
+  if (todo === undefined) return fail("not_found");
+  log.info("todo read");
+  return { status: 200, body: todo };
+});
+```
+
+The handler's context holds only what the route declares, at the type level and at runtime.
+Reading a header, a parameter or a body the route does not declare is a compile error.
+
+| Field | Present when | Type |
+|---|---|---|
+| `params` | `params` is declared | the schema's output |
+| `query` | `query` is declared | the schema's output |
+| `headers` | the route or `common` declares a header | by alias: a required header is `string`, an optional one `string \| undefined` |
+| `body` | `body` is declared | the schema's output |
+| `fail` | `errors` names a failure | `(code) => Failure`, for the codes named |
+| `caller` | always | `{ pairwiseId }`, see [The caller](#the-caller) |
+| `log` | always | the request's logger, see [Logging](#logging) |
+| `correlationId` | always | the request's `x-correlation-id`, or undefined |
+| `signal` | always | an `AbortSignal` that fires when the deadline passes |
+
+The handler returns one of the statuses the route declares, with a body typed by that status's
+schema, or a failure. A status the route does not declare, or a body of the wrong shape, is a
+compile error.
+
+```ts
+return { status: 200, body: todo };   // body typed as Todo's input
+return { status: 204 };               // declared as `204: null`
+return fail("not_found");             // only if the route lists "not_found"
+```
+
+A module the handler calls can reach the request without being handed it. `routeContext<"GET
+/v1/todos/:id">()` returns the handler's context, `currentCaller()` the caller, and the exported
+`log` writes to the request's logger. Each is backed by Node's `AsyncLocalStorage`, so it works
+however many awaits deep; outside a request, `routeContext` and `currentCaller` throw, and `log`
+writes to the domain's logger, with its name, level and redaction.
+
+<Aside type="caution" title="Planned: the function">
+How a domain's route handlers are mounted into one Lambda function, which routes each request to
+them and answers 404 and 405 for what none matches, is planned. It is the only part of the SDK a
+domain's entry point will import, and the function it builds adapts API Gateway's proxy event to
+the `RouteRequest` a route's `run` takes, so no handler changes when it lands.
+</Aside>
+
+## What a route does with a request
+
+`run` takes a `RouteRequest`: the matched path parameters, the query, the headers, the body as
+text, the deadline (when Lambda will stop the function, in epoch milliseconds) and the invocation
+id. The steps run in this order, each owning the status it answers, and nothing throws out of
+`run`: every failure leaves as a response.
+
+| Step | On failure |
+|---|---|
+| Open the request's log context from `x-correlation-id`, the X-Ray root and the invocation id | never fails |
+| Read the caller from `x-flex-secure` | 401 |
+| For a route with a body, require `Content-Type: application/json` | 415 |
+| Validate `params`, `query`, `headers` and `body` against the declared schemas, in that order | 400, the failing part logged by name and never its value |
+| Build the context; set the gateway client's caller context | never fails |
+| Run the handler, raced against the deadline | 504 if the deadline passes first, or the handler fails once it has passed; 500 for any other error the handler lets out |
+| Check the status is one the route declares, and validate the body against that status's schema | 500, the failing status logged and never the body |
+| Serialise; set `Content-Type` and echo `x-correlation-id` | 500 for a body JSON cannot write, the status logged |
+
+Anything else that throws along the way, such as a schema whose refinement throws, is answered
+500 and logged as where it was thrown.
+
+The body sent is the schema's validated output, not the handler's value, so a handler that
+spreads an upstream's object into its reply cannot leak a field the contract does not declare.
+Unknown properties in a request are dropped at validation, as Zod's object schemas do by default;
+a domain that wants `.strict()` may use it.
+
+## Responses and failures
+
+A failure is a fixed status and a fixed body, `{ message, type, code }`: the Frontdoor's two
+fields, with text the platform wrote, and the code a client can switch on. Nothing a caller, a
+schema, a library or an upstream wrote reaches a body. `type` is `auth_error` for a 401 or a 403,
+`client_error` for any other 4xx and `server_error` for a 5xx.
+
+| Code | Status | Who answers with it |
+|---|---|---|
+| `invalid_request` | 400 | the route, for a request that fails validation; a handler, if declared |
+| `unauthorized` | 401 | the route, for a request without a readable caller |
+| `forbidden` | 403 | a handler, if declared |
+| `not_found` | 404 | a handler, if declared |
+| `conflict` | 409 | a handler, if declared |
+| `unsupported_media_type` | 415 | the route, for a body that is not JSON |
+| `unprocessable` | 422 | a handler, if declared |
+| `internal` | 500 | the route, for an error, an undeclared status or an invalid response body |
+| `bad_gateway` | 502 | a handler passing a gateway's error on |
+| `unavailable` | 503 | a handler passing a gateway's error on |
+| `timeout` | 504 | the route, when the deadline passes; a handler passing a gateway's timeout on |
+
+The first group of codes, `invalid_request`, `forbidden`, `not_found`, `conflict` and
+`unprocessable`, are the ones a route may declare in `errors` and a handler may then return with
+`fail`. `internal`, `bad_gateway`, `unavailable` and `timeout` belong to the platform, and any
+handler may return them. `unauthorized` and `unsupported_media_type` are the route's alone.
+
+A gateway returns its errors in an envelope and never throws them, so a handler decides what each
+means. `fromGatewayError(response.error.code)` is the default mapping, which a handler may return:
+what the upstream itself said is passed on, so `NOT_FOUND` is `not_found` and `UPSTREAM_TIMEOUT`
+is `timeout`; a gateway's refusal of the input the domain built, the operation it named or the
+caller it asserted is `bad_gateway`, since the fault is the domain's; `SECURE_VALUE_MISMATCH`
+is `forbidden`, the one answer that is about the caller; and `UPSTREAM_UNAVAILABLE` and
+`RATE_LIMITED` are `unavailable`. A route that passes gateway errors on this way declares
+`not_found` and `forbidden`, which the types require. A `GatewayInvocationError` the client throws
+and a handler does not catch is mapped the same way: a call that `timed_out` is a 504, a
+`function_error` or `invalid_response` a 502, and `invoke_failed` or `aborted` a 500.
+
+A `Failure` is an `Error`, so a handler may throw one as well as return it. A route answers 500,
+and logs the code, for a `Failure` whose code is neither one it declares nor one of the
+platform's. So no handler answers 401 or 415 on the route's behalf.
+
+## The caller
+
+Every request comes through the Frontdoor, which sets `x-flex-secure` to the caller token: see
+[the caller token](/flex-platform/frontdoor/lambda-edge/#the-caller-token). The route decodes the
+token's payload and reads `pairwiseId` from it, which is the one claim agreed. It never verifies
+the token. The gateway verifies what a domain asserts about its caller, so the platform is
+protected whatever a domain does, and the SDK's reading of the token is not an authentication
+control. API Gateway's own check keeps unsigned requests out, so a request whose token is missing
+or does not decode is answered 401 as a consistency failure, and logged as a category.
+
+<Aside type="caution" title="Limitation">
+Lambda@Edge sets `x-flex-secure` to a fixed `placeholder` today, which decodes as no caller, so a
+deployed route answers every request 401 until the Frontdoor sends the token. The SDK is tested
+against a synthetic token in the agreed shape. Every route needs a caller; whether a route may
+declare that it needs none is not decided.
+</Aside>
+
+The route also sets the gateway client's
+[caller context](/flex-platform/domains/overview/#calling-gateways) around the handler: the
+token's scalar claims as the `values` the gateway compares with its secure bindings, the token's
+signature, and the deadline. So every gateway call the handler makes, however deep, carries them,
+and a call made after the deadline is refused before it is sent.
+
+The deadline is the request's, less a margin of one second for answering, a constant of the SDK.
+When it passes before the handler answers, the route answers 504. The handler's work is not
+stopped: the `signal` in its context fires, so its own long work can stop if it chooses, and the
+client refuses any further gateway call.
+
+## Logging
+
+The SDK logs with pino, written synchronously to stdout, since an asynchronous destination can
+lose lines when a Lambda is frozen. Every line from inside a request carries `route` (the key,
+which is the domain's own text, never the request's path), `correlationId`, `traceId` (the X-Ray
+root) and `requestId` (Lambda's invocation id), under the domain's `name`. The level is set in
+`common.logging.level`, `info` unless set, and nothing branches on the environment.
+
+The route's own lines are fixed messages with no payload: a missing caller as a category, a
+validation failure by its part (`params`, `query`, `headers`, `body`), a response failure by its
+status and the codes of the schema's issues, and an error the handler let out as the summary
+`@repo/utils` builds: its source locations, never its name or message, because a library's
+message can hold payload data. An error a handler logs is reduced the same way, under any name and
+at any depth, and so is anything else logged under `err` or `error`.
+
+Redaction runs over every message and every field, at any depth. That includes the fields every
+line of a request carries, since `correlationId` is the caller's own text. A value is read as JSON
+would write it, so a class instance is redacted by its fields like any other object. It began as
+the previous platform's sanitiser, without its environment switch:
+
+- a field is replaced whole when its name is, or is a compound of, one that looks like a secret
+  (`token`, `password`, `apiKey`, `authorization`, a card number's fields, and so on) or like
+  personal data (`email`, `surname`, `dateOfBirth`, `nino`, `postcode`, and so on). So
+  `phoneNumber` and `bank_account_number` are replaced as `phone` is;
+- a string value that looks like a JWT, a card number passing the Luhn check, an email address, a
+  UK phone number, a National Insurance number, a UK postcode or an IPv4 address is replaced,
+  under any name. A phone or card number is found written whole or in groups.
+
+Redaction is by pattern, so it errs towards replacing: a field named `emailSent` is replaced too.
+
+A domain adds its own patterns in `common.logging`: `redactKeys` for field names and
+`redactValues` for values, each a list of regular expressions. Each is tested from the start of
+the name or value every time, whatever its flags. Tests in `domains/sdk` log synthetic secrets and
+personal data under matched and unmatched names, and assert their absence.
+
+## Testing a route
+
+A route is driven in a test with a plain `RouteRequest`, since nothing of API Gateway's event or
+the router reaches it. Build a request with a synthetic token (a base64url JSON payload with a
+`pairwiseId`, between a header and a signature segment, built in the test rather than written
+down), call `run`, and assert on the `RouteResponse`'s status, headers and body. The SDK's own
+tests in `domains/sdk/src/route.test.ts` show each step. A testing library with fixtures for
+domains is planned.
+
+A sample domain lives in `domains/sdk/test/sample/`: a configuration, a route for each method
+above and a store scoped to the caller. It calls no gateway. Its test drives each route through
+`run`, and holds the compiler to refusing a handler that reads an undeclared parameter, answers
+an undeclared status or names an undeclared route.
+
+## Differences from the previous platform's SDK
+
+The previous SDK, `@flex/sdk`, built one Lambda function per route. These differences are
+deliberate.
+
+| Previous SDK | This SDK | Reason |
+|---|---|---|
+| `route()` returned a Lambda handler | Returns a route handler object, which the planned function mounts | One function per domain |
+| Routes under `public` and `private` per method | Removed | Every request comes through the Frontdoor; domains call gateways, not each other |
+| `response`, one schema | `responses` by status, `null` for none; the result is typed by its status | OpenAPI needs a schema per status, and a handler cannot answer with an undeclared one |
+| `resources`, `integrations`, `featureFlags`, `access`, `environments`, `function`, `logLevel`, `owner` | Removed | The domain has no AWS resources of its own; the gateway client replaces integrations; function settings move to the release |
+| `auth.userId` from the authorizer | `caller.pairwiseId` from the token | The token's own name for the value |
+| `pathParams`, `queryParams` | `params`, `query`, each present only when declared | Shorter, and nothing undeclared is offered |
+| middy and `http-errors` | A fixed pipeline and named failures | One place each status is decided |
+| Powertools logger, `FLEX_LOG_PII_DEBUG` | pino, no switch | The same code and settings everywhere |
+| 400 bodies carried Zod's issues and missing header names | A fixed 400, the part logged | Nothing a caller or a schema wrote is echoed |
+| `{ message, type, errors? }` | `{ message, type, code }` | A stable code the app can act on |
+| Response validation failed with details at DEBUG, and sent the handler's value | Fails as a 500 with nothing from the schema, and sends the validated output | Undeclared fields cannot leak |
+| `z.coerce` in query schemas | Not used; decoders for query and path strings are not written yet | `z.coerce` turns `""` into `0` |

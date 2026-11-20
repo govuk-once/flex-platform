@@ -28,7 +28,8 @@ Lambda proxy integration, in isolated subnets. See [Domains](/flex-platform/doma
 
 ## Domain SDK
 
-The package, with examples, that domain developers install to build a domain. Planned.
+The package, with examples, that domain developers install to build a domain. It is being written,
+in `domains/sdk`.
 
 ## Driver
 
