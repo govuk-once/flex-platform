@@ -9,6 +9,12 @@ export const TodoSchema = z.object({
 });
 export type Todo = z.output<typeof TodoSchema>;
 
+// The body of this domain's failures. A domain chooses its own.
+export const TodoErrorSchema = z.object({
+  error: z.object({ code: z.string(), message: z.string() }),
+});
+export type TodoError = z.output<typeof TodoErrorSchema>;
+
 export const TodoListSchema = z.object({ items: z.array(TodoSchema) });
 
 export const TodoParamsSchema = z.object({ id: z.string() });

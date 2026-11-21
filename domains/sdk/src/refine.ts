@@ -1,7 +1,7 @@
 import type { input, ZodObject, ZodType } from "zod";
 
 import type { HandlerKeyOf } from "./handler.ts";
-import type { NullBodyStatusCode, SuccessStatusCode } from "./http.ts";
+import type { NullBodyStatusCode, ResponseStatusCode } from "./http.ts";
 import type {
   HasField,
   IsNever,
@@ -32,7 +32,7 @@ type FieldCheck<Route> =
     : {
         readonly [
           Field in UnknownFields<Route>
-        ]: Problem<`"${Field}" is not a route field; accepted fields: handler, params, query, body, responses, errors`>;
+        ]: Problem<`"${Field}" is not a route field; accepted fields: handler, params, query, body, responses`>;
       };
 
 // The fields a route's `params` or `query` object declares, each with its schema, and none when
@@ -162,9 +162,9 @@ type BodyCheck<Key extends string, Route> =
       : unknown
     : unknown;
 
-type FailureStatusCodes<Route> = Exclude<
+type RefusedStatusCodes<Route> = Exclude<
   keyof ResponsesOf<Route>,
-  SuccessStatusCode
+  ResponseStatusCode
 > &
   number;
 
@@ -175,10 +175,10 @@ type ResponsesCheck<Route> =
     ? {
         readonly responses: Problem<"responses must declare at least one status">;
       }
-    : IsNever<FailureStatusCodes<Route>> extends true
+    : IsNever<RefusedStatusCodes<Route>> extends true
       ? unknown
       : {
-          readonly responses: Problem<`status ${FailureStatusCodes<Route>} is not a success status; accepted statuses: 2xx, with a failure as a code in errors`>;
+          readonly responses: Problem<`status ${RefusedStatusCodes<Route>} is not one a route may declare; accepted statuses: 2xx, and 4xx except 401 and 403`>;
         };
 
 // A null body status declared with a schema, which would make its handler return a body that
