@@ -56,7 +56,7 @@ Each environment has these stacks:
 | Stack | Account | Region | One per | Holds |
 |---|---|---|---|---|
 | `frontdoor-<environment>-edge-logs-eu-west-2` | Frontdoor | eu-west-2 | Environment | Lambda@Edge's log group, and the policy that lets its role write to it |
-| `frontdoor-<environment>-caller-token-keys` | Frontdoor | eu-west-2 | Environment | The caller token's signing key, the bucket every gateway reads its public keys from, and key rotation: see [the caller token](/flex-platform/frontdoor/caller-token/#stacks) |
+| `frontdoor-<environment>-caller-token-keys` | Frontdoor | eu-west-2 | Environment | The caller token's signing key, the bucket every gateway reads its public keys from, the push ID's secret, and key rotation: see [the caller token](/flex-platform/frontdoor/caller-token/#stacks) |
 | `frontdoor-<environment>` | Frontdoor | us-east-1 | Environment | The certificate and DNS records, the distribution, the web ACL, the CloudFront Function, the Lambda@Edge function and its role, and their other log groups |
 | `network-<environment>-<account>` | Domain | eu-west-2 | Domain account | The VPC, its subnets, NAT gateways, interface endpoints, security groups, network ACLs, DNS Firewall, and its flow and query logs: see [Network](/flex-platform/infrastructure/network/) |
 | `domainaccount-<environment>-<account>` | Domain | eu-west-2 | Domain account | What the account's domains share: see [what a domain account provides](/flex-platform/domains/hosting/#what-a-domain-account-provides) |

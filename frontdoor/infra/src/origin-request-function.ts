@@ -14,7 +14,13 @@ import {
   SIGNING_KEY_REGION,
   type TrustedIssuer,
 } from "@repo/frontdoor-shared";
-import { Duration, RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
+import {
+  ArnFormat,
+  Duration,
+  RemovalPolicy,
+  Stack,
+  Validations,
+} from "aws-cdk-lib";
 import {
   CompositePrincipal,
   Effect,
@@ -40,6 +46,7 @@ import {
   originRequestFunctionName,
   originRequestLogGroupName,
   originRequestLogsPolicyName,
+  pushIdSecretName,
   signingKeyAliasName,
   signingKeyParameterName,
 } from "./names.ts";
@@ -139,6 +146,21 @@ export class OriginRequestFunction extends Construct {
           },
         },
       }),
+      // The push ID's secret. Secrets Manager ends its ARN in six characters of its own, and
+      // encrypts it with the account's key for Secrets Manager, which needs no grant.
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["secretsmanager:GetSecretValue"],
+        resources: [
+          stack.formatArn({
+            service: "secretsmanager",
+            region: SIGNING_KEY_REGION,
+            resource: "secret",
+            resourceName: `${pushIdSecretName(environment)}-??????`,
+            arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+          }),
+        ],
+      }),
       ...(apis.length === 0
         ? []
         : [
@@ -191,6 +213,7 @@ export class OriginRequestFunction extends Construct {
           routes: props.routes,
           callerTokenAudience: callerTokenAudience(environment),
           signingKeyParameter: signingKeyParameterName(environment),
+          pushIdSecret: pushIdSecretName(environment),
         }),
       ),
       memorySize: ORIGIN_REQUEST_MEMORY_MB,

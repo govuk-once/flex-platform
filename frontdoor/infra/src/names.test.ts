@@ -14,6 +14,7 @@ import {
   originRequestLogGroupName,
   originRequestLogsPolicyName,
   originRequestPolicyName,
+  pushIdSecretName,
   responseHeadersPolicyName,
   signingKeyAliasName,
   signingKeyParameterName,
@@ -64,6 +65,9 @@ describe("names", () => {
     );
     expect(signingKeyParameterName("sandbox")).toBe(
       "/flex/frontdoor/sandbox/caller-token-signing-key",
+    );
+    expect(pushIdSecretName("sandbox")).toBe(
+      "frontdoor-sandbox-push-id-secret",
     );
     expect(originRequestLogGroupName("sandbox")).toBe(
       "/flex/frontdoor/sandbox/origin-request",

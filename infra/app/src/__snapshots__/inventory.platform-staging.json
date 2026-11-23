@@ -173,6 +173,14 @@
         "type": "AWS::KMS::Key"
       },
       {
+        "logicalId": "PushIdSecret95017F2B",
+        "type": "AWS::SecretsManager::Secret"
+      },
+      {
+        "logicalId": "PushIdSecretPolicyA0EB8F26",
+        "type": "AWS::SecretsManager::ResourcePolicy"
+      },
+      {
         "logicalId": "SigningKey49B95470",
         "type": "AWS::KMS::Key"
       },

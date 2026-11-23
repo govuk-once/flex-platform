@@ -98,6 +98,14 @@ export function signingKeyParameterName(environment: string): string {
   return `/flex/frontdoor/${environment}/caller-token-signing-key`;
 }
 
+/**
+ * The secret the edge derives each caller's push ID with. Secrets Manager adds six characters of
+ * its own to the ARN, so a policy names it by a pattern.
+ */
+export function pushIdSecretName(environment: string): string {
+  return `frontdoor-${environment}-push-id-secret`;
+}
+
 /** Where key rotation keeps its state. Key rotation writes it. */
 export function keyRotationStateParameterName(environment: string): string {
   return `/flex/frontdoor/${environment}/caller-token-key-state`;

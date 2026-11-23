@@ -26,9 +26,9 @@ function build(region = "us-east-1", apiAccounts = API_ACCOUNTS) {
   };
 }
 
-// The signing key's parameter, and decrypting with its key, by alias, for the caller token's
-// purpose alone.
-const SIGNING_KEY_GRANTS = [
+// The signing key's parameter, decrypting with its key, by alias, for the caller token's purpose
+// alone, and the push ID's secret, whose ARN Secrets Manager ends in six characters of its own.
+const SIGNING_GRANTS = [
   {
     Action: "ssm:GetParameter",
     Effect: "Allow",
@@ -45,6 +45,12 @@ const SIGNING_KEY_GRANTS = [
       },
       StringEquals: { "kms:EncryptionContext:purpose": "flex-caller-token" },
     },
+  },
+  {
+    Action: "secretsmanager:GetSecretValue",
+    Effect: "Allow",
+    Resource:
+      "arn:aws:secretsmanager:eu-west-2:123456789012:secret:frontdoor-sandbox-push-id-secret-??????",
   },
 ];
 
@@ -119,6 +125,7 @@ describe("OriginRequestFunction", () => {
         routes: ROUTES,
         callerTokenAudience: "flex:sandbox:gateways",
         signingKeyParameter: "/flex/frontdoor/sandbox/caller-token-signing-key",
+        pushIdSecret: "frontdoor-sandbox-push-id-secret",
       }),
     );
   });
@@ -154,7 +161,7 @@ describe("OriginRequestFunction", () => {
           PolicyName: "Edge",
           PolicyDocument: {
             Statement: [
-              ...SIGNING_KEY_GRANTS,
+              ...SIGNING_GRANTS,
               {
                 Action: "execute-api:Invoke",
                 Effect: "Allow",
@@ -172,12 +179,12 @@ describe("OriginRequestFunction", () => {
     );
   });
 
-  it("can call no API when the environment has no domain accounts, but still reads its signing key", () => {
+  it("can call no API when the environment has no domain accounts, but still reads its signing key and the push ID's secret", () => {
     build("us-east-1", []).template.hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
           PolicyName: "Edge",
-          PolicyDocument: { Statement: SIGNING_KEY_GRANTS },
+          PolicyDocument: { Statement: SIGNING_GRANTS },
         },
       ],
     });

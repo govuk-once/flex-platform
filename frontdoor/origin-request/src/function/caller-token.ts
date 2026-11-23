@@ -18,6 +18,8 @@ import {
   type SigningKey,
 } from "@repo/frontdoor-shared";
 
+import type { DerivePushId } from "./push-id.ts";
+
 /** How long the edge signs with the keys it holds before reading them again. */
 export const SIGNING_KEY_REFRESH_MS = 5 * 60 * 1000;
 
@@ -160,6 +162,8 @@ export type SignCallerToken = (claims: CallerTokenClaims) => Promise<string>;
 
 export interface CallerTokenSignerOptions {
   readonly loadKey: LoadSigningKey;
+  /** The caller's push ID, which every token holds: without one, nothing is signed. */
+  readonly derivePushId: DerivePushId;
   /** The gateways the token is for, which each checks. */
   readonly audience: string;
   readonly now?: () => number;
@@ -180,11 +184,16 @@ export function createCallerTokenSigner(
 ): SignCallerToken {
   const now = options.now ?? Date.now;
   return async ({ pairwiseId, jti }) => {
-    const { kid, key } = await options.loadKey();
+    // Together, so a cold start waits for the slower of the two reads, not for both.
+    const [{ kid, key }, pushId] = await Promise.all([
+      options.loadKey(),
+      options.derivePushId(pairwiseId),
+    ]);
     const iat = Math.floor(now() / 1000);
     const input = `${base64url({ alg: "EdDSA", typ: "JWT", kid })}.${base64url({
       pairwiseId,
       service: CALLER_SERVICE,
+      pushId,
       aud: options.audience,
       iat,
       exp: iat + CALLER_TOKEN_TTL_SECONDS,

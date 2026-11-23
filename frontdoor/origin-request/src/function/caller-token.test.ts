@@ -234,9 +234,15 @@ describe("createCallerTokenSigner", () => {
     return JSON.parse(Buffer.from(segment, "base64url").toString());
   }
 
+  const loadKey = () => Promise.resolve({ kid: KEY.kid, key: KEY.privateKey });
+
   it("signs the caller's values with EdDSA, for a minute, for the gateways", async () => {
+    const derivePushId = vi.fn((pairwiseId: string) =>
+      Promise.resolve(`push-id-of-${pairwiseId}`),
+    );
     const sign = createCallerTokenSigner({
-      loadKey: () => Promise.resolve({ kid: KEY.kid, key: KEY.privateKey }),
+      loadKey,
+      derivePushId,
       audience: "flex:sandbox:gateways",
       now: () => NOW,
     });
@@ -247,6 +253,7 @@ describe("createCallerTokenSigner", () => {
     expect(decode(payload)).toEqual({
       pairwiseId: "pairwise-id",
       service: "app",
+      pushId: "push-id-of-pairwise-id",
       aud: "flex:sandbox:gateways",
       iat: NOW / 1000,
       exp: NOW / 1000 + 60,
@@ -260,5 +267,29 @@ describe("createCallerTokenSigner", () => {
         Buffer.from(signature, "base64url"),
       ),
     ).toBe(true);
+  });
+
+  it("signs nothing without the caller's push ID", async () => {
+    const sign = createCallerTokenSigner({
+      loadKey,
+      derivePushId: () => Promise.reject(new Error("no push ID secret")),
+      audience: "flex:sandbox:gateways",
+      now: () => NOW,
+    });
+    await expect(
+      sign({ pairwiseId: "pairwise-id", jti: "request-id" }),
+    ).rejects.toThrow("no push ID secret");
+  });
+
+  it("signs nothing without a key, though it has the push ID", async () => {
+    const sign = createCallerTokenSigner({
+      loadKey: () => Promise.reject(new Error("no signing key")),
+      derivePushId: () => Promise.resolve("push-id"),
+      audience: "flex:sandbox:gateways",
+      now: () => NOW,
+    });
+    await expect(
+      sign({ pairwiseId: "pairwise-id", jti: "request-id" }),
+    ).rejects.toThrow("no signing key");
   });
 });

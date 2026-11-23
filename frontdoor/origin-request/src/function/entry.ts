@@ -1,6 +1,7 @@
 // What Lambda@Edge runs. Only the build bundles this module: it replaces ORIGIN_REQUEST_CONFIG
 // with an environment's config, because Lambda@Edge has no environment variables of its own.
 import { KMSClient } from "@aws-sdk/client-kms";
+import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 
@@ -9,13 +10,14 @@ import {
   createSigningKeyLoader,
 } from "./caller-token.ts";
 import { createOriginRequestHandler } from "./origin-request.ts";
+import { createPushIdDeriver } from "./push-id.ts";
 import { createRequestSigner, credentialsFromEnvironment } from "./sign.ts";
 import { createTokenVerifier } from "./token.ts";
 import type { OriginRequestConfig } from "./types.ts";
 
 declare const ORIGIN_REQUEST_CONFIG: OriginRequestConfig;
 
-// One attempt per call: the loader waits before reading again, and keeps the keys it has meanwhile,
+// One attempt per call: each loader waits before reading again, and keeps what it has meanwhile,
 // so a retry here would only spend the request's time.
 const SIGNING_REGION_CLIENT = {
   region: SIGNING_KEY_REGION,
@@ -33,6 +35,10 @@ export const handler = createOriginRequestHandler({
       ssm: new SSMClient(SIGNING_REGION_CLIENT),
       kms: new KMSClient(SIGNING_REGION_CLIENT),
       parameterName: ORIGIN_REQUEST_CONFIG.signingKeyParameter,
+    }),
+    derivePushId: createPushIdDeriver({
+      secrets: new SecretsManagerClient(SIGNING_REGION_CLIENT),
+      secretId: ORIGIN_REQUEST_CONFIG.pushIdSecret,
     }),
   }),
 });

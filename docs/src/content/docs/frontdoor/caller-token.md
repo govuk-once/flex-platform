@@ -1,6 +1,6 @@
 ---
 title: The caller token
-description: The token that says who a request is for, how the edge signs it, how gateways verify it, and how key rotation makes, schedules, publishes and removes its keys.
+description: The token that says who a request is for, how the edge signs it and derives the push ID it holds, how gateways verify it, and how key rotation makes, schedules, publishes and removes its keys.
 ---
 
 The caller token is the platform's statement of who a request is for. Lambda@Edge signs it and
@@ -18,6 +18,7 @@ A compact JWS, signed with EdDSA over Ed25519:
 | Header | `alg: "EdDSA"`, `typ: "JWT"`, and `kid`, the [key](#keys) it was signed with |
 | `pairwiseId` | The verified access token's `username` |
 | `service` | The service the caller uses, whose namespace `pairwiseId` is in: One Login gives each service its own pairwise IDs. `"app"`, the one service the Frontdoor serves |
+| `pushId` | The ID the caller's notifications are pushed to, [derived](#the-push-id) from `pairwiseId` |
 | `aud` | `flex:<environment>:gateways`, the environment's gateways |
 | `iat`, `exp` | When it was signed, and a minute later |
 | `jti` | CloudFront's ID for the request, so each gateway call traces to the request that made it |
@@ -47,6 +48,26 @@ gateway refuses what it signs.
 With no key that has started, the request is the 500, and the next read waits 30 seconds too, so
 SSM isn't asked again by every request while it can't be reached. Requests that arrive while a read
 is under way share it.
+
+## The push ID
+
+`pushId` is `base64url(HMAC-SHA256(pairwiseId))`, keyed with a secret that only the edge reads. The
+same user has the same push ID in every token, and nobody without the secret can turn one ID into
+the other.
+
+The secret is `frontdoor-<environment>-push-id-secret`, in Secrets Manager in the frontdoor account
+in eu-west-2. Its stack creates it empty, and a person puts its value, as text. The edge keys the
+HMAC with every character of that text, never parsed and never trimmed. Until it has a value, every
+request with a valid token is the edge's 500. A new value changes every user's push ID, so it is
+put once and never rotated. The secret's own policy refuses a read by anything but the edge's
+role, whatever else allows it.
+
+Lambda@Edge reads the secret from eu-west-2, wherever the copy runs, while it loads its signing
+keys. The call is signed with the function's own role and has 1.5 seconds. A copy reads it once,
+and keeps it for as long as it runs, since the value never changes. While a read fails, or finds
+the secret without a value, the request is the 500: no token is signed without the claim. The
+read isn't tried again for 30 seconds, so a copy starts signing within 30 seconds of a person
+putting the value. Requests that arrive while a read is under way share it.
 
 ## Verifying
 
@@ -259,8 +280,9 @@ It logs each key it makes, with when it starts, and each it removes or revokes, 
 
 One stack, `frontdoor-<environment>-caller-token-keys`, in the frontdoor account in eu-west-2,
 holds the signing key and its alias, the [public keys' bucket](#the-public-keys-bucket) and its
-policy, and key rotation's function, role, log group, schedule and alarm. It is protected from
-deletion, and the key and the bucket are retained.
+policy, the [push ID's secret](#the-push-id) and its policy, and key rotation's function, role,
+log group, schedule and alarm. It is protected from deletion, and the key, the bucket and the
+secret are retained.
 
 A gateway's stack doesn't depend on it: a gateway finds the bucket by name, and reads it only when
 called.
