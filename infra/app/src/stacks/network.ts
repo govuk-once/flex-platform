@@ -14,6 +14,7 @@ import {
   NetworkVpc,
   networkZones,
   type Placement,
+  type PrivateApiAccess,
   WorkloadSecurityGroup,
 } from "@repo/infra-constructs";
 import { sortedNames } from "@repo/utils/sorted-names";
@@ -44,6 +45,8 @@ interface Workload {
 
 // What runs in the network, and the endpoints each may reach: a domain's to invoke gateways, a
 // gateway's to read its secret, assume an upstream's role and read the caller token's public keys.
+// An isolated gateway has no other way out, so it reaches an upstream's private API through
+// `execute-api` too.
 const WORKLOADS: readonly Workload[] = [
   {
     id: "DomainWorkload",
@@ -55,7 +58,12 @@ const WORKLOADS: readonly Workload[] = [
     id: "IsolatedGatewayWorkload",
     workload: "isolated-gateway",
     placement: "isolated",
-    reaches: ({ secretsManager, sts, s3 }) => [secretsManager, sts, s3],
+    reaches: ({ secretsManager, sts, s3, executeApi }) => [
+      secretsManager,
+      sts,
+      s3,
+      executeApi,
+    ],
   },
   {
     id: "PrivateGatewayWorkload",
@@ -64,6 +72,32 @@ const WORKLOADS: readonly Workload[] = [
     reaches: ({ secretsManager, sts, s3 }) => [secretsManager, sts, s3],
   },
 ];
+
+// Every private API the account's gateways call, as a principal of the account of a role one of
+// them signs as. Which role a gateway signs as is held by its own role, which may assume only those
+// it names in roleArns.
+function privateApiAccess(
+  gateways: DomainAccountConfig["gateways"],
+): PrivateApiAccess {
+  const calling = gateways.filter(
+    ({ privateApiArns }) => privateApiArns.length > 0,
+  );
+  return {
+    apiArns: sortedNames(new Set(calling.flatMap((g) => g.privateApiArns))),
+    callerAccounts: sortedNames(
+      new Set(calling.flatMap((g) => g.roleArns.map(accountOf))),
+    ),
+  };
+}
+
+// A role's ARN, arn:aws:iam::<account>:role/<name>, which config has already checked.
+function accountOf(roleArn: string): string {
+  const account = roleArn.split(":")[4];
+  if (account === undefined || account === "") {
+    throw new Error(`The role ARN ${roleArn} names no account.`);
+  }
+  return account;
+}
 
 interface NetworkStackProps {
   readonly environment: EnvironmentConfig;
@@ -130,6 +164,7 @@ export class NetworkStack extends Stack {
         new Set(domainAccount.gateways.flatMap(({ roleArns }) => roleArns)),
       ),
       gatewayRoles: gatewayRolePattern(environment.name),
+      invokableApis: privateApiAccess(domainAccount.gateways),
     });
     // The names the SDK calls the endpoints at, and every name the account's gateways resolve.
     const { gateways } = domainAccount;
@@ -161,14 +196,20 @@ export class NetworkStack extends Stack {
       endpoints: endpoints.byService,
     });
 
-    // The one value nothing can derive, and the one upstreams need: the address a private
-    // gateway's requests come from.
+    // The values nothing can derive, and the ones upstreams need: the address a private
+    // gateway's requests come from, and the endpoint an isolated gateway's calls to a private API
+    // come through, which that API's policy names.
     for (const zone of zones) {
       new CfnOutput(this, `NatAddress-${zone}`, {
         description: `The address requests leave ${zone} from`,
         value: natAddresses.address(zone).publicIp,
       });
     }
+    new CfnOutput(this, "ExecuteApiEndpointId", {
+      description:
+        "The endpoint calls to an upstream's private API come through",
+      value: endpoints.executeApi.vpcEndpointId,
+    });
   }
 
   // The zones config names. Otherwise CDK would look the account's up at synth.

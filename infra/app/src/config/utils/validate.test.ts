@@ -6,6 +6,7 @@ import {
   FIXTURE_STAGES,
   FRONTDOOR,
   OWN_SECRET_GATEWAY,
+  PRIVATE_API_GATEWAY,
   REPOSITORY,
   shared,
   TEST_USERS,
@@ -912,6 +913,121 @@ describe("validateStages", () => {
           ]),
         ]),
       ).toThrow("udp gateway: a role ARN is listed more than once");
+    });
+
+    it("accepts an isolated gateway that calls a private API as a role it names, at the API's own name", () => {
+      expect(() =>
+        validateStages([withGateways([PRIVATE_API_GATEWAY])]),
+      ).not.toThrow();
+    });
+
+    it.each([
+      [
+        "arn:aws:execute-api:eu-west-2:200000000001:a1b2c3d4e5/dev/GET/v1",
+        "with a stage and path",
+      ],
+      ["arn:aws:execute-api:eu-west-2:200000000001:*", "with a wildcard"],
+      [
+        "arn:aws:execute-api:eu-west-1:200000000001:a1b2c3d4e5",
+        "in another region",
+      ],
+      ["a1b2c3d4e5", "by its ID alone"],
+    ])("refuses the private API ARN %j, %s", (arn) => {
+      expect(() =>
+        validateStages([
+          withGateways([{ ...PRIVATE_API_GATEWAY, privateApiArns: [arn] }]),
+        ]),
+      ).toThrow(
+        `udp gateway: ${JSON.stringify(arn)} is not a private API's ARN in eu-west-2`,
+      );
+    });
+
+    it("refuses a private API listed twice", () => {
+      expect(() =>
+        validateStages([
+          withGateways([
+            {
+              ...PRIVATE_API_GATEWAY,
+              privateApiArns: [
+                ...PRIVATE_API_GATEWAY.privateApiArns,
+                ...PRIVATE_API_GATEWAY.privateApiArns,
+              ],
+            },
+          ]),
+        ]),
+      ).toThrow("udp gateway: a private API's ARN is listed more than once");
+    });
+
+    it("refuses a private API whose name the gateway couldn't resolve", () => {
+      expect(() =>
+        validateStages([
+          withGateways([
+            { ...PRIVATE_API_GATEWAY, hostnames: ["api.udp.example"] },
+          ]),
+        ]),
+      ).toThrow(
+        "udp gateway: it calls the private API a1b2c3d4e5, so its hostnames must list a1b2c3d4e5.execute-api.eu-west-2.amazonaws.com",
+      );
+    });
+
+    it("finds a private API's name however its hostname is written", () => {
+      expect(() =>
+        validateStages([
+          withGateways([
+            {
+              ...PRIVATE_API_GATEWAY,
+              hostnames: ["A1B2C3D4E5.execute-api.eu-west-2.amazonaws.com."],
+            },
+          ]),
+        ]),
+      ).not.toThrow();
+    });
+
+    it("refuses a private API on a gateway that leaves through NAT, which never reaches the endpoint", () => {
+      expect(() =>
+        validateStages([
+          withGateways([{ ...PRIVATE_API_GATEWAY, placement: "private" }]),
+        ]),
+      ).toThrow(
+        "udp gateway: it calls a private API, which only an isolated gateway reaches",
+      );
+    });
+
+    it("refuses a private API with no role to call it as, which the endpoint would refuse", () => {
+      expect(() =>
+        validateStages([
+          withGateways([{ ...PRIVATE_API_GATEWAY, roleArns: [] }]),
+        ]),
+      ).toThrow(
+        "udp gateway: it calls a private API, which is reached only as a role it names in roleArns",
+      );
+    });
+
+    it.each(["private", "isolated"] as const)(
+      "refuses a %s gateway naming an API Gateway hostname that is no private API of its own, which the endpoint answers for and refuses",
+      (placement) => {
+        const hostname = "z9y8x7w6v5.execute-api.eu-west-2.amazonaws.com";
+        expect(() =>
+          validateStages([
+            withGateways([{ ...UDP, placement, hostnames: [hostname] }]),
+          ]),
+        ).toThrow(
+          `udp gateway: ${JSON.stringify(hostname)} resolves to the network's execute-api endpoint, which reaches only the private APIs named in privateApiArns. A public API is called at its custom domain name`,
+        );
+      },
+    );
+
+    it("accepts an API Gateway hostname in another region, which the endpoint doesn't answer for", () => {
+      expect(() =>
+        validateStages([
+          withGateways([
+            {
+              ...UDP,
+              hostnames: ["z9y8x7w6v5.execute-api.eu-west-1.amazonaws.com"],
+            },
+          ]),
+        ]),
+      ).not.toThrow();
     });
 
     it("refuses an empty target, which would read as none", () => {

@@ -56,6 +56,13 @@ export interface GatewayConfig {
   readonly target: string | null;
   /** The roles it assumes to sign as, by ARN, such as an upstream's for `sigV4`. */
   readonly roleArns: readonly string[];
+  /**
+   * The private API Gateway APIs it calls, each by ARN with no stage or path, such as
+   * `arn:aws:execute-api:eu-west-2:111122223333:a1b2c3d4e5`. An `isolated` gateway reaches one
+   * through the network's `execute-api` endpoint, signing as one of `roleArns`. Empty for an
+   * upstream that isn't one.
+   */
+  readonly privateApiArns: readonly string[];
 }
 
 export interface UpstreamSecretConfig {

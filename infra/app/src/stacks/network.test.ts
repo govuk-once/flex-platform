@@ -5,6 +5,7 @@ import { assert, describe, expect, it } from "vitest";
 import {
   FIXTURE_STAGES,
   OWN_SECRET_GATEWAY,
+  PRIVATE_API_GATEWAY,
   synthesizedStage,
   UDP,
 } from "../../test/helpers.ts";
@@ -139,6 +140,110 @@ describe("NetworkStack", () => {
     });
   });
 
+  it("lets a principal of an upstream's account, and nothing else, invoke its private API through the execute-api endpoint, which only isolated gateways reach", () => {
+    const [main] = PROD_ENVIRONMENT.domainAccounts;
+    const stack = new NetworkStack(cdkAppForTest(), {
+      environment: PROD_ENVIRONMENT,
+      domainAccount: { ...main, gateways: [PRIVATE_API_GATEWAY] },
+    });
+    const withPrivateApi = Template.fromStack(stack);
+
+    withPrivateApi.hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.execute-api",
+      PolicyDocument: {
+        Statement: [
+          {
+            Effect: "Allow",
+            Action: "execute-api:Invoke",
+            Resource: `${PRIVATE_API_GATEWAY.privateApiArns[0]}/*`,
+            Condition: {
+              StringEquals: { "aws:PrincipalAccount": ["200000000001"] },
+            },
+          },
+        ],
+      },
+    });
+    withPrivateApi.hasResourceProperties(
+      "AWS::Route53Resolver::FirewallDomainList",
+      { Domains: Match.arrayWith([PRIVATE_API_GATEWAY.hostnames[0]]) },
+    );
+    // One rule into the endpoint's group, from the isolated gateways' group.
+    const into = withPrivateApi.findResources(
+      "AWS::EC2::SecurityGroupIngress",
+      {
+        Properties: {
+          GroupId: {
+            "Fn::GetAtt": [
+              Match.stringLikeRegexp("^EndpointsExecuteApiSecurityGroup"),
+              "GroupId",
+            ],
+          },
+        },
+      },
+    );
+    expect(
+      Object.values(into).map(
+        (rule) =>
+          (rule as { Properties: { Description: string } }).Properties
+            .Description,
+      ),
+    ).toEqual(["HTTPS from isolated-gateway workloads"]);
+  });
+
+  it("names every gateway's private APIs in one statement, with each upstream's account once", () => {
+    const [main] = PROD_ENVIRONMENT.domainAccounts;
+    const sameUpstream = {
+      ...PRIVATE_API_GATEWAY,
+      id: "udp-other",
+      hostnames: ["f6g7h8i9j0.execute-api.eu-west-2.amazonaws.com"],
+      privateApiArns: ["arn:aws:execute-api:eu-west-2:200000000001:f6g7h8i9j0"],
+    };
+    const otherUpstream = {
+      ...PRIVATE_API_GATEWAY,
+      id: "uns",
+      hostnames: ["k1l2m3n4o5.execute-api.eu-west-2.amazonaws.com"],
+      roleArns: ["arn:aws:iam::300000000001:role/uns-consumer"],
+      privateApiArns: ["arn:aws:execute-api:eu-west-2:300000000001:k1l2m3n4o5"],
+    };
+    const stack = new NetworkStack(cdkAppForTest(), {
+      environment: PROD_ENVIRONMENT,
+      domainAccount: {
+        ...main,
+        gateways: [otherUpstream, PRIVATE_API_GATEWAY, sameUpstream],
+      },
+    });
+
+    Template.fromStack(stack).hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.execute-api",
+      PolicyDocument: {
+        Statement: [
+          {
+            Action: "execute-api:Invoke",
+            Resource: [
+              "arn:aws:execute-api:eu-west-2:200000000001:a1b2c3d4e5/*",
+              "arn:aws:execute-api:eu-west-2:200000000001:f6g7h8i9j0/*",
+              "arn:aws:execute-api:eu-west-2:300000000001:k1l2m3n4o5/*",
+            ],
+            Condition: {
+              StringEquals: {
+                "aws:PrincipalAccount": ["200000000001", "300000000001"],
+              },
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  it("refuses everything through the execute-api endpoint when no gateway calls a private API", () => {
+    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.execute-api",
+      PolicyDocument: {
+        Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }],
+      },
+    });
+  });
+
   it("lets gateways read only the caller token's public keys through the s3 endpoint, and resolve the bucket's name", () => {
     const bucket = `frontdoor-prod-keys-${PROD_ENVIRONMENT.frontdoor.account}`;
     template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
@@ -166,7 +271,13 @@ describe("NetworkStack", () => {
   });
 
   it("writes each endpoint's ID, for policies that hold a call to it", () => {
-    for (const service of ["lambda", "s3", "secretsmanager", "sts"]) {
+    for (const service of [
+      "execute-api",
+      "lambda",
+      "s3",
+      "secretsmanager",
+      "sts",
+    ]) {
       template().hasResourceProperties("AWS::SSM::Parameter", {
         Name: `/flex/network/prod/endpoint/${service}`,
       });
@@ -181,10 +292,11 @@ describe("NetworkStack", () => {
     }
   });
 
-  it("outputs each zone's NAT address, for upstreams to allowlist", () => {
+  it("outputs each zone's NAT address, for upstreams to allowlist, and the endpoint a private API lets in", () => {
     const outputs = template().findOutputs("*");
 
     expect(Object.keys(outputs).sort()).toEqual([
+      "ExecuteApiEndpointId",
       expect.stringMatching(/^NatAddresseuwest2a/),
       expect.stringMatching(/^NatAddresseuwest2b/),
       expect.stringMatching(/^NatAddresseuwest2c/),
