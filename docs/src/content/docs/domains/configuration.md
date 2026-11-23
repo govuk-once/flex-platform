@@ -8,6 +8,13 @@ A domain declares its name and routes in `src/domain.ts`, with `defineDomain` fr
 checks it as it loads. The platform reads nothing from it, and sets the
 [function's settings](/flex-platform/domains/hosting/#the-domains-function) itself.
 
+:::caution[Planned]
+The SDK checks a domain's configuration and types its handlers, and nothing more so far. Serving a
+request is planned: routing it, holding its `params`, `query` and `body` to the route's schemas,
+calling the handler and sending its response. Until then, no request is held to a schema this
+page describes.
+:::
+
 ## An example
 
 ```ts
@@ -127,10 +134,10 @@ export const getTodo: Handler<"GET /v1/todos/{id}"> = ({ params }) => {
 };
 ```
 
-Its context holds the `params`, `query` and `body` its route declares, each typed by its schema's
-output. It answers with one of the route's `responses` as `{ status, body }`, a failure the same
-way as a success, and may be `async`. On any route it may also answer with a 500, 502, 503 or
-504, which has no body of the handler's.
+The type gives a handler a context of the `params`, `query` and `body` its route declares, each
+typed by its schema's output. It returns one of the route's `responses` as `{ status, body }`, a
+failure the same way as a success, and may be `async`. On any route it may also return a 500,
+502, 503 or 504, with no body.
 
 The SDK exports a function for each common failure, which returns the response written out:
 `notFound()` is `{ status: 404 }`, and `notFound(body)` is `{ status: 404, body }`.
