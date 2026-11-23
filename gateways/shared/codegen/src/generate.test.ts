@@ -77,6 +77,7 @@ function callerToken(): string {
     {
       pairwiseId: "pairwise-id",
       service: "app",
+      pushId: "push-id",
       aud: TOKEN_AUDIENCE,
       iat,
       exp: iat + 60,

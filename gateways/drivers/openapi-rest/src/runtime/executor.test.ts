@@ -1293,7 +1293,11 @@ describe("through the runtime handler", () => {
       execute,
       verifyCallerToken: () =>
         Promise.resolve({
-          claims: { pairwiseId: "pairwise-id", service: "app" },
+          claims: {
+            pairwiseId: "pairwise-id",
+            service: "app",
+            pushId: "push-id",
+          },
           tokenId: "request-id",
         }),
     });

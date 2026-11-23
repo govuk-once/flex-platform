@@ -17,6 +17,13 @@ export const FOR_CALLER = {
   requestingServiceUserId: "pairwiseId",
 } as const;
 
+// The same, for the write of a user's notification preferences, which also holds the ID their
+// notifications are pushed to. That is held to the token's too.
+export const FOR_CALLER_WITH_PUSH_ID = {
+  ...FOR_CALLER,
+  "payload.data.pushId": "pushId",
+} as const;
+
 // The same, for an operation that names the user by `identifier` under `serviceName`.
 export const FOR_CALLER_BY_IDENTIFIER = {
   serviceName: "service",
