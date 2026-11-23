@@ -13,6 +13,7 @@ import {
   type SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 import { backingOff } from "@repo/utils/backing-off";
+import { keptWhile } from "@repo/utils/kept-while";
 
 /**
  * After a read that fails, or finds the secret without a value, how long the edge waits before
@@ -52,17 +53,11 @@ export function createPushIdDeriver(options: PushIdOptions): DerivePushId {
     { fetch: (secretId: string) => read(options.secrets, secretId) },
     PUSH_ID_SECRET_RETRY_MS,
   );
-  let held: string | undefined;
-  let inFlight: Promise<string> | undefined;
-
-  async function secret(): Promise<string> {
-    if (held !== undefined) return held;
-    inFlight ??= secrets.fetch(options.secretId).finally(() => {
-      inFlight = undefined;
-    });
-    held = await inFlight;
-    return held;
-  }
+  // Kept for as long as the copy runs: the value never changes.
+  const secret = keptWhile(
+    () => secrets.fetch(options.secretId),
+    () => true,
+  );
 
   return async (pairwiseId) => pushIdFor(pairwiseId, await secret());
 }

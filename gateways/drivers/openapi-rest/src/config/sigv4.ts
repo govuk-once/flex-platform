@@ -1,5 +1,6 @@
 import { fromTemporaryCredentials } from "@aws-sdk/credential-providers";
 import { GatewayError } from "@repo/gateway-runtime";
+import { keptWhile } from "@repo/utils/kept-while";
 import { Hash } from "@smithy/hash-node";
 import { SignatureV4 } from "@smithy/signature-v4";
 
@@ -99,26 +100,12 @@ const RENEW_BEFORE_MS = 5 * 60 * 1000;
 function heldCredentials(
   assume: () => Promise<Credentials>,
 ): () => Promise<Credentials> {
-  let held: Credentials | undefined;
-  let pending: Promise<Credentials> | undefined;
-  return () => {
-    const expiry = held?.expiration?.getTime();
-    if (
-      held !== undefined &&
-      (expiry === undefined || expiry - Date.now() > RENEW_BEFORE_MS)
-    ) {
-      return Promise.resolve(held);
-    }
-    pending ??= assume()
-      .then((credentials) => {
-        held = credentials;
-        return credentials;
-      })
-      .finally(() => {
-        pending = undefined;
-      });
-    return pending;
-  };
+  return keptWhile(
+    assume,
+    ({ expiration }) =>
+      expiration === undefined ||
+      expiration.getTime() - Date.now() > RENEW_BEFORE_MS,
+  );
 }
 
 // The header a payload hash is written in. The signer takes the value already on a request as
