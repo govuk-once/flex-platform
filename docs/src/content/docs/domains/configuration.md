@@ -61,6 +61,10 @@ The path is what the domain's function sees, after the Frontdoor
 [removes the domain's segment](/flex-platform/frontdoor/lambda-edge/#routing). Two keys that differ
 only in a parameter's name, such as `{id}` and `{todoId}`, are the same route, and are refused.
 
+Two routes can match one request, such as `GET /v1/todos/{id}` and `GET /v1/todos/archived`, and
+both are accepted. Routing a request is planned. The route with a literal segment will take it
+over the one with a parameter, at the first segment where the two keys differ.
+
 ## Routes
 
 | Field | Required | Rule |

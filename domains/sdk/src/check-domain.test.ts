@@ -28,6 +28,20 @@ describe("checkDomain", () => {
     expect(problemsOf(domain)).toEqual([]);
   });
 
+  // Both match a request for /v1/todos/archived. They are two routes, and which one takes the
+  // request is routing's rule: the literal segment beats the parameter.
+  it("accepts a literal segment where another route has a parameter", () => {
+    expect(
+      problemsOf({
+        name: "domain-a",
+        routes: {
+          "GET /v1/todos/{id}": GET_ROUTE,
+          "GET /v1/todos/archived": LIST_ROUTE,
+        },
+      }),
+    ).toEqual([]);
+  });
+
   it.each<[string, unknown, readonly string[]]>([
     [
       "keys for the same method and path",
