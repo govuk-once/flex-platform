@@ -167,31 +167,41 @@ deploy is put right by deploying it again or a newer commit, never an older one.
 
 ## Config
 
-`infra/app/src/config/stages.ts` holds every stage's values, typed as `StageConfig`, and is
-committed to this repository. Every field is required, so every difference between stages is
-written out side by side. A value is in config whenever it can be known before deploy. A secret
-never is: config names a secret, never holds one.
+Every stage's values are committed to this repository, under `infra/app/src/config/`, typed as
+`StageConfig` in `types.ts`. Every field is required, so every difference between stages is
+written out. A value is in config whenever it can be known before deploy. A secret never is:
+config names a secret, never holds one.
+
+```
+config/
+  stages.ts                every stage and its environments, and what each domain account hosts
+  types.ts                 StageConfig and the types within it
+  zones.ts                 every account's hosted zone, each named for the zone
+  user-pools.ts            every Cognito user pool, with the app clients trusted in it
+  domains.ts               every domain, once, with the repository that releases it
+  utils/                   what reads config: choosing a stage and target, and checking it
+```
 
 ```ts
-StageConfig         { name, shared: { account, zone, testUsers },
-                      domains: [{ name, repository: { name, id, ownerId } | null }], environments }
+StageConfig         { name, shared: { account, zone }, environments }
 EnvironmentConfig   { name, release: "publish" | { promoteFrom },
-                      frontdoor: { account, zone, issuers, testUsers }, domainAccounts }
-DomainAccountConfig { name, account, domains: [name | { name, disabled: true }], zone,
+                      frontdoor: { account, zone, issuers, testUserIssuer }, domainAccounts }
+DomainAccountConfig { name, account, domains: [DomainConfig & { disabled?: true }], zone,
                       network: { availabilityZones }, gateways }
+DomainConfig        { name, repository: { name, id, ownerId } | null }
 GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
 ```
 
 - A domain account's `name` goes into its stacks' and resources' names. Every stage names its
   first `domain00`, which leaves room for more domain accounts in an environment.
-- `domains` lists the domains a domain account hosts in the environment, each by its name, or
-  as `{ name, disabled: true }` when it is disabled. See
+- `domains` lists the domains a domain account hosts in the environment, each as `domains.ts`
+  defines it, or with `disabled: true` added when it is disabled. See
   [Hosting a domain](/flex-platform/domains/hosting/).
-- A stage's own `domains` lists every domain its environments host, once each, with the GitHub
-  repository that may release it, or `null` until that repository exists. One entry serves every
-  environment, because a domain's code is uploaded once and promoted. A repository's `id` and
-  `ownerId` are GitHub's IDs for it and for its owner, in digits. A repository keeps them when it
-  is renamed or transferred, and one created later under the same name has others. Its `name`,
+- A domain is defined once, in `domains.ts`, with the GitHub repository that may release it, or
+  `null` until that repository exists. One definition serves every environment that hosts it,
+  because a domain's code is uploaded once and promoted. A repository's `id` and `ownerId` are
+  GitHub's IDs for it and for its owner, in digits. A repository keeps them when it is renamed or
+  transferred, and one created later under the same name has others. Its `name`,
   `<owner>/<repository>`, is for people to read.
 - `release` says how a domain's code reaches the environment: `"publish"`, where new code enters
   the stage, or `{ promoteFrom }`, naming the environment whose released code it takes. Only a
@@ -221,12 +231,12 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns }
 
   The secrets and roles feed the [endpoints' policies](/flex-platform/infrastructure/network/#endpoints)
   and the gateway's role exactly.
-- `shared.testUsers` is the stage's [test user pool](#test-users), as an issuer URL and its app
-  client ID, or `null` until the pool exists.
 - `issuers` lists the Cognito user pools whose access tokens the Frontdoor accepts, each as its
   issuer URL, `https://cognito-idp.<region>.amazonaws.com/<pool ID>`, and the app client IDs it
-  accepts from that pool. It never names a test user pool.
-- `frontdoor.testUsers` is `true` where the Frontdoor also accepts the stage's test users.
+  accepts from that pool. It never names a test user pool. Each pool is defined once, in
+  `user-pools.ts`.
+- `testUserIssuer` is the stage's [test user pool](#test-users), in the same form, where the
+  Frontdoor also accepts its test users, or `null`.
 
 Before building any stage, the app checks every stage's config:
 
@@ -242,19 +252,19 @@ Before building any stage, the app checks every stage's config:
   and its ID is a hosted zone ID without `/hostedzone/`. A certificate's name may be at most 64
   characters, ACM's limit, so the Frontdoor's zone name, the shared account's, and `*.` and each
   domain account's zone name, must fit within it;
-- every issuer, in `issuers` and in `shared.testUsers`, is an `https` URL naming at least one app
+- every issuer, in `issuers` and as `testUserIssuer`, is an `https` URL naming at least one app
   client;
 - no environment's `issuers` names a test user pool, its own stage's or another's;
-- an environment with `frontdoor.testUsers` is in a stage whose `shared.testUsers` is set;
+- every environment of a stage that trusts test users names the same `testUserIssuer`, and no two
+  stages name one, since each stage's pool is in its own shared account;
 - every environment trusts at least one issuer, counting the test user pool where it trusts test
   users;
 - every domain's name follows the same rule as the names above, is used once in its environment,
   across all its domain accounts, and is short enough for its execution role's name to fit IAM's
   64 characters. See [checks](/flex-platform/domains/hosting/#checks);
-- a stage's `domains` holds exactly the domains its environments host, disabled ones included,
-  each once. A domain missing from it could never be released, and one no environment hosts
-  would leave its repository named for a domain the stage no longer has. A repository's name is
-  `<owner>/<repository>`, and its IDs are digits with no leading zero;
+- a domain has one repository wherever its stage hosts it, or none anywhere, since one upload
+  goes through every environment. A repository's name is `<owner>/<repository>`, and its IDs are
+  digits with no leading zero;
 - every `promoteFrom` names another environment of its stage, the promotions lead back to an
   environment that publishes, and every domain an environment hosts is also hosted in the
   environment it is promoted from;
@@ -333,8 +343,8 @@ lets the token through like any other. Every stage has the pool, so its stacks a
 each.
 
 A test user's username is whatever its creator chose, and Lambda@Edge passes a token's username on
-as the caller's pairwise ID. So an environment trusts test users only where its config sets
-`frontdoor.testUsers`, which adds the stage's `shared.testUsers` to its issuers, and validation
+as the caller's pairwise ID. So an environment trusts test users only where its config names the
+pool as `frontdoor.testUserIssuer`, which adds it to the Frontdoor's issuers, and validation
 refuses a test user pool named in `issuers`. An environment real users reach never sets it.
 
 - **Only an administrator creates a user.** There is no sign-up, no hosted sign-in, no account
@@ -351,8 +361,8 @@ Cognito generates the pool's and the client's IDs, and the CloudFront Function a
 have their issuers built in when they are synthesized. So config can name the pool only once it
 exists. The pool is retained and protected from deletion, and the inventory snapshots hold its
 logical ID, the one change that would make CloudFormation replace it. A new stage's pool is
-created first, with `-c target=shared`, and its IDs written into `shared.testUsers` before the
-stage's first full deploy. The stack outputs both, as `TestUsersIssuer` and `TestUsersClientId`,
+created first, with `-c target=shared`, and its IDs written into `user-pools.ts`, for the
+environments that trust it to name, before the stage's first full deploy. The stack outputs both, as `TestUsersIssuer` and `TestUsersClientId`,
 and exports neither. `shared-identity` depends on nothing and nothing depends on it, so it
 never holds up an environment's deploy.
 

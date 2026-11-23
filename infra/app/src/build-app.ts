@@ -9,10 +9,9 @@ import type { App } from "aws-cdk-lib";
 import { Aspects, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
 
-import { domainName } from "./config/domain-name.ts";
-import type { Target } from "./config/select-target.ts";
-import { trustedIssuers } from "./config/trusted-issuers.ts";
 import type { StageConfig } from "./config/types.ts";
+import type { Target } from "./config/utils/select-target.ts";
+import { trustedIssuers } from "./config/utils/trusted-issuers.ts";
 import { gatewayBundle } from "./gateway-bundle.ts";
 import { DomainStack } from "./stacks/domain.ts";
 import { DomainAccountStack } from "./stacks/domain-account.ts";
@@ -60,7 +59,7 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
     const frontdoor = new FrontdoorStack(
       app,
       environment,
-      trustedIssuers(stage, environment),
+      trustedIssuers(environment),
     );
 
     frontdoor.addStackDependency(
@@ -100,7 +99,7 @@ export function buildApp(app: App, stage: StageConfig, target: Target): void {
         const domainStack = new DomainStack(app, {
           environment,
           domainAccount,
-          domain: domainName(domain),
+          domain: domain.name,
           sharedAccount: stage.shared.account,
         });
 

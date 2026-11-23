@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  domain,
   domainAccount,
   FIXTURE_STAGES,
   FRONTDOOR,
@@ -9,23 +10,21 @@ import {
   shared,
   TEST_USERS,
   UDP,
-} from "../../test/helpers.ts";
-import { domainName } from "./domain-name.ts";
+} from "../../../test/helpers.ts";
 import type {
   DomainAccountConfig,
-  DomainConfig,
   EnvironmentConfig,
   FrontdoorConfig,
+  HostedDomainConfig,
   RepositoryConfig,
   StageConfig,
-  StageDomainConfig,
   ZoneConfig,
-} from "./types.ts";
+} from "../types.ts";
 import { validateStages } from "./validate.ts";
 
 const MAIN_DOMAIN_ACCOUNT: DomainAccountConfig = {
   ...domainAccount("sandbox", "main", "100000000003"),
-  domains: ["domain-a"],
+  domains: [domain("domain-a")],
 };
 
 const ENVIRONMENT: EnvironmentConfig = {
@@ -38,7 +37,6 @@ const ENVIRONMENT: EnvironmentConfig = {
 const STAGE: StageConfig = {
   name: "platform-dev",
   shared: shared("100000000001"),
-  domains: [{ name: "domain-a", repository: null }],
   environments: [ENVIRONMENT],
 };
 
@@ -46,7 +44,6 @@ const STAGE: StageConfig = {
 const OTHER_STAGE: StageConfig = {
   name: "platform-prod",
   shared: shared("300000000001"),
-  domains: [],
   environments: [
     {
       name: "prod",
@@ -57,23 +54,10 @@ const OTHER_STAGE: StageConfig = {
   ],
 };
 
-// The domains the environments host, each once and with no repository, so a test that changes
-// what is hosted keeps the stage's own list in step with it.
-function hostedDomains(
-  environments: readonly EnvironmentConfig[],
-): StageDomainConfig[] {
-  const names = new Set(
-    environments.flatMap(({ domainAccounts }) =>
-      domainAccounts.flatMap(({ domains }) => domains.map(domainName)),
-    ),
-  );
-  return [...names].map((name) => ({ name, repository: null }));
-}
-
 function withEnvironments(
   environments: readonly EnvironmentConfig[],
 ): StageConfig {
-  return { ...STAGE, domains: hostedDomains(environments), environments };
+  return { ...STAGE, environments };
 }
 
 function withEnvironment(environment: Partial<EnvironmentConfig>): StageConfig {
@@ -278,92 +262,118 @@ describe("validateStages", () => {
   });
 
   describe("test users", () => {
-    const WITH_POOL: StageConfig = {
-      ...STAGE,
-      shared: { ...STAGE.shared, testUsers: TEST_USERS },
-    };
-
     function trusting(
       stage: StageConfig,
       frontdoor: Partial<FrontdoorConfig>,
+      environment = ENVIRONMENT.name,
     ): StageConfig {
       return {
         ...stage,
         environments: [
-          { ...ENVIRONMENT, frontdoor: { ...FRONTDOOR, ...frontdoor } },
+          {
+            ...ENVIRONMENT,
+            name: environment,
+            frontdoor: { ...FRONTDOOR, ...frontdoor },
+          },
         ],
       };
     }
 
-    it("accepts an environment that trusts its stage's test users", () => {
-      expect(() =>
-        validateStages([trusting(WITH_POOL, { testUsers: true })]),
-      ).not.toThrow();
+    const WITH_POOL = trusting(STAGE, { testUserIssuer: TEST_USERS });
+
+    it("accepts an environment that trusts test users", () => {
+      expect(() => validateStages([WITH_POOL])).not.toThrow();
     });
 
     it("accepts an environment that trusts test users alone", () => {
       expect(() =>
-        validateStages([trusting(WITH_POOL, { issuers: [], testUsers: true })]),
+        validateStages([
+          trusting(STAGE, { issuers: [], testUserIssuer: TEST_USERS }),
+        ]),
       ).not.toThrow();
     });
 
-    it("holds a stage's test user pool to the rule every issuer is held to", () => {
+    it("holds a test user issuer to the rule every issuer is held to", () => {
       const http = { ...TEST_USERS, issuer: "http://example" };
       expect(() =>
-        validateStages([
-          { ...STAGE, shared: { ...STAGE.shared, testUsers: http } },
-        ]),
+        validateStages([trusting(STAGE, { testUserIssuer: http })]),
       ).toThrow(
-        'platform-dev shared test users: the issuer "http://example" must be an https URL',
+        'platform-dev/sandbox test user issuer: the issuer "http://example" must be an https URL',
       );
 
       const noClient = { ...TEST_USERS, clientIds: [] };
       expect(() =>
-        validateStages([
-          { ...STAGE, shared: { ...STAGE.shared, testUsers: noClient } },
-        ]),
+        validateStages([trusting(STAGE, { testUserIssuer: noClient })]),
       ).toThrow(
-        `platform-dev shared test users: the issuer ${TEST_USERS.issuer} names no app client`,
+        `platform-dev/sandbox test user issuer: the issuer ${TEST_USERS.issuer} names no app client`,
       );
     });
 
-    it("refuses its stage's test user pool in an environment's issuers", () => {
+    it("refuses a test user pool in an environment's issuers, its own stage's or another's", () => {
+      const asIssuer = { issuers: [...FRONTDOOR.issuers, TEST_USERS] };
       expect(() =>
         validateStages([
-          trusting(WITH_POOL, { issuers: [...FRONTDOOR.issuers, TEST_USERS] }),
+          {
+            ...STAGE,
+            environments: [
+              ...WITH_POOL.environments,
+              {
+                ...ENVIRONMENT,
+                name: "other",
+                frontdoor: { ...FRONTDOOR, ...asIssuer },
+              },
+            ],
+          },
         ]),
       ).toThrow(
-        `platform-dev/sandbox: the issuer ${TEST_USERS.issuer} is a test user pool, which an environment trusts only through frontdoor.testUsers`,
+        `platform-dev/other: the issuer ${TEST_USERS.issuer} is a test user pool, which an environment trusts only as its frontdoor.testUserIssuer`,
       );
-    });
-
-    it("refuses another stage's test user pool in an environment's issuers", () => {
-      const other: StageConfig = {
-        ...OTHER_STAGE,
-        shared: { ...OTHER_STAGE.shared, testUsers: TEST_USERS },
-      };
       expect(() =>
         validateStages([
-          trusting(STAGE, { issuers: [...FRONTDOOR.issuers, TEST_USERS] }),
-          other,
+          trusting(STAGE, asIssuer),
+          trusting(OTHER_STAGE, { testUserIssuer: TEST_USERS }, "prod"),
         ]),
       ).toThrow(
         `platform-dev/sandbox: the issuer ${TEST_USERS.issuer} is a test user pool`,
       );
     });
 
-    it("refuses trust in test users where the stage has no pool", () => {
+    // A stage has one pool, in its shared account.
+    it("refuses two test user pools in one stage", () => {
+      const another = { ...TEST_USERS, issuer: `${TEST_USERS.issuer}2` };
       expect(() =>
-        validateStages([trusting(STAGE, { testUsers: true })]),
+        validateStages([
+          {
+            ...STAGE,
+            environments: [
+              ...WITH_POOL.environments,
+              {
+                ...ENVIRONMENT,
+                name: "other",
+                frontdoor: { ...FRONTDOOR, testUserIssuer: another },
+              },
+            ],
+          },
+        ]),
       ).toThrow(
-        "platform-dev/sandbox: the frontdoor trusts test users, but platform-dev names no test user pool",
+        "platform-dev/other: its test user issuer is not the one platform-dev's other environments name, and a stage has one test user pool",
+      );
+    });
+
+    // So one stage's test users can never reach another's environments.
+    it("refuses one test user pool in two stages", () => {
+      expect(() =>
+        validateStages([
+          WITH_POOL,
+          trusting(OTHER_STAGE, { testUserIssuer: TEST_USERS }, "prod"),
+        ]),
+      ).toThrow(
+        `platform-prod: its test user issuer ${TEST_USERS.issuer} is platform-dev's too, and each stage's test user pool is its own`,
       );
     });
 
     it("needs an issuer when the environment doesn't trust test users", () => {
-      expect(() =>
-        validateStages([trusting(WITH_POOL, { issuers: [] })]),
-      ).toThrow(
+      expect(() => validateStages([trusting(STAGE, { issuers: [] })])).toThrow(
         "platform-dev/sandbox: the frontdoor needs at least one trusted issuer",
       );
     });
@@ -371,8 +381,8 @@ describe("validateStages", () => {
 
   describe("domains", () => {
     function withDomains(
-      domains: readonly DomainConfig[],
-      second: readonly DomainConfig[] = [],
+      domains: readonly HostedDomainConfig[],
+      second: readonly HostedDomainConfig[] = [],
     ): StageConfig {
       return withEnvironment({
         domainAccounts: [
@@ -390,14 +400,16 @@ describe("validateStages", () => {
     });
 
     it("refuses an invalid domain name", () => {
-      expect(() => validateStages([withDomains(["Domain-A"])])).toThrow(
+      expect(() => validateStages([withDomains([domain("Domain-A")])])).toThrow(
         'The platform-dev/sandbox domain name "Domain-A" must be',
       );
     });
 
     it("refuses a domain name used twice in an environment, even in two accounts", () => {
       expect(() =>
-        validateStages([withDomains(["domain-a"], ["domain-a"])]),
+        validateStages([
+          withDomains([domain("domain-a")], [domain("domain-a")]),
+        ]),
       ).toThrow(
         "The platform-dev/sandbox domain name domain-a is used more than once",
       );
@@ -406,7 +418,10 @@ describe("validateStages", () => {
     it("refuses a name a disabled domain holds, since it keeps its stack", () => {
       expect(() =>
         validateStages([
-          withDomains(["domain-a"], [{ name: "domain-a", disabled: true }]),
+          withDomains(
+            [domain("domain-a")],
+            [{ ...domain("domain-a"), disabled: true }],
+          ),
         ]),
       ).toThrow(
         "The platform-dev/sandbox domain name domain-a is used more than once",
@@ -415,7 +430,9 @@ describe("validateStages", () => {
 
     it("checks a disabled domain's name as any other", () => {
       expect(() =>
-        validateStages([withDomains([{ name: "Domain-A", disabled: true }])]),
+        validateStages([
+          withDomains([{ ...domain("Domain-A"), disabled: true }]),
+        ]),
       ).toThrow('The platform-dev/sandbox domain name "Domain-A" must be');
     });
 
@@ -429,7 +446,10 @@ describe("validateStages", () => {
             ...ENVIRONMENT,
             name: environment,
             domainAccounts: [
-              { ...MAIN_DOMAIN_ACCOUNT, domains: [{ name, disabled: true }] },
+              {
+                ...MAIN_DOMAIN_ACCOUNT,
+                domains: [{ ...domain(name), disabled: true }],
+              },
             ],
           },
         ]);
@@ -442,77 +462,68 @@ describe("validateStages", () => {
   });
 
   describe("a stage's domains", () => {
-    function withStageDomains(
-      domains: readonly StageDomainConfig[],
-    ): StageConfig {
-      return { ...STAGE, domains };
-    }
-
     function withRepository(
       repository: Partial<RepositoryConfig>,
     ): StageConfig {
-      return withStageDomains([
-        { name: "domain-a", repository: { ...REPOSITORY, ...repository } },
+      return withDomainsIn(
+        domain("domain-a", { ...REPOSITORY, ...repository }),
+      );
+    }
+
+    // The domain hosted in two of the stage's accounts, as one domain may be.
+    function withDomainsIn(
+      first: HostedDomainConfig,
+      second: HostedDomainConfig = first,
+    ): StageConfig {
+      return withEnvironments([
+        {
+          ...ENVIRONMENT,
+          domainAccounts: [{ ...MAIN_DOMAIN_ACCOUNT, domains: [first] }],
+        },
+        {
+          ...ENVIRONMENT,
+          name: "other",
+          domainAccounts: [
+            {
+              ...domainAccount("other", "main", "100000000005"),
+              domains: [second],
+            },
+          ],
+          frontdoor: { ...FRONTDOOR, account: "100000000006" },
+        },
       ]);
     }
 
     it("accepts a domain with a repository, and one with none yet", () => {
       expect(() => validateStages([withRepository({})])).not.toThrow();
       expect(() =>
+        validateStages([withDomainsIn(domain("domain-a"))]),
+      ).not.toThrow();
+    });
+
+    it("accepts a domain hosted disabled in one place and enabled in another", () => {
+      const domainA = domain("domain-a", REPOSITORY);
+      expect(() =>
         validateStages([
-          withStageDomains([{ name: "domain-a", repository: null }]),
+          withDomainsIn(domainA, { ...domainA, disabled: true }),
         ]),
       ).not.toThrow();
     });
 
-    it("refuses a hosted domain the stage doesn't list, disabled or not", () => {
-      expect(() => validateStages([withStageDomains([])])).toThrow(
-        "platform-dev/sandbox: the domain domain-a is not in platform-dev's domains, which say who may release it",
-      );
-
-      const disabled: StageConfig = {
-        ...STAGE,
-        domains: [],
-        environments: [
-          {
-            ...ENVIRONMENT,
-            domainAccounts: [
-              {
-                ...MAIN_DOMAIN_ACCOUNT,
-                domains: [{ name: "domain-a", disabled: true }],
-              },
-            ],
-          },
-        ],
-      };
-      expect(() => validateStages([disabled])).toThrow(
-        "platform-dev/sandbox: the domain domain-a is not in platform-dev's domains",
-      );
-    });
-
-    // Its repository would stay trusted to upload code for a domain the stage no longer has.
-    it("refuses a listed domain that no environment hosts", () => {
-      expect(() =>
-        validateStages([
-          withStageDomains([
-            { name: "domain-a", repository: null },
-            { name: "domain-b", repository: REPOSITORY },
+    // One upload goes through every environment, so one repository releases it everywhere.
+    it("refuses one domain given two repositories in a stage, or a repository and none", () => {
+      for (const other of [
+        domain("domain-a", { ...REPOSITORY, id: "700000002" }),
+        domain("domain-a"),
+      ]) {
+        expect(() =>
+          validateStages([
+            withDomainsIn(domain("domain-a", REPOSITORY), other),
           ]),
-        ]),
-      ).toThrow(
-        "platform-dev: the domain domain-b is in its domains, but no environment hosts it",
-      );
-    });
-
-    it("refuses a domain listed twice", () => {
-      expect(() =>
-        validateStages([
-          withStageDomains([
-            { name: "domain-a", repository: null },
-            { name: "domain-a", repository: REPOSITORY },
-          ]),
-        ]),
-      ).toThrow("The platform-dev domain name domain-a is used more than once");
+        ).toThrow(
+          "platform-dev/other: the domain domain-a has a repository other than the one platform-dev gives it elsewhere, and one repository releases it everywhere",
+        );
+      }
     });
 
     it.each(["example-org/domain-a", "a/b", "Example-Org/Domain.A_1"])(
@@ -624,20 +635,18 @@ describe("validateStages", () => {
 
     it("refuses a domain that isn't hosted where it would be promoted from, disabled or not", () => {
       const [main, second] = LIVE.domainAccounts;
-      const live = (domain: DomainConfig): EnvironmentConfig => ({
+      const live = (hosted: HostedDomainConfig): EnvironmentConfig => ({
         ...LIVE,
-        domainAccounts: [main, { ...second, domains: [domain] }],
+        domainAccounts: [main, { ...second, domains: [hosted] }],
       });
-      const stage = (domain: DomainConfig): StageConfig => ({
-        ...withProdEnvironments([DEV, STAGING, live(domain)]),
-        domains: [...PROD.domains, { name: "domain-c", repository: null }],
-      });
+      const stage = (hosted: HostedDomainConfig): StageConfig =>
+        withProdEnvironments([DEV, STAGING, live(hosted)]);
 
-      expect(() => validateStages([stage("domain-c")])).toThrow(
+      expect(() => validateStages([stage(domain("domain-c"))])).toThrow(
         "platform-prod/prod: the domain domain-c is not hosted in staging, which it would be promoted from",
       );
       expect(() =>
-        validateStages([stage({ name: "domain-c", disabled: true })]),
+        validateStages([stage({ ...domain("domain-c"), disabled: true })]),
       ).toThrow(
         "platform-prod/prod: the domain domain-c is not hosted in staging",
       );

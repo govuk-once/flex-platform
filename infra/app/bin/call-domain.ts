@@ -7,8 +7,8 @@
 
 import { isRecord } from "@repo/utils/is-record";
 
-import { selectStage } from "../src/config/select-stage.ts";
 import { STAGES } from "../src/config/stages.ts";
+import { selectStage } from "../src/config/utils/select-stage.ts";
 
 const USAGE =
   "Usage: call-domain.ts <stage> <environment> <path>, where <path> is /app/<domain>/...";
@@ -57,9 +57,9 @@ if (!environment) {
     `Unknown environment ${JSON.stringify(environmentName)}. ${stage.name} has: ${known}`,
   );
 }
-const pool = stage.shared.testUsers;
+const pool = environment.frontdoor.testUserIssuer;
 const clientId = pool?.clientIds[0];
-if (!environment.frontdoor.testUsers || !pool || clientId === undefined) {
+if (!pool || clientId === undefined) {
   throw new Error(
     `${stage.name}/${environment.name} doesn't trust test users, so its Frontdoor would refuse the token`,
   );

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { FIXTURE_STAGES } from "../../test/helpers.ts";
+import { domain, FIXTURE_STAGES, REPOSITORY } from "../../../test/helpers.ts";
+import type { StageConfig } from "../types.ts";
 import { bundleReaders, releaseTargets } from "./release-targets.ts";
-import type { StageConfig } from "./types.ts";
 
 const [DEV_STAGE, , PROD] = FIXTURE_STAGES;
 
@@ -40,7 +40,10 @@ describe("releaseTargets", () => {
         {
           ...environment,
           domainAccounts: [
-            { ...account, domains: [{ name: "domain-a", disabled: true }] },
+            {
+              ...account,
+              domains: [{ ...domain("domain-a", REPOSITORY), disabled: true }],
+            },
           ],
         },
       ],

@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES } from "../test/helpers.ts";
 import { buildApp } from "./build-app.ts";
-import type { Target } from "./config/select-target.ts";
+import type { Target } from "./config/utils/select-target.ts";
 import { PLATFORM_TAGS } from "./tags.ts";
 
 const [STAGE] = FIXTURE_STAGES;
