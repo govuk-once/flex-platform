@@ -1,7 +1,6 @@
 import type { ZodObject, ZodType } from "zod";
 
-import type { RouteRejectionCode } from "./errors.ts";
-import type { HttpMethod, SuccessStatusCode } from "./http.ts";
+import type { HttpMethod, ResponseStatusCode } from "./http.ts";
 
 export type RouteKey = `${HttpMethod} /v${number}/${string}`;
 
@@ -31,9 +30,8 @@ export interface RouteConfig {
   readonly query?: ZodObject;
   readonly body?: ZodType;
   readonly responses: {
-    readonly [Status in SuccessStatusCode]?: ZodType | null;
+    readonly [Status in ResponseStatusCode]?: ZodType | null;
   };
-  readonly errors?: readonly RouteRejectionCode[];
 }
 
 export type DomainRoutes = Readonly<Record<string, RouteConfig>>;

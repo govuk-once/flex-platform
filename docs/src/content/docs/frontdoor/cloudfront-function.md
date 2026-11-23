@@ -66,7 +66,7 @@ Lambda@Edge applies the same rules.
 
 ## Rejections
 
-Each rejection has the shape the app handles, `{"message": "...", "type": "..."}`, with
+Each rejection is `{"message": "...", "type": "..."}`, with
 `x-rejected-by: cloudfront-function` and the trace ID as `x-correlation-id`. `type` is
 `auth_error` for the 401 and `client_error` otherwise, and the status says which failure it is:
 
@@ -77,7 +77,8 @@ Each rejection has the shape the app handles, `{"message": "...", "type": "..."}
 | 405 | `Method not allowed` |
 | 415 | `Unsupported media type` |
 
-The app relies on the 401's body exactly, so it never changes.
+The app reads a rejection's status, not its body. It reads a 401 or a 403, from any part of the
+platform, as an expired token: it refreshes its tokens and sends the request once more.
 
 ## Logs
 

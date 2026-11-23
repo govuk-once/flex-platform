@@ -1,14 +1,8 @@
 import type { input, output, ZodType } from "zod";
 
-import type { HandlerRejectionCode, RouteRejectionCode } from "./errors.ts";
+import type { ServerErrorStatusCode } from "./http.ts";
 import type { RegisteredRouteKey, RegisteredRoutes } from "./register.ts";
 import type { ResponsesOf, StatusCodesOf } from "./types.ts";
-
-export interface Rejection<
-  Code extends RouteRejectionCode | HandlerRejectionCode,
-> {
-  readonly rejected: Code;
-}
 
 // Never a key a domain uses. It carries the key a handler was typed for, without existing at
 // runtime.
@@ -23,15 +17,6 @@ type RequestOf<Route> = {
     : never;
 };
 
-type ErrorCodesOf<Route> = Route extends {
-  readonly errors: readonly (infer Code extends RouteRejectionCode)[];
-}
-  ? Code
-  : never;
-
-// What `reject()` accepts: the codes the route lists, and those any handler may answer with.
-type RejectCodeOf<Route> = ErrorCodesOf<Route> | HandlerRejectionCode;
-
 // Responses write a schema's input, which validation reads. A `null` response has no body, and
 // `body?: never` refuses one, which a returned object would otherwise let through, since it is
 // not always checked for excess properties.
@@ -44,16 +29,20 @@ type ResponseOf<Route> = {
     : { readonly status: Status; readonly body?: never };
 }[StatusCodesOf<Route>];
 
-/** What a handler is called with for a route, given the route's configuration. */
-export type RouteContextOf<Route> = {
-  readonly reject: <Code extends RejectCodeOf<Route>>(
-    code: Code,
-  ) => Rejection<Code>;
-} & RequestOf<Route>;
+// A failure that is not the route's own. It has no body of the handler's.
+interface ServerError {
+  readonly status: ServerErrorStatusCode;
+  readonly body?: never;
+}
 
-/** What a handler may answer with for a route, given the route's configuration. */
-export type RouteResultOf<Route> =
-  ResponseOf<Route> | Rejection<RejectCodeOf<Route>>;
+/** What a handler is called with for a route, given the route's configuration. */
+export type RouteContextOf<Route> = RequestOf<Route>;
+
+/**
+ * What a handler may answer with for a route: one of the responses it declares, a failure
+ * included, or a server error, which no route declares.
+ */
+export type RouteResultOf<Route> = ResponseOf<Route> | ServerError;
 
 /** What the handler of the registered route under `Key` is called with. */
 export type RouteContext<Key extends RegisteredRouteKey> = RouteContextOf<

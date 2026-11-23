@@ -109,9 +109,14 @@ const refusedByBoth = {
     route: { ...LIST_ROUTE, body: CreateTodoSchema },
     at: ["body"],
   },
-  "a status that is not 2xx": {
+  "a status the app reads as an expired token": {
     key: "GET /v1/todos",
-    route: { ...LIST_ROUTE, responses: { 200: TodoListSchema, 404: null } },
+    route: { ...LIST_ROUTE, responses: { 200: TodoListSchema, 403: null } },
+    at: ["responses"],
+  },
+  "a 5xx status": {
+    key: "GET /v1/todos",
+    route: { ...LIST_ROUTE, responses: { 200: TodoListSchema, 502: null } },
     at: ["responses"],
   },
   "no responses": {
@@ -124,25 +129,20 @@ const refusedByBoth = {
     route: { ...DELETE_ROUTE, responses: { 204: TodoSchema } },
     at: ["responses"],
   },
-  "a code that is not a route's": {
-    key: "GET /v1/todos",
-    route: { ...LIST_ROUTE, errors: ["internal"] },
-    at: ["RouteConfig"],
-  },
   "a key that does not follow the grammar": {
     key: "GET /todos",
     route: LIST_ROUTE,
     at: [KEY_PROBLEM],
   },
-  "a misspelled field, and name or function on a route": {
+  "errors, a name or function on a route": {
     key: "GET /v1/todos",
     route: {
       ...LIST_ROUTE,
-      erorrs: ["not_found"],
+      errors: ["not_found"],
       name: "listTodos",
       function: { memoryMb: 256 },
     },
-    at: ["erorrs", "name", "function"],
+    at: ["errors", "name", "function"],
   },
 } as const;
 

@@ -7,6 +7,7 @@ import { listTodos } from "./routes/list-todos.ts";
 import { updateTodo } from "./routes/update-todo.ts";
 import {
   CreateTodoSchema,
+  TodoErrorSchema,
   TodoListSchema,
   TodoParamsSchema,
   TodoQuerySchema,
@@ -25,27 +26,23 @@ const domain = defineDomain({
     "GET /v1/todos/{id}": {
       handler: getTodo,
       params: TodoParamsSchema,
-      responses: { 200: TodoSchema },
-      errors: ["not_found"],
+      responses: { 200: TodoSchema, 404: TodoErrorSchema },
     },
     "POST /v1/todos": {
       handler: createTodo,
       body: CreateTodoSchema,
-      responses: { 201: TodoSchema },
-      errors: ["conflict"],
+      responses: { 201: TodoSchema, 409: TodoErrorSchema },
     },
     "PATCH /v1/todos/{id}": {
       handler: updateTodo,
       params: TodoParamsSchema,
       body: UpdateTodoSchema,
-      responses: { 204: null },
-      errors: ["not_found"],
+      responses: { 204: null, 404: null },
     },
     "DELETE /v1/todos/{id}": {
       handler: deleteTodo,
       params: TodoParamsSchema,
-      responses: { 204: null },
-      errors: ["not_found"],
+      responses: { 204: null, 404: null },
     },
   },
 });

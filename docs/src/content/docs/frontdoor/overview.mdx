@@ -97,7 +97,8 @@ both edge functions accept a token in
 [one form only](/flex-platform/frontdoor/cloudfront-function/#one-form-per-token). A request
 without the header isn't counted per token, and the CloudFront Function refuses it.
 
-The 413 and 429 have JSON bodies in the shape the app handles:
+The 413 and 429 have JSON bodies in the
+[shape of every rejection](/flex-platform/frontdoor/cloudfront-function/#rejections):
 `{"message":"Request body too large","type":"client_error"}` and
 `{"message":"Too many requests","type":"client_error"}`. A managed rule's block is WAF's own 403.
 

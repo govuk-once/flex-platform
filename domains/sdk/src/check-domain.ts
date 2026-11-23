@@ -13,8 +13,7 @@ import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
 import { isRecord } from "@repo/utils/is-record";
 import { ZodObject, ZodType } from "zod";
 
-import { HANDLER_REJECTION_CODES, ROUTE_REJECTION_CODES } from "./errors.ts";
-import { NULL_BODY_STATUS_CODES, SUCCESS_STATUS_CODES } from "./http.ts";
+import { NULL_BODY_STATUS_CODES, RESPONSE_STATUS_CODES } from "./http.ts";
 import { parseRouteKey } from "./route-key.ts";
 import { strictInputProblems } from "./strict-input.ts";
 import type { ParsedRouteKey } from "./types.ts";
@@ -27,20 +26,20 @@ const ROUTE_CONFIG_FIELDS: ReadonlySet<string> = new Set([
   "query",
   "body",
   "responses",
-  "errors",
 ]);
 
-const SUCCESS_STATUSES: ReadonlySet<string> = new Set(
-  SUCCESS_STATUS_CODES.map(String),
+const RESPONSE_STATUSES: ReadonlySet<string> = new Set(
+  RESPONSE_STATUS_CODES.map(String),
 );
+
+// The statuses the app reads as an expired token, whatever sent them.
+const TOKEN_STATUSES: ReadonlySet<string> = new Set(["401", "403"]);
+
+const SERVER_ERROR_STATUS = /^5\d\d$/;
 
 const NULL_BODY_STATUSES: ReadonlySet<string> = new Set(
   NULL_BODY_STATUS_CODES.map(String),
 );
-
-const ROUTE_CODES: ReadonlySet<string> = new Set(ROUTE_REJECTION_CODES);
-
-const HANDLER_CODES: ReadonlySet<string> = new Set(HANDLER_REJECTION_CODES);
 
 const NAME_RULE =
   "1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen";
@@ -106,6 +105,26 @@ function paramsProblems(
   ];
 }
 
+function statusProblems(at: string, status: string): string[] {
+  if (RESPONSE_STATUSES.has(status)) return [];
+
+  if (TOKEN_STATUSES.has(status)) {
+    return [
+      `${at}[${status}]: must not be declared, as the app reads a ${status} as an expired token and sends the request again`,
+    ];
+  }
+
+  if (SERVER_ERROR_STATUS.test(status)) {
+    return [
+      `${at}[${status}]: must not be declared, as any handler may answer with a 500, 502, 503 or 504, and with no other 5xx`,
+    ];
+  }
+
+  return [
+    `${at}[${status}]: is not a status a route may declare; accepted statuses: 2xx, and 4xx except 401 and 403`,
+  ];
+}
+
 function responsesProblems(at: string, responses: unknown): string[] {
   if (!isRecord(responses)) {
     return [`${at}: must be an object of schemas keyed by status`];
@@ -116,11 +135,7 @@ function responsesProblems(at: string, responses: unknown): string[] {
   if (statuses.length === 0) return [`${at}: must declare at least one status`];
 
   return statuses.flatMap(([status, schema]) => [
-    ...(SUCCESS_STATUSES.has(status)
-      ? []
-      : [
-          `${at}[${status}]: is not a success status; accepted statuses: 2xx, with a failure as a code in errors`,
-        ]),
+    ...statusProblems(at, status),
     ...(schema === null || schema instanceof ZodType
       ? []
       : [`${at}[${status}]: must be a Zod schema, or null for no body`]),
@@ -128,36 +143,6 @@ function responsesProblems(at: string, responses: unknown): string[] {
       ? [`${at}[${status}]: must be null, as a ${status} response has no body`]
       : []),
   ]);
-}
-
-function errorsProblems(at: string, errors: unknown): string[] {
-  if (errors === undefined) return [];
-
-  if (!Array.isArray(errors)) return [`${at}: must be a list of codes`];
-
-  return errors.flatMap((code: unknown, index) => {
-    const codeAt = `${at}[${index}]`;
-
-    const first = errors.indexOf(code);
-
-    if (first >= 0 && first < index) {
-      return [
-        `${codeAt}: ${JSON.stringify(code)} is already listed at errors[${first}]`,
-      ];
-    }
-
-    if (typeof code === "string" && ROUTE_CODES.has(code)) return [];
-
-    if (typeof code === "string" && HANDLER_CODES.has(code)) {
-      return [
-        `${codeAt}: "${code}" must not be listed, as any handler may reject with it`,
-      ];
-    }
-
-    return [
-      `${codeAt}: ${JSON.stringify(code)} is not a route code; accepted codes: ${ROUTE_REJECTION_CODES.join(", ")}`,
-    ];
-  });
 }
 
 function routeProblems(
@@ -176,7 +161,7 @@ function routeProblems(
     "route",
   );
 
-  const { handler, params, query, body, responses, errors } = route;
+  const { handler, params, query, body, responses } = route;
 
   if (typeof handler !== "function") {
     problems.push(`${at}.handler: must be a function`);
@@ -204,10 +189,7 @@ function routeProblems(
     }
   }
 
-  problems.push(
-    ...responsesProblems(`${at}.responses`, responses),
-    ...errorsProblems(`${at}.errors`, errors),
-  );
+  problems.push(...responsesProblems(`${at}.responses`, responses));
 
   return problems;
 }

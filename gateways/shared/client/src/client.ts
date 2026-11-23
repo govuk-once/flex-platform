@@ -8,6 +8,7 @@ import {
   type LambdaClientConfig,
 } from "@aws-sdk/client-lambda";
 import {
+  assertGatewayId,
   type EnvelopeResponse,
   GATEWAY_FUNCTION_ALIAS,
   gatewayFunctionName,
@@ -79,13 +80,21 @@ export type LambdaSettings = Omit<
 // alias, in the caller's own account and region. The Lambda client takes everything else from
 // the environment it runs in, as a domain's function provides it.
 export function connect<TOperations extends ContractOperations<TOperations>>(
-  environment: string,
+  /** Asked for on the first call, and no sooner: see `functionName`. */
+  environment: () => string,
   gatewayId: string,
   /** The contract's operations, which codegen lists, since types are gone at runtime. */
   operations: readonly OperationName<TOperations>[],
   settings: LambdaSettings = {},
 ): GatewayClient<TOperations> {
-  const functionName = `${gatewayFunctionName(environment, gatewayId)}:${GATEWAY_FUNCTION_ALIAS}`;
+  // The id is the client's own, so a wrong one is refused as the client is created.
+  assertGatewayId(gatewayId);
+  // The name needs the environment, which is asked for on the first call and kept. A module
+  // creates its client as it is imported, and whatever imports it, such as a build, may have no
+  // environment to name.
+  let named: string | undefined;
+  const functionName = (): string =>
+    (named ??= `${gatewayFunctionName(environment(), gatewayId)}:${GATEWAY_FUNCTION_ALIAS}`);
   // One attempt only. A retried invoke can repeat an upstream write, and whether a retry is safe
   // depends on the operation and the deadline, which the SDK knows nothing of.
   const lambda = new LambdaClient({ ...settings, maxAttempts: 1 });
@@ -96,6 +105,7 @@ export function connect<TOperations extends ContractOperations<TOperations>>(
     input: unknown,
     callOptions: CallOptions = {},
   ): Promise<EnvelopeResponse> {
+    const name = functionName();
     const caller = currentCallerContext();
     const remaining = caller.deadline - Date.now();
     if (remaining <= 0) {
@@ -106,7 +116,7 @@ export function connect<TOperations extends ContractOperations<TOperations>>(
     }
     const deadline = AbortSignal.timeout(remaining);
     const command = new InvokeCommand({
-      FunctionName: functionName,
+      FunctionName: name,
       InvocationType: "RequestResponse",
       Payload: new TextEncoder().encode(
         JSON.stringify({

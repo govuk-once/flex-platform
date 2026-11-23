@@ -8,6 +8,30 @@ export const SUCCESS_STATUS_CODES = [
 
 export type SuccessStatusCode = (typeof SUCCESS_STATUS_CODES)[number];
 
+// Every registered 4xx status but 401 and 403. The app reads either, from any request, as an
+// expired token: it refreshes its tokens and sends the request again. So neither can carry a
+// route's own refusal.
+export const FAILURE_STATUS_CODES = [
+  400, 402, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416,
+  417, 421, 422, 423, 424, 425, 426, 428, 429, 431, 451,
+] as const;
+
+export type FailureStatusCode = (typeof FAILURE_STATUS_CODES)[number];
+
+/** The statuses a route may declare in `responses`. */
+export const RESPONSE_STATUS_CODES = [
+  ...SUCCESS_STATUS_CODES,
+  ...FAILURE_STATUS_CODES,
+] as const;
+
+export type ResponseStatusCode = (typeof RESPONSE_STATUS_CODES)[number];
+
+// What can go wrong on any route, such as a gateway that did not answer. No route declares
+// these, and any handler may answer with one.
+export const SERVER_ERROR_STATUS_CODES = [500, 502, 503, 504] as const;
+
+export type ServerErrorStatusCode = (typeof SERVER_ERROR_STATUS_CODES)[number];
+
 // The 2xx statuses the Fetch standard calls null body statuses: a response with one carries no
 // body, and a `Response` built with one throws.
 export const NULL_BODY_STATUS_CODES = [204, 205] as const;

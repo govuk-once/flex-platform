@@ -8,6 +8,13 @@ A domain declares its name and routes in `src/domain.ts`, with `defineDomain` fr
 checks it as it loads. The platform reads nothing from it, and sets the
 [function's settings](/flex-platform/domains/hosting/#the-domains-function) itself.
 
+:::caution[Planned]
+The SDK checks a domain's configuration and types its handlers, and nothing more so far. Serving a
+request is planned: routing it, holding its `params`, `query` and `body` to the route's schemas,
+calling the handler and sending its response. Until then, no request is held to a schema this
+page describes.
+:::
+
 ## An example
 
 ```ts
@@ -61,6 +68,10 @@ The path is what the domain's function sees, after the Frontdoor
 [removes the domain's segment](/flex-platform/frontdoor/lambda-edge/#routing). Two keys that differ
 only in a parameter's name, such as `{id}` and `{todoId}`, are the same route, and are refused.
 
+Two routes can match one request, such as `GET /v1/todos/{id}` and `GET /v1/todos/archived`, and
+both are accepted. Routing a request is planned. The route with a literal segment will take it
+over the one with a parameter, at the first segment where the two keys differ.
+
 ## Routes
 
 | Field | Required | Rule |
@@ -69,12 +80,28 @@ only in a parameter's name, such as `{id}` and `{todoId}`, are the same route, a
 | `params` | When the key has parameters | A Zod object with exactly the key's parameters, each taking a string |
 | `query` | No | A strict Zod object, each field taking a string, or a list of strings when repeated |
 | `body` | No | A strict Zod schema. Refused on `GET` and `DELETE` |
-| `responses` | Yes | A Zod schema, or `null` for no body, for each 2xx status. 204 and 205 take `null` only |
-| `errors` | No | The codes the handler may reject with: `invalid_request`, `forbidden`, `not_found`, `conflict` or `unprocessable` |
+| `responses` | Yes | A Zod schema, or `null` for no body, for each status the route answers with: see [Responses](#responses) |
 
 A route has no name, and no headers: the Frontdoor forwards only the
-[headers it signs](/flex-platform/frontdoor/lambda-edge/#signing). A failure is a code in `errors`,
-never a status in `responses`.
+[headers it signs](/flex-platform/frontdoor/lambda-edge/#signing).
+
+### Responses
+
+A route declares every status it answers with, a failure of its own as well as a success:
+
+```ts
+responses: { 200: TodoSchema, 404: TodoErrorSchema }
+```
+
+- a 2xx status takes a schema, or `null` for no body. 204 and 205 take `null` only;
+- a 4xx status takes a schema of the domain's own, or `null`. The SDK gives a failure's body no
+  shape;
+- 401 and 403 are refused, because the app reads either as an
+  [expired token](/flex-platform/frontdoor/cloudfront-function/#rejections) and sends the request
+  again;
+- a 5xx status is refused. A failure that is not the route's own, such as a gateway that did not
+  answer, is a 500, 502, 503 or 504, which [any handler](#handlers) may answer with and no route
+  declares.
 
 ### Strict inputs
 
@@ -90,17 +117,35 @@ Each handler is annotated with its route's key, which it finds through the `Regi
 ```ts
 // src/routes/get-todo.ts
 import type { Handler } from "@govuk-once/flex-domain-sdk";
+import { notFound } from "@govuk-once/flex-domain-sdk";
 
-export const getTodo: Handler<"GET /v1/todos/{id}"> = ({ params }) => ({
-  status: 200,
-  body: { id: params.id, title: "A todo", done: false },
-});
+import { findTodo } from "../todos.ts";
+
+export const getTodo: Handler<"GET /v1/todos/{id}"> = ({ params }) => {
+  const todo = findTodo(params.id);
+
+  if (todo === undefined) {
+    return notFound({
+      error: { code: "todo_not_found", message: "No such todo" },
+    });
+  }
+
+  return { status: 200, body: todo };
+};
 ```
 
-Its context holds the `params`, `query` and `body` its route declares, each typed by its schema's
-output, and `reject(code)`. `reject` takes the route's `errors`, and `internal`, `bad_gateway`,
-`unavailable` or `timeout`, which any handler may use. It answers with one of the route's
-`responses` as `{ status, body }`, or with what `reject` returned, and may be `async`.
+The type gives a handler a context of the `params`, `query` and `body` its route declares, each
+typed by its schema's output. It returns one of the route's `responses` as `{ status, body }`, a
+failure the same way as a success, and may be `async`. On any route it may also return a 500,
+502, 503 or 504, with no body.
+
+The SDK exports a function for each common failure, which returns the response written out:
+`notFound()` is `{ status: 404 }`, and `notFound(body)` is `{ status: 404, body }`.
+
+| Function | Status | Body |
+|---|---|---|
+| `badRequest`, `notFound`, `conflict`, `unprocessable`, `tooManyRequests` | 400, 404, 409, 422, 429 | The one the route declares for that status, or none |
+| `internalError`, `badGateway`, `unavailable`, `gatewayTimeout` | 500, 502, 503, 504 | None |
 
 Use `Handler<...>` as an annotation, not with `satisfies`, which the compiler reports as a circular
 reference. A program registers one domain.

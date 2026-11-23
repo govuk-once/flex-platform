@@ -28,6 +28,20 @@ describe("checkDomain", () => {
     expect(problemsOf(domain)).toEqual([]);
   });
 
+  // Both match a request for /v1/todos/archived. They are two routes, and which one takes the
+  // request is routing's rule: the literal segment beats the parameter.
+  it("accepts a literal segment where another route has a parameter", () => {
+    expect(
+      problemsOf({
+        name: "domain-a",
+        routes: {
+          "GET /v1/todos/{id}": GET_ROUTE,
+          "GET /v1/todos/archived": LIST_ROUTE,
+        },
+      }),
+    ).toEqual([]);
+  });
+
   it.each<[string, unknown, readonly string[]]>([
     [
       "keys for the same method and path",
@@ -101,21 +115,6 @@ describe("checkDomain", () => {
       ],
     ],
     [
-      "a code listed twice",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos/{id}": {
-            ...GET_ROUTE,
-            errors: ["not_found", "not_found"],
-          },
-        },
-      },
-      [
-        'routes["GET /v1/todos/{id}"].errors[1]: "not_found" is already listed at errors[0]',
-      ],
-    ],
-    [
       "every problem at once",
       { name: "", routes: { "get /todos": LIST_ROUTE } },
       [
@@ -133,10 +132,17 @@ describe("checkDomain", () => {
       "a field the route does not have",
       {
         name: "domain-a",
-        routes: { "GET /v1/todos": { ...LIST_ROUTE, cache: true } },
+        routes: {
+          "GET /v1/todos": {
+            ...LIST_ROUTE,
+            cache: true,
+            errors: ["not_found"],
+          },
+        },
       },
       [
-        'routes["GET /v1/todos"].cache: is not a route field; accepted fields: handler, params, query, body, responses, errors',
+        'routes["GET /v1/todos"].cache: is not a route field; accepted fields: handler, params, query, body, responses',
+        'routes["GET /v1/todos"].errors: is not a route field; accepted fields: handler, params, query, body, responses',
       ],
     ],
     [
@@ -293,15 +299,49 @@ describe("checkDomain", () => {
       ['routes["GET /v1/todos"].responses: must declare at least one status'],
     ],
     [
-      "a status that is not 2xx",
+      "the statuses the app reads as an expired token",
       {
         name: "domain-a",
         routes: {
-          "GET /v1/todos": { ...LIST_ROUTE, responses: { 404: null } },
+          "GET /v1/todos": {
+            ...LIST_ROUTE,
+            responses: { 200: null, 401: null, 403: null },
+          },
         },
       },
       [
-        'routes["GET /v1/todos"].responses[404]: is not a success status; accepted statuses: 2xx, with a failure as a code in errors',
+        'routes["GET /v1/todos"].responses[401]: must not be declared, as the app reads a 401 as an expired token and sends the request again',
+        'routes["GET /v1/todos"].responses[403]: must not be declared, as the app reads a 403 as an expired token and sends the request again',
+      ],
+    ],
+    [
+      "a 5xx status",
+      {
+        name: "domain-a",
+        routes: {
+          "GET /v1/todos": {
+            ...LIST_ROUTE,
+            responses: { 200: null, 502: null },
+          },
+        },
+      },
+      [
+        'routes["GET /v1/todos"].responses[502]: must not be declared, as any handler may answer with a 500, 502, 503 or 504, and with no other 5xx',
+      ],
+    ],
+    [
+      "a status that is neither 2xx nor 4xx",
+      {
+        name: "domain-a",
+        routes: {
+          "GET /v1/todos": {
+            ...LIST_ROUTE,
+            responses: { 200: null, 302: null },
+          },
+        },
+      },
+      [
+        'routes["GET /v1/todos"].responses[302]: is not a status a route may declare; accepted statuses: 2xx, and 4xx except 401 and 403',
       ],
     ],
     [
@@ -317,25 +357,6 @@ describe("checkDomain", () => {
       },
       [
         'routes["GET /v1/todos"].responses[204]: must be null, as a 204 response has no body',
-      ],
-    ],
-    [
-      "errors that are not a list",
-      {
-        name: "domain-a",
-        routes: { "GET /v1/todos": { ...LIST_ROUTE, errors: "not_found" } },
-      },
-      ['routes["GET /v1/todos"].errors: must be a list of codes'],
-    ],
-    [
-      "codes a route may not list",
-      {
-        name: "domain-a",
-        routes: { "GET /v1/todos": { ...LIST_ROUTE, errors: ["internal", 7] } },
-      },
-      [
-        'routes["GET /v1/todos"].errors[0]: "internal" must not be listed, as any handler may reject with it',
-        'routes["GET /v1/todos"].errors[1]: 7 is not a route code; accepted codes: invalid_request, forbidden, not_found, conflict, unprocessable',
       ],
     ],
     [

@@ -98,13 +98,18 @@ function stubbed(...answers: Answer[]) {
     credentials: { accessKeyId: "AKIDEXAMPLE", secretAccessKey: "secret" },
     requestHandler,
   };
+  // Counted, to show the environment is asked for once.
+  const asked = { count: 0 };
   const client = connect<Operations>(
-    "sandbox",
+    () => {
+      asked.count += 1;
+      return "sandbox";
+    },
     "fixture",
     ["getUser", "deleteUser"],
     settings,
   );
-  return { client, sent };
+  return { client, sent, asked };
 }
 
 const answered = (envelope: unknown, headers = {}): Answer => ({
@@ -349,14 +354,25 @@ describe("connect", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("refuses an id that cannot name a gateway's function", () => {
-    expect(() => connect("sandbox", "fixture:other", [])).toThrow(
+  it("refuses an id that cannot name a gateway's function, as it is created", () => {
+    expect(() => connect(() => "sandbox", "fixture:other", [])).toThrow(
       /The gateway id .* must be/,
     );
   });
 
-  it("refuses an environment that cannot name a gateway's function", () => {
-    expect(() => connect("Sandbox", "fixture", [])).toThrow(
+  it("asks for the environment on the first call, not as it is created", async () => {
+    const { client, asked } = stubbed(
+      answered({ ok: true, outcome: "ok", data: { name: "Ada" } }),
+    );
+    expect(asked.count).toBe(0);
+    await called(() => client.getUser({ id: "u1" }));
+    await called(() => client.getUser({ id: "u2" }));
+    expect(asked.count).toBe(1);
+  });
+
+  it("refuses a call in an environment that cannot name a gateway's function", async () => {
+    const client = connect<Operations>(() => "Sandbox", "fixture", ["getUser"]);
+    await expect(called(() => client.getUser({ id: "u1" }))).rejects.toThrow(
       /The environment .* must be/,
     );
   });
