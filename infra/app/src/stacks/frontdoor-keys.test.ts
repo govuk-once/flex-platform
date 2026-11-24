@@ -70,6 +70,29 @@ describe("FrontdoorCallerTokenKeysStack", () => {
     expect(JSON.stringify(template.toJSON())).not.toContain("100000000099");
   });
 
+  it("holds the secret the environment's edge derives push IDs with, read by that edge's role alone", () => {
+    const template = Template.fromStack(
+      new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),
+    );
+    template.hasResourceProperties("AWS::SecretsManager::Secret", {
+      Name: `frontdoor-${DEV.name}-push-id-secret`,
+    });
+    template.hasResourceProperties("AWS::SecretsManager::ResourcePolicy", {
+      ResourcePolicy: {
+        Statement: [
+          Match.objectLike({
+            Effect: "Deny",
+            Condition: {
+              StringNotEquals: {
+                "aws:PrincipalArn": `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-edge`,
+              },
+            },
+          }),
+        ],
+      },
+    });
+  });
+
   it("has key rotation write the public keys to the environment's bucket, and no other account's of the same name", () => {
     const template = Template.fromStack(
       new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),

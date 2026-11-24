@@ -82,4 +82,6 @@ export interface OriginRequestConfig {
   readonly callerTokenAudience: string;
   /** Where the edge reads the keys it signs with, in the signing region. */
   readonly signingKeyParameter: string;
+  /** The secret the edge derives each caller's push ID with, by name, in the signing region. */
+  readonly pushIdSecret: string;
 }

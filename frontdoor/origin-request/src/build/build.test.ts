@@ -30,6 +30,7 @@ const CONFIG: OriginRequestConfig = {
   routes: {},
   callerTokenAudience: "flex:sandbox:gateways",
   signingKeyParameter: "/flex/frontdoor/sandbox/caller-token-signing-key",
+  pushIdSecret: "frontdoor-sandbox-push-id-secret",
 };
 
 const directories: string[] = [];
@@ -154,13 +155,14 @@ describe("buildOriginRequestFunction", () => {
     ]);
   });
 
-  it("bakes in the caller token's audience and where its key is", () => {
+  it("bakes in the caller token's audience, and where its key and the push ID's secret are", () => {
     const code = buildOriginRequestFunction(CONFIG);
 
     expect(code).toContain('"flex:sandbox:gateways"');
     expect(code).toContain(
       '"/flex/frontdoor/sandbox/caller-token-signing-key"',
     );
+    expect(code).toContain('"frontdoor-sandbox-push-id-secret"');
   });
 
   it("bakes in the routes it was built with", () => {

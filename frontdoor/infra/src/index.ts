@@ -11,5 +11,6 @@ export {
 } from "./names.ts";
 export { OriginRequestFunction } from "./origin-request-function.ts";
 export { OriginRequestLogs } from "./origin-request-logs.ts";
+export { PushIdSecret } from "./push-id-secret.ts";
 export { SigningKey } from "./signing-key.ts";
 export { ViewerRequestFunction } from "./viewer-request-function.ts";
