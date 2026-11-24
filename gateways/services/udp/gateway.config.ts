@@ -6,6 +6,7 @@ import {
   sigV4,
 } from "@repo/gateway-driver-openapi-rest";
 
+import { ACTIVITY_SEARCHES } from "./config/activity-searches.ts";
 import { DATA_STORE, stored } from "./config/data-store.ts";
 import { GROUP_SUBSCRIPTIONS } from "./config/groups.ts";
 import {
@@ -19,6 +20,7 @@ import {
   FOR_CALLER_WITH_PUSH_ID,
   REQUESTING,
 } from "./config/requesting.ts";
+import { TOPICS } from "./config/topics.ts";
 
 export default defineGateway({
   id: "udp",
@@ -152,6 +154,44 @@ export default defineGateway({
       narrow: {
         payload: stored(GROUP_SUBSCRIPTIONS),
         outcomes: { ok: stored(GROUP_SUBSCRIPTIONS) },
+      },
+    },
+    getTopics: {
+      description: "Read the topics a user has selected",
+      upstream: "GET /v1/topics",
+      matches: DATA_STORE,
+      parameters: REQUESTING,
+      secure: FOR_CALLER,
+      narrow: { outcomes: { ok: stored(TOPICS) } },
+    },
+    updateTopics: {
+      description: "Replace the topics a user has selected",
+      upstream: "POST /v1/topics",
+      matches: DATA_STORE,
+      parameters: REQUESTING,
+      secure: FOR_CALLER,
+      narrow: {
+        payload: stored(TOPICS),
+        outcomes: { ok: stored(TOPICS) },
+      },
+    },
+    getActivitySearches: {
+      description: "Read a user's recent searches",
+      upstream: "GET /v1/activity/searches",
+      matches: DATA_STORE,
+      parameters: REQUESTING,
+      secure: FOR_CALLER,
+      narrow: { outcomes: { ok: stored(ACTIVITY_SEARCHES) } },
+    },
+    updateActivitySearches: {
+      description: "Replace a user's recent searches",
+      upstream: "POST /v1/activity/searches",
+      matches: DATA_STORE,
+      parameters: REQUESTING,
+      secure: FOR_CALLER,
+      narrow: {
+        payload: stored(ACTIVITY_SEARCHES),
+        outcomes: { ok: stored(ACTIVITY_SEARCHES) },
       },
     },
   },
