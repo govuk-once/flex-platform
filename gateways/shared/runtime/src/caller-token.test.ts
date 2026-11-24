@@ -39,6 +39,7 @@ function token({ header, payload, key }: TokenParts = {}): string {
     {
       pairwiseId: "SYNTHETIC_PAIRWISE_ID",
       service: "app",
+      pushId: "SYNTHETIC_PUSH_ID",
       aud: AUDIENCE,
       iat: IAT,
       exp: IAT + 60,
@@ -102,7 +103,11 @@ async function refusal(promise: Promise<unknown>): Promise<GatewayError> {
 describe("createCallerTokenVerifier", () => {
   it("accepts a token the edge signed, giving its claims and ID", async () => {
     await expect(verifier()(token())).resolves.toEqual({
-      claims: { pairwiseId: "SYNTHETIC_PAIRWISE_ID", service: "app" },
+      claims: {
+        pairwiseId: "SYNTHETIC_PAIRWISE_ID",
+        service: "app",
+        pushId: "SYNTHETIC_PUSH_ID",
+      },
       tokenId: "SYNTHETIC_REQUEST_ID",
     });
   });
@@ -188,6 +193,16 @@ describe("createCallerTokenVerifier", () => {
       "without a service",
       () => token({ payload: { service: undefined } }),
       "claim service",
+    ],
+    [
+      "without a push ID",
+      () => token({ payload: { pushId: undefined } }),
+      "claim pushId",
+    ],
+    [
+      "with an empty push ID",
+      () => token({ payload: { pushId: "" } }),
+      "claim pushId",
     ],
     [
       "with a token ID that isn't CloudFront's",

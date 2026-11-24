@@ -93,7 +93,7 @@ token:
 - `iat` falls while the key signs: not before it started, and not after it stopped, allowing the
   same 5 seconds;
 - `jti` has the shape of CloudFront's request IDs;
-- each claim, `pairwiseId` and `service`, is a string that isn't empty. Only the token's own properties are read.
+- each claim, `pairwiseId`, `service` and `pushId`, is a string that isn't empty. Only the token's own properties are read.
 
 After it, every log line for the call holds `frontdoorRequestId`, the token's `jti`, which joins
 it to the edge's line for the request. The token and its claims are never logged.

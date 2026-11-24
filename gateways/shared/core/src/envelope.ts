@@ -4,7 +4,7 @@ import type { ErrorCode } from "./errors.ts";
  * The values the caller token vouches for, which an operation's secure bindings compare its input
  * with. Each is a string. A name added here is a claim the edge signs.
  */
-export const SECURE_CLAIMS = ["pairwiseId", "service"] as const;
+export const SECURE_CLAIMS = ["pairwiseId", "service", "pushId"] as const;
 
 export type SecureClaim = (typeof SECURE_CLAIMS)[number];
 

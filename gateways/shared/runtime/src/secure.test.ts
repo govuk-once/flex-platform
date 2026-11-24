@@ -3,7 +3,7 @@ import { assert, describe, expect, it } from "vitest";
 import { GatewayError } from "./errors.ts";
 import { checkSecureBindings, compileBindings } from "./secure.ts";
 
-const ME = { pairwiseId: "user-me", service: "app" };
+const ME = { pairwiseId: "user-me", service: "app", pushId: "push-me" };
 
 function expectMismatch(fn: () => void): GatewayError {
   try {
@@ -92,11 +92,7 @@ describe("checkSecureBindings", () => {
   it("compares strictly, without coercion", () => {
     const bindings = compileBindings({ userId: "pairwiseId" });
     expectMismatch(() =>
-      checkSecureBindings(
-        bindings,
-        { userId: 1 },
-        { pairwiseId: "1", service: "app" },
-      ),
+      checkSecureBindings(bindings, { userId: 1 }, { ...ME, pairwiseId: "1" }),
     );
   });
 
@@ -121,7 +117,7 @@ describe("checkSecureBindings", () => {
       checkSecureBindings(
         bindings,
         { userId: "SYNTHETIC_OTHER" },
-        { pairwiseId: "SYNTHETIC_ME", service: "app" },
+        { ...ME, pairwiseId: "SYNTHETIC_ME" },
       ),
     );
 

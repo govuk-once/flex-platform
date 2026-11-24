@@ -41,7 +41,11 @@ const stubVerifyCallerToken: HandlerDeps["verifyCallerToken"] = (token) => {
     );
   }
   return Promise.resolve({
-    claims: { pairwiseId: token.slice("pairwiseId:".length), service: "app" },
+    claims: {
+      pairwiseId: token.slice("pairwiseId:".length),
+      service: "app",
+      pushId: "push-me",
+    },
     tokenId: "request-1",
   });
 };

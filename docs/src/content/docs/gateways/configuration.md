@@ -134,9 +134,10 @@ secure: { requestingService: "service", requestingServiceUserId: "pairwiseId" }
 ```
 
 The key is an exact dot path into the input. The value is a claim, one of `SECURE_CLAIMS` in
-`@repo/gateway-core`: `pairwiseId`, the caller's access token `username`, and `service`, the
-service whose namespace that ID is in. Bind both wherever an upstream takes both, because an ID
-read in another service's namespace names someone else. Every claim is a string. Comparisons are strict, with no type conversion. A missing input field or a mismatch
+`@repo/gateway-core`: `pairwiseId`, the caller's access token `username`; `service`, the
+service whose namespace that ID is in; and `pushId`, the ID the caller's notifications are pushed
+to. Bind `pairwiseId` and `service` wherever an upstream takes both, because an ID read in another
+service's namespace names someone else. Every claim is a string. Comparisons are strict, with no type conversion. A missing input field or a mismatch
 produces `SECURE_VALUE_MISMATCH`, and the log names the path and the claim, never either value.
 
 Codegen refuses a binding to anything but a claim, and a binding of a field the input schema

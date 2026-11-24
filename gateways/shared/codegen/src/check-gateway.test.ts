@@ -271,7 +271,7 @@ describe("checkGateway", () => {
 
     it("refuses a binding to a claim no token carries", () => {
       expect(check({ userId: "sub" })).toEqual([
-        'operation "ping" binds "userId" to "sub", which no caller token carries: pairwiseId, service',
+        'operation "ping" binds "userId" to "sub", which no caller token carries: pairwiseId, service, pushId',
       ]);
     });
   });

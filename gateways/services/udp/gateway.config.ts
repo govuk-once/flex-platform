@@ -8,11 +8,15 @@ import {
 
 import { DATA_STORE, stored } from "./config/data-store.ts";
 import { GROUP_SUBSCRIPTIONS } from "./config/groups.ts";
-import { NOTIFICATION_PREFERENCES } from "./config/notifications.ts";
+import {
+  NOTIFICATION_PREFERENCES,
+  NOTIFICATION_PREFERENCES_WRITE,
+} from "./config/notifications.ts";
 import {
   FOR_CALLER,
   FOR_CALLER_BY_APP_ID,
   FOR_CALLER_BY_IDENTIFIER,
+  FOR_CALLER_WITH_PUSH_ID,
   REQUESTING,
 } from "./config/requesting.ts";
 
@@ -118,9 +122,9 @@ export default defineGateway({
       upstream: "POST /v1/notifications",
       matches: DATA_STORE,
       parameters: REQUESTING,
-      secure: FOR_CALLER,
+      secure: FOR_CALLER_WITH_PUSH_ID,
       narrow: {
-        payload: stored(NOTIFICATION_PREFERENCES),
+        payload: stored(NOTIFICATION_PREFERENCES_WRITE),
         outcomes: { ok: stored(NOTIFICATION_PREFERENCES) },
       },
     },
