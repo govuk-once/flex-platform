@@ -17,6 +17,7 @@ import {
   SIGNING_KEY_PURPOSE,
   type SigningKey,
 } from "@repo/frontdoor-shared";
+import { keptWhile } from "@repo/utils/kept-while";
 
 import type { DerivePushId } from "./push-id.ts";
 
@@ -65,36 +66,31 @@ export function createSigningKeyLoader(
   options: SigningKeyLoaderOptions,
 ): LoadSigningKey {
   const now = options.now ?? Date.now;
-  let held: { keys: readonly HeldKey[]; at: number } | undefined;
   let nextAttempt = 0;
-  let inFlight: Promise<HeldKey[]> | undefined;
 
-  async function keys(at: number): Promise<readonly HeldKey[]> {
-    if (held !== undefined && at - held.at < SIGNING_KEY_REFRESH_MS) {
-      return held.keys;
-    }
-    if (at < nextAttempt) {
-      if (held !== undefined) return held.keys;
-      throw new Error("No signing key: the last read failed");
-    }
-    inFlight ??= read(options, held?.keys ?? [], at).finally(() => {
-      inFlight = undefined;
-    });
-    try {
-      const read = await inFlight;
-      held = { keys: read, at };
-      return read;
-    } catch (error) {
-      nextAttempt = at + SIGNING_KEY_RETRY_MS;
-      if (held !== undefined) return held.keys;
-      throw error;
-    }
-  }
+  // The keys as last read, and when. While it waits to read again, and when a read fails, the
+  // load gives back the keys it was given, so the edge goes on with them.
+  const keys = keptWhile<{ keys: readonly HeldKey[]; at: number }>(
+    async (held) => {
+      const at = now();
+      if (at < nextAttempt) {
+        if (held !== undefined) return held;
+        throw new Error("No signing key: the last read failed");
+      }
+      try {
+        return { keys: await read(options, held?.keys ?? [], at), at };
+      } catch (error) {
+        nextAttempt = at + SIGNING_KEY_RETRY_MS;
+        if (held !== undefined) return held;
+        throw error;
+      }
+    },
+    ({ at }) => now() - at < SIGNING_KEY_REFRESH_MS,
+  );
 
   return async () => {
-    const at = now();
-    const seconds = Math.floor(at / 1000);
-    const signing = (await keys(at))
+    const seconds = Math.floor(now() / 1000);
+    const signing = (await keys()).keys
       .filter(({ signsFrom }) => signsFrom <= seconds)
       .sort((a, b) => b.signsFrom - a.signsFrom)[0];
     if (signing === undefined) throw new Error("No signing key has started");
