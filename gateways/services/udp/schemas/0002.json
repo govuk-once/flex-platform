@@ -1,0 +1,1116 @@
+{
+  "operations": {
+    "createUser": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "payload": {
+            "type": "object",
+            "properties": {
+              "appId": {
+                "type": "string",
+                "description": "The Users Identifier for the GOVUK App"
+              }
+            },
+            "required": [
+              "appId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "no_content": {
+          "type": "null"
+        }
+      }
+    },
+    "getIdentityExchange": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requiredService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The service name to look up the linked identity for"
+          },
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requiredService",
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "serviceId": {
+              "type": "string",
+              "description": "The Identifer for the requested service"
+            },
+            "serviceName": {
+              "type": "string",
+              "description": "The service name for the identity record"
+            },
+            "accessToken": {
+              "type": "string",
+              "description": "The access token for the service from one login"
+            },
+            "refreshToken": {
+              "type": "string",
+              "description": "The refresh token for the service from one login"
+            },
+            "idToken": {
+              "type": "string",
+              "description": "The idToken for the service from one login"
+            }
+          },
+          "required": [
+            "serviceId",
+            "serviceName"
+          ]
+        }
+      }
+    },
+    "getIdentity": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the service for which the identifier belongs"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provided User Identifier for the given service"
+          }
+        },
+        "required": [
+          "serviceName",
+          "identifier"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "serviceId": {
+              "type": "string",
+              "description": "The Identifer for the requested service"
+            },
+            "serviceName": {
+              "type": "string",
+              "description": "The service name for the identity record"
+            },
+            "accessToken": {
+              "type": "string",
+              "description": "The access token for the service from one login"
+            },
+            "refreshToken": {
+              "type": "string",
+              "description": "The refresh token for the service from one login"
+            },
+            "idToken": {
+              "type": "string",
+              "description": "The idToken for the service from one login"
+            }
+          },
+          "required": [
+            "serviceId",
+            "serviceName"
+          ]
+        }
+      }
+    },
+    "createIdentity": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the service for which the identifier belongs"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provided User Identifier for the given service"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "appId": {
+                "type": "string",
+                "description": "The Users Identifier for the GOVUK App"
+              },
+              "expiresAt": {
+                "type": "integer",
+                "exclusiveMinimum": 1776867570,
+                "description": "The expiry time for the identity in EPOCH Timestamp no milliseconds, must be future dated"
+              },
+              "accessToken": {
+                "type": "string",
+                "description": "The access token for the service from one login"
+              },
+              "refreshToken": {
+                "type": "string",
+                "description": "The refresh token for the service from one login"
+              },
+              "idToken": {
+                "type": "string",
+                "description": "The idToken for the service from one login"
+              }
+            },
+            "required": [
+              "appId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "serviceName",
+          "identifier",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "Server response message"
+            }
+          },
+          "required": [
+            "message"
+          ]
+        }
+      }
+    },
+    "deleteIdentity": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the service for which the identifier belongs"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provided User Identifier for the given service"
+          }
+        },
+        "required": [
+          "serviceName",
+          "identifier"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "Server response message"
+            }
+          },
+          "required": [
+            "message"
+          ]
+        }
+      }
+    },
+    "getLinkedServices": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the service for which the identifier belongs"
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The provided User Identifier for the given service"
+          }
+        },
+        "required": [
+          "serviceName",
+          "identifier"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "linkedServices": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "serviceName": {
+                    "type": "string"
+                  },
+                  "ttl": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "serviceName"
+                ],
+                "description": "A service linked to the same UDP user"
+              },
+              "description": "The list of services linked to the same UDP user"
+            }
+          },
+          "required": [
+            "linkedServices"
+          ]
+        }
+      }
+    },
+    "getNotificationPreferences": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "consentStatus": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "unknown",
+                        "accepted",
+                        "denied"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "description": "Whether the user has agreed to receive notifications"
+                },
+                "pushId": {
+                  "type": "string",
+                  "description": "The id notifications are pushed to"
+                }
+              },
+              "required": [
+                "consentStatus"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "updateNotificationPreferences": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "configuration": {
+                "type": "object",
+                "properties": {
+                  "expiryMechanism": {
+                    "type": "string",
+                    "enum": [
+                      "DELETE"
+                    ],
+                    "description": "The UDP mechanism to execute at expiry"
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 1776867570,
+                    "description": "The expiry time for the data in EPOCH Timestamp no milliseconds, must be future dated"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "consentStatus": {
+                    "type": "string",
+                    "enum": [
+                      "unknown",
+                      "accepted",
+                      "denied"
+                    ],
+                    "description": "Whether the user has agreed to receive notifications"
+                  },
+                  "pushId": {
+                    "type": "string",
+                    "description": "The id notifications are pushed to"
+                  }
+                },
+                "required": [
+                  "consentStatus",
+                  "pushId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "consentStatus": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "unknown",
+                        "accepted",
+                        "denied"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "description": "Whether the user has agreed to receive notifications"
+                },
+                "pushId": {
+                  "type": "string",
+                  "description": "The id notifications are pushed to"
+                }
+              },
+              "required": [
+                "consentStatus"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "deleteNotificationPreferences": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "Server response message"
+            }
+          },
+          "required": [
+            "message"
+          ]
+        }
+      }
+    },
+    "getGroupSubscriptions": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "groups": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Namespace": {
+                        "type": "string"
+                      },
+                      "Group": {
+                        "type": "string"
+                      },
+                      "Subgroup": {
+                        "type": "string"
+                      },
+                      "Type": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "NOTIFICATION"
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Namespace",
+                      "Group",
+                      "Type"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "groups"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "updateGroupSubscriptions": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "configuration": {
+                "type": "object",
+                "properties": {
+                  "expiryMechanism": {
+                    "type": "string",
+                    "enum": [
+                      "DELETE"
+                    ],
+                    "description": "The UDP mechanism to execute at expiry"
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 1776867570,
+                    "description": "The expiry time for the data in EPOCH Timestamp no milliseconds, must be future dated"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "Namespace": {
+                          "type": "string"
+                        },
+                        "Group": {
+                          "type": "string"
+                        },
+                        "Subgroup": {
+                          "type": "string"
+                        },
+                        "Type": {
+                          "type": "string",
+                          "enum": [
+                            "NOTIFICATION"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "Namespace",
+                        "Group",
+                        "Type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "groups"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "groups": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Namespace": {
+                        "type": "string"
+                      },
+                      "Group": {
+                        "type": "string"
+                      },
+                      "Subgroup": {
+                        "type": "string"
+                      },
+                      "Type": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "NOTIFICATION"
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "Namespace",
+                      "Group",
+                      "Type"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "groups"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "getTopics": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "topics": {
+                  "type": "object",
+                  "properties": {
+                    "selectedTopics": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "selectedTopics"
+                  ]
+                }
+              },
+              "required": [
+                "topics"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "updateTopics": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "configuration": {
+                "type": "object",
+                "properties": {
+                  "expiryMechanism": {
+                    "type": "string",
+                    "enum": [
+                      "DELETE"
+                    ],
+                    "description": "The UDP mechanism to execute at expiry"
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 1776867570,
+                    "description": "The expiry time for the data in EPOCH Timestamp no milliseconds, must be future dated"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "topics": {
+                    "type": "object",
+                    "properties": {
+                      "selectedTopics": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "title"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "selectedTopics"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "topics"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "topics": {
+                  "type": "object",
+                  "properties": {
+                    "selectedTopics": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "selectedTopics"
+                  ]
+                }
+              },
+              "required": [
+                "topics"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "getActivitySearches": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "searches": {
+                  "type": "object",
+                  "properties": {
+                    "selectedSearches": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "term": {
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "term",
+                          "timestamp"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "selectedSearches"
+                  ]
+                }
+              },
+              "required": [
+                "searches"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    },
+    "updateActivitySearches": {
+      "input": {
+        "type": "object",
+        "properties": {
+          "requestingService": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The name of the requesting service - often the One Login relying-party name"
+          },
+          "requestingServiceUserId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The user identifier used by the requesting service when linking the user to the app"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "configuration": {
+                "type": "object",
+                "properties": {
+                  "expiryMechanism": {
+                    "type": "string",
+                    "enum": [
+                      "DELETE"
+                    ],
+                    "description": "The UDP mechanism to execute at expiry"
+                  },
+                  "expiresAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 1776867570,
+                    "description": "The expiry time for the data in EPOCH Timestamp no milliseconds, must be future dated"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "searches": {
+                    "type": "object",
+                    "properties": {
+                      "selectedSearches": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "term": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "timestamp": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "term",
+                            "timestamp"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "selectedSearches"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "searches"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "requestingService",
+          "requestingServiceUserId",
+          "payload"
+        ],
+        "additionalProperties": false
+      },
+      "outcomes": {
+        "ok": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "searches": {
+                  "type": "object",
+                  "properties": {
+                    "selectedSearches": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "term": {
+                            "type": "string"
+                          },
+                          "timestamp": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "term",
+                          "timestamp"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "selectedSearches"
+                  ]
+                }
+              },
+              "required": [
+                "searches"
+              ]
+            }
+          },
+          "required": [
+            "data"
+          ]
+        }
+      }
+    }
+  }
+}
