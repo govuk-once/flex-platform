@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
+  cloudFrontFunctionUrl,
   logGroupWriteStatements,
   PlatformLogGroup,
 } from "@repo/infra-constructs";
@@ -13,7 +14,7 @@ import {
   HANDLER,
 } from "@repo/shared-ci";
 import { bundleKey } from "@repo/shared-release/bundle-key";
-import { Duration, Fn, Stack, Validations } from "aws-cdk-lib";
+import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   PolicyDocument,
   PolicyStatement,
@@ -24,7 +25,6 @@ import {
   Architecture,
   Code,
   Function as LambdaFunction,
-  FunctionUrlAuthType,
   Runtime,
 } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
@@ -77,13 +77,8 @@ export interface CiFunctionProps {
  * pipeline uploads and read one back, look for a bundle, to release only one that was uploaded,
  * put a release on the release worker's queue, and read how a release went.
  *
- * The URL takes only requests signed with SigV4 by a caller IAM allows, and the function's
- * policy admits CloudFront alone, for this account's distributions. So a request sent straight
- * to the URL from outside the account is refused by Lambda before the function runs. In the
- * account, as for any function, a principal whose own policy allows the call can make it, so
- * the function relies on the token it verifies, never on where a request came from. The policy
- * names no one distribution: the distribution is in another stack, in another region, which
- * reads this one's URL, so naming it here would make each stack wait for the other.
+ * The URL admits CloudFront alone from outside the account (see `cloudFrontFunctionUrl`). The
+ * function relies on the token it verifies, never on where a request came from.
  */
 export class CiFunction extends Construct {
   public readonly function: LambdaFunction;
@@ -205,33 +200,7 @@ export class CiFunction extends Construct {
       logGroup,
     });
 
-    const url = this.function.addFunctionUrl({
-      authType: FunctionUrlAuthType.AWS_IAM,
-    });
-    // The URL is https://<host>/.
-    this.urlHost = Fn.select(2, Fn.split("/", url.url));
-
-    // Lambda checks both actions for a call through a function URL. The second is held to calls
-    // that come through the URL, so CloudFront can't invoke the function any other way.
-    const cloudFront = new ServicePrincipal("cloudfront.amazonaws.com");
-    const sourceArn = stack.formatArn({
-      service: "cloudfront",
-      region: "",
-      resource: "distribution",
-      resourceName: "*",
-    });
-    this.function.addPermission("InvokeUrlFromCloudFront", {
-      principal: cloudFront,
-      action: "lambda:InvokeFunctionUrl",
-      functionUrlAuthType: FunctionUrlAuthType.AWS_IAM,
-      sourceArn,
-    });
-    this.function.addPermission("InvokeFromCloudFront", {
-      principal: cloudFront,
-      action: "lambda:InvokeFunction",
-      invokedViaFunctionUrl: true,
-      sourceArn,
-    });
+    this.urlHost = cloudFrontFunctionUrl(this.function);
   }
 }
 

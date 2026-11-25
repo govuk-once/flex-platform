@@ -77,7 +77,7 @@ describe("ManagementEdge", () => {
   });
 
   // The CloudFront Function refuses any path that isn't the pipeline API's before it gets here.
-  it("sends every path to the pipeline API over HTTPS, caching nothing", () => {
+  it("sends every path to the pipeline API, caching nothing", () => {
     const { template } = managementEdgeTemplate();
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
@@ -86,10 +86,6 @@ describe("ManagementEdge", () => {
           Match.objectLike({
             Id: "ci",
             DomainName: CI_ORIGIN_HOST,
-            CustomOriginConfig: {
-              OriginProtocolPolicy: "https-only",
-              OriginSSLProtocols: ["TLSv1.2"],
-            },
           }),
         ],
         CacheBehaviors: Match.absent(),
@@ -104,17 +100,14 @@ describe("ManagementEdge", () => {
     });
   });
 
-  // The function URL takes no unsigned request, so without this every request would be refused.
-  it("signs every request to the pipeline API, replacing any Authorization a caller sent", () => {
+  // How the origin is reached and signed is `functionUrlOrigin`'s, and tested with it.
+  it("signs requests to the pipeline API with an access control of the shared account's names", () => {
     const { template } = managementEdgeTemplate();
 
     template.hasResourceProperties("AWS::CloudFront::OriginAccessControl", {
-      OriginAccessControlConfig: {
+      OriginAccessControlConfig: Match.objectLike({
         Name: "shared-management-ci",
-        OriginAccessControlOriginType: "lambda",
-        SigningBehavior: "always",
-        SigningProtocol: "sigv4",
-      },
+      }),
     });
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.objectLike({

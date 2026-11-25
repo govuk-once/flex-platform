@@ -55,8 +55,6 @@ function template(): Template {
   return Template.fromStack(build().stack);
 }
 
-const DISTRIBUTIONS = `arn:aws:cloudfront::${ACCOUNT}:distribution/*`;
-
 describe("CiFunction", () => {
   it("refuses any region but the shared account's", () => {
     expect(() => build("us-east-1")).toThrow("runs in eu-west-2");
@@ -209,41 +207,19 @@ describe("CiFunction", () => {
     });
   });
 
-  // Anything else would have Lambda run the function for whoever found the URL.
-  it("has a URL that takes only signed requests", () => {
-    template().hasResourceProperties("AWS::Lambda::Url", {
-      AuthType: "AWS_IAM",
+  // What the URL admits is `cloudFrontFunctionUrl`'s, and tested with it.
+  it("has one URL, for its own function, and gives that URL's host", () => {
+    const { stack, ci } = build();
+    const built = Template.fromStack(stack);
+    const [urlId] = Object.keys(built.findResources("AWS::Lambda::Url"));
+
+    built.resourceCountIs("AWS::Lambda::Url", 1);
+    built.hasResourceProperties("AWS::Lambda::Url", {
       TargetFunctionArn: {
         "Fn::GetAtt": [Match.stringLikeRegexp("^CiFunction"), "Arn"],
       },
     });
-  });
-
-  // Lambda checks both actions for a call through a URL.
-  it("has a policy that admits CloudFront alone, for this account's distributions, and only through the URL", () => {
-    const built = template();
-
     built.resourceCountIs("AWS::Lambda::Permission", 2);
-    built.hasResourceProperties("AWS::Lambda::Permission", {
-      Action: "lambda:InvokeFunctionUrl",
-      Principal: "cloudfront.amazonaws.com",
-      FunctionUrlAuthType: "AWS_IAM",
-      SourceArn: DISTRIBUTIONS,
-    });
-    built.hasResourceProperties("AWS::Lambda::Permission", {
-      Action: "lambda:InvokeFunction",
-      Principal: "cloudfront.amazonaws.com",
-      InvokedViaFunctionUrl: true,
-      SourceArn: DISTRIBUTIONS,
-    });
-  });
-
-  it("gives the URL's host alone, for the distribution to reach it at", () => {
-    const { stack, ci } = build();
-    const [urlId] = Object.keys(
-      Template.fromStack(stack).findResources("AWS::Lambda::Url"),
-    );
-
     expect(stack.resolve(ci.urlHost)).toEqual({
       "Fn::Select": [
         2,
