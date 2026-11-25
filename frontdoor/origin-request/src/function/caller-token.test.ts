@@ -1,7 +1,7 @@
 import { generateKeyPairSync, type KeyObject, verify } from "node:crypto";
 
+import { type DynamoDBClient, ScanCommand } from "@aws-sdk/client-dynamodb";
 import { DecryptCommand, type KMSClient } from "@aws-sdk/client-kms";
-import { GetParameterCommand, type SSMClient } from "@aws-sdk/client-ssm";
 import { assert, describe, expect, it, vi } from "vitest";
 
 import {
@@ -12,39 +12,62 @@ import {
   SIGNING_KEY_RETRY_MS,
 } from "./caller-token.ts";
 
-const PARAMETER = "/flex/frontdoor/sandbox/caller-token-signing-key";
+const TABLE = "frontdoor-sandbox-caller-token-private-keys";
 
 interface TestKey {
   readonly kid: string;
   readonly privateKey: KeyObject;
   readonly publicKey: KeyObject;
-  readonly signsFrom: number;
+  readonly activeFrom: number;
+  readonly activeUntil?: number;
 }
 
-function testKey(kid: string, signsFrom = 0): TestKey {
-  return { kid, signsFrom, ...generateKeyPairSync("ed25519") };
+function testKey(kid: string, activeFrom = 0, activeUntil?: number): TestKey {
+  return {
+    kid,
+    activeFrom,
+    ...(activeUntil !== undefined && { activeUntil }),
+    ...generateKeyPairSync("ed25519"),
+  };
 }
 
-// SSM and KMS in the signing region: the parameter holds the keys, each "encrypted" as its kid, and
-// KMS decrypts one only with the context key rotation made it with. While `down`, neither answers.
-function fakeAws(keys: readonly TestKey[], down = { now: false }) {
+// The item key rotation writes for a key, its private key "encrypted" as its kid.
+function itemOf({ kid, activeFrom, activeUntil }: TestKey) {
+  return {
+    keyId: { S: kid },
+    privateKey: { B: new Uint8Array(Buffer.from(kid)) },
+    activeFrom: { N: String(activeFrom) },
+    ...(activeUntil !== undefined && {
+      activeUntil: { N: String(activeUntil) },
+    }),
+  };
+}
+
+interface FakeAwsOptions {
+  /** While true, neither answers. */
+  readonly down?: { now: boolean };
+  /** The table's items, in place of the keys'. */
+  readonly items?: () => Record<string, unknown>[];
+  readonly lastEvaluatedKey?: Record<string, unknown>;
+}
+
+// DynamoDB and KMS in the signing region: the table holds the keys, and KMS decrypts one only with
+// the context key rotation made it with.
+function fakeAws(keys: readonly TestKey[], options: FakeAwsOptions = {}) {
   const calls: unknown[] = [];
   const send = vi.fn(
-    (command: unknown, options?: { abortSignal?: unknown }) => {
+    (command: unknown, sendOptions?: { abortSignal?: unknown }) => {
       calls.push(command);
-      expect(options?.abortSignal).toBeInstanceOf(AbortSignal);
-      if (down.now) return Promise.reject(new Error("unreachable"));
-      if (command instanceof GetParameterCommand) {
+      expect(sendOptions?.abortSignal).toBeInstanceOf(AbortSignal);
+      if (options.down?.now === true) {
+        return Promise.reject(new Error("unreachable"));
+      }
+      if (command instanceof ScanCommand) {
         return Promise.resolve({
-          Parameter: {
-            Value: JSON.stringify({
-              keys: keys.map(({ kid, signsFrom }) => ({
-                kid,
-                privateKey: Buffer.from(kid).toString("base64"),
-                signsFrom,
-              })),
-            }),
-          },
+          Items: options.items?.() ?? keys.map(itemOf),
+          ...(options.lastEvaluatedKey !== undefined && {
+            LastEvaluatedKey: options.lastEvaluatedKey,
+          }),
         });
       }
       if (!(command instanceof DecryptCommand)) {
@@ -69,11 +92,11 @@ function fakeAws(keys: readonly TestKey[], down = { now: false }) {
     },
   );
   // Each client's `send` is overloaded for every command; the loader sends two of them.
-  const client = { send } as unknown as Pick<SSMClient, "send"> &
+  const client = { send } as unknown as Pick<DynamoDBClient, "send"> &
     Pick<KMSClient, "send">;
   const decrypts = () =>
     calls.filter((command) => command instanceof DecryptCommand).length;
-  return { ssm: client, kms: client, call: send, calls, decrypts };
+  return { dynamodb: client, kms: client, call: send, calls, decrypts };
 }
 
 const KEY = testKey("20261106T120000Z");
@@ -81,9 +104,9 @@ const KEY = testKey("20261106T120000Z");
 describe("createSigningKeyLoader", () => {
   function loader(aws: ReturnType<typeof fakeAws>, now: () => number) {
     return createSigningKeyLoader({
-      ssm: aws.ssm,
+      dynamodb: aws.dynamodb,
       kms: aws.kms,
-      parameterName: PARAMETER,
+      tableName: TABLE,
       now,
     });
   }
@@ -94,11 +117,11 @@ describe("createSigningKeyLoader", () => {
 
     expect(loaded.kid).toBe(KEY.kid);
     const [read, decrypt] = aws.calls;
-    assert.instanceOf(read, GetParameterCommand);
-    expect(read.input).toEqual({ Name: PARAMETER });
+    assert.instanceOf(read, ScanCommand);
+    expect(read.input).toEqual({ TableName: TABLE });
     assert.instanceOf(decrypt, DecryptCommand);
     expect(decrypt.input).toEqual({
-      CiphertextBlob: Buffer.from(KEY.kid),
+      CiphertextBlob: new Uint8Array(Buffer.from(KEY.kid)),
       EncryptionContext: { purpose: "flex-caller-token", kid: KEY.kid },
     });
     expect(aws.calls).toHaveLength(2);
@@ -106,7 +129,7 @@ describe("createSigningKeyLoader", () => {
 
   it("switches to the next key the moment it starts, with no read", async () => {
     const next = testKey("20261106T121500Z", 60);
-    const aws = fakeAws([KEY, next]);
+    const aws = fakeAws([testKey(KEY.kid, 0, 60), next]);
     let now = 0;
     const load = loader(aws, () => now);
 
@@ -137,6 +160,25 @@ describe("createSigningKeyLoader", () => {
     now = start;
     expect((await load()).kid).toBe(next.kid);
     expect(aws.decrypts()).toBe(2);
+  });
+
+  it("neither decrypts nor signs with a key that has stopped, which the table still holds", async () => {
+    const stopped = testKey("20261106T110000Z", 0, 60);
+    const aws = fakeAws([stopped, testKey(KEY.kid, 60)]);
+    const load = loader(aws, () => 61_000);
+
+    expect((await load()).kid).toBe(KEY.kid);
+    expect(aws.decrypts()).toBe(1);
+  });
+
+  it("stops signing with a key it holds once the key stops, though no key follows", async () => {
+    const aws = fakeAws([testKey(KEY.kid, 0, 60)]);
+    let now = 0;
+    const load = loader(aws, () => now);
+    await load();
+
+    now = 60_000;
+    await expect(load()).rejects.toThrow("No signing key has started");
   });
 
   it("reads the keys again every five minutes, decrypting only a key it doesn't hold", async () => {
@@ -179,7 +221,7 @@ describe("createSigningKeyLoader", () => {
 
   it("goes on signing with the keys it has when a read fails, and tries again after a wait", async () => {
     const down = { now: false };
-    const aws = fakeAws([KEY], down);
+    const aws = fakeAws([KEY], { down });
     let now = 0;
     const load = loader(aws, () => now);
     await load();
@@ -197,7 +239,7 @@ describe("createSigningKeyLoader", () => {
   });
 
   it("fails with no key at all, and doesn't read again for every request", async () => {
-    const aws = fakeAws([], { now: true });
+    const aws = fakeAws([], { down: { now: true } });
     const load = loader(aws, () => 0);
     await expect(load()).rejects.toThrow("unreachable");
     const calls = aws.call.mock.calls.length;
@@ -218,13 +260,44 @@ describe("createSigningKeyLoader", () => {
     const rsa = {
       ...generateKeyPairSync("rsa", { modulusLength: 2048 }),
       kid: KEY.kid,
-      signsFrom: 0,
+      activeFrom: 0,
     };
     const aws = fakeAws([rsa]);
     await expect(loader(aws, () => 0)()).rejects.toThrow(
       "The signing key is not an Ed25519 key",
     );
   });
+
+  it("refuses a table that needs more than one read, rather than sign from part of it", async () => {
+    const aws = fakeAws([KEY], { lastEvaluatedKey: { keyId: { S: KEY.kid } } });
+    await expect(loader(aws, () => 0)()).rejects.toThrow(
+      "The private keys table answered with more than one page",
+    );
+    expect(aws.decrypts()).toBe(0);
+  });
+
+  it.each([
+    ["a key ID that isn't one", { keyId: { S: "../x" } }],
+    ["a private key that isn't binary", { privateKey: { S: "AQID" } }],
+    ["a start that isn't a number", { activeFrom: { S: "0" } }],
+    ["a start that isn't a whole second", { activeFrom: { N: "1.5" } }],
+    ["an end before the start", { activeUntil: { N: "0" } }],
+    ["an end that isn't a number", { activeUntil: { S: "60" } }],
+  ])(
+    "refuses the whole table for %s, decrypting nothing",
+    async (_, fields) => {
+      const aws = fakeAws([KEY], {
+        items: () => [
+          itemOf(testKey("20261106T110000Z")),
+          { ...itemOf(KEY), ...fields },
+        ],
+      });
+      await expect(loader(aws, () => 0)()).rejects.toThrow(
+        "The private keys table holds something that isn't a key",
+      );
+      expect(aws.decrypts()).toBe(0);
+    },
+  );
 });
 
 describe("createCallerTokenSigner", () => {

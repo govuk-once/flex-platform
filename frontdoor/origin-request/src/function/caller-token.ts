@@ -2,20 +2,24 @@
 // gateways it calls and each gateway verifies.
 //
 // The edge holds the keys: the one signing now and, from an hour before it starts, the one
-// scheduled next. It signs with the latest that has started, so every edge switches at the same
-// moment, without a read. It reads the keys from SSM in the signing region every five minutes,
-// wherever it runs, and decrypts with KMS only a key it doesn't hold yet, so a revocation reaches
-// every edge within minutes.
+// scheduled next. It signs with the latest that has started and not stopped, so every edge switches
+// at the same moment, without a read. It reads the keys from the private keys table in the signing
+// region every five minutes, wherever it runs, and decrypts with KMS only a key it doesn't hold
+// yet, so a revocation reaches every edge within minutes.
 
 import { createPrivateKey, type KeyObject, sign } from "node:crypto";
 
+import {
+  type AttributeValue,
+  type DynamoDBClient,
+  ScanCommand,
+} from "@aws-sdk/client-dynamodb";
 import { DecryptCommand, type KMSClient } from "@aws-sdk/client-kms";
-import { GetParameterCommand, type SSMClient } from "@aws-sdk/client-ssm";
 import {
   CALLER_TOKEN_TTL_SECONDS,
-  parseSigningKeys,
+  isKeyId,
+  type PrivateKeyItem,
   SIGNING_KEY_PURPOSE,
-  type SigningKey,
 } from "@repo/frontdoor-shared";
 import { keptWhile } from "@repo/utils/kept-while";
 
@@ -34,7 +38,8 @@ export const SIGNING_KEY_RETRY_MS = 30 * 1000;
 export const SIGNING_KEY_LEAD_MS = 60 * 60 * 1000;
 
 // One call's whole budget. The function has 10 seconds, and a key load makes at most three calls:
-// a read, then a decrypt for each key it doesn't hold yet, at once.
+// a read, then a decrypt for each key it doesn't hold yet, at once. The table holds a few small
+// items, so a read is one page.
 const CALL_TIMEOUT_MS = 1_500;
 
 export interface LoadedSigningKey {
@@ -45,17 +50,33 @@ export interface LoadedSigningKey {
 /** The key to sign with now. */
 export type LoadSigningKey = () => Promise<LoadedSigningKey>;
 
+/** A key in the table, as the edge reads it. */
+interface StoredKey {
+  readonly kid: string;
+  readonly privateKey: Uint8Array;
+  readonly activeFrom: number;
+  readonly activeUntil?: number;
+}
+
 interface HeldKey extends LoadedSigningKey {
-  readonly signsFrom: number;
+  readonly activeFrom: number;
+  readonly activeUntil?: number;
 }
 
 export interface SigningKeyLoaderOptions {
-  /** SSM and KMS in the signing region, where the parameter and the KMS key are. */
-  readonly ssm: Pick<SSMClient, "send">;
+  /** DynamoDB and KMS in the signing region, where the table and the KMS key are. */
+  readonly dynamodb: Pick<DynamoDBClient, "send">;
   readonly kms: Pick<KMSClient, "send">;
-  readonly parameterName: string;
+  /** The caller token's private keys table. */
+  readonly tableName: string;
   readonly now?: () => number;
 }
+
+const active = (
+  { activeFrom, activeUntil }: Pick<StoredKey, "activeFrom" | "activeUntil">,
+  seconds: number,
+) =>
+  activeFrom <= seconds && (activeUntil === undefined || activeUntil > seconds);
 
 /**
  * Loads the keys to sign with, keeps them, and gives the one that signs now. A read that fails
@@ -91,46 +112,90 @@ export function createSigningKeyLoader(
   return async () => {
     const seconds = Math.floor(now() / 1000);
     const signing = (await keys()).keys
-      .filter(({ signsFrom }) => signsFrom <= seconds)
-      .sort((a, b) => b.signsFrom - a.signsFrom)[0];
+      .filter((key) => active(key, seconds))
+      .sort((a, b) => b.activeFrom - a.activeFrom)[0];
     if (signing === undefined) throw new Error("No signing key has started");
     return { kid: signing.kid, key: signing.key };
   };
 }
 
+function numberOf(value: AttributeValue | undefined): number | undefined {
+  if (value?.N === undefined) return undefined;
+  const number = Number(value.N);
+  return Number.isSafeInteger(number) ? number : undefined;
+}
+
+// The table holds what key rotation writes. Anything else is refused, whole.
+function storedKey(
+  item: Partial<Record<keyof PrivateKeyItem, AttributeValue>>,
+): StoredKey {
+  const kid = item.keyId?.S;
+  const privateKey = item.privateKey?.B;
+  const activeFrom = numberOf(item.activeFrom);
+  const activeUntil = numberOf(item.activeUntil);
+  if (
+    kid === undefined ||
+    !isKeyId(kid) ||
+    privateKey === undefined ||
+    activeFrom === undefined ||
+    (item.activeUntil !== undefined &&
+      (activeUntil === undefined || activeUntil <= activeFrom))
+  ) {
+    throw new Error("The private keys table holds something that isn't a key");
+  }
+  return {
+    kid,
+    privateKey,
+    activeFrom,
+    ...(activeUntil !== undefined && { activeUntil }),
+  };
+}
+
 async function read(
-  { ssm, kms, parameterName }: SigningKeyLoaderOptions,
+  { dynamodb, kms, tableName }: SigningKeyLoaderOptions,
   held: readonly HeldKey[],
   at: number,
 ): Promise<HeldKey[]> {
-  const { Parameter } = await ssm.send(
-    new GetParameterCommand({ Name: parameterName }),
+  const { Items, LastEvaluatedKey } = await dynamodb.send(
+    new ScanCommand({ TableName: tableName }),
     { abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS) },
   );
-  const value = Parameter?.Value;
-  if (value === undefined) throw new Error("SSM returned no value");
+  // A page holds a megabyte, thousands of keys. Signing from part of the table could miss the
+  // newest key, so a read that would need another page fails.
+  if (Items === undefined || LastEvaluatedKey !== undefined) {
+    throw new Error("The private keys table answered with more than one page");
+  }
 
   // A key ID names one key pair, so a key already decrypted is the same key.
   const loaded = new Map(held.map((key) => [key.kid, key.key]));
+  const seconds = Math.floor(at / 1000);
   const due = Math.floor((at + SIGNING_KEY_LEAD_MS) / 1000);
   return Promise.all(
-    parseSigningKeys(value)
-      .filter(({ signsFrom }) => signsFrom <= due)
-      .map(async (signingKey) => ({
-        kid: signingKey.kid,
-        signsFrom: signingKey.signsFrom,
-        key: loaded.get(signingKey.kid) ?? (await decrypt(kms, signingKey)),
+    Items.map(storedKey)
+      // The table also holds keys that have stopped, until rotation removes them.
+      .filter(
+        ({ activeFrom, activeUntil }) =>
+          activeFrom <= due &&
+          (activeUntil === undefined || activeUntil > seconds),
+      )
+      .map(async (stored) => ({
+        kid: stored.kid,
+        activeFrom: stored.activeFrom,
+        ...(stored.activeUntil !== undefined && {
+          activeUntil: stored.activeUntil,
+        }),
+        key: loaded.get(stored.kid) ?? (await decrypt(kms, stored)),
       })),
   );
 }
 
 async function decrypt(
   kms: Pick<KMSClient, "send">,
-  { kid, privateKey }: SigningKey,
+  { kid, privateKey }: StoredKey,
 ): Promise<KeyObject> {
   const { Plaintext } = await kms.send(
     new DecryptCommand({
-      CiphertextBlob: Buffer.from(privateKey, "base64"),
+      CiphertextBlob: privateKey,
       // As key rotation made it: a ciphertext decrypts only as the key it was made as.
       EncryptionContext: { purpose: SIGNING_KEY_PURPOSE, kid },
     }),

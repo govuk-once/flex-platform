@@ -1,3 +1,5 @@
+import { TABLE_MANAGEMENT_ACTIONS } from "@repo/infra-constructs";
+import { sortedNames } from "@repo/utils/sorted-names";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
@@ -6,24 +8,76 @@ import { KeyRotation, type KeyRotationProps } from "./key-rotation.ts";
 
 const ACCOUNT = "123456789012";
 
+const EDGE_ROLE = `arn:aws:iam::${ACCOUNT}:role/frontdoor-sandbox-edge`;
+const ROTATION_ROLE = `arn:aws:iam::${ACCOUNT}:role/frontdoor-sandbox-caller-token-key-rotation`;
+
 const PROPS: KeyRotationProps = {
   environment: "sandbox",
-  publicKeysBucket: `frontdoor-sandbox-keys-${ACCOUNT}`,
-  publicKeysAccount: ACCOUNT,
-  publicKeysRegion: "eu-west-2",
+  kind: "caller-token",
+  keyAlias: "alias/frontdoor-sandbox-caller-token",
+  privateKeyReaderRoleArns: [EDGE_ROLE],
+  publication: {
+    bucket: `frontdoor-sandbox-keys-${ACCOUNT}`,
+    account: ACCOUNT,
+    object: "caller-token-keys.json",
+    region: "eu-west-2",
+  },
 };
 
-function build(region = "eu-west-2", nag = false) {
+function build(region = "eu-west-2", nag = false, props = PROPS) {
   const stack = stackIn(region, nag);
-  new KeyRotation(stack, "KeyRotation", PROPS);
+  new KeyRotation(stack, "KeyRotation", props);
   return { stack, template: Template.fromStack(stack) };
+}
+
+function expectedPolicy(table: string, readers: string[]) {
+  const deny = (
+    Sid: string,
+    NotAction: string | string[],
+    Condition: object,
+  ) => ({
+    Sid,
+    Effect: "Deny",
+    Principal: { AWS: "*" },
+    NotAction,
+    Resource: `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/${table}`,
+    Condition,
+  });
+  return {
+    PolicyDocument: {
+      Statement: [
+        deny(
+          "DenyOthersAllButManagingTheTable",
+          [...TABLE_MANAGEMENT_ACTIONS],
+          {
+            ArnNotLike: {
+              "aws:PrincipalArn": sortedNames([ROTATION_ROLE, ...readers]),
+            },
+          },
+        ),
+        deny(
+          "DenyKeyRotationAllButItsWork",
+          ["dynamodb:DeleteItem", "dynamodb:PutItem", "dynamodb:Scan"],
+          { ArnLike: { "aws:PrincipalArn": [ROTATION_ROLE] } },
+        ),
+        ...(readers.length === 0
+          ? []
+          : [
+              deny("DenyReadersAllButItsWork", "dynamodb:Scan", {
+                ArnLike: { "aws:PrincipalArn": readers },
+              }),
+            ]),
+      ],
+      Version: "2012-10-17",
+    },
+  };
 }
 
 describe("KeyRotation", () => {
   it("runs one copy at a time, every 15 minutes, logging to its own group", () => {
     const { template } = build();
     template.hasResourceProperties("AWS::Lambda::Function", {
-      FunctionName: "frontdoor-sandbox-key-rotation",
+      FunctionName: "frontdoor-sandbox-caller-token-key-rotation",
       Runtime: "nodejs24.x",
       Handler: "index.handler",
       ReservedConcurrentExecutions: 1,
@@ -32,7 +86,7 @@ describe("KeyRotation", () => {
       },
     });
     template.hasResourceProperties("AWS::Scheduler::Schedule", {
-      Name: "frontdoor-sandbox-key-rotation",
+      Name: "frontdoor-sandbox-caller-token-key-rotation",
       ScheduleExpression: "rate(15 minutes)",
       FlexibleTimeWindow: { Mode: "OFF" },
       State: "ENABLED",
@@ -52,13 +106,13 @@ describe("KeyRotation", () => {
     template.resourceCountIs("AWS::Events::Rule", 0);
     template.resourceCountIs("AWS::Lambda::Permission", 0);
     template.hasResourceProperties("AWS::Logs::LogGroup", {
-      LogGroupName: "/flex/frontdoor/sandbox/key-rotation",
+      LogGroupName: "/flex/frontdoor/sandbox/caller-token-key-rotation",
     });
   });
 
   it("alarms on runs that fail in two of three periods, with no action", () => {
     build().template.hasResourceProperties("AWS::CloudWatch::Alarm", {
-      AlarmName: "frontdoor-sandbox-key-rotation-failed",
+      AlarmName: "frontdoor-sandbox-caller-token-key-rotation-failed",
       Namespace: "AWS/Lambda",
       MetricName: "Errors",
       Dimensions: [
@@ -80,7 +134,7 @@ describe("KeyRotation", () => {
 
   it("makes key pairs only under the signing key, by alias, for the caller token's purpose", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
-      RoleName: "frontdoor-sandbox-key-rotation",
+      RoleName: "frontdoor-sandbox-caller-token-key-rotation",
       Policies: [
         {
           PolicyDocument: {
@@ -109,7 +163,7 @@ describe("KeyRotation", () => {
   it("checks a key decrypts only by encrypting it again under the same key, and can't decrypt", () => {
     const { template } = build();
     template.hasResourceProperties("AWS::IAM::Role", {
-      RoleName: "frontdoor-sandbox-key-rotation",
+      RoleName: "frontdoor-sandbox-caller-token-key-rotation",
       Policies: [
         {
           PolicyDocument: {
@@ -139,7 +193,34 @@ describe("KeyRotation", () => {
     ).not.toContain("kms:Decrypt");
   });
 
-  it("reads and writes only its state, the edge's signing keys, and the public keys' object", () => {
+  it("keeps the kind's keys in two tables, which only it may change, and only it and the edge read", () => {
+    const { template } = build();
+    for (const [name, readers] of [
+      ["frontdoor-sandbox-caller-token-private-keys", [EDGE_ROLE]],
+      ["frontdoor-sandbox-caller-token-public-keys", []],
+    ] as const) {
+      template.hasResource("AWS::DynamoDB::Table", {
+        Properties: Match.exact({
+          TableName: name,
+          KeySchema: [{ AttributeName: "keyId", KeyType: "HASH" }],
+          AttributeDefinitions: [
+            { AttributeName: "keyId", AttributeType: "S" },
+          ],
+          BillingMode: "PAY_PER_REQUEST",
+          PointInTimeRecoverySpecification: {
+            PointInTimeRecoveryEnabled: true,
+          },
+          DeletionProtectionEnabled: true,
+          ResourcePolicy: expectedPolicy(name, [...readers]),
+        }),
+        DeletionPolicy: "Retain",
+        UpdateReplacePolicy: "Retain",
+      });
+    }
+    template.resourceCountIs("AWS::DynamoDB::Table", 2);
+  });
+
+  it("reads and changes only its tables, and the public keys' object", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
@@ -147,10 +228,14 @@ describe("KeyRotation", () => {
             Statement: Match.arrayWith([
               {
                 Effect: "Allow",
-                Action: ["ssm:GetParameter", "ssm:PutParameter"],
+                Action: [
+                  "dynamodb:DeleteItem",
+                  "dynamodb:PutItem",
+                  "dynamodb:Scan",
+                ],
                 Resource: [
-                  `arn:aws:ssm:eu-west-2:${ACCOUNT}:parameter/flex/frontdoor/sandbox/caller-token-key-state`,
-                  `arn:aws:ssm:eu-west-2:${ACCOUNT}:parameter/flex/frontdoor/sandbox/caller-token-signing-key`,
+                  `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/frontdoor-sandbox-caller-token-private-keys`,
+                  `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/frontdoor-sandbox-caller-token-public-keys`,
                 ],
               },
               {
@@ -170,7 +255,7 @@ describe("KeyRotation", () => {
 
   it("is run by a schedule whose role may only invoke the function, assumed only through the account's default schedule group", () => {
     build().template.hasResourceProperties("AWS::IAM::Role", {
-      RoleName: "frontdoor-sandbox-key-rotation-schedule",
+      RoleName: "frontdoor-sandbox-caller-token-key-rotation-schedule",
       AssumeRolePolicyDocument: Match.exact({
         Statement: [
           {
@@ -208,6 +293,12 @@ describe("KeyRotation", () => {
         },
       ]),
     });
+  });
+
+  it("refuses a publication the kind's policy doesn't make", () => {
+    expect(() =>
+      build("eu-west-2", false, { ...PROPS, publication: null }),
+    ).toThrow("The caller-token keys' policy and config disagree");
   });
 
   it("is built in the signing region alone", () => {

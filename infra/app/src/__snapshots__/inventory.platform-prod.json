@@ -213,6 +213,14 @@
         "type": "AWS::Logs::LogGroup"
       },
       {
+        "logicalId": "KeyRotationPrivateKeysEF1A69CC",
+        "type": "AWS::DynamoDB::Table"
+      },
+      {
+        "logicalId": "KeyRotationPublicKeys505EB595",
+        "type": "AWS::DynamoDB::Table"
+      },
+      {
         "logicalId": "KeyRotationRole0EC452CC",
         "type": "AWS::IAM::Role"
       },
@@ -396,6 +404,14 @@
         "type": "AWS::Logs::LogGroup"
       },
       {
+        "logicalId": "KeyRotationPrivateKeysEF1A69CC",
+        "type": "AWS::DynamoDB::Table"
+      },
+      {
+        "logicalId": "KeyRotationPublicKeys505EB595",
+        "type": "AWS::DynamoDB::Table"
+      },
+      {
         "logicalId": "KeyRotationRole0EC452CC",
         "type": "AWS::IAM::Role"
       },
@@ -577,6 +593,14 @@
       {
         "logicalId": "KeyRotationLogsLogGroupA2DE2F3C",
         "type": "AWS::Logs::LogGroup"
+      },
+      {
+        "logicalId": "KeyRotationPrivateKeysEF1A69CC",
+        "type": "AWS::DynamoDB::Table"
+      },
+      {
+        "logicalId": "KeyRotationPublicKeys505EB595",
+        "type": "AWS::DynamoDB::Table"
       },
       {
         "logicalId": "KeyRotationRole0EC452CC",

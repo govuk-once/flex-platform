@@ -6,18 +6,22 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { KeyRotationConfig } from "../function/types.ts";
 import { buildKeyRotationFunction } from "./build.ts";
 
 const execFile = promisify(execFileCb);
 
-const CONFIG = {
+const CONFIG: KeyRotationConfig = {
+  kind: "caller-token",
   keyAlias: "alias/frontdoor-sandbox-caller-token",
-  signingKeyParameter: "/flex/frontdoor/sandbox/caller-token-signing-key",
-  stateParameter: "/flex/frontdoor/sandbox/caller-token-key-state",
-  publicKeysBucket: "frontdoor-sandbox-keys-100000000002",
-  publicKeysAccount: "100000000002",
-  publicKeysObject: "caller-token-keys.json",
-  publicKeysRegion: "eu-west-2",
+  privateKeysTable: "frontdoor-sandbox-caller-token-private-keys",
+  publicKeysTable: "frontdoor-sandbox-caller-token-public-keys",
+  publication: {
+    bucket: "frontdoor-sandbox-keys-100000000002",
+    account: "100000000002",
+    object: "caller-token-keys.json",
+    region: "eu-west-2",
+  },
 };
 
 const directories: string[] = [];
@@ -51,5 +55,20 @@ describe("buildKeyRotationFunction", () => {
       { cwd: directory, env: { AWS_REGION: "eu-west-2" } },
     );
     expect(stdout).toBe("function");
+  });
+
+  it("refuses a kind with no policy", () => {
+    expect(() =>
+      buildKeyRotationFunction({
+        ...CONFIG,
+        kind: "nothing" as KeyRotationConfig["kind"],
+      }),
+    ).toThrow('No key policy is named "nothing"');
+  });
+
+  it("refuses a publication the kind's policy doesn't make", () => {
+    expect(() =>
+      buildKeyRotationFunction({ ...CONFIG, publication: null }),
+    ).toThrow("The caller-token keys' policy and config disagree");
   });
 });

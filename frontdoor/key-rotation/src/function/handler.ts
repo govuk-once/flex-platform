@@ -4,6 +4,7 @@
 import { isKeyId } from "@repo/frontdoor-shared";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
+import type { KeyPolicy } from "./policy.ts";
 import {
   KeyCheckFailed,
   rotate,
@@ -36,20 +37,24 @@ function log(
   );
 }
 
-export function createHandler(ports: RotationPorts, now: () => Date) {
+export function createHandler(
+  ports: RotationPorts,
+  policy: KeyPolicy,
+  now: () => Date,
+) {
   return async (event: unknown): Promise<void> => {
     try {
-      const report = await rotate(ports, now(), requestOf(event));
+      const report = await rotate(ports, policy, now(), requestOf(event));
       for (const { event: name, ...details } of report.events)
         log("INFO", name, details);
     } catch (error) {
       if (error instanceof KeyCheckFailed) {
-        const { kid, reason, stored } = error;
-        log("ERROR", "key_check_failed", { kid, reason, stored });
+        const { keyId, reason, stored } = error;
+        log("ERROR", "key_check_failed", { keyId, reason, stored });
         throw error;
       }
       // The name is AWS's error code, such as AccessDeniedException, or Error. A message from
-      // this module names only key IDs and accounts.
+      // this package names only key IDs, tables and kinds.
       log("ERROR", "key_rotation_failed", {
         name: error instanceof Error ? error.name : typeof error,
         message: error instanceof Error ? error.message : undefined,

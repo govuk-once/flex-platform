@@ -1,9 +1,12 @@
 import {
+  CALLER_TOKEN_KEYS_OBJECT,
   CallerTokenKeysBucket,
   callerTokenKeysBucketName,
+  edgeRoleName,
   KeyRotation,
   PushIdSecret,
   SigningKey,
+  signingKeyAliasName,
 } from "@repo/frontdoor-infra";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 import { gatewayRolePattern } from "@repo/gateway-infra";
@@ -22,11 +25,11 @@ export function frontdoorCallerTokenKeysStackName(
 /**
  * The caller token's keys: the KMS key that wraps the private keys the edge signs with, the bucket
  * every gateway reads the public keys from, and key rotation, which makes the keys under the
- * signing key, gives the edge its private keys and writes every public key to the bucket. With
- * them, the secret the edge derives each caller's push ID with, which the token holds. One stack,
- * because all four are in the frontdoor account in eu-west-2. Protected from deletion, and the
- * key, the bucket and the secret are retained: without them, the edge can't sign and no gateway
- * can verify a token.
+ * signing key, keeps them in its two tables, where the edge reads its private keys, and writes
+ * every public key to the bucket. With them, the secret the edge derives each caller's push ID
+ * with, which the token holds. One stack, because all four are in the frontdoor account in
+ * eu-west-2. Protected from deletion, and the key, the bucket, the tables and the secret are
+ * retained: without them, the edge can't sign and no gateway can verify a token.
  */
 export class FrontdoorCallerTokenKeysStack extends Stack {
   constructor(scope: Construct, environment: EnvironmentConfig) {
@@ -40,10 +43,8 @@ export class FrontdoorCallerTokenKeysStack extends Stack {
     });
 
     // Derived once, and given to both as a plain string: key rotation bakes it into its function.
-    const bucketName = callerTokenKeysBucketName(
-      environment.name,
-      environment.frontdoor.account,
-    );
+    const { account } = environment.frontdoor;
+    const bucketName = callerTokenKeysBucketName(environment.name, account);
 
     new SigningKey(this, "SigningKey", { environment: environment.name });
     new CallerTokenKeysBucket(this, "CallerTokenKeys", {
@@ -62,9 +63,19 @@ export class FrontdoorCallerTokenKeysStack extends Stack {
     new PushIdSecret(this, "PushIdSecret", { environment: environment.name });
     new KeyRotation(this, "KeyRotation", {
       environment: environment.name,
-      publicKeysBucket: bucketName,
-      publicKeysAccount: environment.frontdoor.account,
-      publicKeysRegion: NETWORK_REGION,
+      kind: "caller-token",
+      keyAlias: signingKeyAliasName(environment.name),
+      // The edge's role, which signs with the private keys. Its stack deploys after this one.
+      privateKeyReaderRoleArns: [
+        `arn:aws:iam::${account}:role/${edgeRoleName(environment.name)}`,
+      ],
+      // The gateways' own region, where they read the public keys.
+      publication: {
+        bucket: bucketName,
+        account,
+        object: CALLER_TOKEN_KEYS_OBJECT,
+        region: NETWORK_REGION,
+      },
     });
   }
 }

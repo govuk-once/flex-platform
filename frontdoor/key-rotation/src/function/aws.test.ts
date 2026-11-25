@@ -11,18 +11,27 @@ import {
   vi,
 } from "vitest";
 
-import { awsPorts } from "./aws.ts";
-import type { KeyRotationConfig } from "./types.ts";
+import { awsPorts as kindPorts } from "./aws.ts";
+import { CALLER_TOKEN_POLICY } from "./policy.ts";
+import type { KeyRotationConfig, PublicationConfig } from "./types.ts";
+
+const PUBLICATION: PublicationConfig = {
+  bucket: "frontdoor-sandbox-keys-100000000002",
+  account: "100000000002",
+  object: "caller-token-keys.json",
+  region: "eu-west-2",
+};
 
 const CONFIG: KeyRotationConfig = {
+  kind: "caller-token",
   keyAlias: "alias/frontdoor-sandbox-caller-token",
-  signingKeyParameter: "/flex/frontdoor/sandbox/caller-token-signing-key",
-  stateParameter: "/flex/frontdoor/sandbox/caller-token-key-state",
-  publicKeysBucket: "frontdoor-sandbox-keys-100000000002",
-  publicKeysAccount: "100000000002",
-  publicKeysObject: "caller-token-keys.json",
-  publicKeysRegion: "eu-west-2",
+  privateKeysTable: "frontdoor-sandbox-caller-token-private-keys",
+  publicKeysTable: "frontdoor-sandbox-caller-token-public-keys",
+  publication: PUBLICATION,
 };
+
+const awsPorts = (config: KeyRotationConfig, region: string) =>
+  kindPorts(config, CALLER_TOKEN_POLICY, region);
 
 interface Call {
   readonly target: string;
@@ -31,11 +40,10 @@ interface Call {
   readonly accessKey: string;
 }
 
-// One stand-in for KMS, SSM and S3: it answers by the request's target, or as S3 when it has
+// One stand-in for KMS and S3: it answers by the request's target, or as S3 when it has
 // none, and records each call with the region and access key it was signed for.
 let server: Server;
 let calls: Call[];
-let parameters: Map<string, string>;
 let objects: Map<string, string>;
 
 const PUBLIC_KEY = generateKeyPairSync("ed25519").publicKey;
@@ -50,7 +58,6 @@ function read(request: IncomingMessage): Promise<string> {
 
 beforeEach(async () => {
   calls = [];
-  parameters = new Map();
   objects = new Map();
   server = createServer((request, response) => {
     void read(request).then((text) => {
@@ -94,21 +101,7 @@ beforeEach(async () => {
       const body = JSON.parse(text) as Record<string, unknown>;
       calls.push({ target, region, body, accessKey });
       response.setHeader("content-type", "application/x-amz-json-1.1");
-      if (target === "AmazonSSM.GetParameter") {
-        const value = parameters.get(String(body.Name));
-        if (value === undefined) {
-          response.statusCode = 400;
-          response.end(JSON.stringify({ __type: "ParameterNotFound" }));
-          return;
-        }
-        response.end(JSON.stringify({ Parameter: { Value: value } }));
-      } else if (target === "AmazonSSM.PutParameter") {
-        parameters.set(`${region} ${String(body.Name)}`, String(body.Value));
-        parameters.set(String(body.Name), String(body.Value));
-        response.end(JSON.stringify({ Version: 1 }));
-      } else if (
-        target === "TrentService.GenerateDataKeyPairWithoutPlaintext"
-      ) {
+      if (target === "TrentService.GenerateDataKeyPairWithoutPlaintext") {
         response.end(
           JSON.stringify({
             PublicKey: PUBLIC_KEY.export({
@@ -153,39 +146,15 @@ afterEach(async () => {
 });
 
 describe("awsPorts", () => {
-  it("reads no state as empty, and reads back the state it writes", async () => {
-    const ports = awsPorts(CONFIG, "eu-west-2");
-    expect(await ports.readState()).toEqual({ keys: [], revoked: [] });
-
-    const state = {
-      keys: [
-        {
-          kid: "20261106T120000Z",
-          x: "AAAA",
-          privateKey: "AQID",
-          signsFrom: 1_793_102_400,
-        },
-      ],
-      revoked: [{ kid: "20261106T110000Z", revokedAt: 1_793_098_800 }],
-    };
-    await ports.writeState(state);
-    expect(await ports.readState()).toEqual(state);
-    expect(calls.map(({ region }) => region)).toEqual([
-      "eu-west-2",
-      "eu-west-2",
-      "eu-west-2",
-    ]);
-  });
-
   it("makes an Ed25519 key pair, bound to its purpose and ID", async () => {
     const key = await awsPorts(CONFIG, "eu-west-2").generate(
       "20261106T120000Z",
     );
 
-    expect(key).toEqual({
-      x: PUBLIC_KEY.export({ format: "jwk" }).x,
-      privateKey: Buffer.from("ciphertext").toString("base64"),
-    });
+    expect(Buffer.from(key.publicKey)).toEqual(
+      PUBLIC_KEY.export({ format: "der", type: "spki" }),
+    );
+    expect(Buffer.from(key.privateKey).toString()).toBe("ciphertext");
     expect(calls).toEqual([
       expect.objectContaining({
         target: "TrentService.GenerateDataKeyPairWithoutPlaintext",
@@ -206,8 +175,8 @@ describe("awsPorts", () => {
     const ports = awsPorts(CONFIG, "eu-west-2");
     const context = { purpose: "flex-caller-token", kid: "20261106T120000Z" };
     await ports.check({
-      kid: "20261106T120000Z",
-      privateKey: Buffer.from("ciphertext").toString("base64"),
+      keyId: "20261106T120000Z",
+      privateKey: new Uint8Array(Buffer.from("ciphertext")),
     });
 
     expect(calls).toEqual([
@@ -229,8 +198,8 @@ describe("awsPorts", () => {
     const ports = awsPorts(CONFIG, "eu-west-2");
     await expect(
       ports.check({
-        kid: "20261106T120000Z",
-        privateKey: Buffer.from("damaged").toString("base64"),
+        keyId: "20261106T120000Z",
+        privateKey: new Uint8Array(Buffer.from("damaged")),
       }),
     ).rejects.toMatchObject({ name: "InvalidCiphertextException" });
   });
@@ -251,29 +220,22 @@ describe("awsPorts", () => {
 
   it("never reads or writes a bucket of the same name that another account owns", async () => {
     const ports = awsPorts(
-      { ...CONFIG, publicKeysAccount: "999999999999" },
+      { ...CONFIG, publication: { ...PUBLICATION, account: "999999999999" } },
       "eu-west-2",
     );
     await expect(ports.publish('{"keys":[]}')).rejects.toThrow();
     expect(objects.size).toBe(0);
   });
 
-  it("writes the edge's signing keys, and only when they changed", async () => {
-    const ports = awsPorts(CONFIG, "eu-west-2");
-    const keys =
-      '{"keys":[{"kid":"20261106T120000Z","privateKey":"AQID","signsFrom":1}]}';
-    await ports.distribute(keys);
-    await ports.distribute(keys);
-
-    expect(
-      parameters.get(
-        "eu-west-2 /flex/frontdoor/sandbox/caller-token-signing-key",
-      ),
-    ).toBe(keys);
-    expect(calls.map(({ target, region }) => `${region} ${target}`)).toEqual([
-      "eu-west-2 AmazonSSM.GetParameter",
-      "eu-west-2 AmazonSSM.PutParameter",
-      "eu-west-2 AmazonSSM.GetParameter",
-    ]);
+  it("publishes nothing for a kind that has no publication", async () => {
+    const ports = kindPorts(
+      { ...CONFIG, publication: null },
+      { ...CALLER_TOKEN_POLICY, publication: null },
+      "eu-west-2",
+    );
+    await expect(ports.publish('{"keys":[]}')).rejects.toThrow(
+      "The caller-token keys are not published",
+    );
+    expect(calls).toEqual([]);
   });
 });

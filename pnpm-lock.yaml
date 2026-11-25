@@ -330,13 +330,13 @@ importers:
 
   frontdoor/key-rotation:
     dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: 3.1168.0
+        version: 3.1168.0
       '@aws-sdk/client-kms':
         specifier: 3.1168.0
         version: 3.1168.0
       '@aws-sdk/client-s3':
-        specifier: 3.1168.0
-        version: 3.1168.0
-      '@aws-sdk/client-ssm':
         specifier: 3.1168.0
         version: 3.1168.0
       '@repo/frontdoor-shared':
@@ -367,13 +367,13 @@ importers:
 
   frontdoor/origin-request:
     dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: 3.1168.0
+        version: 3.1168.0
       '@aws-sdk/client-kms':
         specifier: 3.1168.0
         version: 3.1168.0
       '@aws-sdk/client-secrets-manager':
-        specifier: 3.1168.0
-        version: 3.1168.0
-      '@aws-sdk/client-ssm':
         specifier: 3.1168.0
         version: 3.1168.0
       '@repo/cloudfront-js-utils':
