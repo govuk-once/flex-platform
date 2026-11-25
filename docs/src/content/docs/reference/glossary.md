@@ -28,8 +28,8 @@ Lambda proxy integration, in isolated subnets. See [Domains](/flex-platform/doma
 
 ## Domain SDK
 
-`@govuk-once/flex-domain-sdk`, the package a domain's code uses to declare its configuration and
-type its handlers. See [Domain SDK](/flex-platform/domains/overview/#domain-sdk).
+`@govuk-once/flex-domain-sdk`, the package a domain's code uses to declare its configuration, type
+its handlers and answer its requests. See [Domain SDK](/flex-platform/domains/overview/#domain-sdk).
 
 ## Driver
 

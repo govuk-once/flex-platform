@@ -72,8 +72,9 @@ putting the value. Requests that arrive while a read is under way share it.
 ## Verifying
 
 A domain passes the token as the envelope's `secure.token`, through the
-[gateway client](/flex-platform/domains/overview/#the-caller-context). A domain may decode it to
-read `pairwiseId`, but has no need to verify it. The gateway verifies it as the second step of
+[gateway client](/flex-platform/domains/overview/#the-caller-context). The
+[domain SDK](/flex-platform/domains/requests/#the-handlers-context) reads `pairwiseId` and `pushId`
+from it for a handler, and has no need to verify it. The gateway verifies it as the second step of
 [a request](/flex-platform/gateways/overview/#a-request), before it routes the call, so a caller
 without a valid token learns nothing of the gateway's operations.
 

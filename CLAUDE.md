@@ -47,5 +47,6 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 | The CDK app, stages, config and its rules | `infrastructure/overview.md` |
 | The network, endpoints and DNS allowlist | `infrastructure/network.md` |
 | Adding a gateway | `gateways/creating-a-gateway.md` |
+| The domain SDK, a domain's configuration, and how a request is answered | `domains/overview.mdx`, `domains/configuration.md`, `domains/requests.md` |
 | CI, secret scanning, SonarQube, Dependabot | `start/working-in-the-repo.md` |
 | Terms | `reference/glossary.md` |

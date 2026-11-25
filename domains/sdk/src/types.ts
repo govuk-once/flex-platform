@@ -14,7 +14,7 @@ export interface ParsedRouteKey {
   readonly parameters: readonly string[];
   // The key with every parameter's name blanked, so two keys that match the same requests
   // compare equal: `GET /v1/todos/{id}` and `GET /v1/todos/{todoId}` are one route.
-  readonly shape: string;
+  readonly pattern: string;
 }
 
 export type RouteKeyResult =
@@ -48,3 +48,40 @@ export type ResponsesOf<Route> = Route extends {
   : never;
 
 export type StatusCodesOf<Route> = keyof ResponsesOf<Route> & number;
+
+// A required property named for the mistake. The compiler reports it missing, so the message
+// reads as the rule that was broken, on the line that broke it.
+export type Problem<Message extends string> = {
+  readonly [Text in Message]: never;
+};
+
+export type IsNever<Type> = [Type] extends [never] ? true : false;
+
+export type IsSame<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left]
+    ? true
+    : false
+  : false;
+
+export type HasField<Type, Field extends string> = Field extends keyof Type
+  ? true
+  : false;
+
+// "id" and "linkId" from "/v1/todos/{id}/links/{linkId}".
+export type PathParameters<Template extends string> =
+  Template extends `${string}{${infer Param}}${infer Rest}`
+    ? Param | PathParameters<Rest>
+    : never;
+
+// "200, 201" from [200, 201] and ", ".
+export type Join<
+  Items extends readonly (string | number)[],
+  Separator extends string,
+> = Items extends readonly [
+  infer First extends string | number,
+  ...infer Rest extends readonly (string | number)[],
+]
+  ? Rest extends readonly []
+    ? `${First}`
+    : `${First}${Separator}${Join<Rest, Separator>}`
+  : "";

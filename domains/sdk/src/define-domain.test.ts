@@ -11,9 +11,10 @@ import {
 } from "../test/fixtures/schemas.ts";
 import { checkDomain, DomainConfigError } from "./check-domain.ts";
 import { defineDomain } from "./define-domain.ts";
+import type { RESPONSE_STATUS_CODES } from "./http.ts";
 import type { RefinedRoutes } from "./refine.ts";
 import type { RegisteredRouteKey } from "./register.ts";
-import type { DomainConfig, DomainRoutes } from "./types.ts";
+import type { DomainConfig, DomainRoutes, Join, RouteConfig } from "./types.ts";
 
 // Where defineDomain refuses a route: the fields its checks put a problem on, or `never` for a
 // route it takes. A case is held to where it is refused, not only to being refused, so one that
@@ -38,8 +39,8 @@ type Expected<Cases extends Record<string, RouteCase>> = {
   [Case in keyof Cases]: Cases[Case]["at"][number];
 };
 
-const KEY_PROBLEM =
-  'a route key must have the format "<METHOD> /<version>/<path>"';
+const ROUTE_KEY_PROBLEM =
+  'invalid route key, must be "<METHOD> /<version>/<path>"';
 
 // Each case is one of the fixture's routes with one thing wrong.
 const { routes } = domain;
@@ -66,19 +67,6 @@ const refusedByTypes = {
     },
     at: ["handler"],
   },
-  "a path parameter whose schema takes no string": {
-    key: "GET /v1/todos/{id}",
-    route: { ...GET_ROUTE, params: z.object({ id: z.number() }) },
-    at: ["params"],
-  },
-  "a query parameter whose schema takes no string": {
-    key: "GET /v1/todos",
-    route: {
-      ...LIST_ROUTE,
-      query: z.strictObject({ page: z.number().optional() }),
-    },
-    at: ["query"],
-  },
 } as const;
 
 // What the types refuse and the check refuses too, so a configuration that bypassed the types is
@@ -103,6 +91,32 @@ const refusedByBoth = {
     key: "GET /v1/todos",
     route: { ...LIST_ROUTE, query: z.string() },
     at: ["RouteConfig"],
+  },
+  "a path parameter that converts its input": {
+    key: "GET /v1/todos/{id}",
+    route: { ...GET_ROUTE, params: z.object({ id: z.coerce.number() }) },
+    at: ["params"],
+  },
+  "an optional path parameter": {
+    key: "GET /v1/todos/{id}",
+    route: { ...GET_ROUTE, params: z.object({ id: z.string().optional() }) },
+    at: ["params"],
+  },
+  "a query parameter that converts its input": {
+    key: "GET /v1/todos",
+    route: {
+      ...LIST_ROUTE,
+      query: z.strictObject({ page: z.coerce.number().optional() }),
+    },
+    at: ["query"],
+  },
+  "a query parameter that is an object": {
+    key: "GET /v1/todos",
+    route: {
+      ...LIST_ROUTE,
+      query: z.strictObject({ page: z.strictObject({ size: z.number() }) }),
+    },
+    at: ["query"],
   },
   "a body on GET": {
     key: "GET /v1/todos",
@@ -132,7 +146,7 @@ const refusedByBoth = {
   "a key that does not follow the grammar": {
     key: "GET /todos",
     route: LIST_ROUTE,
-    at: [KEY_PROBLEM],
+    at: [ROUTE_KEY_PROBLEM],
   },
   "errors, a name or function on a route": {
     key: "GET /v1/todos",
@@ -185,6 +199,44 @@ describe("defineDomain", () => {
     expectTypeOf<RefusedAtEach<ByBoth>>().toEqualTypeOf<Expected<ByBoth>>();
   });
 
+  it("accepts path and query parameters of each type the SDK reads from text", () => {
+    const params = z.object({ id: z.number() });
+
+    const query = z.strictObject({
+      tag: z.array(z.string()).optional(),
+      archived: z.boolean().default(false),
+      size: z.enum(["small", "large"]).optional(),
+    });
+
+    const route = { ...GET_ROUTE, params, query };
+
+    expectTypeOf<
+      RefusedAt<"GET /v1/todos/{id}", typeof route>
+    >().toEqualTypeOf<never>();
+    expect(check("GET /v1/todos/{id}", route)).not.toThrow();
+  });
+
+  it("explains each refused status, naming the accepted ones from their constant", () => {
+    type ResponsesProblem<Responses extends RouteConfig["responses"]> =
+      RefinedRoutes<
+        Record<"GET /v1/todos", { handler: object; responses: Responses }>
+      >["GET /v1/todos"] extends { readonly responses: infer Problem }
+        ? keyof Problem
+        : never;
+
+    type Accepted = Join<typeof RESPONSE_STATUS_CODES, ", ">;
+
+    expectTypeOf<
+      ResponsesProblem<{ 200: null; 302: null }>
+    >().toEqualTypeOf<`status 302 not allowed, must be one of: ${Accepted}`>();
+    expectTypeOf<
+      ResponsesProblem<{ 200: null; 403: null }>
+    >().toEqualTypeOf<"status 403 not allowed, the app treats it as an expired token">();
+    expectTypeOf<
+      ResponsesProblem<{ 200: null; 502: null }>
+    >().toEqualTypeOf<"status 502 not allowed, any handler may return 500, 502, 503 or 504 undeclared">();
+  });
+
   it.each(Object.entries(refusedByBoth))(
     "refuses %s as it loads too",
     (_case, { key, route }) => {
@@ -204,7 +256,7 @@ describe("defineDomain", () => {
 
     expect(define).toThrow(DomainConfigError);
     expect(define).toThrow(
-      'name: "Domain_A" must be 1 to 32 lowercase letters, digits and hyphens',
+      "name: invalid format, must be 1 to 32 lowercase letters",
     );
   });
 

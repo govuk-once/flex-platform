@@ -46,6 +46,7 @@ export default defineConfig({
           items: [
             "domains/overview",
             "domains/configuration",
+            "domains/requests",
             "domains/hosting",
             "domains/designing-a-domain",
           ],

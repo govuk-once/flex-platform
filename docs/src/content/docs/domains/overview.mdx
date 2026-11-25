@@ -71,17 +71,12 @@ points the client at a stand-in for Lambda's API.
 The client has a function for each of the gateway's operations, named for it and taking its input,
 and nothing else. An editor shows each with the description the configuration gives its
 operation. A call sends one [envelope](/flex-platform/gateways/overview/#a-request) and returns the
-gateway's response, typed by the operation: an error envelope or one of its outcomes. As a result:
+gateway's response, typed by the operation: an error envelope or one of its outcomes.
 
-- a gateway's handler takes an envelope that names the operation, not an HTTP event. It answers
-  with an outcome name, not a status code.
-- codegen writes the contract and the client package to `.gen/client/`, separate from what the
-  gateway runs in `.gen/runtime/`, because the two are deployed separately.
-- the client sends each call only once, with the SDK's retries turned off (`maxAttempts: 1`). A
-  retried invoke could repeat an upstream write. Deciding whether to retry needs to know the
-  operation and the deadline.
-- the client leaves the invoke's `LogType` unset, so it never asks for the end of the gateway's
-  execution log.
+The client sends each call only once, with the SDK's retries turned off (`maxAttempts: 1`): a
+retried invoke could repeat an upstream write, and deciding whether to retry needs to know the
+operation and the deadline. It leaves the invoke's `LogType` unset, so it never asks for the end of
+the gateway's execution log.
 
 A call's second argument, its options, can carry a `signal` that stops the client waiting.
 
@@ -90,9 +85,9 @@ A call's second argument, its options, can carry a `signal` that stops the clien
 What a call sends on its caller's behalf comes from the caller context, not from the call. It is
 set once for the whole of a domain's invocation, by running the handler inside `withCallerContext`
 from `@govuk-once/flex-gateway-client/caller`. Every call made from the handler, however many
-`await`s deep, then carries it. The domain SDK's planned runtime will do this for every handler,
-so a domain developer does not. The entry is kept apart from the client's main one so that an
-editor does not offer it, and nothing exports a way to read the context back.
+`await`s deep, then carries it. The [domain SDK](#domain-sdk) does this for every handler it
+calls, so a domain developer does not. The entry is kept apart from the client's main one so that
+an editor does not offer it, and nothing exports a way to read the context back.
 
 ```ts
 import { withCallerContext } from "@govuk-once/flex-gateway-client/caller";
@@ -108,14 +103,10 @@ withCallerContext({ deadline, secure }, () => handler(event));
   request's `x-flex-secure` header, passed on unchanged. The gateway verifies it, and compares an
   operation's [bound fields](/flex-platform/gateways/configuration/#secure-bindings) with its
   claims. Without it the client sends none, and the gateway refuses every call with
-  `UNAUTHENTICATED`, even for an operation with no bindings. A domain may decode the token to read
-  `pairwiseId`, but never needs to verify it: the gateway does.
+  `UNAUTHENTICATED`, even for an operation with no bindings.
 
 A call made outside a caller context is refused before anything is sent: the client throws an
 `Error`, not a `GatewayInvocationError`, because the mistake is in the caller's code.
-
-The SDK takes the gateway client as a peer dependency, as each gateway's package does, so a domain
-has one copy of it, and one caller context.
 
 ### When the gateway does not answer
 
@@ -150,9 +141,15 @@ gateway refuses as `UPSTREAM_CONTRACT_VIOLATION`.
 ## Domain SDK
 
 The domain SDK, `@govuk-once/flex-domain-sdk` in `domains/sdk`, is the package a domain's code uses
-to declare its routes and type its handlers. It is not published yet, and serving a domain's
-requests with it is planned. How a domain uses it is in
-[Domain configuration](/flex-platform/domains/configuration/).
+to declare its routes, type its handlers and answer its requests:
+
+- [Domain configuration](/flex-platform/domains/configuration/) is what a domain declares, and
+  the rules each field is held to.
+- [Requests](/flex-platform/domains/requests/) is how the SDK answers a request.
+
+Serving requests from a domain's function with it is planned, and it is not published yet. It
+takes `zod` and `@govuk-once/flex-gateway-client` as peer dependencies, so a domain's schemas, its
+gateway calls and the SDK share the domain's own copy of each, and one caller context.
 
 ## API specifications
 

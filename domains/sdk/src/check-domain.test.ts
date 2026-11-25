@@ -3,6 +3,11 @@ import { z } from "zod";
 
 import domain from "../test/fixtures/domain.ts";
 import { checkDomain, DomainConfigError } from "./check-domain.ts";
+import {
+  CONVERTED_PROBLEM,
+  NOT_STRICT_PROBLEM,
+  UNREADABLE_PROBLEMS,
+} from "./input-rules.ts";
 
 function problemsOf(config: unknown): readonly string[] {
   try {
@@ -14,355 +19,241 @@ function problemsOf(config: unknown): readonly string[] {
   return [];
 }
 
+function domainWith(routes: unknown) {
+  return { name: "domain-a", routes };
+}
+
 const {
   "GET /v1/todos": LIST_ROUTE,
   "GET /v1/todos/{id}": GET_ROUTE,
+  "POST /v1/todos": POST_ROUTE,
   "DELETE /v1/todos/{id}": DELETE_ROUTE,
 } = domain.routes;
 
-const NAME_RULE =
-  "1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen";
+// Where checkDomain reports a problem on the fixture's list and get routes.
+const LIST_ROUTE_AT = 'routes["GET /v1/todos"]';
+
+const GET_ROUTE_AT = 'routes["GET /v1/todos/{id}"]';
+
+// Every status a route may declare, as the problem for any other lists them.
+const RESPONSE_STATUSES = "200, 201, 202, 204, 400, 404, 409, 410, 422, 429";
+
+const ROUTE_FIELDS = "handler, params, query, body, responses";
 
 describe("checkDomain", () => {
-  it("finds nothing wrong with the fixture's domain", () => {
-    expect(problemsOf(domain)).toEqual([]);
-  });
-
-  // Both match a request for /v1/todos/archived. They are two routes, and which one takes the
-  // request is routing's rule: the literal segment beats the parameter.
-  it("accepts a literal segment where another route has a parameter", () => {
-    expect(
-      problemsOf({
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos/{id}": GET_ROUTE,
-          "GET /v1/todos/archived": LIST_ROUTE,
-        },
+  it.each<[string, unknown]>([
+    ["the fixture's domain", domain],
+    // Both match /v1/todos/archived. Routing gives it to the literal segment.
+    [
+      "a literal segment where another route has a parameter",
+      domainWith({
+        "GET /v1/todos/{id}": GET_ROUTE,
+        "GET /v1/todos/archived": LIST_ROUTE,
       }),
-    ).toEqual([]);
+    ],
+  ])("accepts %s", (_case, config) => {
+    expect(problemsOf(config)).toEqual([]);
   });
 
   it.each<[string, unknown, readonly string[]]>([
     [
-      "keys for the same method and path",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos/{id}": GET_ROUTE,
-          "GET /v1/todos/{todoId}": {
-            ...GET_ROUTE,
-            params: z.object({ todoId: z.string() }),
-          },
-          "GET /v1/todos/{key}": {
-            ...GET_ROUTE,
-            params: z.object({ key: z.string() }),
-          },
-        },
-      },
-      [
-        'routes: these keys match the same requests, because a path parameter\'s name does not distinguish routes: "GET /v1/todos/{id}", "GET /v1/todos/{todoId}", "GET /v1/todos/{key}"',
-      ],
+      "a configuration that is not an object",
+      "domain-a",
+      ["configuration: invalid type, must be an object"],
     ],
     [
-      "a name that is not a platform name",
-      { name: "Domain_A", routes: { "GET /v1/todos": LIST_ROUTE } },
-      [`name: "Domain_A" must be ${NAME_RULE}`],
+      "a domain field it does not have",
+      { ...domainWith({ "GET /v1/todos": LIST_ROUTE }), function: {} },
+      ["function: unknown field, must be one of: name, routes"],
     ],
     [
       "a name that is not a string",
       { routes: { "GET /v1/todos": LIST_ROUTE } },
-      [`name: must be a string of ${NAME_RULE}`],
-    ],
-    [
-      "a field the domain does not have",
-      {
-        name: "domain-a",
-        function: { memoryMb: 256 },
-        routes: { "GET /v1/todos": LIST_ROUTE },
-      },
-      ["function: is not a domain field; accepted fields: name, routes"],
-    ],
-    [
-      "no routes",
-      { name: "domain-a", routes: {} },
-      ["routes: must declare at least one route"],
+      ["name: invalid type, must be a string"],
     ],
     [
       "routes that are not an object",
-      { name: "domain-a", routes: [] },
+      domainWith([]),
       [
-        'routes: must be an object of routes, each keyed "<METHOD> /<version>/<path>"',
+        'routes: invalid type, must be an object of routes keyed "<METHOD> /<version>/<path>"',
       ],
     ],
     [
-      "a handler that is not a function",
-      {
-        name: "domain-a",
-        routes: { "GET /v1/todos": { ...LIST_ROUTE, handler: "listTodos" } },
-      },
-      ['routes["GET /v1/todos"].handler: must be a function'],
+      "no routes",
+      domainWith({}),
+      ["routes: empty, declare at least one route"],
     ],
     [
-      "a response that is not a schema",
+      "every problem with the name and a key at once",
+      // The params are not checked against a key that cannot be read.
       {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": { ...LIST_ROUTE, responses: { 200: "todos" } },
+        name: "Domain_A",
+        routes: { "get /todos": { ...LIST_ROUTE, params: z.object({}) } },
+      },
+      [
+        "name: invalid format, must be 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen",
+        'routes["get /todos"]: invalid method "get", must be one of: GET, POST, PUT, PATCH, DELETE',
+        'routes["get /todos"]: missing version, start the path with one, such as /v1',
+      ],
+    ],
+    [
+      "keys that differ only in a parameter's name",
+      domainWith({
+        "GET /v1/todos/{id}": GET_ROUTE,
+        "GET /v1/todos/{todoId}": {
+          ...GET_ROUTE,
+          params: z.object({ todoId: z.string() }),
         },
-      },
+      }),
       [
-        'routes["GET /v1/todos"].responses[200]: must be a Zod schema, or null for no body',
-      ],
-    ],
-    [
-      "every problem at once",
-      { name: "", routes: { "get /todos": LIST_ROUTE } },
-      [
-        `name: "" must be ${NAME_RULE}`,
-        'routes["get /todos"]: "get" is not a valid method, must be one of: GET, POST, PUT, PATCH, DELETE',
-        'routes["get /todos"]: the path must start with a version, such as /v1',
+        'routes: duplicate routes, parameter names do not tell apart: "GET /v1/todos/{id}", "GET /v1/todos/{todoId}"',
       ],
     ],
     [
       "a route that is not an object",
-      { name: "domain-a", routes: { "GET /v1/todos": "route" } },
-      ['routes["GET /v1/todos"]: must be an object'],
+      domainWith({ "GET /v1/todos": "route" }),
+      [`${LIST_ROUTE_AT}: invalid type, must be an object`],
     ],
     [
-      "a field the route does not have",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": {
-            ...LIST_ROUTE,
-            cache: true,
-            errors: ["not_found"],
-          },
-        },
-      },
+      "route fields it does not have",
+      domainWith({ "GET /v1/todos": { ...LIST_ROUTE, cache: true } }),
       [
-        'routes["GET /v1/todos"].cache: is not a route field; accepted fields: handler, params, query, body, responses',
-        'routes["GET /v1/todos"].errors: is not a route field; accepted fields: handler, params, query, body, responses',
+        `${LIST_ROUTE_AT}.cache: unknown field, must be one of: ${ROUTE_FIELDS}`,
       ],
+    ],
+    [
+      "a handler that is not a function",
+      domainWith({ "GET /v1/todos": { ...LIST_ROUTE, handler: "listTodos" } }),
+      [`${LIST_ROUTE_AT}.handler: invalid type, must be a function`],
     ],
     [
       "path parameters without params",
-      {
-        name: "domain-a",
-        routes: { "GET /v1/todos/{id}": { ...GET_ROUTE, params: undefined } },
-      },
-      [
-        'routes["GET /v1/todos/{id}"].params: is required, with the route key\'s path parameters: {id}',
-      ],
+      domainWith({ "GET /v1/todos/{id}": { ...GET_ROUTE, params: undefined } }),
+      [`${GET_ROUTE_AT}.params: missing, required by path parameters: {id}`],
     ],
     [
-      "params that are not a Zod object",
-      {
-        name: "domain-a",
-        routes: { "GET /v1/todos/{id}": { ...GET_ROUTE, params: {} } },
-      },
-      ['routes["GET /v1/todos/{id}"].params: must be a Zod object'],
+      "params that are not an object schema",
+      domainWith({ "GET /v1/todos/{id}": { ...GET_ROUTE, params: {} } }),
+      [`${GET_ROUTE_AT}.params: invalid type, must be an object schema`],
     ],
     [
-      "params on a route key with no path parameter",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": {
-            ...LIST_ROUTE,
-            params: z.object({ id: z.string() }),
-          },
+      "params on a key with no path parameter",
+      domainWith({
+        "GET /v1/todos": {
+          ...LIST_ROUTE,
+          params: z.object({ id: z.string() }),
         },
-      },
+      }),
       [
-        'routes["GET /v1/todos"].params: must be left out, as the route key has no path parameter',
+        `${LIST_ROUTE_AT}.params: not allowed, the route key has no path parameters`,
       ],
     ],
     [
       "params that miss a path parameter and add a key",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos/{id}": {
-            ...GET_ROUTE,
-            params: z.object({ other: z.string() }),
-          },
+      domainWith({
+        "GET /v1/todos/{id}": {
+          ...GET_ROUTE,
+          params: z.object({ other: z.string() }),
         },
-      },
+      }),
       [
-        'routes["GET /v1/todos/{id}"].params: is missing the key for the path parameter {id}',
-        'routes["GET /v1/todos/{id}"].params.other: is not a path parameter; accepted keys: id',
+        `${GET_ROUTE_AT}.params.id: missing, required by path parameter {id}`,
+        `${GET_ROUTE_AT}.params.other: unknown path parameter, must be one of: id`,
       ],
     ],
     [
-      "params on a route whose key is not valid",
-      {
-        name: "domain-a",
-        routes: { "get /v1/todos": { ...LIST_ROUTE, params: z.object({}) } },
-      },
+      "parameters that cannot be read from text",
+      domainWith({
+        "GET /v1/todos/{id}": {
+          ...GET_ROUTE,
+          params: z.object({ id: z.coerce.number() }),
+          query: z.strictObject({ at: z.date().optional() }),
+        },
+      }),
       [
-        'routes["get /v1/todos"]: "get" is not a valid method, must be one of: GET, POST, PUT, PATCH, DELETE',
+        `${GET_ROUTE_AT}.params.id: ${CONVERTED_PROBLEM}`,
+        `${GET_ROUTE_AT}.query.at: ${UNREADABLE_PROBLEMS.query}`,
       ],
     ],
     [
-      "a query that is not a Zod object",
-      {
-        name: "domain-a",
-        routes: { "GET /v1/todos": { ...LIST_ROUTE, query: {} } },
-      },
-      ['routes["GET /v1/todos"].query: must be a Zod object'],
-    ],
-    [
-      "a query that takes fields it does not name",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": {
-            ...LIST_ROUTE,
-            query: z.object({ done: z.string() }),
-          },
+      "a query and a body that take fields they do not declare",
+      domainWith({
+        "GET /v1/todos": {
+          ...LIST_ROUTE,
+          query: z.object({ done: z.boolean() }),
         },
-      },
-      [expect.stringContaining('routes["GET /v1/todos"].query')],
-    ],
-    [
-      "a body that is not a Zod schema",
-      {
-        name: "domain-a",
-        routes: {
-          "POST /v1/todos": {
-            handler: LIST_ROUTE.handler,
-            body: {},
-            responses: { 200: null },
-          },
+        "POST /v1/todos": {
+          ...POST_ROUTE,
+          body: z.object({ title: z.string() }),
         },
-      },
-      ['routes["POST /v1/todos"].body: must be a Zod schema'],
-    ],
-    [
-      "a body on a GET route",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": { ...LIST_ROUTE, body: z.strictObject({}) },
-        },
-      },
+      }),
       [
-        'routes["GET /v1/todos"].body: must be left out, as a GET route takes no body',
+        `${LIST_ROUTE_AT}.query: ${NOT_STRICT_PROBLEM}`,
+        `routes["POST /v1/todos"].body: ${NOT_STRICT_PROBLEM}`,
       ],
     ],
     [
-      "a body on a DELETE route",
-      {
-        name: "domain-a",
-        routes: {
-          "DELETE /v1/todos/{id}": {
-            ...DELETE_ROUTE,
-            body: z.strictObject({}),
-          },
-        },
-      },
-      [
-        'routes["DELETE /v1/todos/{id}"].body: must be left out, as a DELETE route takes no body',
-      ],
+      "a query that is not an object schema",
+      domainWith({ "GET /v1/todos": { ...LIST_ROUTE, query: {} } }),
+      [`${LIST_ROUTE_AT}.query: invalid type, must be an object schema`],
     ],
     [
-      "a body that takes fields it does not name",
-      {
-        name: "domain-a",
-        routes: {
-          "POST /v1/todos": {
-            handler: LIST_ROUTE.handler,
-            body: z.object({ title: z.string() }),
-            responses: { 201: null },
-          },
-        },
-      },
-      [expect.stringContaining('routes["POST /v1/todos"].body')],
+      "a body that is not a schema",
+      domainWith({ "POST /v1/todos": { ...POST_ROUTE, body: {} } }),
+      ['routes["POST /v1/todos"].body: invalid type, must be a schema'],
+    ],
+    [
+      "a body on GET and DELETE",
+      domainWith({
+        "GET /v1/todos": { ...LIST_ROUTE, body: z.strictObject({}) },
+        "DELETE /v1/todos/{id}": { ...DELETE_ROUTE, body: z.strictObject({}) },
+      }),
+      [
+        `${LIST_ROUTE_AT}.body: not allowed, a GET route takes no body`,
+        'routes["DELETE /v1/todos/{id}"].body: not allowed, a DELETE route takes no body',
+      ],
     ],
     [
       "responses that are not an object",
-      {
-        name: "domain-a",
-        routes: { "GET /v1/todos": { ...LIST_ROUTE, responses: [] } },
-      },
+      domainWith({ "GET /v1/todos": { ...LIST_ROUTE, responses: [] } }),
       [
-        'routes["GET /v1/todos"].responses: must be an object of schemas keyed by status',
+        `${LIST_ROUTE_AT}.responses: invalid type, must be an object of schemas keyed by status`,
       ],
     ],
     [
-      "responses with no status",
-      {
-        name: "domain-a",
-        routes: { "GET /v1/todos": { ...LIST_ROUTE, responses: {} } },
-      },
-      ['routes["GET /v1/todos"].responses: must declare at least one status'],
+      "no responses",
+      domainWith({ "GET /v1/todos": { ...LIST_ROUTE, responses: {} } }),
+      [`${LIST_ROUTE_AT}.responses: empty, declare at least one status`],
     ],
     [
-      "the statuses the app reads as an expired token",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": {
-            ...LIST_ROUTE,
-            responses: { 200: null, 401: null, 403: null },
-          },
-        },
-      },
+      "a response that is not a schema or null",
+      domainWith({ "GET /v1/todos": { ...LIST_ROUTE, responses: { 200: 1 } } }),
       [
-        'routes["GET /v1/todos"].responses[401]: must not be declared, as the app reads a 401 as an expired token and sends the request again',
-        'routes["GET /v1/todos"].responses[403]: must not be declared, as the app reads a 403 as an expired token and sends the request again',
-      ],
-    ],
-    [
-      "a 5xx status",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": {
-            ...LIST_ROUTE,
-            responses: { 200: null, 502: null },
-          },
-        },
-      },
-      [
-        'routes["GET /v1/todos"].responses[502]: must not be declared, as any handler may answer with a 500, 502, 503 or 504, and with no other 5xx',
-      ],
-    ],
-    [
-      "a status that is neither 2xx nor 4xx",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": {
-            ...LIST_ROUTE,
-            responses: { 200: null, 302: null },
-          },
-        },
-      },
-      [
-        'routes["GET /v1/todos"].responses[302]: is not a status a route may declare; accepted statuses: 2xx, and 4xx except 401 and 403',
+        `${LIST_ROUTE_AT}.responses[200]: invalid type, must be a schema, or null for no body`,
       ],
     ],
     [
       "a schema on a status with no body",
-      {
-        name: "domain-a",
-        routes: {
-          "GET /v1/todos": {
-            ...LIST_ROUTE,
-            responses: { 204: z.object({}) },
-          },
-        },
-      },
+      domainWith({
+        "GET /v1/todos": { ...LIST_ROUTE, responses: { 204: z.object({}) } },
+      }),
       [
-        'routes["GET /v1/todos"].responses[204]: must be null, as a 204 response has no body',
+        `${LIST_ROUTE_AT}.responses[204]: must be null, a 204 response has no body`,
       ],
     ],
     [
-      "a configuration that is not an object",
-      "domain-a",
-      ["the configuration must be an object"],
+      "each kind of status a route may not declare",
+      domainWith({
+        "GET /v1/todos": {
+          ...LIST_ROUTE,
+          responses: { 200: null, 302: null, 403: null, 502: null },
+        },
+      }),
+      [
+        `${LIST_ROUTE_AT}.responses[302]: status not allowed, must be one of: ${RESPONSE_STATUSES}`,
+        `${LIST_ROUTE_AT}.responses[403]: status not allowed, the app treats a 403 as an expired token`,
+        `${LIST_ROUTE_AT}.responses[502]: status not allowed, any handler may return 500, 502, 503 or 504 undeclared`,
+      ],
     ],
   ])("refuses %s", (_case, config, problems) => {
     expect(problemsOf(config)).toEqual(problems);
