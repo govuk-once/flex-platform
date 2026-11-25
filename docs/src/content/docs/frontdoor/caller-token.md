@@ -29,25 +29,28 @@ gateway calls, but only for that user.
 
 ## Signing
 
-Lambda@Edge reads its signing keys from eu-west-2, wherever the copy runs. It reads the signing key
-parameter from SSM: the key signing now and the one scheduled next, each with the moment it starts.
-It decrypts with KMS, with the key's encryption context, each private key it doesn't already hold
-that has started or starts within the hour. Each call is signed with the function's own role and
-has 1.5 seconds.
+Lambda@Edge reads its signing keys from eu-west-2, wherever the copy runs. It reads the
+[private keys table](#keys) from DynamoDB: every key rotation holds, each with the moment it starts
+and, once the next key is scheduled, the moment it stops. It decrypts with KMS, with the key's
+encryption context, each private key it doesn't already hold that hasn't stopped, and has started
+or starts within the hour. Each call is signed with the function's own role and has 1.5 seconds. A
+table that holds anything but keys, or that would take more than one read, is a read that fails:
+the edge never signs from part of the table.
 
 The next key is scheduled seven days ahead, and few copies that read it then are still running when
 it starts. So a copy leaves it until its last hour, which is 12 reads, and the least notice
 [rotation](#rotation) gives of a key.
 
-It signs with the latest key that has started. By then it holds the next key, so every copy
-switches at the scheduled moment without a read. It reads the parameter again every five minutes,
+It signs with the latest key that has started and not stopped. By then it holds the next key, so
+every copy switches at the scheduled moment without a read. It reads the table again every five
+minutes,
 so a [revocation](#revoking-a-key) normally reaches every copy within five minutes, and calls KMS
 only for a key it hasn't seen. A read that fails keeps the keys it has, however old, and isn't tried
 again for 30 seconds. So an edge that can't read goes on signing with a revoked key, and every
 gateway refuses what it signs.
 With no key that has started, the request is the 500, and the next read waits 30 seconds too, so
-SSM isn't asked again by every request while it can't be reached. Requests that arrive while a read
-is under way share it.
+DynamoDB isn't asked again by every request while it can't be reached. Requests that arrive while a
+read is under way share it.
 
 ## The push ID
 
@@ -133,16 +136,31 @@ A key ID names the time the key was made, such as `20261106T120000Z`, so key IDs
 | What | Where | Holds |
 |---|---|---|
 | `alias/frontdoor-<environment>-caller-token` | KMS, frontdoor account, eu-west-2 | The key that wraps the private keys. Retained, with rotation of its own key material on |
-| `/flex/frontdoor/<environment>/caller-token-signing-key` | SSM, frontdoor account, eu-west-2 | `{ keys: [{ kid, privateKey, signsFrom }] }`: the keys the edge signs with now and next, each private key as KMS encrypted it, and when each starts, in seconds since the epoch |
-| `/flex/frontdoor/<environment>/caller-token-key-state` | SSM, frontdoor account, eu-west-2 | Every key rotation holds, when each starts, and when each stops once its successor is scheduled. The ID of each key revoked in the last day, and when |
+| `frontdoor-<environment>-caller-token-private-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`; `privateKey`, the private key as KMS encrypted it; `activeFrom`, when it starts; and, once its successor is scheduled, `activeUntil`, when it stops. Times are in seconds since the epoch. The edge reads it |
+| `frontdoor-<environment>-caller-token-public-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`, `publicKey`, as KMS returned it, in DER, and the same times. In a revoked key's place, for a day, its `keyId` and `revokedAt`, when it was revoked. And the item `#version`, how many times rotation has changed the two tables |
 | `caller-token-keys.json` in `frontdoor-<environment>-keys-<account>` | S3, frontdoor account, eu-west-2 | The public keys, as a JWK set, each with `signsFrom` and, once its successor is scheduled, `signsUntil`. Gateways read it through their network's [`s3` endpoint](/flex-platform/infrastructure/network/#the-caller-tokens-keys) |
 
 Each private key is encrypted with the encryption context `{ purpose: "flex-caller-token", kid }`.
 A ciphertext decrypts only with the same context, so one key's ciphertext can never be passed off
 as another's, and a role may be given decryption for this purpose alone.
 
-No stack holds a parameter's value or the object: key rotation writes them, and a template would
-put back what it last deployed whenever it changed.
+No stack holds an item or the object: key rotation writes them, and a template would put back what
+it last deployed whenever it changed.
+
+### The tables
+
+Each table is keyed by `keyId`. Each table's own policy, as
+[every table's policy](/flex-platform/infrastructure/overview/#a-tables-policy) does, denies:
+
+- everything to anyone but key rotation's role and the table's readers, except managing the table;
+- everything to a reader but a scan;
+- everything to key rotation's role but its scans, puts and deletes.
+
+Both tables are billed on demand, with point-in-time recovery, encrypted with DynamoDB's own key,
+protected from deletion and retained.
+
+The private keys' one reader is the edge's role, `frontdoor-<environment>-edge`, in the frontdoor
+account. The public keys have none yet: gateways read them from the bucket below.
 
 ### The public keys' bucket
 
@@ -174,10 +192,14 @@ every domain account too. It is retained, versioned, and refuses plain HTTP, as 
 
 ## Rotation
 
-Key rotation is a Lambda function, `frontdoor-<environment>-key-rotation`, in eu-west-2. An
-EventBridge Scheduler schedule of the same name runs it every 15 minutes, with no retry. Each run does what is due and nothing more, so a run that fails
-is simply retried by the next. Only one copy runs at a time, so two runs never write the state at
-once.
+Key rotation is a Lambda function, `frontdoor-<environment>-caller-token-key-rotation`, in
+eu-west-2. An EventBridge Scheduler schedule of the same name runs it every 15 minutes, with no
+retry. Each run does what is due and nothing more, so a run that fails is simply retried by the
+next. Only one copy runs at a time.
+
+Its code is the same for any kind of key. What is particular to the caller token's is its policy:
+an Ed25519 key pair, the encryption context's purpose, the timings on this page, and the public
+keys it publishes to the bucket.
 
 A switch from one key to the next is a moment, set when the next key is made:
 
@@ -190,8 +212,8 @@ A switch from one key to the next is a moment, set when the next key is made:
 2. **Signing.** At that moment every edge signs with it, since each already holds it,
    and every gateway accepts it, since each already holds its public key. The key it replaces stops
    verifying a little over a minute later, when its last token expires.
-3. **Removed.** Five minutes after a key is replaced, a run takes it out of the public keys. The
-   edge's parameter already left it out.
+3. **Removed.** Five minutes after a key is replaced, a run takes it out of both tables and the
+   public keys. The edge stopped signing with it at the switch.
 
 Rotation needs no downtime, and no edge or gateway has to read anything at the moment of a switch.
 
@@ -204,12 +226,25 @@ next run makes another. A key made before stops every run until it is
 [revoked](#revoking-a-key). So a key that can't be decrypted is found within 15 minutes, normally
 days before an edge asks for it. See [when a run fails](#when-a-run-fails).
 
-A run then writes its state first, so a key it has made is never lost, then the public keys, then
-the edge's signing keys. If the public keys can't be written, no edge is given anything new, so no edge
-holds a key a gateway can't. If the signing keys can't be written, the run fails and the next run
-writes them again. A key is normally scheduled seven days ahead, so there are hundreds
-of runs to do it in. Each run writes what each reader should hold, and only what differs from what
-is there, so a run with nothing due adds no version.
+A run then writes, in order:
+
+1. the public keys, with every key the tables hold now and every key they are to hold, so the
+   gateways have a key before any edge can read it;
+2. every change to the two tables, in one transaction, so neither is ever written without the
+   other;
+3. the public keys again, as the tables now hold them, so a key removed or revoked leaves them only
+   once the tables have lost it.
+
+If the public keys can't be written first, nothing is, so no edge holds a key a gateway can't, and
+a key the run made is never used. If the transaction fails, neither table changes, and the next run
+starts again from what they hold. If the last write fails, the run fails and the next run writes
+it. A key is normally scheduled seven days ahead, so there are hundreds of runs to do it in. Each
+run writes only what differs from what is there, so a run with nothing due changes neither table and
+adds no version of the object.
+
+The transaction refuses a run whose view of the tables is stale. Every transaction writes
+`#version` one higher, and only if it is still the count the run read before it read anything
+else, so a change made since the run read the tables makes it write nothing, and fail.
 
 On an environment's first run, the first key is made to start at once, since no edge has signed
 anything yet. The second run, 15 minutes later, schedules the next key. Until the
@@ -219,8 +254,8 @@ are made.
 
 ### Revoking a key
 
-To remove a key at once, invoke the function with `{ "revoke": "<kid>" }`. The key leaves the
-public keys and the edge's parameter in that run. If the edge was signing with it, a new key is
+To remove a key at once, invoke the function with `{ "revoke": "<kid>" }`. The key leaves both
+tables and the public keys in that run. If the edge was signing with it, a new key is
 made that starts at once, and the key it replaced stays stopped. If it was the next key, a new one
 is scheduled for the same moment, or an hour ahead if that is later, and the signing key now stops
 when the new one starts.
@@ -238,51 +273,55 @@ by an edge that hasn't read its new key yet.
 
 ### When a run fails
 
-The alarm `frontdoor-<environment>-key-rotation-failed` goes off when runs fail in two of the last
-three 15-minute periods. One failed run doesn't set it off, since the next run is the retry. The
-function's log group, `/flex/frontdoor/<environment>/key-rotation`, says why.
+The alarm `frontdoor-<environment>-caller-token-key-rotation-failed` goes off when runs fail in two
+of the last three 15-minute periods. One failed run doesn't set it off, since the next run is the
+retry. The function's log group, `/flex/frontdoor/<environment>/caller-token-key-rotation`, says
+why.
 
-A key that fails its check is logged as `key_check_failed`, with its `kid`, AWS's name for the
+A key that fails its check is logged as `key_check_failed`, with its `keyId`, AWS's name for the
 error as `reason`, and `stored`: whether rotation held the key before this run. A stored key passed
-the same check when it was made, so something has changed since: the state parameter, or the KMS
-key.
+the same check when it was made, so something has changed since: the private keys table, or the
+KMS key.
 
 | `reason` | Means | Do |
 |---|---|---|
-| `InvalidCiphertextException`, `IncorrectKeyException` | The private key rotation holds isn't what KMS encrypted for that key ID | [Revoke](#revoking-a-key) the key. If it was stored, look in CloudTrail for a `PutParameter` on the state parameter by anything but rotation's role |
+| `InvalidCiphertextException`, `IncorrectKeyException` | The private key rotation holds isn't what KMS encrypted for that key ID | [Revoke](#revoking-a-key) the key. If it was stored, look in CloudTrail for a change to the private keys table's policy, which is what would let anything but rotation's role write to it |
 | `DisabledException`, `KMSInvalidStateException` | The KMS key is disabled or scheduled for deletion, so no edge can decrypt either | Enable the KMS key, or cancel its deletion, and look in CloudTrail for who changed it |
 | `AccessDeniedException` | The role's policy or the KMS key's no longer allows the check | Compare both with what the stack deploys |
 | Throttling, or a timeout | KMS didn't answer | Nothing, unless every run says it |
 
 Any other failure is logged as `key_rotation_failed`, with the AWS error's name and the source
-locations.
+locations. So is a run that found the tables holding anything it can't read, which writes nothing,
+and a run whose view of the tables was stale.
 
 ### Permissions
 
-The function's role, `frontdoor-<environment>-key-rotation`, may:
+The function's role, `frontdoor-<environment>-caller-token-key-rotation`, may:
 
 - make key pairs only under the signing key, found by its alias, since KMS generates the key's ID,
   and only with the caller token's encryption context purpose;
 - have KMS encrypt a private key again, only under that same key and with that purpose, which is
   how a run [checks](#rotation) one. It can't decrypt one;
-- read and write its state, and the signing key parameter;
+- read its two tables, and put and delete their items;
 - read and write the public keys' object, in its own account's bucket;
-- write to its own log group, `/flex/frontdoor/<environment>/key-rotation`.
+- write to its own log group, `/flex/frontdoor/<environment>/caller-token-key-rotation`.
 
-The schedule runs it as its own role, `frontdoor-<environment>-key-rotation-schedule`, which only
-EventBridge Scheduler may assume, for a schedule in the account's default group, and which may only
-invoke the function. Scheduler names a schedule's group, not the schedule, when it assumes a role.
+The schedule runs it as its own role, `frontdoor-<environment>-caller-token-key-rotation-schedule`,
+which only EventBridge Scheduler may assume, for a schedule in the account's default group, and
+which may only invoke the function. Scheduler names a schedule's group, not the schedule, when it
+assumes a role.
 
-It logs each key it makes, with when it starts, and each it removes or revokes, by key ID alone. A
+It logs each key it makes, as `keyId`, with when it starts, as `activeFrom`, and each it removes or
+revokes, by key ID alone. A
 [failed run](#when-a-run-fails) logs why, and fails, so Lambda's error metric counts it.
 
 ## Stacks
 
 One stack, `frontdoor-<environment>-caller-token-keys`, in the frontdoor account in eu-west-2,
 holds the signing key and its alias, the [public keys' bucket](#the-public-keys-bucket) and its
-policy, the [push ID's secret](#the-push-id) and its policy, and key rotation's function, role,
-log group, schedule and alarm. It is protected from deletion, and the key, the bucket and the
-secret are retained.
+policy, the [push ID's secret](#the-push-id) and its policy, and key rotation's
+[tables](#the-tables), function, role, log group, schedule and alarm. It is protected from
+deletion, and the key, the bucket, the tables and the secret are retained.
 
 A gateway's stack doesn't depend on it: a gateway finds the bucket by name, and reads it only when
 called.

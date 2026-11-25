@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import type { KeyKind } from "@repo/frontdoor-key-rotation";
 import {
   buildOriginRequestFunction,
   HANDLER,
@@ -46,10 +47,13 @@ import {
   originRequestFunctionName,
   originRequestLogGroupName,
   originRequestLogsPolicyName,
+  privateKeysTableName,
   pushIdSecretName,
   signingKeyAliasName,
-  signingKeyParameterName,
 } from "./names.ts";
+
+/** The kind of key the edge signs the caller token with, whose tables it reads. */
+const CALLER_TOKEN_KIND: KeyKind = "caller-token";
 
 /**
  * Lambda gives CPU in proportion to memory, which speeds the cold path (the key fetch, TLS) and
@@ -108,9 +112,13 @@ export class OriginRequestFunction extends Construct {
         resource: "*",
       }),
     );
-    // The caller token's signing key: its parameter, and its KMS key, found by alias, since KMS
+    // The caller token's private keys: their table, and their KMS key, found by alias, since KMS
     // generates the key's ID, and only for the caller token's purpose.
     const environment = props.environment;
+    const privateKeysTable = privateKeysTableName(
+      environment,
+      CALLER_TOKEN_KIND,
+    );
     const signingKey = stack.formatArn({
       service: "kms",
       region: SIGNING_KEY_REGION,
@@ -120,16 +128,13 @@ export class OriginRequestFunction extends Construct {
     const statements = [
       new PolicyStatement({
         effect: Effect.ALLOW,
-        actions: ["ssm:GetParameter"],
+        actions: ["dynamodb:Scan"],
         resources: [
           stack.formatArn({
-            service: "ssm",
+            service: "dynamodb",
             region: SIGNING_KEY_REGION,
-            resource: "parameter",
-            resourceName: signingKeyParameterName(environment).replace(
-              /^\//,
-              "",
-            ),
+            resource: "table",
+            resourceName: privateKeysTable,
           }),
         ],
       }),
@@ -212,7 +217,7 @@ export class OriginRequestFunction extends Construct {
           issuers: props.issuers,
           routes: props.routes,
           callerTokenAudience: callerTokenAudience(environment),
-          signingKeyParameter: signingKeyParameterName(environment),
+          privateKeysTable,
           pushIdSecret: pushIdSecretName(environment),
         }),
       ),

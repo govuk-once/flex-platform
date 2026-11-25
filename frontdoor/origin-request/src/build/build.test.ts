@@ -29,7 +29,7 @@ const CONFIG: OriginRequestConfig = {
   issuers: ISSUERS,
   routes: {},
   callerTokenAudience: "flex:sandbox:gateways",
-  signingKeyParameter: "/flex/frontdoor/sandbox/caller-token-signing-key",
+  privateKeysTable: "frontdoor-sandbox-caller-token-private-keys",
   pushIdSecret: "frontdoor-sandbox-push-id-secret",
 };
 
@@ -159,9 +159,7 @@ describe("buildOriginRequestFunction", () => {
     const code = buildOriginRequestFunction(CONFIG);
 
     expect(code).toContain('"flex:sandbox:gateways"');
-    expect(code).toContain(
-      '"/flex/frontdoor/sandbox/caller-token-signing-key"',
-    );
+    expect(code).toContain('"frontdoor-sandbox-caller-token-private-keys"');
     expect(code).toContain('"frontdoor-sandbox-push-id-secret"');
   });
 

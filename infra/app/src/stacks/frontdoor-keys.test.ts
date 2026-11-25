@@ -118,4 +118,33 @@ describe("FrontdoorCallerTokenKeysStack", () => {
       ],
     });
   });
+
+  it("keeps the caller token's private keys where the environment's edge, and key rotation, alone read them", () => {
+    const template = Template.fromStack(
+      new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),
+    );
+    template.hasResourceProperties("AWS::DynamoDB::Table", {
+      TableName: `frontdoor-${DEV.name}-caller-token-private-keys`,
+      ResourcePolicy: {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Sid: "DenyOthersAllButManagingTheTable",
+              Condition: {
+                ArnNotLike: {
+                  "aws:PrincipalArn": [
+                    `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-caller-token-key-rotation`,
+                    `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-edge`,
+                  ],
+                },
+              },
+            }),
+          ]),
+        },
+      },
+    });
+    template.hasResourceProperties("AWS::DynamoDB::Table", {
+      TableName: `frontdoor-${DEV.name}-caller-token-public-keys`,
+    });
+  });
 });

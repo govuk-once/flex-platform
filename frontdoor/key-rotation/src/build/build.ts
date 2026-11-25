@@ -1,5 +1,6 @@
 import { buildSync } from "esbuild";
 
+import { KEY_POLICIES } from "../function/policy.ts";
 import type { KeyRotationConfig } from "../function/types.ts";
 
 const ENTRY = new URL("../function/entry.ts", import.meta.url).pathname;
@@ -11,6 +12,7 @@ export const HANDLER = "index.handler";
 // every dependency bundled, the AWS SDK's included, so the function runs the versions tested
 // here, and the config baked in.
 export function buildKeyRotationFunction(config: KeyRotationConfig): string {
+  checkConfig(config);
   const result = buildSync({
     entryPoints: [ENTRY],
     bundle: true,
@@ -24,4 +26,17 @@ export function buildKeyRotationFunction(config: KeyRotationConfig): string {
   const output = result.outputFiles[0]?.text;
   if (output === undefined) throw new Error("esbuild produced no output");
   return output;
+}
+
+// Config is checked when it is built, so a mistake fails synth rather than every run.
+export function checkConfig(config: KeyRotationConfig): void {
+  if (!Object.hasOwn(KEY_POLICIES, config.kind)) {
+    throw new Error(`No key policy is named ${JSON.stringify(config.kind)}`);
+  }
+  const policy = KEY_POLICIES[config.kind];
+  if ((config.publication === null) !== (policy.publication === null)) {
+    throw new Error(
+      `The ${config.kind} keys' policy and config disagree on whether they are published`,
+    );
+  }
 }
