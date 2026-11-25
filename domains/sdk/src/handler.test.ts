@@ -1,10 +1,14 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 
+import { requestContext } from "../test/fixtures/request-context.ts";
 import { getTodo } from "../test/fixtures/routes/get-todo.ts";
 import type { Todo, TodoError } from "../test/fixtures/schemas.ts";
+import type { PairwiseId, PushId } from "./caller.ts";
 import type {
+  Caller,
   Handler,
+  RequestContext,
   RouteContext,
   RouteContextOf,
   RouteResult,
@@ -17,7 +21,10 @@ import type { RegisteredRouteKey } from "./register.ts";
 describe("Handler", () => {
   it("gives each handler the parts its route declares, and nothing else", () => {
     expectTypeOf<{
-      [Key in RegisteredRouteKey]: keyof RouteContext<Key>;
+      [Key in RegisteredRouteKey]: Exclude<
+        keyof RouteContext<Key>,
+        keyof RequestContext
+      >;
     }>().toEqualTypeOf<{
       "GET /v1/todos": "query";
       "GET /v1/todos/{id}": "params";
@@ -42,6 +49,20 @@ describe("Handler", () => {
       title?: string | undefined;
       done?: boolean | undefined;
     }>();
+  });
+
+  it("gives every handler the caller, a log instance, and the deadline's signal", () => {
+    expectTypeOf<keyof RequestContext>().toEqualTypeOf<
+      "caller" | "log" | "signal"
+    >();
+    expectTypeOf<Caller>().toEqualTypeOf<{
+      readonly pairwiseId: PairwiseId;
+      readonly pushId: PushId;
+    }>();
+    expectTypeOf<RouteContext<"GET /v1/todos">>().toExtend<RequestContext>();
+    expectTypeOf<PairwiseId>().not.toExtend<PushId>();
+    expectTypeOf<PushId>().not.toExtend<PairwiseId>();
+    expectTypeOf<PairwiseId>().toExtend<string>();
   });
 
   it("lets any handler answer with a server error, which no route declares", () => {
@@ -111,11 +132,11 @@ describe("Handler", () => {
   });
 
   it("runs the fixture's handler to a success and to the failure its route declares", () => {
-    expect(getTodo({ params: { id: "1" } })).toEqual({
+    expect(getTodo({ ...requestContext(), params: { id: "1" } })).toEqual({
       status: 200,
       body: { id: "1", title: "Renew a passport", done: false },
     });
-    expect(getTodo({ params: { id: "9" } })).toEqual({
+    expect(getTodo({ ...requestContext(), params: { id: "9" } })).toEqual({
       status: 404,
       body: { error: { code: "todo_not_found", message: "No such todo" } },
     });

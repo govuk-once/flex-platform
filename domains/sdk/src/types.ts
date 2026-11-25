@@ -14,30 +14,44 @@ export interface ParsedRouteKey {
   readonly parameters: readonly string[];
   // The key with every parameter's name blanked, so two keys that match the same requests
   // compare equal: `GET /v1/todos/{id}` and `GET /v1/todos/{todoId}` are one route.
-  readonly shape: string;
+  readonly pattern: string;
 }
 
 export type RouteKeyResult =
   | { readonly ok: true; readonly route: ParsedRouteKey }
   | { readonly ok: false; readonly problems: readonly string[] };
 
+/**
+ * The fields a route's request line holds: dot paths to scalar fields, with `*` across a list's
+ * entries or an object's values. `input` reads `params`, `query` and `body`; `output` reads the
+ * response body.
+ */
+export interface RouteLog {
+  readonly input?: readonly string[];
+  readonly output?: readonly string[];
+}
+
 export interface RouteConfig {
   // Not a function type: checking a handler against one would read its signature, and so the
   // registered configuration, while the configuration's own type is still being worked out.
   // HandlerCheck holds it to the route's key instead.
   readonly handler: object;
+  readonly operationId?: string;
+  readonly description?: string;
   readonly params?: ZodObject;
   readonly query?: ZodObject;
   readonly body?: ZodType;
   readonly responses: {
     readonly [Status in ResponseStatusCode]?: ZodType | null;
   };
+  readonly log?: RouteLog;
 }
 
 export type DomainRoutes = Readonly<Record<string, RouteConfig>>;
 
 export interface DomainConfig<Routes extends DomainRoutes = DomainRoutes> {
   readonly name: string;
+  readonly description?: string;
   readonly routes: Routes;
 }
 
@@ -48,3 +62,40 @@ export type ResponsesOf<Route> = Route extends {
   : never;
 
 export type StatusCodesOf<Route> = keyof ResponsesOf<Route> & number;
+
+// A required property named for the mistake. The compiler reports it missing, so the message
+// reads as the rule that was broken, on the line that broke it.
+export type Problem<Message extends string> = {
+  readonly [Text in Message]: never;
+};
+
+export type IsNever<Type> = [Type] extends [never] ? true : false;
+
+export type IsSame<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left]
+    ? true
+    : false
+  : false;
+
+export type HasField<Type, Field extends string> = Field extends keyof Type
+  ? true
+  : false;
+
+// "id" and "linkId" from "/v1/todos/{id}/links/{linkId}".
+export type PathParameters<Template extends string> =
+  Template extends `${string}{${infer Param}}${infer Rest}`
+    ? Param | PathParameters<Rest>
+    : never;
+
+// "200, 201" from [200, 201] and ", ".
+export type Join<
+  Items extends readonly (string | number)[],
+  Separator extends string,
+> = Items extends readonly [
+  infer First extends string | number,
+  ...infer Rest extends readonly (string | number)[],
+]
+  ? Rest extends readonly []
+    ? `${First}`
+    : `${First}${Separator}${Join<Rest, Separator>}`
+  : "";

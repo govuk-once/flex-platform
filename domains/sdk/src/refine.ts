@@ -1,17 +1,20 @@
 import type { input, ZodObject, ZodType } from "zod";
 
 import type { HandlerKeyOf } from "./handler.ts";
-import type { NullBodyStatusCode, ResponseStatusCode } from "./http.ts";
 import type {
+  NullBodyStatusCode,
+  RESPONSE_STATUS_CODES,
+  ResponseStatusCode,
+} from "./http.ts";
+import type {
+  DomainRoutes,
   HasField,
   IsNever,
   IsSame,
+  Join,
+  MethodOf,
   PathParameters,
   Problem,
-} from "./type-utils.ts";
-import type {
-  DomainRoutes,
-  MethodOf,
   ResponsesOf,
   RouteConfig,
   RouteKey,
@@ -22,7 +25,7 @@ import type {
 
 type KeyCheck<Key extends string> = Key extends RouteKey
   ? unknown
-  : Problem<'a route key must have the format "<METHOD> /<version>/<path>"'>;
+  : Problem<'invalid route key, must be "<METHOD> /<version>/<path>"'>;
 
 type UnknownFields<Route> = Exclude<keyof Route, keyof RouteConfig> & string;
 
@@ -32,7 +35,7 @@ type FieldCheck<Route> =
     : {
         readonly [
           Field in UnknownFields<Route>
-        ]: Problem<`"${Field}" is not a route field; accepted fields: handler, params, query, body, responses`>;
+        ]: Problem<`unknown field "${Field}", must be one of: handler, operationId, description, params, query, body, responses, log`>;
       };
 
 // The fields a route's `params` or `query` object declares, each with its schema, and none when
@@ -63,17 +66,19 @@ type ExtraParams<Key extends string, Route> = Exclude<
   PathParameters<Key>
 >;
 
-// A path parameter always arrives as a string. A schema takes one when its input is a string, as
-// `z.string()` and `z.enum()` have, or anything, as `z.coerce.number()` has. `z.number()` takes
-// neither, so it would refuse every request.
-type TakesString<Input> = unknown extends Input
-  ? true
-  : [Input] extends [string]
+type Scalar = string | number | boolean;
+
+// The SDK reads a parameter's text by the type its schema declares, so the schema's input is
+// that type. A schema whose input is `unknown`, as a coerced one's is, would take the text as it
+// is and convert it loosely, so it is refused.
+type TakesScalar<Input> = unknown extends Input
+  ? false
+  : [Input] extends [Scalar]
     ? true
     : false;
 
 type NonStringParams<Route> = {
-  [Param in ShapeKeys<Route, "params">]: TakesString<
+  [Param in ShapeKeys<Route, "params">]: TakesScalar<
     InputOf<Route, "params", Param>
   > extends true
     ? never
@@ -84,14 +89,14 @@ type ParamsInputCheck<Route> =
   IsNever<NonStringParams<Route>> extends true
     ? unknown
     : {
-        readonly params: Problem<`path parameter {${NonStringParams<Route>}} arrives as a string, so its schema must take one, such as z.string() or z.coerce.number()`>;
+        readonly params: Problem<`invalid path parameter {${NonStringParams<Route>}}, must be a string, number, boolean or enum, not optional or converted`>;
       };
 
 // A key with no parameter takes no params.
 type NoParamsCheck<Route> =
   HasField<Route, "params"> extends true
     ? {
-        readonly params: Problem<"params must be left out, as the route key has no path parameter">;
+        readonly params: Problem<"params not allowed, the route key has no path parameters">;
       }
     : unknown;
 
@@ -107,8 +112,8 @@ type ParamsMatchCheck<Key extends string, Route> =
       ? ParamsInputCheck<Route>
       : {
           readonly params: Problem<
-            | `params is missing the key for the path parameter {${MissingParams<Key, Route>}}`
-            | `params key "${ExtraParams<Key, Route>}" is not a path parameter`
+            | `missing params key, required by path parameter {${MissingParams<Key, Route>}}`
+            | `unknown params key "${ExtraParams<Key, Route>}", not a path parameter`
           >;
         };
 
@@ -117,26 +122,15 @@ type ParamsCheck<Key extends string, Route> =
     ? NoParamsCheck<Route>
     : ParamsMatchCheck<Key, Route>;
 
-// What a query parameter arrives as that a schema's input takes: a string, or a list of strings
-// when the parameter is repeated. A parameter left out arrives as nothing, so `undefined` in an
-// input neither helps nor hurts.
-type QueryValues<Input> = Input extends string
-  ? Input
-  : Input extends readonly (infer Item)[]
-    ? unknown extends Item
-      ? Input
-      : [Item] extends [string]
-        ? Input
-        : never
-    : never;
-
-// Unlike a path parameter, a query parameter can be left out or repeated, so a schema is refused
-// only when it can never take what arrives. `z.number()` takes neither a string nor a list.
+// A query parameter may be left out, so `undefined` in its input is allowed, and may be repeated,
+// so a list of one type is too.
 type TakesQueryValue<Input> = unknown extends Input
-  ? true
-  : IsNever<QueryValues<Input>> extends true
-    ? false
-    : true;
+  ? false
+  : TakesScalar<Exclude<Input, undefined>> extends true
+    ? true
+    : [Exclude<Input, undefined>] extends [readonly (infer Item)[]]
+      ? TakesScalar<Item>
+      : false;
 
 type NonStringQuery<Route> = {
   [Param in ShapeKeys<Route, "query">]: TakesQueryValue<
@@ -150,14 +144,14 @@ type QueryCheck<Route> =
   IsNever<NonStringQuery<Route>> extends true
     ? unknown
     : {
-        readonly query: Problem<`query parameter "${NonStringQuery<Route>}" arrives as a string, or a list of them when repeated, so its schema must take one, such as z.string() or z.coerce.number()`>;
+        readonly query: Problem<`invalid query parameter "${NonStringQuery<Route>}", must be a string, number, boolean, enum or an array of one, not converted`>;
       };
 
 type BodyCheck<Key extends string, Route> =
   HasField<Route, "body"> extends true
     ? MethodOf<Key> extends "GET" | "DELETE"
       ? {
-          readonly body: Problem<`body must be left out, as a ${MethodOf<Key>} route takes no body`>;
+          readonly body: Problem<`body not allowed, a ${MethodOf<Key>} route takes no body`>;
         }
       : unknown
     : unknown;
@@ -168,17 +162,24 @@ type RefusedStatusCodes<Route> = Exclude<
 > &
   number;
 
+// One message for each refused status, distributed over them.
+type StatusProblem<Status extends number> = Status extends 401 | 403
+  ? `status ${Status} not allowed, the app treats it as an expired token`
+  : `${Status}` extends `5${string}`
+    ? `status ${Status} not allowed, any handler may return 500, 502, 503 or 504 undeclared`
+    : `status ${Status} not allowed, must be one of: ${Join<typeof RESPONSE_STATUS_CODES, ", ">}`;
+
 // The problem sits on `responses` itself, not on the status: `null & Problem` would reduce the
 // whole object to `never` and lose the message.
 type ResponsesCheck<Route> =
   IsNever<keyof ResponsesOf<Route>> extends true
     ? {
-        readonly responses: Problem<"responses must declare at least one status">;
+        readonly responses: Problem<"responses empty, declare at least one status">;
       }
     : IsNever<RefusedStatusCodes<Route>> extends true
       ? unknown
       : {
-          readonly responses: Problem<`status ${RefusedStatusCodes<Route>} is not one a route may declare; accepted statuses: 2xx, and 4xx except 401 and 403`>;
+          readonly responses: Problem<StatusProblem<RefusedStatusCodes<Route>>>;
         };
 
 // A null body status declared with a schema, which would make its handler return a body that
@@ -193,7 +194,7 @@ type NullBodyCheck<Route> =
   IsNever<NullBodyStatusesWithSchema<Route>> extends true
     ? unknown
     : {
-        readonly responses: Problem<`the schema for status ${NullBodyStatusesWithSchema<Route>} must be null, as a response with that status has no body`>;
+        readonly responses: Problem<`status ${NullBodyStatusesWithSchema<Route>} must be null, a ${NullBodyStatusesWithSchema<Route>} response has no body`>;
       };
 
 type StructureCheck<Key extends string, Route> = KeyCheck<Key> &
@@ -217,7 +218,7 @@ type HandlerCheck<Key extends string, Route> =
     ? IsSame<RouteHandlerKey<Route>, Key> extends true
       ? unknown
       : {
-          readonly handler: Problem<`the handler must be typed Handler<"${Key}">`>;
+          readonly handler: Problem<`handler typed for another route, must be Handler<"${Key}">`>;
         }
     : unknown;
 

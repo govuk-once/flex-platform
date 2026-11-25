@@ -8,21 +8,21 @@ export const SUCCESS_STATUS_CODES = [
 
 export type SuccessStatusCode = (typeof SUCCESS_STATUS_CODES)[number];
 
-// Every registered 4xx status but 401 and 403. The app reads either, from any request, as an
-// expired token: it refreshes its tokens and sends the request again. So neither can carry a
-// route's own refusal.
+// The 4xx statuses a route may answer with of its own. 401 and 403 are left out because the app
+// reads either, from any request, as an expired token: it refreshes its tokens and sends the
+// request again. Those about the request's method, headers, length or media type are left out
+// because the SDK or API Gateway answers them, so a route's own would be indistinguishable.
 export const FAILURE_STATUS_CODES = [
-  400, 402, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416,
-  417, 421, 422, 423, 424, 425, 426, 428, 429, 431, 451,
+  400, 402, 404, 409, 410, 412, 413, 422, 423, 424, 425, 428, 429, 451,
 ] as const;
 
 export type FailureStatusCode = (typeof FAILURE_STATUS_CODES)[number];
 
 /** The statuses a route may declare in `responses`. */
-export const RESPONSE_STATUS_CODES = [
-  ...SUCCESS_STATUS_CODES,
-  ...FAILURE_STATUS_CODES,
-] as const;
+export const RESPONSE_STATUS_CODES: readonly [
+  ...typeof SUCCESS_STATUS_CODES,
+  ...typeof FAILURE_STATUS_CODES,
+] = [...SUCCESS_STATUS_CODES, ...FAILURE_STATUS_CODES];
 
 export type ResponseStatusCode = (typeof RESPONSE_STATUS_CODES)[number];
 
@@ -37,3 +37,11 @@ export type ServerErrorStatusCode = (typeof SERVER_ERROR_STATUS_CODES)[number];
 export const NULL_BODY_STATUS_CODES = [204, 205] as const;
 
 export type NullBodyStatusCode = (typeof NULL_BODY_STATUS_CODES)[number];
+
+export const MEDIA_TYPE_JSON = "application/json";
+
+export const CALLER_TOKEN_HEADER = "x-flex-secure";
+
+export const CORRELATION_ID_HEADER = "x-correlation-id";
+
+export const REJECTED_BY_HEADER = "x-rejected-by";
