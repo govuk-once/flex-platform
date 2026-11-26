@@ -18,6 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
+import type * as DynamoDB from "@aws-sdk/client-dynamodb";
 import type { EnvelopeResponse } from "@repo/gateway-core";
 import { GatewayError } from "@repo/gateway-runtime";
 import { type OutputOptions, rolldown, type RolldownOptions } from "rolldown";
@@ -61,13 +62,14 @@ const SECRET_ARN =
 
 const execFile = promisify(execFileCb);
 
-// The caller token, as the edge signs it, and the public keys a stand-in for S3 serves.
+// The caller token, as the edge signs it, and the public keys the stand-in DynamoDB client gives.
 const TOKEN_KEY = generateKeyPairSync("ed25519");
 const TOKEN_KID = "20261106T120000Z";
 const TOKEN_AUDIENCE = "flex:sandbox:gateways";
-const TOKEN_KEYS_BUCKET = "frontdoor-sandbox-keys-100000000002";
-const TOKEN_KEYS_OBJECT = "caller-token-keys.json";
-const TOKEN_KEYS_ACCOUNT = "100000000002";
+const TOKEN_KEYS_TABLE =
+  "arn:aws:dynamodb:eu-west-2:100000000002:table/frontdoor-sandbox-caller-token-public-keys";
+const TOKEN_KEYS_ENDPOINT =
+  "vpce-0123456789abcdef0-abcdefgh.dynamodb.eu-west-2.vpce.amazonaws.com";
 
 function callerToken(): string {
   const encode = (value: unknown) =>
@@ -87,45 +89,48 @@ function callerToken(): string {
   return `${input}.${sign(null, Buffer.from(input), TOKEN_KEY.privateKey).toString("base64url")}`;
 }
 
-// S3, answering GetObject with the public keys.
-async function startS3(): Promise<{ url: string; close: () => void }> {
-  const keys = JSON.stringify({
-    keys: [
-      {
-        kty: "OKP",
-        crv: "Ed25519",
-        kid: TOKEN_KID,
-        x: TOKEN_KEY.publicKey.export({ format: "jwk" }).x,
-        signsFrom: 0,
-      },
-    ],
-  });
-  // Refuses a read that names another account as the bucket's owner, as S3 does.
-  const server = createServer((request, response) => {
-    if (request.headers["x-amz-expected-bucket-owner"] !== TOKEN_KEYS_ACCOUNT) {
-      response.statusCode = 403;
-      response.end();
-      return;
-    }
-    response.setHeader("content-type", "application/json");
-    response.end(keys);
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  // A string only for a pipe or socket path, and null before it listens.
-  assert(typeof address === "object" && address !== null);
-  const { port } = address;
-  return {
-    url: `http://127.0.0.1:${String(port)}`,
-    close: () => server.close(),
-  };
-}
-
 // A write that fails part way through a run, which cannot be arranged from outside the
 // filesystem. Which write fails is the test's to decide.
 const duringWrite: { do: (target: string) => Promise<void> } = {
   do: () => Promise.resolve(),
 };
+
+// DynamoDB as the gateway's runtime reaches it, answering a scan of the public keys table with its
+// one key, and recording how each client was made and what it was sent.
+const dynamodb: { clients: unknown[]; scans: unknown[] } = {
+  clients: [],
+  scans: [],
+};
+
+vi.mock("@aws-sdk/client-dynamodb", async (importOriginal) => {
+  const actual = await importOriginal<typeof DynamoDB>();
+  return {
+    ...actual,
+    DynamoDBClient: class {
+      constructor(config: unknown) {
+        dynamodb.clients.push(config);
+      }
+
+      send(command: unknown) {
+        assert.instanceOf(command, actual.ScanCommand);
+        dynamodb.scans.push(command.input);
+        return Promise.resolve({
+          Items: [
+            {
+              keyId: { S: TOKEN_KID },
+              publicKey: {
+                B: new Uint8Array(
+                  TOKEN_KEY.publicKey.export({ format: "der", type: "spki" }),
+                ),
+              },
+              activeFrom: { N: "0" },
+            },
+          ],
+        });
+      }
+    },
+  };
+});
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof FsPromises>();
@@ -400,7 +405,6 @@ describe("the generated gateway", () => {
     input,
     secure: { token: callerToken() },
   });
-  let s3: { url: string; close: () => void };
 
   const context: LambdaContext = { getRemainingTimeInMillis: () => 30_000 };
 
@@ -412,12 +416,9 @@ describe("the generated gateway", () => {
     vi.stubEnv("FLEX_UPSTREAM_TARGET", TARGET);
     vi.stubEnv("FLEX_UPSTREAM_SECRET_ARN", SECRET_ARN);
     vi.stubEnv("AWS_REGION", "eu-west-2");
-    s3 = await startS3();
-    vi.stubEnv("FLEX_CALLER_TOKEN_KEYS_BUCKET", TOKEN_KEYS_BUCKET);
-    vi.stubEnv("FLEX_CALLER_TOKEN_KEYS_OBJECT", TOKEN_KEYS_OBJECT);
-    vi.stubEnv("FLEX_CALLER_TOKEN_KEYS_ACCOUNT", TOKEN_KEYS_ACCOUNT);
+    vi.stubEnv("FLEX_CALLER_TOKEN_KEYS_TABLE", TOKEN_KEYS_TABLE);
+    vi.stubEnv("FLEX_CALLER_TOKEN_KEYS_ENDPOINT", TOKEN_KEYS_ENDPOINT);
     vi.stubEnv("FLEX_CALLER_TOKEN_AUDIENCE", TOKEN_AUDIENCE);
-    vi.stubEnv("AWS_ENDPOINT_URL_S3", s3.url);
     vi.stubEnv("AWS_ACCESS_KEY_ID", "SYNTHETIC_ACCESS_KEY");
     vi.stubEnv("AWS_SECRET_ACCESS_KEY", "SYNTHETIC_SECRET");
 
@@ -441,7 +442,6 @@ describe("the generated gateway", () => {
 
   afterAll(() => {
     vi.unstubAllEnvs();
-    s3.close();
   });
 
   it("keeps what the gateway runs apart from what a caller imports", async () => {
@@ -511,21 +511,20 @@ describe("the generated gateway", () => {
     // The deployed artifact, run as the platform runs it: a fresh Node process loading the
     // bundle, which reads the environment and builds the handler as it loads. Importing the
     // entry point instead would not catch what only the bundle has, such as a bundled
-    // dependency reaching for `require`.
+    // dependency reaching for `require`. Nothing stands in for DynamoDB here, so the call
+    // carries no token, and is answered before any key is read.
     const script = `
       process.env.FLEX_UPSTREAM_TARGET = ${JSON.stringify(TARGET)};
       process.env.FLEX_UPSTREAM_SECRET_ARN = ${JSON.stringify(SECRET_ARN)};
       process.env.AWS_REGION = "eu-west-2";
-      process.env.FLEX_CALLER_TOKEN_KEYS_BUCKET = ${JSON.stringify(TOKEN_KEYS_BUCKET)};
-      process.env.FLEX_CALLER_TOKEN_KEYS_OBJECT = ${JSON.stringify(TOKEN_KEYS_OBJECT)};
-      process.env.FLEX_CALLER_TOKEN_KEYS_ACCOUNT = ${JSON.stringify(TOKEN_KEYS_ACCOUNT)};
+      process.env.FLEX_CALLER_TOKEN_KEYS_TABLE = ${JSON.stringify(TOKEN_KEYS_TABLE)};
+      process.env.FLEX_CALLER_TOKEN_KEYS_ENDPOINT = ${JSON.stringify(TOKEN_KEYS_ENDPOINT)};
       process.env.FLEX_CALLER_TOKEN_AUDIENCE = ${JSON.stringify(TOKEN_AUDIENCE)};
-      process.env.AWS_ENDPOINT_URL_S3 = ${JSON.stringify(s3.url)};
       process.env.AWS_ACCESS_KEY_ID = "SYNTHETIC_ACCESS_KEY";
       process.env.AWS_SECRET_ACCESS_KEY = "SYNTHETIC_SECRET";
       const { handler } = await import(${JSON.stringify(pathToFileURL(bundlePath).href)});
       const response = await handler(
-        ${JSON.stringify(call("createUser", { payload: { email: "a@b.test" } }))},
+        ${JSON.stringify({ operation: "createUser", input: { payload: { email: "a@b.test" } } })},
         { getRemainingTimeInMillis: () => 30000 },
       );
       // Marked, because the handler logs its own line to stdout.
@@ -542,9 +541,24 @@ describe("the generated gateway", () => {
       .find((line) => line.startsWith("RESPONSE "));
 
     expect(answer).toBe(
-      `RESPONSE ${JSON.stringify({ ok: true, outcome: "created", data: { id: "fixture" }, meta: { requestId: "fixture-request" } })}`,
+      `RESPONSE ${JSON.stringify({ ok: false, error: { code: "UNAUTHENTICATED" } })}`,
     );
   }, 60_000);
+
+  it("reads the caller token's keys from the table, at the endpoint's own name, over HTTPS", async () => {
+    await handler(
+      call("createUser", { payload: { email: "a@b.test" } }),
+      context,
+    );
+
+    expect(dynamodb.clients).toEqual([
+      expect.objectContaining({
+        region: "eu-west-2",
+        endpoint: `https://${TOKEN_KEYS_ENDPOINT}`,
+      }),
+    ]);
+    expect(dynamodb.scans).toContainEqual({ TableName: TOKEN_KEYS_TABLE });
+  });
 
   it("gives the driver the deployment the entry point read", () => {
     expect(stub.options?.target).toBe(TARGET);

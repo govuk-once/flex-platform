@@ -37,8 +37,8 @@ own executor, so the entry point names no driver package and no transport. If an
 need to know about a specific driver or gateway, that is a design error.
 
 `FLEX_UPSTREAM_TARGET` and `FLEX_UPSTREAM_SECRET_ARN` are read here, through
-`readUpstreamOptions`, and the caller token's `FLEX_CALLER_TOKEN_KEYS_BUCKET`,
-`FLEX_CALLER_TOKEN_KEYS_OBJECT` and `FLEX_CALLER_TOKEN_AUDIENCE` through `readCallerTokenVerifier`,
+`readUpstreamOptions`, and the caller token's `FLEX_CALLER_TOKEN_KEYS_TABLE`,
+`FLEX_CALLER_TOKEN_KEYS_ENDPOINT` and `FLEX_CALLER_TOKEN_AUDIENCE` through `readCallerTokenVerifier`,
 and nowhere else. The verifier
 reads no key until the first call. The handler is built while the module loads, during the Lambda initialisation phase.
 So the operations compile, and the secret is retrieved and validated, before the handler can

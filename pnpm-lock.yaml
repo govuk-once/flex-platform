@@ -664,6 +664,9 @@ importers:
         specifier: 4.23.15
         version: 4.23.15
     devDependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: 3.1168.0
+        version: 3.1168.0
       '@aws-sdk/client-secrets-manager':
         specifier: 3.1168.0
         version: 3.1168.0
@@ -737,8 +740,8 @@ importers:
     dependencies:
       '@aws-lambda-powertools/parameters':
         specifier: 2.36.0
-        version: 2.36.0(@aws-sdk/client-dynamodb@3.1163.0)(@aws-sdk/client-secrets-manager@3.1168.0)(@aws-sdk/client-ssm@3.1168.0)
-      '@aws-sdk/client-s3':
+        version: 2.36.0(@aws-sdk/client-dynamodb@3.1168.0)(@aws-sdk/client-secrets-manager@3.1168.0)(@aws-sdk/client-ssm@3.1168.0)
+      '@aws-sdk/client-dynamodb':
         specifier: 3.1168.0
         version: 3.1168.0
       '@aws-sdk/client-secrets-manager':
@@ -1451,10 +1454,6 @@ packages:
 
   '@aws-sdk/checksums@3.1002.5':
     resolution: {integrity: sha512-OHlfkNzDFjYnwNPABhwAkDTUi0HPjfsKUHJDR0bSMORpCXNzRpInPCNCIT08xKDhjaPlcLJ+2Av+Sk7hHnuC8A==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/client-dynamodb@3.1163.0':
-    resolution: {integrity: sha512-CRMJ34w76+Lbvy6xMYPQTo3+r/qKoYfxFBAJjoBXmK+noNWLwdF1cxlvzgDh+j3sy/XXYBCHlG0Z/Q+6CyTgmQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-dynamodb@3.1168.0':
@@ -4941,11 +4940,11 @@ snapshots:
     dependencies:
       '@aws/lambda-invoke-store': 0.3.0
 
-  '@aws-lambda-powertools/parameters@2.36.0(@aws-sdk/client-dynamodb@3.1163.0)(@aws-sdk/client-secrets-manager@3.1168.0)(@aws-sdk/client-ssm@3.1168.0)':
+  '@aws-lambda-powertools/parameters@2.36.0(@aws-sdk/client-dynamodb@3.1168.0)(@aws-sdk/client-secrets-manager@3.1168.0)(@aws-sdk/client-ssm@3.1168.0)':
     dependencies:
       '@aws-lambda-powertools/commons': 2.36.0
     optionalDependencies:
-      '@aws-sdk/client-dynamodb': 3.1163.0
+      '@aws-sdk/client-dynamodb': 3.1168.0
       '@aws-sdk/client-secrets-manager': 3.1168.0
       '@aws-sdk/client-ssm': 3.1168.0
 
@@ -4956,20 +4955,6 @@ snapshots:
       '@smithy/core': 3.40.0
       '@smithy/types': 4.20.0
       tslib: 2.8.1
-
-  '@aws-sdk/client-dynamodb@3.1163.0':
-    dependencies:
-      '@aws-sdk/core': 3.981.0
-      '@aws-sdk/credential-provider-node': 3.972.97
-      '@aws-sdk/dynamodb-codec': 3.973.58
-      '@aws-sdk/middleware-endpoint-discovery': 3.972.39
-      '@aws-sdk/types': 3.975.1
-      '@smithy/core': 3.40.0
-      '@smithy/fetch-http-handler': 5.8.1
-      '@smithy/node-http-handler': 4.14.2
-      '@smithy/types': 4.20.0
-      tslib: 2.8.1
-    optional: true
 
   '@aws-sdk/client-dynamodb@3.1168.0':
     dependencies:

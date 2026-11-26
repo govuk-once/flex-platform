@@ -388,7 +388,7 @@ table. That also means a principal whose own policy allows `dynamodb:PutResource
 rewrite the table's policy, so who may do that in the account matters as much as the policy.
 
 A role appears in one set only, since each set's deny would refuse the other's work. A set may
-name roles by a pattern.
+name roles by a pattern, such as every gateway's role.
 
 ## Test users
 

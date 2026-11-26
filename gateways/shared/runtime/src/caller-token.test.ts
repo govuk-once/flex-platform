@@ -1,15 +1,18 @@
 import type { KeyObject } from "node:crypto";
 import { generateKeyPairSync, sign } from "node:crypto";
 
+import { ScanCommand } from "@aws-sdk/client-dynamodb";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 import {
   createCallerTokenKeys,
   createCallerTokenVerifier,
+  type KeyItem,
   KEYS_MAX_AGE_MS,
   KEYS_MAX_STALE_MS,
   KEYS_MIN_INTERVAL_MS,
   readCallerTokenVerifier,
+  scanKeyTable,
 } from "./caller-token.ts";
 import { GatewayError } from "./errors.ts";
 
@@ -64,26 +67,33 @@ interface Window {
   readonly signsUntil?: number;
 }
 
-// A JWK set as key rotation writes it. A key signs from FROM, with no end, unless it says.
-const keySet = (keys: Record<string, KeyObject>, windows: Window = {}) =>
-  JSON.stringify({
-    keys: Object.entries(keys).map(([kid, key]) => ({
-      kty: "OKP",
-      crv: "Ed25519",
-      alg: "EdDSA",
-      use: "sig",
-      kid,
-      x: key.export({ format: "jwk" }).x,
-      signsFrom: FROM,
-      ...windows,
-    })),
-  });
+const der = (key: KeyObject) =>
+  new Uint8Array(key.export({ format: "der", type: "spki" }));
+
+// A key's item as key rotation writes it. A key signs from FROM, with no end, unless it says.
+function keyItem(kid: string, key: KeyObject, window: Window = {}): KeyItem {
+  const signsFrom = Object.hasOwn(window, "signsFrom")
+    ? window.signsFrom
+    : FROM;
+  return {
+    keyId: { S: kid },
+    publicKey: { B: der(key) },
+    ...(signsFrom !== undefined && { activeFrom: { N: String(signsFrom) } }),
+    ...(window.signsUntil !== undefined && {
+      activeUntil: { N: String(window.signsUntil) },
+    }),
+  };
+}
+
+const keyItems = (keys: Record<string, KeyObject>, window: Window = {}) =>
+  Object.entries(keys).map(([kid, key]) => keyItem(kid, key, window));
 
 function verifier(now = () => NOW, window: Window = {}) {
   return createCallerTokenVerifier({
     audience: AUDIENCE,
     keys: createCallerTokenKeys({
-      read: () => Promise.resolve(keySet({ [KID]: SIGNING.publicKey }, window)),
+      read: () =>
+        Promise.resolve(keyItems({ [KID]: SIGNING.publicKey }, window)),
       now,
     }),
     now,
@@ -303,7 +313,7 @@ describe("createCallerTokenKeys", () => {
   it("reads the keys once, and again after a minute", async () => {
     let now = 0;
     const read = vi.fn(() =>
-      Promise.resolve(keySet({ [KID]: SIGNING.publicKey })),
+      Promise.resolve(keyItems({ [KID]: SIGNING.publicKey })),
     );
     const keys = createCallerTokenKeys({ read, now: () => now });
 
@@ -318,12 +328,12 @@ describe("createCallerTokenKeys", () => {
 
   it("reads again for a key ID it doesn't hold, but not more than once in ten seconds", async () => {
     let now = 0;
-    let set = keySet({ [KID]: SIGNING.publicKey });
+    let set = keyItems({ [KID]: SIGNING.publicKey });
     const read = vi.fn(() => Promise.resolve(set));
     const keys = createCallerTokenKeys({ read, now: () => now });
     await keys.get(KID);
 
-    set = keySet({ [KID]: SIGNING.publicKey, [OTHER_KID]: OTHER.publicKey });
+    set = keyItems({ [KID]: SIGNING.publicKey, [OTHER_KID]: OTHER.publicKey });
     now = KEYS_MIN_INTERVAL_MS - 1;
     expect(await keys.get(OTHER_KID)).toBeUndefined();
     expect(read).toHaveBeenCalledTimes(1);
@@ -339,7 +349,7 @@ describe("createCallerTokenKeys", () => {
     const read = vi.fn(() =>
       fail
         ? Promise.reject(new Error("SYNTHETIC store error"))
-        : Promise.resolve(keySet({ [KID]: SIGNING.publicKey })),
+        : Promise.resolve(keyItems({ [KID]: SIGNING.publicKey })),
     );
     const keys = createCallerTokenKeys({ read, now: () => clock.now });
     return {
@@ -411,15 +421,37 @@ describe("createCallerTokenKeys", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
+  const item = (fields: Record<string, unknown>) => [fields as KeyItem];
+
   it.each([
     ["can't be read", () => Promise.reject(new Error("SYNTHETIC store error"))],
-    ["aren't a JWK set", () => Promise.resolve('{"SYNTHETIC":1}')],
+    [
+      "hold an item without a key ID",
+      () => Promise.resolve(item({ publicKey: { B: der(SIGNING.publicKey) } })),
+    ],
+    [
+      "hold an item whose key ID is of another shape",
+      () => Promise.resolve(keyItems({ "../keys": SIGNING.publicKey })),
+    ],
+    [
+      "hold an item that is neither a key, a revoked key nor the version",
+      () => Promise.resolve(item({ keyId: { S: KID } })),
+    ],
     [
       "hold a key that isn't Ed25519",
       () =>
         Promise.resolve(
-          JSON.stringify({
-            keys: [{ kty: "RSA", kid: KID, n: "x", e: "AQAB" }],
+          keyItems({ [KID]: generateKeyPairSync("ed448").publicKey }),
+        ),
+    ],
+    [
+      "hold a key that isn't a public key at all",
+      () =>
+        Promise.resolve(
+          item({
+            keyId: { S: KID },
+            publicKey: { B: new Uint8Array(32) },
+            activeFrom: { N: String(FROM) },
           }),
         ),
     ],
@@ -427,53 +459,39 @@ describe("createCallerTokenKeys", () => {
       "hold a key without the time it starts",
       () =>
         Promise.resolve(
-          keySet({ [KID]: SIGNING.publicKey }, { signsFrom: undefined }),
+          keyItems({ [KID]: SIGNING.publicKey }, { signsFrom: undefined }),
         ),
     ],
     [
       "hold a key that stops before it starts",
       () =>
         Promise.resolve(
-          keySet({ [KID]: SIGNING.publicKey }, { signsUntil: FROM }),
-        ),
-    ],
-    [
-      "hold a key that isn't an object",
-      () => Promise.resolve(JSON.stringify({ keys: ["SYNTHETIC"] })),
-    ],
-    [
-      "hold a key with a key ID of another shape",
-      () => Promise.resolve(keySet({ "../keys": SIGNING.publicKey })),
-    ],
-    [
-      "hold a key of the wrong length",
-      () =>
-        Promise.resolve(
-          JSON.stringify({
-            keys: [
-              {
-                kty: "OKP",
-                crv: "Ed25519",
-                kid: KID,
-                x: Buffer.alloc(16).toString("base64url"),
-                signsFrom: FROM,
-              },
-            ],
-          }),
+          keyItems({ [KID]: SIGNING.publicKey }, { signsUntil: FROM }),
         ),
     ],
     [
       "hold a key whose start isn't whole seconds",
       () =>
         Promise.resolve(
-          keySet({ [KID]: SIGNING.publicKey }, { signsFrom: FROM + 0.5 }),
+          keyItems({ [KID]: SIGNING.publicKey }, { signsFrom: FROM + 0.5 }),
         ),
     ],
     [
       "hold a key whose end isn't whole seconds",
       () =>
         Promise.resolve(
-          keySet({ [KID]: SIGNING.publicKey }, { signsUntil: FROM + 60.5 }),
+          keyItems({ [KID]: SIGNING.publicKey }, { signsUntil: FROM + 60.5 }),
+        ),
+    ],
+    [
+      "hold a key whose time is text",
+      () =>
+        Promise.resolve(
+          item({
+            keyId: { S: KID },
+            publicKey: { B: der(SIGNING.publicKey) },
+            activeFrom: { S: String(FROM) },
+          }),
         ),
     ],
   ])(
@@ -485,9 +503,36 @@ describe("createCallerTokenKeys", () => {
     },
   );
 
+  it("gives a key that has stopped, with the time it stopped", async () => {
+    const until = FROM + 3600;
+    const keys = createCallerTokenKeys({
+      read: () =>
+        Promise.resolve(
+          keyItems({ [KID]: SIGNING.publicKey }, { signsUntil: until }),
+        ),
+    });
+    expect(await keys.get(KID)).toMatchObject({
+      signsFrom: FROM,
+      signsUntil: until,
+    });
+  });
+
+  it("passes over a revoked key's record and the version item", async () => {
+    const keys = createCallerTokenKeys({
+      read: () =>
+        Promise.resolve([
+          ...keyItems({ [KID]: SIGNING.publicKey }),
+          { keyId: { S: OTHER_KID }, revokedAt: { N: String(FROM) } },
+          { keyId: { S: "#version" }, version: { N: "3" } },
+        ]),
+    });
+    expect(await keys.get(KID)).toBeDefined();
+    expect(await keys.get(OTHER_KID)).toBeUndefined();
+  });
+
   it("reads once for calls that arrive together", async () => {
     const read = vi.fn(() =>
-      Promise.resolve(keySet({ [KID]: SIGNING.publicKey })),
+      Promise.resolve(keyItems({ [KID]: SIGNING.publicKey })),
     );
     const keys = createCallerTokenKeys({ read });
     await Promise.all([keys.get(KID), keys.get(KID), keys.get(KID)]);
@@ -495,19 +540,65 @@ describe("createCallerTokenKeys", () => {
   });
 });
 
+describe("scanKeyTable", () => {
+  const TABLE =
+    "arn:aws:dynamodb:eu-west-2:100000000002:table/frontdoor-sandbox-caller-token-public-keys";
+
+  // DynamoDB, answering a scan with one page.
+  function client(page: { Items?: KeyItem[]; LastEvaluatedKey?: KeyItem }) {
+    const sent: unknown[] = [];
+    return {
+      sent,
+      send: vi.fn((command: unknown) => {
+        assert.instanceOf(command, ScanCommand);
+        sent.push(command.input);
+        return Promise.resolve(page);
+      }),
+    };
+  }
+
+  it("reads the table whole, named by its ARN, in one call", async () => {
+    const items = keyItems({ [KID]: SIGNING.publicKey });
+    const dynamodb = client({ Items: items });
+    expect(await scanKeyTable(dynamodb, TABLE)()).toEqual(items);
+    expect(dynamodb.sent).toEqual([{ TableName: TABLE }]);
+  });
+
+  it("refuses a table that needs a second page", async () => {
+    const dynamodb = client({
+      Items: keyItems({ [KID]: SIGNING.publicKey }),
+      LastEvaluatedKey: { keyId: { S: KID } },
+    });
+    await expect(scanKeyTable(dynamodb, TABLE)()).rejects.toThrow(
+      "the table answered with more than one page",
+    );
+    expect(dynamodb.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses an answer with no items", async () => {
+    await expect(scanKeyTable(client({}), TABLE)()).rejects.toThrow(
+      "the table answered with more than one page",
+    );
+  });
+});
+
 describe("readCallerTokenVerifier", () => {
   const DEPLOYED = {
     AWS_REGION: "eu-west-2",
-    FLEX_CALLER_TOKEN_KEYS_BUCKET: "frontdoor-sandbox-keys-100000000002",
-    FLEX_CALLER_TOKEN_KEYS_OBJECT: "caller-token-keys.json",
-    FLEX_CALLER_TOKEN_KEYS_ACCOUNT: "100000000002",
+    FLEX_CALLER_TOKEN_KEYS_TABLE:
+      "arn:aws:dynamodb:eu-west-2:100000000002:table/frontdoor-sandbox-caller-token-public-keys",
+    FLEX_CALLER_TOKEN_KEYS_ENDPOINT:
+      "vpce-0123456789abcdef0-abcdefgh.dynamodb.eu-west-2.vpce.amazonaws.com",
     FLEX_CALLER_TOKEN_AUDIENCE: AUDIENCE,
   };
 
+  it("starts with the deployment's variables", () => {
+    expect(() => readCallerTokenVerifier(DEPLOYED)).not.toThrow();
+  });
+
   it.each([
-    "FLEX_CALLER_TOKEN_KEYS_BUCKET",
-    "FLEX_CALLER_TOKEN_KEYS_OBJECT",
-    "FLEX_CALLER_TOKEN_KEYS_ACCOUNT",
+    "FLEX_CALLER_TOKEN_KEYS_TABLE",
+    "FLEX_CALLER_TOKEN_KEYS_ENDPOINT",
     "FLEX_CALLER_TOKEN_AUDIENCE",
   ])("refuses to start without %s", (name) => {
     const env: Record<string, string> = { ...DEPLOYED };
@@ -526,14 +617,48 @@ describe("readCallerTokenVerifier", () => {
     ).toThrow("Environment variable FLEX_CALLER_TOKEN_AUDIENCE must be set");
   });
 
-  it("refuses to start with a bucket owner that isn't an account ID", () => {
+  it.each([
+    "frontdoor-sandbox-caller-token-public-keys",
+    "arn:aws:s3:::frontdoor-sandbox-keys-100000000002",
+    "arn:aws:dynamodb:eu-west-2:frontdoor:table/frontdoor-sandbox-caller-token-public-keys",
+  ])("refuses to start with a table that isn't named by its ARN: %s", (arn) => {
     expect(() =>
       readCallerTokenVerifier({
         ...DEPLOYED,
-        FLEX_CALLER_TOKEN_KEYS_ACCOUNT: "frontdoor",
+        FLEX_CALLER_TOKEN_KEYS_TABLE: arn,
       }),
     ).toThrow(
-      "Environment variable FLEX_CALLER_TOKEN_KEYS_ACCOUNT must be an AWS account ID",
+      "Environment variable FLEX_CALLER_TOKEN_KEYS_TABLE must be a DynamoDB table's ARN",
+    );
+  });
+
+  it("refuses to start with a table in another region than its own", () => {
+    expect(() =>
+      readCallerTokenVerifier({
+        ...DEPLOYED,
+        FLEX_CALLER_TOKEN_KEYS_TABLE:
+          "arn:aws:dynamodb:us-east-1:100000000002:table/frontdoor-sandbox-caller-token-public-keys",
+      }),
+    ).toThrow(
+      "Environment variable FLEX_CALLER_TOKEN_KEYS_TABLE must name a table in eu-west-2",
+    );
+  });
+
+  it.each([
+    "https://vpce-0123456789abcdef0-abcdefgh.dynamodb.eu-west-2.vpce.amazonaws.com",
+    "http://localhost",
+    "vpce-0123456789abcdef0-abcdefgh.dynamodb.eu-west-2.vpce.amazonaws.com:443",
+    "vpce-0123456789abcdef0-abcdefgh.dynamodb.eu-west-2.vpce.amazonaws.com/keys",
+    "127.0.0.1",
+    "localhost",
+  ])("refuses to start with an endpoint that isn't a name alone: %s", (url) => {
+    expect(() =>
+      readCallerTokenVerifier({
+        ...DEPLOYED,
+        FLEX_CALLER_TOKEN_KEYS_ENDPOINT: url,
+      }),
+    ).toThrow(
+      "Environment variable FLEX_CALLER_TOKEN_KEYS_ENDPOINT must be an endpoint's name",
     );
   });
 });

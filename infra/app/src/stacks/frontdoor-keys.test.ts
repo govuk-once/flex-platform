@@ -12,6 +12,7 @@ import {
 
 const PROD = FIXTURE_STAGES[2];
 const [DEV] = PROD.environments;
+const ROTATION_ROLE = `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-caller-token-key-rotation`;
 
 describe("FrontdoorCallerTokenKeysStack", () => {
   it("is one per environment, in the frontdoor account in eu-west-2, protected from deletion", () => {
@@ -29,7 +30,7 @@ describe("FrontdoorCallerTokenKeysStack", () => {
     }
   });
 
-  it("lets every gateway's role in every domain account read the public keys, by its name's pattern", () => {
+  it("lets every gateway's role in every domain account read the public keys' object, by its name's pattern", () => {
     const template = Template.fromStack(
       new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),
     );
@@ -56,6 +57,48 @@ describe("FrontdoorCallerTokenKeysStack", () => {
             },
           }),
         ]),
+      },
+    });
+  });
+
+  it("lets every gateway's role in every domain account scan the public keys, by its name's pattern, and read them no other way", () => {
+    const template = Template.fromStack(
+      new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),
+    );
+    const roles = DEV.domainAccounts
+      .map(
+        ({ account }) =>
+          `arn:aws:iam::${account}:role/gateway-${DEV.name}-*-execution`,
+      )
+      .sort();
+    expect(roles.length).toBeGreaterThan(0);
+
+    template.hasResourceProperties("AWS::DynamoDB::Table", {
+      TableName: `frontdoor-${DEV.name}-caller-token-public-keys`,
+      ResourcePolicy: {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Sid: "AllowItsReadersToScan",
+              Effect: "Allow",
+              Action: "dynamodb:Scan",
+              Condition: { ArnLike: { "aws:PrincipalArn": roles } },
+            }),
+            Match.objectLike({
+              Sid: "DenyOthersAllButManagingTheTable",
+              Condition: {
+                ArnNotLike: {
+                  "aws:PrincipalArn": [ROTATION_ROLE, ...roles].sort(),
+                },
+              },
+            }),
+            Match.objectLike({
+              Sid: "DenyReadersAllButItsWork",
+              NotAction: "dynamodb:Scan",
+              Condition: { ArnLike: { "aws:PrincipalArn": roles } },
+            }),
+          ]),
+        },
       },
     });
   });
@@ -142,7 +185,7 @@ describe("FrontdoorCallerTokenKeysStack", () => {
               Condition: {
                 ArnNotLike: {
                   "aws:PrincipalArn": [
-                    `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-caller-token-key-rotation`,
+                    ROTATION_ROLE,
                     `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-edge`,
                   ],
                 },

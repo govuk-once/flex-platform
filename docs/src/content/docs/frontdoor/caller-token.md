@@ -102,11 +102,18 @@ token:
 After it, every log line for the call holds `frontdoorRequestId`, the token's `jti`, which joins
 it to the edge's line for the request. The token and its claims are never logged.
 
-The gateway reads the public keys from S3, the object `FLEX_CALLER_TOKEN_KEYS_OBJECT` in the bucket
-`FLEX_CALLER_TOKEN_KEYS_BUCKET`, which the account `FLEX_CALLER_TOKEN_KEYS_ACCOUNT` must own, on the
-first call, and again after a minute, so a revoked key is refused within a minute. A key ID it
-doesn't hold reads them again. It reads at most once every ten seconds, so a caller can't make
-every call read them, and a store that can't be reached isn't asked by every call either.
+The gateway reads the public keys from the [public keys table](#keys), named by its ARN in
+`FLEX_CALLER_TOKEN_KEYS_TABLE`, through its network's
+[`dynamodb` endpoint](/flex-platform/infrastructure/network/#the-caller-tokens-keys), at the name in
+`FLEX_CALLER_TOKEN_KEYS_ENDPOINT`, over HTTPS. It reads on the first call, and again after a minute, so a
+revoked key is refused within a minute. A key ID it doesn't hold reads them again. It reads at
+most once every ten seconds, so a caller can't make every call read them, and a store that can't
+be reached isn't asked by every call either.
+
+Each read scans the whole table, in one page: a table that would need a second isn't one rotation
+keeps, and the read fails. Each key's item gives an Ed25519 public key, in DER, and the times it
+signs between. A revoked key's record and `#version` hold no key, and are passed over. A table that
+holds anything else, or a key of any other type, fails the read whole.
 
 A read that fails keeps the keys it has, for five minutes from the last read that worked, which is
 time for a failed read to be tried again many times. A key revoked in that time is one the gateway
@@ -138,8 +145,8 @@ A key ID names the time the key was made, such as `20261106T120000Z`, so key IDs
 |---|---|---|
 | `alias/frontdoor-<environment>-caller-token` | KMS, frontdoor account, eu-west-2 | The key that wraps the private keys. Retained, with rotation of its own key material on |
 | `frontdoor-<environment>-caller-token-private-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`; `privateKey`, the private key as KMS encrypted it; `activeFrom`, when it starts; and, once its successor is scheduled, `activeUntil`, when it stops. Times are in seconds since the epoch. The edge reads it |
-| `frontdoor-<environment>-caller-token-public-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`, `publicKey`, as KMS returned it, in DER, and the same times. In a revoked key's place, for a day, its `keyId` and `revokedAt`, when it was revoked. And the item `#version`, how many times rotation has changed the two tables |
-| `caller-token-keys.json` in `frontdoor-<environment>-keys-<account>` | S3, frontdoor account, eu-west-2 | The public keys, as a JWK set, each with `signsFrom` and, once its successor is scheduled, `signsUntil`. Gateways read it through their network's [`s3` endpoint](/flex-platform/infrastructure/network/#the-caller-tokens-keys) |
+| `frontdoor-<environment>-caller-token-public-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`, `publicKey`, as KMS returned it, in DER, and the same times. In a revoked key's place, for a day, its `keyId` and `revokedAt`, when it was revoked. And the item `#version`, how many times rotation has changed the two tables. Every gateway reads it, through its network's [`dynamodb` endpoint](/flex-platform/infrastructure/network/#the-caller-tokens-keys) |
+| `caller-token-keys.json` in `frontdoor-<environment>-keys-<account>` | S3, frontdoor account, eu-west-2 | The public keys, as a JWK set, each with `signsFrom` and, once its successor is scheduled, `signsUntil`. No gateway reads it: each reads the table |
 
 Each private key is encrypted with the encryption context `{ purpose: "flex-caller-token", kid }`.
 A ciphertext decrypts only with the same context, so one key's ciphertext can never be passed off
@@ -150,7 +157,7 @@ it last deployed whenever it changed.
 
 ### The tables
 
-Each table is keyed by `keyId`. Each table's own policy, as
+Each table is keyed by `keyId`. Each table's own policy lets its readers scan it, and, as
 [every table's policy](/flex-platform/infrastructure/overview/#a-tables-policy) does, denies:
 
 - everything to anyone but key rotation's role and the table's readers, except managing the table;
@@ -161,13 +168,23 @@ Both tables are billed on demand, with point-in-time recovery, encrypted with Dy
 protected from deletion and retained.
 
 The private keys' one reader is the edge's role, `frontdoor-<environment>-edge`, in the frontdoor
-account. The public keys have none yet: gateways read them from the bucket below.
-
-### The public keys' bucket
+account.
 
 The public keys are in one place, which every gateway in every domain account reads, so a key is
 in every gateway's reach the moment rotation writes it, and adding a domain account adds nothing
-for rotation to write. The bucket's name ends in the frontdoor account's ID, since bucket names are
+for rotation to write. Their readers are any role named `gateway-<environment>-*-execution`, the
+pattern every gateway's role matches, in each domain account that runs a gateway. The policy names
+those accounts as principals and holds them to the pattern with an `aws:PrincipalArn` condition,
+because a policy naming a role that doesn't exist yet is refused, and a gateway's stack may deploy
+after it. A pattern, not each gateway's role, so adding a gateway leaves the policy as it is, and
+it never nears DynamoDB's limit on a policy's size. A domain account is only ever one environment's,
+so the pattern reaches no other environment's gateways. Each gateway's role grants itself the same
+scan, which is all it may do. No other table lets in another account.
+
+### The public keys' bucket
+
+Rotation also writes the public keys to a bucket, whose policy still lets gateways read them. No
+gateway does: each reads the table. The bucket's name ends in the frontdoor account's ID, since bucket names are
 global, and both come from config, so every stack derives it.
 
 The bucket's policy lets any role named `gateway-<environment>-*-execution`, the pattern every
@@ -324,5 +341,5 @@ policy, the [push ID's secret](#the-push-id) and its policy, and key rotation's
 [tables](#the-tables), function, role, log group, schedule and alarm. It is protected from
 deletion, and the key, the bucket, the tables and the secret are retained.
 
-A gateway's stack doesn't depend on it: a gateway finds the bucket by name, and reads it only when
-called.
+A gateway's stack doesn't depend on it: a gateway finds the public keys table by name, and reads it
+only when called.

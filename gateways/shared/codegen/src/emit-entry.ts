@@ -31,8 +31,8 @@ import { meta, validators } from "./${VALIDATORS_DIR}/${VALIDATORS_MODULE}";
 // Built while this module loads, which is the platform's initialisation phase: the operations
 // compile and the driver retrieves and validates the gateway secret once, before any request
 // rather than during the first one. FLEX_UPSTREAM_TARGET, FLEX_UPSTREAM_SECRET_ARN and the
-// caller token's FLEX_CALLER_TOKEN_KEYS_BUCKET, FLEX_CALLER_TOKEN_KEYS_OBJECT,
-// FLEX_CALLER_TOKEN_KEYS_ACCOUNT and FLEX_CALLER_TOKEN_AUDIENCE are read here and nowhere else.
+// caller token's FLEX_CALLER_TOKEN_KEYS_TABLE, FLEX_CALLER_TOKEN_KEYS_ENDPOINT and
+// FLEX_CALLER_TOKEN_AUDIENCE are read here and nowhere else.
 const execute = await config.driver.createExecutor(config, {
   ...readUpstreamOptions(),
   log: createStartupLog(config.id),

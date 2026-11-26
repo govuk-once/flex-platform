@@ -1,7 +1,3 @@
-import {
-  CALLER_TOKEN_KEYS_OBJECT,
-  callerTokenKeysBucketName,
-} from "@repo/frontdoor-infra";
 import { callerTokenAudience } from "@repo/frontdoor-shared";
 import { gatewayFunctionName } from "@repo/gateway-core";
 import {
@@ -15,6 +11,7 @@ import {
   upstreamAccess,
 } from "@repo/gateway-infra";
 import {
+  endpointAddressParameterName,
   endpointIdParameterName,
   NETWORK_REGION,
   securityGroupIdParameterName,
@@ -30,6 +27,7 @@ import type {
   EnvironmentConfig,
   GatewayConfig,
 } from "../config/types.ts";
+import { callerTokenPublicKeysTableArn } from "./frontdoor-keys.ts";
 
 // Each domain account in an environment runs its own copy of a gateway its domains call, so the
 // account is in the name, as in the network's.
@@ -119,9 +117,11 @@ export class GatewayStack extends Stack {
           }).secret.secretArn
         : gateway.secret.arn;
 
-    const keysBucket = callerTokenKeysBucketName(
-      environment.name,
-      environment.frontdoor.account,
+    const keysTable = callerTokenPublicKeysTableArn(environment);
+    // DynamoDB's endpoint has no private DNS, so the gateway is given its own name.
+    const keysEndpoint = StringParameter.valueForStringParameter(
+      this,
+      endpointAddressParameterName(environment.name, "dynamodb"),
     );
 
     new GatewayFunction(this, "Gateway", {
@@ -134,9 +134,8 @@ export class GatewayStack extends Stack {
         ...(gateway.target !== null && {
           FLEX_UPSTREAM_TARGET: gateway.target,
         }),
-        FLEX_CALLER_TOKEN_KEYS_BUCKET: keysBucket,
-        FLEX_CALLER_TOKEN_KEYS_OBJECT: CALLER_TOKEN_KEYS_OBJECT,
-        FLEX_CALLER_TOKEN_KEYS_ACCOUNT: environment.frontdoor.account,
+        FLEX_CALLER_TOKEN_KEYS_TABLE: keysTable,
+        FLEX_CALLER_TOKEN_KEYS_ENDPOINT: keysEndpoint,
         FLEX_CALLER_TOKEN_AUDIENCE: callerTokenAudience(environment.name),
       },
       statements: [
@@ -147,19 +146,12 @@ export class GatewayStack extends Stack {
           roleArns: gateway.roleArns,
           endpointIds: [secretsEndpointId, endpointId("sts")],
         }),
-        // The edge's public keys, in the frontdoor account's bucket, whose policy lets this
-        // role read them too. Bucket names are global, so it is held to that account's.
+        // The edge's public keys, in the frontdoor account's table, whose policy lets this role
+        // scan it too.
         new PolicyStatement({
           effect: Effect.ALLOW,
-          actions: ["s3:GetObject"],
-          resources: [
-            `arn:${this.partition}:s3:::${keysBucket}/${CALLER_TOKEN_KEYS_OBJECT}`,
-          ],
-          conditions: {
-            StringEquals: {
-              "aws:ResourceAccount": environment.frontdoor.account,
-            },
-          },
+          actions: ["dynamodb:Scan"],
+          resources: [keysTable],
         }),
       ],
       subnetIdsParameterName: subnetIdsParameterName(

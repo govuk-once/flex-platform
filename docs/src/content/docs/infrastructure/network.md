@@ -66,9 +66,9 @@ only on TCP port 443:
 
 A domain uses the `lambda` endpoint to invoke gateways. A gateway uses `secretsmanager` to read its
 secret, `sts` to assume an upstream's role for
-[`sigV4`](/flex-platform/drivers/openapi-rest/authentication/), and `s3` to read the
-[caller token's keys](#the-caller-tokens-keys). The `dynamodb` endpoint reaches the table that
-holds the same keys. An isolated gateway uses `execute-api` to call an
+[`sigV4`](/flex-platform/drivers/openapi-rest/authentication/), and `dynamodb` to read the
+[caller token's keys](#the-caller-tokens-keys). The `s3` endpoint reaches the bucket that holds
+the same keys. An isolated gateway uses `execute-api` to call an
 upstream's [private API](#private-apis). Each endpoint's own security group
 lets in only the workloads that may reach it, and lets nothing out. What a workload may call is its
 role's to decide: an endpoint's policy applies to the requests sent through that endpoint.
@@ -364,33 +364,35 @@ somewhere unseen.
 ## The caller token's keys
 
 Gateways verify the [caller token](/flex-platform/frontdoor/caller-token/) with the edge's public
-keys, which are in [one bucket](/flex-platform/frontdoor/caller-token/#the-public-keys-bucket) in
-the environment's frontdoor account. A gateway reads them through the `s3` endpoint, whose policy
-names that one object, and the frontdoor account as its bucket's owner: bucket names are global, so
-a bucket of the same name in another account is refused.
+keys, which are in [one table](/flex-platform/frontdoor/caller-token/#the-tables) in the
+environment's frontdoor account. A gateway scans it, by its ARN, through the `dynamodb` endpoint,
+whose policy names that one table.
 
-S3 offers both a gateway endpoint and an interface endpoint. The network uses the interface
+DynamoDB offers both a gateway endpoint and an interface endpoint. The network uses the interface
 endpoint, as it does for every other service, so its traffic stays inside the VPC, to an address
-the security groups and network ACLs already allow. A gateway endpoint would send it to S3's public
-ranges, which the network ACLs would have to let out. With no gateway endpoint beside it, the
-interface endpoint's private DNS answers every resolver in the VPC, not only inbound ones, so it
-sets `PrivateDnsOnlyForInboundResolverEndpoint` to `AllResolvers`.
+the security groups and network ACLs already allow. A gateway endpoint would send it to
+DynamoDB's public ranges, which the network ACLs would have to let out.
 
-The same keys are in [a table](/flex-platform/frontdoor/caller-token/#the-tables) in the
-frontdoor account, which the `dynamodb` endpoint reaches. Its policy names that one table, by ARN.
 DynamoDB's interface endpoint has no private DNS, and AWS advises against a private hosted zone
-that answers for DynamoDB's own names, since those may change. So a client is given the endpoint's
-own regional name, and calls it there over HTTPS. The regional name answers with the endpoint's
-address in every subnet it is in. CloudFormation lists the endpoint's names regional first, then
-zonal, each after its hosted zone's ID. The network writes the first to
-`/flex/network/<environment>/endpoint-address/dynamodb`, and allows it on the
-[allowlist](#the-allowlist).
+that answers for DynamoDB's own names, since those may change. So a gateway is given the endpoint's
+own regional name, in `FLEX_CALLER_TOKEN_KEYS_ENDPOINT`, and calls it there over HTTPS. The
+regional name answers with the endpoint's address in every subnet it is in. CloudFormation lists
+the endpoint's names regional first, then zonal, each after its hosted zone's ID. The network
+writes the first to `/flex/network/<environment>/endpoint-address/dynamodb`, which a gateway's
+stack reads, and allows it on the [allowlist](#the-allowlist).
 
 The regional name lasts as long as the endpoint. Adding or removing one of the network's zones
 changes only the zonal names, which nothing reads. An endpoint that is replaced has a new name. The
-network's stack updates the parameter and the allowlist together, and every stack that reads the
-parameter must then deploy with `--force`, as for [any ID](#ids-other-stacks-read). Until it does,
-it calls the old name, which the allowlist refuses.
+network's stack updates the parameter and the allowlist together, and every gateway's stack must
+then deploy with `--force`, as for [any ID](#ids-other-stacks-read). Until it does, the gateway
+calls the old name, which the allowlist refuses.
+
+The keys are also in [a bucket](/flex-platform/frontdoor/caller-token/#the-public-keys-bucket),
+which the `s3` endpoint reaches. Its policy names that one object, and the frontdoor account as
+its bucket's owner: bucket names are global, so a bucket of the same name in another account is
+refused. With no S3 gateway endpoint beside it, the interface endpoint's private DNS answers every
+resolver in the VPC, not only inbound ones, so it sets `PrivateDnsOnlyForInboundResolverEndpoint`
+to `AllResolvers`.
 
 ## IDs other stacks read
 
@@ -404,7 +406,7 @@ names derived from config:
 | `/flex/network/<environment>/private-subnet-ids` | The private subnets' IDs, as a list |
 | `/flex/network/<environment>/security-group/<workload>` | A workload's security group |
 | `/flex/network/<environment>/endpoint/<service>` | An interface endpoint's ID, such as `secretsmanager`'s, for a role's `aws:SourceVpce` condition |
-| `/flex/network/<environment>/endpoint-address/dynamodb` | The `dynamodb` endpoint's own regional name, which a client calls it at |
+| `/flex/network/<environment>/endpoint-address/dynamodb` | The `dynamodb` endpoint's own regional name, which a gateway calls it at |
 
 Each account has its own parameters, so the names need no account. A stack reads one with
 `StringParameter.valueForStringParameter` or `StringListParameter.valueForTypedListParameter`.

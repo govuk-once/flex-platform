@@ -10,12 +10,18 @@ const ACCOUNT = "123456789012";
 
 const EDGE_ROLE = `arn:aws:iam::${ACCOUNT}:role/frontdoor-sandbox-edge`;
 const ROTATION_ROLE = `arn:aws:iam::${ACCOUNT}:role/frontdoor-sandbox-caller-token-key-rotation`;
+// Every gateway's role, by pattern, in two other accounts.
+const GATEWAY_ROLES = [
+  "arn:aws:iam::100000000003:role/gateway-sandbox-*",
+  "arn:aws:iam::100000000004:role/gateway-sandbox-*",
+];
 
 const PROPS: KeyRotationProps = {
   environment: "sandbox",
   kind: "caller-token",
   keyAlias: "alias/frontdoor-sandbox-caller-token",
   privateKeyReaderRoleArns: [EDGE_ROLE],
+  publicKeyReaderRoleArns: GATEWAY_ROLES,
   publication: {
     bucket: `frontdoor-sandbox-keys-${ACCOUNT}`,
     account: ACCOUNT,
@@ -30,7 +36,10 @@ function build(region = "eu-west-2", nag = false, props = PROPS) {
   return { stack, template: Template.fromStack(stack) };
 }
 
-function expectedPolicy(table: string, readers: string[]) {
+const root = (account: string) => `arn:aws:iam::${account}:root`;
+
+function expectedPolicy(table: string, readers: string[], accounts: string[]) {
+  const Resource = `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/${table}`;
   const deny = (
     Sid: string,
     NotAction: string | string[],
@@ -40,12 +49,23 @@ function expectedPolicy(table: string, readers: string[]) {
     Effect: "Deny",
     Principal: { AWS: "*" },
     NotAction,
-    Resource: `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/${table}`,
+    Resource,
     Condition,
   });
+  const principals = accounts.map(root);
   return {
     PolicyDocument: {
       Statement: [
+        {
+          Sid: "AllowItsReadersToScan",
+          Effect: "Allow",
+          Principal: {
+            AWS: principals.length === 1 ? principals[0] : principals,
+          },
+          Action: "dynamodb:Scan",
+          Resource,
+          Condition: { ArnLike: { "aws:PrincipalArn": readers } },
+        },
         deny(
           "DenyOthersAllButManagingTheTable",
           [...TABLE_MANAGEMENT_ACTIONS],
@@ -60,13 +80,9 @@ function expectedPolicy(table: string, readers: string[]) {
           ["dynamodb:DeleteItem", "dynamodb:PutItem", "dynamodb:Scan"],
           { ArnLike: { "aws:PrincipalArn": [ROTATION_ROLE] } },
         ),
-        ...(readers.length === 0
-          ? []
-          : [
-              deny("DenyReadersAllButItsWork", "dynamodb:Scan", {
-                ArnLike: { "aws:PrincipalArn": readers },
-              }),
-            ]),
+        deny("DenyReadersAllButItsWork", "dynamodb:Scan", {
+          ArnLike: { "aws:PrincipalArn": readers },
+        }),
       ],
       Version: "2012-10-17",
     },
@@ -197,11 +213,15 @@ describe("KeyRotation", () => {
     ).not.toContain("kms:Decrypt");
   });
 
-  it("keeps the kind's keys in two tables, which only it may change, and only it and the edge read", () => {
+  it("keeps the kind's keys in two tables, which only it may change, and only it and each table's readers read", () => {
     const { template } = build();
-    for (const [name, readers] of [
-      ["frontdoor-sandbox-caller-token-private-keys", [EDGE_ROLE]],
-      ["frontdoor-sandbox-caller-token-public-keys", []],
+    for (const [name, readers, accounts] of [
+      ["frontdoor-sandbox-caller-token-private-keys", [EDGE_ROLE], [ACCOUNT]],
+      [
+        "frontdoor-sandbox-caller-token-public-keys",
+        GATEWAY_ROLES,
+        ["100000000003", "100000000004"],
+      ],
     ] as const) {
       template.hasResource("AWS::DynamoDB::Table", {
         Properties: Match.exact({
@@ -215,7 +235,7 @@ describe("KeyRotation", () => {
             PointInTimeRecoveryEnabled: true,
           },
           DeletionProtectionEnabled: true,
-          ResourcePolicy: expectedPolicy(name, [...readers]),
+          ResourcePolicy: expectedPolicy(name, [...readers], [...accounts]),
         }),
         DeletionPolicy: "Retain",
         UpdateReplacePolicy: "Retain",
@@ -303,6 +323,28 @@ describe("KeyRotation", () => {
     expect(() =>
       build("eu-west-2", false, { ...PROPS, publication: null }),
     ).toThrow("The caller-token keys' policy and config disagree");
+  });
+
+  it("admits no reader to a table that has none", () => {
+    const { template } = build("eu-west-2", false, {
+      ...PROPS,
+      publicKeyReaderRoleArns: [],
+    });
+    const policy = JSON.stringify(
+      template.findResources("AWS::DynamoDB::Table"),
+    );
+    expect(policy.match(/AllowItsReadersToScan/g)).toHaveLength(1);
+  });
+
+  it("refuses a reader whose ARN names no account", () => {
+    expect(() =>
+      build("eu-west-2", false, {
+        ...PROPS,
+        publicKeyReaderRoleArns: ["arn:aws:iam::gateways:role/gateway-*"],
+      }),
+    ).toThrow(
+      "The role ARN arn:aws:iam::gateways:role/gateway-* names no account",
+    );
   });
 
   it("is built in the signing region alone", () => {
