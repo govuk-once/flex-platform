@@ -17,7 +17,7 @@ function build() {
     environment: DEV,
     domainAccount: MAIN,
   });
-  return { stack, template: Template.fromStack(stack) };
+  return { stack };
 }
 
 describe("DomainAccountStack", () => {
@@ -40,7 +40,10 @@ describe("DomainAccountStack", () => {
 
   it("holds what every domain shares, and nothing per domain", () => {
     const resources = Object.values(
-      build().template.toJSON().Resources as Record<string, { Type: string }>,
+      Template.fromStack(build().stack).toJSON().Resources as Record<
+        string,
+        { Type: string }
+      >,
     ).map(({ Type }) => Type);
 
     expect(resources.toSorted()).toEqual([
@@ -82,7 +85,9 @@ describe("DomainAccountStack", () => {
   });
 
   it("reads nothing, and outputs nothing", () => {
-    const { Parameters, Outputs } = build().template.toJSON() as {
+    const { Parameters, Outputs } = Template.fromStack(
+      build().stack,
+    ).toJSON() as {
       Parameters: Record<string, unknown>;
       Outputs?: Record<string, unknown>;
     };

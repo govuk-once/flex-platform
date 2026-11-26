@@ -1,6 +1,5 @@
 import { cdkApp, LogGroupCheck } from "@repo/infra-constructs";
 import { App, Stack, Validations } from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { assert } from "vitest";
 
@@ -54,12 +53,12 @@ export function managementEdgeIn(
   });
 }
 
-export function managementEdgeTemplate(nag = false): {
+export function buildManagementEdge(nag = false): {
   edge: ManagementEdge;
   app: App;
-  template: Template;
+  stack: Stack;
 } {
   const stack = stackIn("us-east-1", nag);
   const edge = managementEdgeIn(stack);
-  return { edge, app: appOf(stack), template: Template.fromStack(stack) };
+  return { edge, app: appOf(stack), stack };
 }

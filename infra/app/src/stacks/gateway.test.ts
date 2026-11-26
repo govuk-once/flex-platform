@@ -24,7 +24,7 @@ function build(gateway: GatewayConfig = UDP) {
     gateway,
     bundle: gatewayBundle("udp"),
   });
-  return { stack, template: Template.fromStack(stack) };
+  return { stack };
 }
 
 // The value of the SSM parameter a CloudFormation parameter reads, by the parameter's name.
@@ -229,7 +229,7 @@ describe("GatewayStack", () => {
   });
 
   it("sets no target where the driver takes it from the secret", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
     const [fn] = Object.values(
       template.findResources("AWS::Lambda::Function"),
     ) as {

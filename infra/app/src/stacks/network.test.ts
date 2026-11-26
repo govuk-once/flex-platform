@@ -66,6 +66,15 @@ describe("NetworkStack", () => {
     }
   });
 
+  // The tests below build the stack themselves, so this holds what they check to what deploys.
+  it("is the stack the app builds, when a test builds it", () => {
+    const deployed = synthesizedStage(PROD).getStackByName(
+      networkStackName(PROD_ENVIRONMENT, PROD_ENVIRONMENT.domainAccounts[0]),
+    ).template as Record<string, unknown>;
+
+    expect(Template.fromStack(build()).toJSON()).toEqual(deployed);
+  });
+
   it("lays out the zones its domain account's config lists", () => {
     const zones = Template.fromStack(build()).toJSON().Resources as Record<
       string,

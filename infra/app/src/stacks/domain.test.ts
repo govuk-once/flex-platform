@@ -22,7 +22,7 @@ function build() {
     domain: DOMAIN,
     sharedAccount: PROD.shared.account,
   });
-  return { stack, template: Template.fromStack(stack) };
+  return { stack };
 }
 
 describe("DomainStack", () => {
@@ -58,7 +58,10 @@ describe("DomainStack", () => {
 
   it("holds one domain's API, its alarms, host, log group and roles, and nothing shared", () => {
     const resources = Object.values(
-      build().template.toJSON().Resources as Record<string, { Type: string }>,
+      Template.fromStack(build().stack).toJSON().Resources as Record<
+        string,
+        { Type: string }
+      >,
     ).map(({ Type }) => Type);
 
     expect(resources.toSorted()).toEqual([
@@ -108,7 +111,9 @@ describe("DomainStack", () => {
   });
 
   it("reads the account's certificate and the network's IDs, and outputs nothing", () => {
-    const { Parameters, Outputs } = build().template.toJSON() as {
+    const { Parameters, Outputs } = Template.fromStack(
+      build().stack,
+    ).toJSON() as {
       Parameters: Record<string, { Default: string }>;
       Outputs?: Record<string, unknown>;
     };

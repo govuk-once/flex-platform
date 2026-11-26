@@ -7,7 +7,7 @@ type Entry = Record<string, unknown>;
 
 // Each tier's entries, as CloudFormation sees them, by the tier's ACL.
 function entries(tier: string): Entry[] {
-  const { template } = buildNetwork();
+  const template = Template.fromStack(buildNetwork().stack);
   return Object.values(template.findResources("AWS::EC2::NetworkAclEntry"))
     .map(({ Properties }) => Properties as Entry)
     .filter(({ NetworkAclId }) =>
