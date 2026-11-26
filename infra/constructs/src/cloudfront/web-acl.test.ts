@@ -21,7 +21,7 @@ function build(region = "us-east-1", checks = false) {
     rateLimitPerIp: 500,
     redactedHeaders: ["x-example-token", "cookie"],
   });
-  return { app, webAcl, template: () => Template.fromStack(stack) };
+  return { app, webAcl, stack };
 }
 
 function rules(template: Template): Rule[] {
@@ -55,9 +55,9 @@ describe("CloudFrontWebAcl", () => {
   });
 
   it("is CloudFront scoped, named as it is given, and allows by default", () => {
-    build()
-      .template()
-      .hasResourceProperties("AWS::WAFv2::WebACL", {
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::WAFv2::WebACL",
+      {
         Name: "example-web-acl",
         Scope: "CLOUDFRONT",
         DefaultAction: { Allow: {} },
@@ -66,12 +66,13 @@ describe("CloudFrontWebAcl", () => {
           MetricName: "example-web-acl",
           SampledRequestsEnabled: true,
         },
-      });
+      },
+    );
   });
 
   it("evaluates the body size limit, the managed rule groups, then the rate limits", () => {
-    const { webAcl, template } = build();
-    const built = template();
+    const { webAcl, stack } = build();
+    const built = Template.fromStack(stack);
 
     expect(webAcl.ruleNames).toEqual([
       "BodySizeLimit",
@@ -89,7 +90,7 @@ describe("CloudFrontWebAcl", () => {
   });
 
   it("answers a body over 16 KB with a 413, including one too large to inspect", () => {
-    const built = build().template();
+    const built = Template.fromStack(build().stack);
 
     built.hasResourceProperties("AWS::WAFv2::WebACL", {
       AssociationConfig: {
@@ -126,7 +127,7 @@ describe("CloudFrontWebAcl", () => {
   });
 
   it("keeps the managed rule groups' own actions, except the two it counts", () => {
-    const built = build().template();
+    const built = Template.fromStack(build().stack);
 
     expect(rule(built, "AWSManagedRulesCommonRuleSet")).toMatchObject({
       OverrideAction: { None: {} },
@@ -155,7 +156,7 @@ describe("CloudFrontWebAcl", () => {
   });
 
   it("limits each token, by the header it is given, and each address, with a 429", () => {
-    const built = build().template();
+    const built = Template.fromStack(build().stack);
     const tooMany = {
       Block: {
         CustomResponse: {
@@ -196,7 +197,7 @@ describe("CloudFrontWebAcl", () => {
   });
 
   it("logs every evaluated request to a retained log group, with the headers it is given redacted", () => {
-    const built = build().template();
+    const built = Template.fromStack(build().stack);
 
     built.hasResource("AWS::Logs::LogGroup", {
       DeletionPolicy: "Retain",

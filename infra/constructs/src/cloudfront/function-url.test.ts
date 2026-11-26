@@ -26,7 +26,7 @@ function functionSide() {
     code: Code.fromInline("exports.handler = async () => ({});"),
   });
   const host = cloudFrontFunctionUrl(fn);
-  return { stack, fn, host, template: Template.fromStack(stack) };
+  return { stack, fn, host };
 }
 
 // A distribution in us-east-1 whose one origin is a function URL's host.
@@ -44,23 +44,26 @@ function distributionSide() {
       cachePolicy: CachePolicy.CACHING_DISABLED,
     },
   });
-  return { stack, template: Template.fromStack(stack) };
+  return { stack };
 }
 
 describe("cloudFrontFunctionUrl", () => {
   // Anything else would have Lambda run the function for whoever found the URL.
   it("gives the function a URL that takes only signed requests", () => {
-    functionSide().template.hasResourceProperties("AWS::Lambda::Url", {
-      AuthType: "AWS_IAM",
-      TargetFunctionArn: {
-        "Fn::GetAtt": [Match.stringLikeRegexp("^Api"), "Arn"],
+    Template.fromStack(functionSide().stack).hasResourceProperties(
+      "AWS::Lambda::Url",
+      {
+        AuthType: "AWS_IAM",
+        TargetFunctionArn: {
+          "Fn::GetAtt": [Match.stringLikeRegexp("^Api"), "Arn"],
+        },
       },
-    });
+    );
   });
 
   // Lambda checks both actions for a call through a URL.
   it("admits CloudFront alone, for any distribution in the function's account, and only through the URL", () => {
-    const { template } = functionSide();
+    const template = Template.fromStack(functionSide().stack);
 
     template.resourceCountIs("AWS::Lambda::Permission", 2);
     template.hasResourceProperties("AWS::Lambda::Permission", {
@@ -78,7 +81,8 @@ describe("cloudFrontFunctionUrl", () => {
   });
 
   it("gives the URL's host alone", () => {
-    const { stack, host, template } = functionSide();
+    const { stack, host } = functionSide();
+    const template = Template.fromStack(stack);
     const [urlId] = Object.keys(template.findResources("AWS::Lambda::Url"));
 
     expect(stack.resolve(host)).toEqual({
@@ -106,7 +110,7 @@ describe("cloudFrontFunctionUrl", () => {
 describe("functionUrlOrigin", () => {
   // The URL takes no unsigned request, so without this every request would be refused.
   it("signs every request, replacing any Authorization a caller sent", () => {
-    distributionSide().template.hasResourceProperties(
+    Template.fromStack(distributionSide().stack).hasResourceProperties(
       "AWS::CloudFront::OriginAccessControl",
       {
         OriginAccessControlConfig: {
@@ -120,7 +124,7 @@ describe("functionUrlOrigin", () => {
   });
 
   it("reaches the host over HTTPS and TLS 1.2, under the origin ID and access control given", () => {
-    distributionSide().template.hasResourceProperties(
+    Template.fromStack(distributionSide().stack).hasResourceProperties(
       "AWS::CloudFront::Distribution",
       {
         DistributionConfig: Match.objectLike({

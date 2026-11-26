@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { cdkApp } from "./cdk-app.ts";
 import { PlatformLogGroup } from "./log-group.ts";
 
-function build(name?: string, nag = false): { app: App; template: Template } {
+function build(name?: string, nag = false): { app: App; stack: Stack } {
   const app = cdkApp();
   if (nag) Validations.of(app).addPlugins(new AwsSolutionsChecks(app));
   const stack = new Stack(app, "Test", {
@@ -17,7 +17,7 @@ function build(name?: string, nag = false): { app: App; template: Template } {
     "Logs",
     name === undefined ? {} : { logGroupName: name },
   );
-  return { app, template: Template.fromStack(stack) };
+  return { app, stack };
 }
 
 describe("PlatformLogGroup", () => {
@@ -28,7 +28,7 @@ describe("PlatformLogGroup", () => {
   });
 
   it("keeps logs for a year, refuses to be deleted and outlives its stack", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
 
     template.hasResource("AWS::Logs::LogGroup", {
       DeletionPolicy: "Retain",
@@ -61,7 +61,7 @@ describe("PlatformLogGroup", () => {
   });
 
   it("lets CloudWatch Logs in the stack's region use the key, for its log groups only", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
 
     template.hasResourceProperties("AWS::KMS::Key", {
       KeyPolicy: {
@@ -83,13 +83,13 @@ describe("PlatformLogGroup", () => {
 
   it("lets CloudFormation name it unless told otherwise", () => {
     const [unnamed] = Object.values(
-      build().template.findResources("AWS::Logs::LogGroup"),
+      Template.fromStack(build().stack).findResources("AWS::Logs::LogGroup"),
     );
     expect(
       (unnamed?.Properties as { LogGroupName?: string }).LogGroupName,
     ).toBeUndefined();
 
-    build("aws-waf-logs-test").template.hasResourceProperties(
+    Template.fromStack(build("aws-waf-logs-test").stack).hasResourceProperties(
       "AWS::Logs::LogGroup",
       { LogGroupName: "aws-waf-logs-test" },
     );

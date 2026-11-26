@@ -1,28 +1,31 @@
-import { Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, it } from "vitest";
 
 import { buildNetwork } from "../../test/network.ts";
 
 describe("FlowLogs", () => {
   it("logs every flow in the VPC to its bucket, in hourly partitions", () => {
-    buildNetwork().template.hasResourceProperties("AWS::EC2::FlowLog", {
-      ResourceType: "VPC",
-      ResourceId: { Ref: Match.stringLikeRegexp("^NetworkVpc") },
-      TrafficType: "ALL",
-      LogDestinationType: "s3",
-      LogDestination: {
-        "Fn::GetAtt": [Match.stringLikeRegexp("^FlowLogsStore"), "Arn"],
+    Template.fromStack(buildNetwork().stack).hasResourceProperties(
+      "AWS::EC2::FlowLog",
+      {
+        ResourceType: "VPC",
+        ResourceId: { Ref: Match.stringLikeRegexp("^NetworkVpc") },
+        TrafficType: "ALL",
+        LogDestinationType: "s3",
+        LogDestination: {
+          "Fn::GetAtt": [Match.stringLikeRegexp("^FlowLogsStore"), "Arn"],
+        },
+        DestinationOptions: {
+          fileFormat: "plain-text",
+          hiveCompatiblePartitions: true,
+          perHourPartition: true,
+        },
       },
-      DestinationOptions: {
-        fileFormat: "plain-text",
-        hiveCompatiblePartitions: true,
-        perHourPartition: true,
-      },
-    });
+    );
   });
 
   it("archives logs after a month and deletes them after a year, as log groups are kept, locked until then", () => {
-    buildNetwork().template.hasResource("AWS::S3::Bucket", {
+    Template.fromStack(buildNetwork().stack).hasResource("AWS::S3::Bucket", {
       DeletionPolicy: "Retain",
       Properties: {
         ObjectLockConfiguration: {
@@ -46,7 +49,7 @@ describe("FlowLogs", () => {
   });
 
   it("sends the rejected flows alone to a log group of the platform's, for the central logs", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     template.hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: "/flex/network/sandbox/rejected-flows",

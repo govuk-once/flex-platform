@@ -1,4 +1,4 @@
-import { Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { assert, describe, expect, it } from "vitest";
 
 import { buildNetwork } from "../../test/network.ts";
@@ -114,7 +114,7 @@ describe("NetworkAcls", () => {
   });
 
   it("associates each tier's ACL with each of its subnets", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
     for (const tier of ["Public", "Private", "Isolated"]) {
       for (const zone of ["euwest2a", "euwest2b"]) {
         template.hasResourceProperties(

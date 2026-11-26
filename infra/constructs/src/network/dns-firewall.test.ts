@@ -1,4 +1,4 @@
-import { Match, type Template } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { assert, describe, expect, it } from "vitest";
 
 import { ACCOUNT, buildNetwork, UPSTREAM } from "../../test/network.ts";
@@ -44,7 +44,7 @@ const DYNAMODB_ADDRESS = {
 
 describe("DnsFirewall", () => {
   it("allows the endpoints' names and the upstream's, sorted, then the dynamodb endpoint's own, and nothing broader", () => {
-    buildNetwork().template.hasResourceProperties(
+    Template.fromStack(buildNetwork().stack).hasResourceProperties(
       "AWS::Route53Resolver::FirewallDomainList",
       {
         Name: "network-sandbox-dns-allowed",
@@ -59,7 +59,7 @@ describe("DnsFirewall", () => {
   });
 
   it("allows the listed names first, trusting where they alias to, then blocks every name with NXDOMAIN", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     template.hasResourceProperties("AWS::Route53Resolver::FirewallRuleGroup", {
       Name: "network-sandbox-dns-allow",
@@ -105,7 +105,7 @@ describe("DnsFirewall", () => {
   it("associates both groups with the VPC, the allowlist evaluated before the block", () => {
     const associations = Object.values(
       resources(
-        buildNetwork().template,
+        Template.fromStack(buildNetwork().stack),
         "AWS::Route53Resolver::FirewallRuleGroupAssociation",
       ),
     ).map(({ Properties }) => Properties);
@@ -129,10 +129,12 @@ describe("DnsFirewall", () => {
   // The block's group, list and association can't depend on the allowlist, so changing or rolling
   // back the allowlist never touches them, or anything else.
   it("changes nothing but the allowlist when the names change, so the block stays in place", () => {
-    const before = buildNetwork().template.toJSON().Resources as Resources;
-    const after = buildNetwork(undefined, false, {
-      hostnames: ["api.other.example"],
-    }).template.toJSON().Resources as Resources;
+    const before = Template.fromStack(buildNetwork().stack).toJSON()
+      .Resources as Resources;
+    const after = Template.fromStack(
+      buildNetwork(undefined, false, { hostnames: ["api.other.example"] })
+        .stack,
+    ).toJSON().Resources as Resources;
     const changed = Object.keys({ ...before, ...after }).filter(
       (id) => JSON.stringify(before[id]) !== JSON.stringify(after[id]),
     );
@@ -143,9 +145,11 @@ describe("DnsFirewall", () => {
   });
 
   it("allows only the names it's given, without repeats", () => {
-    const { template } = buildNetwork(undefined, false, {
-      hostnames: ["auth.upstream.example", "AUTH.upstream.example."],
-    });
+    const template = Template.fromStack(
+      buildNetwork(undefined, false, {
+        hostnames: ["auth.upstream.example", "AUTH.upstream.example."],
+      }).stack,
+    );
 
     template.hasResourceProperties("AWS::Route53Resolver::FirewallDomainList", {
       Name: "network-sandbox-dns-allowed",
@@ -164,14 +168,14 @@ describe("DnsFirewall", () => {
   // Failing closed is the VPC's default. CloudFormation refuses a FirewallConfig that sets the
   // default, and every other value fails open, so the construct sets none.
   it("leaves the VPC failing closed, as it does by default", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     template.resourceCountIs("AWS::Route53Resolver::FirewallConfig", 0);
     template.resourceCountIs("Custom::AWS", 0);
   });
 
   it("logs the VPC's resolver queries to a log group of the platform's", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     template.hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: "/flex/network/sandbox/dns-queries",
@@ -203,7 +207,10 @@ describe("DnsFirewall", () => {
 
   it("lets only this account's log delivery write the query logs", () => {
     const [policy] = Object.values(
-      resources(buildNetwork().template, "AWS::Logs::ResourcePolicy"),
+      resources(
+        Template.fromStack(buildNetwork().stack),
+        "AWS::Logs::ResourcePolicy",
+      ),
     );
     // The document is a string joined around the log group's ARN.
     const document = JSON.stringify(policy?.Properties.PolicyDocument);
@@ -220,33 +227,36 @@ describe("DnsFirewall", () => {
   });
 
   it("alarms on any blocked query, with no action until alerting exists", () => {
-    buildNetwork().template.hasResourceProperties("AWS::CloudWatch::Alarm", {
-      AlarmName: "network-sandbox-dns-blocked-queries",
-      Namespace: "AWS/Route53Resolver",
-      MetricName: "FirewallRuleQueryVolume",
-      Dimensions: [
-        {
-          Name: "FirewallDomainListId",
-          Value: {
-            "Fn::GetAtt": [
-              Match.stringLikeRegexp("^DnsFirewallEveryName"),
-              "Id",
-            ],
+    Template.fromStack(buildNetwork().stack).hasResourceProperties(
+      "AWS::CloudWatch::Alarm",
+      {
+        AlarmName: "network-sandbox-dns-blocked-queries",
+        Namespace: "AWS/Route53Resolver",
+        MetricName: "FirewallRuleQueryVolume",
+        Dimensions: [
+          {
+            Name: "FirewallDomainListId",
+            Value: {
+              "Fn::GetAtt": [
+                Match.stringLikeRegexp("^DnsFirewallEveryName"),
+                "Id",
+              ],
+            },
           },
-        },
-        {
-          Name: "FirewallRuleGroupId",
-          Value: {
-            "Fn::GetAtt": [Match.stringLikeRegexp("^DnsFirewallBlock"), "Id"],
+          {
+            Name: "FirewallRuleGroupId",
+            Value: {
+              "Fn::GetAtt": [Match.stringLikeRegexp("^DnsFirewallBlock"), "Id"],
+            },
           },
-        },
-      ],
-      Statistic: "Sum",
-      Period: 300,
-      Threshold: 1,
-      ComparisonOperator: "GreaterThanOrEqualToThreshold",
-      TreatMissingData: "notBreaching",
-      AlarmActions: Match.absent(),
-    });
+        ],
+        Statistic: "Sum",
+        Period: 300,
+        Threshold: 1,
+        ComparisonOperator: "GreaterThanOrEqualToThreshold",
+        TreatMissingData: "notBreaching",
+        AlarmActions: Match.absent(),
+      },
+    );
   });
 });

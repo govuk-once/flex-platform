@@ -12,7 +12,7 @@ function build(props: PlatformBucketProps = {}) {
     env: { account: "123456789012", region: "eu-west-2" },
   });
   const { bucket } = new PlatformBucket(stack, "Store", props);
-  return { app, bucket, template: Template.fromStack(stack) };
+  return { app, bucket, stack };
 }
 
 const BUCKET_ARN = {
@@ -28,23 +28,26 @@ describe("PlatformBucket", () => {
     ["plain HTTP", { Bool: { "aws:SecureTransport": "false" } }],
     ["TLS older than 1.2", { NumericLessThan: { "s3:TlsVersion": 1.2 } }],
   ])("denies every request over %s, from anyone", (_, Condition) => {
-    build().template.hasResourceProperties("AWS::S3::BucketPolicy", {
-      PolicyDocument: {
-        Statement: Match.arrayWith([
-          {
-            Effect: "Deny",
-            Principal: { AWS: "*" },
-            Action: "s3:*",
-            Resource: BUCKET_AND_OBJECTS,
-            Condition,
-          },
-        ]),
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::S3::BucketPolicy",
+      {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            {
+              Effect: "Deny",
+              Principal: { AWS: "*" },
+              Action: "s3:*",
+              Resource: BUCKET_AND_OBJECTS,
+              Condition,
+            },
+          ]),
+        },
       },
-    });
+    );
   });
 
   it("blocks public access and encrypts with S3's keys", () => {
-    build().template.hasResourceProperties("AWS::S3::Bucket", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::S3::Bucket", {
       PublicAccessBlockConfiguration: {
         BlockPublicAcls: true,
         BlockPublicPolicy: true,
@@ -60,39 +63,37 @@ describe("PlatformBucket", () => {
   });
 
   it("keeps every version of an object", () => {
-    build().template.hasResourceProperties("AWS::S3::Bucket", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::S3::Bucket", {
       VersioningConfiguration: { Status: "Enabled" },
     });
   });
 
   it("is retained unless told otherwise", () => {
-    build().template.hasResource("AWS::S3::Bucket", {
+    Template.fromStack(build().stack).hasResource("AWS::S3::Bucket", {
       DeletionPolicy: "Retain",
     });
-    build({ removalPolicy: RemovalPolicy.DESTROY }).template.hasResource(
-      "AWS::S3::Bucket",
-      { DeletionPolicy: "Delete" },
-    );
+    Template.fromStack(
+      build({ removalPolicy: RemovalPolicy.DESTROY }).stack,
+    ).hasResource("AWS::S3::Bucket", { DeletionPolicy: "Delete" });
   });
 
   it("locks nothing unless told to", () => {
-    build().template.hasResourceProperties("AWS::S3::Bucket", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::S3::Bucket", {
       ObjectLockEnabled: Match.absent(),
       ObjectLockConfiguration: Match.absent(),
     });
   });
 
   it("locks every version in compliance mode for as long as it's told", () => {
-    build({ lockedFor: Duration.days(365) }).template.hasResourceProperties(
-      "AWS::S3::Bucket",
-      {
-        ObjectLockEnabled: true,
-        ObjectLockConfiguration: {
-          ObjectLockEnabled: "Enabled",
-          Rule: { DefaultRetention: { Mode: "COMPLIANCE", Days: 365 } },
-        },
+    Template.fromStack(
+      build({ lockedFor: Duration.days(365) }).stack,
+    ).hasResourceProperties("AWS::S3::Bucket", {
+      ObjectLockEnabled: true,
+      ObjectLockConfiguration: {
+        ObjectLockEnabled: "Enabled",
+        Rule: { DefaultRetention: { Mode: "COMPLIANCE", Days: 365 } },
       },
-    );
+    });
   });
 
   it("refuses to lock a bucket it would destroy", () => {
