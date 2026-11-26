@@ -1,3 +1,4 @@
+import { TABLE_MANAGEMENT_ACTIONS } from "@repo/infra-constructs";
 import { Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
@@ -36,33 +37,28 @@ describe("ArtefactTable", () => {
     });
   });
 
-  // An admin of the account can't either: a deny in the table's policy holds over any allow.
-  it("lets no role but the API's record a version, and none change or delete one", () => {
+  // An admin of the account can't either, short of rewriting the policy: a deny in the table's
+  // policy holds over any allow.
+  it("lets the API's role alone get and put a version, and nothing change or delete one", () => {
     Template.fromStack(build()).hasResourceProperties("AWS::DynamoDB::Table", {
       ResourcePolicy: {
         PolicyDocument: {
           Statement: [
             {
-              Sid: "DenyRecordingButThePipelineApi",
+              Sid: "DenyOthersAllButManagingTheTable",
               Effect: "Deny",
               Principal: { AWS: "*" },
-              Action: "dynamodb:PutItem",
+              NotAction: [...TABLE_MANAGEMENT_ACTIONS],
               Resource: TABLE_ARN,
-              Condition: { ArnNotEquals: { "aws:PrincipalArn": [RECORDER] } },
+              Condition: { ArnNotLike: { "aws:PrincipalArn": [RECORDER] } },
             },
             {
-              Sid: "DenyChanging",
+              Sid: "DenyPipelineApiAllButItsWork",
               Effect: "Deny",
               Principal: { AWS: "*" },
-              Action: [
-                "dynamodb:BatchWriteItem",
-                "dynamodb:DeleteItem",
-                "dynamodb:PartiQLDelete",
-                "dynamodb:PartiQLInsert",
-                "dynamodb:PartiQLUpdate",
-                "dynamodb:UpdateItem",
-              ],
+              NotAction: ["dynamodb:GetItem", "dynamodb:PutItem"],
               Resource: TABLE_ARN,
+              Condition: { ArnLike: { "aws:PrincipalArn": [RECORDER] } },
             },
           ],
           Version: "2012-10-17",

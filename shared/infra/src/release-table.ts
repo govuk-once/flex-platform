@@ -1,15 +1,27 @@
+import { tablePolicy } from "@repo/infra-constructs";
 import { FIXED_ATTRIBUTES } from "@repo/shared-release/table";
 import { RemovalPolicy, Stack } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
-import {
-  AnyPrincipal,
-  Effect,
-  PolicyDocument,
-  PolicyStatement,
-} from "aws-cdk-lib/aws-iam";
+import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 import { RELEASE_TABLE_NAME } from "./names.ts";
+
+/**
+ * All the pipeline API does to the table: record each release, record one the queue wouldn't take
+ * as refused, and answer how one went.
+ */
+export const RELEASE_RECORDER_ACTIONS = [
+  "dynamodb:GetItem",
+  "dynamodb:PutItem",
+  "dynamodb:UpdateItem",
+];
+
+/** All a worker does to the table: read a release, and change how it is going. */
+export const RELEASE_WORKER_ACTIONS = [
+  "dynamodb:GetItem",
+  "dynamodb:UpdateItem",
+];
 
 export interface ReleaseTableProps {
   /** The pipeline API's role, by ARN: the one role that may record a release. */
@@ -23,10 +35,10 @@ export interface ReleaseTableProps {
  * sorts by when it was asked for. The worker reads what to release from here, not from the
  * message, so a release is only one the API recorded.
  *
- * The table's policy denies, to anyone, recording a release unless it is the API's role, changing
- * one unless it is the API's or the worker's, changing what was asked for, and deleting one. A
- * deny there holds whatever any principal's own policy allows. Kept, with its backups, when the
- * stack goes: it is the record of what was released.
+ * The table's policy is a `tablePolicy`: anything to the API's role but its gets, puts and
+ * updates, anything to a worker's but its gets and updates, and anything else to anyone but
+ * managing the table, is denied. It also denies, to anyone, changing what was asked for. Kept,
+ * with its backups, when the stack goes: it is the record of what was released.
  */
 export class ReleaseTable extends Construct {
   public readonly table: Table;
@@ -40,22 +52,6 @@ export class ReleaseTable extends Construct {
       resource: "table",
       resourceName: RELEASE_TABLE_NAME,
     });
-    const deny = (
-      sid: string,
-      actions: string[],
-      conditions?: Record<string, Record<string, string[]>>,
-    ) =>
-      new PolicyStatement({
-        sid,
-        effect: Effect.DENY,
-        principals: [new AnyPrincipal()],
-        actions,
-        resources: [tableArn],
-        ...(conditions !== undefined && { conditions }),
-      });
-    const except = (roleArns: string[]) => ({
-      ArnNotEquals: { "aws:PrincipalArn": roleArns },
-    });
 
     this.table = new Table(this, "Table", {
       tableName: RELEASE_TABLE_NAME,
@@ -65,38 +61,36 @@ export class ReleaseTable extends Construct {
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
       deletionProtection: true,
       removalPolicy: RemovalPolicy.RETAIN,
-      resourcePolicy: new PolicyDocument({
+      resourcePolicy: tablePolicy({
+        tableArn,
+        roles: [
+          {
+            name: "PipelineApi",
+            roleArns: [props.recorderRoleArn],
+            actions: RELEASE_RECORDER_ACTIONS,
+          },
+          {
+            name: "Workers",
+            roleArns: props.workerRoleArns,
+            actions: RELEASE_WORKER_ACTIONS,
+          },
+        ],
         statements: [
-          deny(
-            "DenyRecordingButThePipelineApi",
-            ["dynamodb:PutItem"],
-            except([props.recorderRoleArn]),
-          ),
-          deny(
-            "DenyChangingButTheApiAndWorker",
-            ["dynamodb:UpdateItem"],
-            except([props.recorderRoleArn, ...props.workerRoleArns]),
-          ),
           // Each writer changes only how a release is going. A role that could change what was
           // asked for could have the worker release a bundle no pipeline asked for. An update can
           // also make an item, which then holds none of these, so isn't a release.
-          deny("DenyChangingWhatWasAsked", ["dynamodb:UpdateItem"], {
-            "ForAnyValue:StringEquals": {
-              "dynamodb:Attributes": [...FIXED_ATTRIBUTES],
+          new PolicyStatement({
+            sid: "DenyChangingWhatWasAsked",
+            effect: Effect.DENY,
+            principals: [new AnyPrincipal()],
+            actions: ["dynamodb:UpdateItem"],
+            resources: [tableArn],
+            conditions: {
+              "ForAnyValue:StringEquals": {
+                "dynamodb:Attributes": [...FIXED_ATTRIBUTES],
+              },
             },
           }),
-          // PartiQL's statements are authorised as their own actions. Nothing here uses them, so
-          // they are refused outright, not left to the conditions above.
-          deny("DenyPartiQLChanges", [
-            "dynamodb:PartiQLInsert",
-            "dynamodb:PartiQLUpdate",
-          ]),
-          // A batch write can put an item as well as delete one, and nothing here makes one.
-          deny("DenyDeleting", [
-            "dynamodb:BatchWriteItem",
-            "dynamodb:DeleteItem",
-            "dynamodb:PartiQLDelete",
-          ]),
         ],
       }),
     });
