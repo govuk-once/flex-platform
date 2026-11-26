@@ -30,17 +30,13 @@ function build(nag = false) {
   return stack;
 }
 
-function template(): Template {
-  return Template.fromStack(build());
-}
-
 describe("ReleaseDeadLetterWorker", () => {
   it("passes cdk-nag and the platform's log group check", () => {
     expect(() => appOf(build(true)).synth()).not.toThrow();
   });
 
   it("reads the dead-letter queue one message at a time, giving back only one it couldn't record", () => {
-    const built = template();
+    const built = Template.fromStack(build());
 
     built.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "shared-release-dead-letter-worker",
@@ -67,7 +63,7 @@ describe("ReleaseDeadLetterWorker", () => {
   });
 
   it("may take the dead-letter queue's messages and read and change a release, and nothing else", () => {
-    const built = template();
+    const built = Template.fromStack(build());
     const [role] = Object.values(built.findResources("AWS::IAM::Role"));
     const statements = (
       role?.Properties as {
@@ -100,7 +96,9 @@ describe("ReleaseDeadLetterWorker", () => {
   });
 
   it("lets no role but its own take a message from the dead-letter queue", () => {
-    template().hasResourceProperties("AWS::SQS::QueuePolicy", {
+    const template = Template.fromStack(build());
+
+    template.hasResourceProperties("AWS::SQS::QueuePolicy", {
       PolicyDocument: {
         Statement: Match.arrayWith([
           {
@@ -135,7 +133,7 @@ describe("ReleaseDeadLetterWorker", () => {
     ["shared-release-abandoned", "release_abandoned"],
     ["shared-release-abandon-failed", "release_failed"],
   ])("alarms as %s on any %s in its log", (name, event) => {
-    const built = template();
+    const built = Template.fromStack(build());
 
     built.hasResourceProperties("AWS::Logs::MetricFilter", {
       FilterPattern: `{ $.telemetry.event = "${event}" }`,
