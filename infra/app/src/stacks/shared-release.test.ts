@@ -20,8 +20,8 @@ import {
 
 const [, , PROD] = FIXTURE_STAGES;
 
-function template(): Template {
-  return Template.fromStack(new SharedReleaseStack(cdkApp(), PROD));
+function build() {
+  return new SharedReleaseStack(cdkApp(), PROD);
 }
 
 // The function's code as CDK staged it for upload, found by the key the function names.
@@ -69,7 +69,7 @@ describe("SharedReleaseStack", () => {
   });
 
   it("holds the pipeline API's function and its URL, and reads nothing", () => {
-    const built = template();
+    const built = Template.fromStack(build());
 
     built.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "shared-ci",
@@ -99,7 +99,7 @@ describe("SharedReleaseStack", () => {
   });
 
   it("holds the release queue and the worker that takes from it", () => {
-    const built = template();
+    const built = Template.fromStack(build());
 
     built.hasResourceProperties("AWS::SQS::Queue", {
       QueueName: "shared-release.fifo",
@@ -111,7 +111,7 @@ describe("SharedReleaseStack", () => {
 
   // The address the function is built with is the queue's, or a release would go nowhere.
   it("builds the function with the release queue's address, and lets its role send only there", () => {
-    const built = template();
+    const built = Template.fromStack(build());
     const [queueId] = Object.keys(
       built.findResources("AWS::SQS::Queue", {
         Properties: { QueueName: "shared-release.fifo" },
@@ -142,7 +142,7 @@ describe("SharedReleaseStack", () => {
 
   // The roles the table and the queue name are the ones the functions run as.
   it("lets the function's role, and no other, record a release and send it, and the workers' change it", () => {
-    const built = template();
+    const built = Template.fromStack(build());
     const role = `arn:aws:iam::${PROD.shared.account}:role/shared-ci`;
     const worker = `arn:aws:iam::${PROD.shared.account}:role/shared-release-worker`;
     const deadLetterWorker = `arn:aws:iam::${PROD.shared.account}:role/shared-release-dead-letter-worker`;
@@ -193,7 +193,7 @@ describe("SharedReleaseStack", () => {
 
   // The role the table names is the one the function runs as.
   it("lets the function's role, and no other, record each version a domain uploads", () => {
-    const built = template();
+    const built = Template.fromStack(build());
     const role = `arn:aws:iam::${PROD.shared.account}:role/shared-ci`;
 
     built.hasResourceProperties("AWS::DynamoDB::Table", {
@@ -218,7 +218,7 @@ describe("SharedReleaseStack", () => {
 
   // The role the table lets give a release up is the one the dead-letter worker runs as.
   it("gives up, by its own function, each release the queue moves to the dead-letter queue", () => {
-    const built = template();
+    const built = Template.fromStack(build());
 
     built.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "shared-release-dead-letter-worker",
@@ -239,7 +239,7 @@ describe("SharedReleaseStack", () => {
     const [dev] = PROD.environments;
     const [main] = dev.domainAccounts;
 
-    template().hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build()).hasResourceProperties("AWS::IAM::Role", {
       RoleName: "shared-release-worker",
       Policies: [
         {
@@ -260,7 +260,7 @@ describe("SharedReleaseStack", () => {
   it("lets Lambda read a bundle for the domain functions of each account where a pipeline publishes", () => {
     const [dev] = PROD.environments;
     const policy = JSON.stringify(
-      template().findResources("AWS::S3::BucketPolicy"),
+      Template.fromStack(build()).findResources("AWS::S3::BucketPolicy"),
     );
 
     for (const { account } of dev.domainAccounts) {
@@ -277,7 +277,7 @@ describe("SharedReleaseStack", () => {
   it("lets the deploy roles of each account where a pipeline publishes read a bundle", () => {
     const [dev] = PROD.environments;
     const policy = JSON.stringify(
-      template().findResources("AWS::S3::BucketPolicy"),
+      Template.fromStack(build()).findResources("AWS::S3::BucketPolicy"),
     );
 
     for (const { account } of dev.domainAccounts) {
@@ -291,7 +291,7 @@ describe("SharedReleaseStack", () => {
   });
 
   it("holds the bucket a domain's code is uploaded to, named for the shared account", () => {
-    template().hasResourceProperties("AWS::S3::Bucket", {
+    Template.fromStack(build()).hasResourceProperties("AWS::S3::Bucket", {
       BucketName: `shared-domain-code-${PROD.shared.account}`,
     });
   });
@@ -303,13 +303,15 @@ describe("SharedReleaseStack", () => {
     expect(bundle()).toContain(`bucket: "${name}"`);
     expect(bundle()).toContain(`region: "${SHARED_REGION}"`);
     expect(
-      JSON.stringify(template().findResources("AWS::IAM::Role")),
+      JSON.stringify(
+        Template.fromStack(build()).findResources("AWS::IAM::Role"),
+      ),
     ).toContain(`:s3:::${name}/*/bundle/*.zip`);
   });
 
   // The role that signs uploads, so a signed upload is the only write the bucket takes.
   it("lets the function's role, and no other, write to the bucket", () => {
-    const built = template();
+    const built = Template.fromStack(build());
     const [roleId] = Object.keys(
       built.findResources("AWS::IAM::Role", {
         Properties: { RoleName: "shared-ci" },
@@ -353,7 +355,7 @@ describe("SharedReleaseStack", () => {
   // AWS generates the host, and the distribution's stack is in another region, where
   // CloudFormation can write no parameter for this one.
   it("writes the URL's host to the distribution's region, for its stack to read", () => {
-    const built = template();
+    const built = Template.fromStack(build());
     const [urlId] = Object.keys(built.findResources("AWS::Lambda::Url"));
     const [writer] = Object.values(
       built.findResources("Custom::CrossRegionParameter"),
@@ -379,7 +381,7 @@ describe("SharedReleaseStack", () => {
 
   // CDK would run the writer in a function with a log group of its own, which nothing accounts for.
   it("logs the writer to a log group of the platform's", () => {
-    template().hasResourceProperties("AWS::Logs::LogGroup", {
+    Template.fromStack(build()).hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: "/flex/shared/cross-region-writer",
       RetentionInDays: 365,
     });
