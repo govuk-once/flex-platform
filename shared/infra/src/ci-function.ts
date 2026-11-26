@@ -29,6 +29,7 @@ import {
 } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
+import { ARTEFACT_RECORDER_ACTIONS } from "./artefact-table.ts";
 import {
   CI_FUNCTION_NAME,
   CI_LOG_GROUP_NAME,
@@ -37,6 +38,7 @@ import {
   PIPELINE_TOKEN_KEYS_URI,
   SHARED_REGION,
 } from "./names.ts";
+import { RELEASE_RECORDER_ACTIONS } from "./release-table.ts";
 
 /**
  * How many requests the function serves at once. Lambda answers 429 to one more, which a pipeline
@@ -146,17 +148,13 @@ export class CiFunction extends Construct {
             // To claim each version for its bundle, and to find the bundle a release names. A
             // version is never changed, so only put and get.
             new PolicyStatement({
-              actions: ["dynamodb:GetItem", "dynamodb:PutItem"],
+              actions: ARTEFACT_RECORDER_ACTIONS,
               resources: [props.artefactTable.arn],
             }),
             // To record each release, to record one the queue wouldn't take as refused, and to
             // answer how one went.
             new PolicyStatement({
-              actions: [
-                "dynamodb:GetItem",
-                "dynamodb:PutItem",
-                "dynamodb:UpdateItem",
-              ],
+              actions: RELEASE_RECORDER_ACTIONS,
               resources: [props.releaseTable.arn],
             }),
           ],

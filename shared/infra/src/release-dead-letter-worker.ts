@@ -45,6 +45,7 @@ import {
   RELEASE_DEAD_LETTER_WORKER_NAME,
   RELEASE_METRIC_NAMESPACE,
 } from "./names.ts";
+import { RELEASE_WORKER_ACTIONS } from "./release-table.ts";
 
 /** How long the dead-letter worker may take over one message: one read and one write. */
 export const DEAD_LETTER_WORKER_TIMEOUT = Duration.seconds(30);
@@ -113,7 +114,7 @@ export class ReleaseDeadLetterWorker extends Construct {
             }),
             // To read a release, and give it up.
             new PolicyStatement({
-              actions: ["dynamodb:GetItem", "dynamodb:UpdateItem"],
+              actions: RELEASE_WORKER_ACTIONS,
               resources: [props.releaseTable.arn],
             }),
           ],

@@ -1,3 +1,4 @@
+import { TABLE_MANAGEMENT_ACTIONS } from "@repo/infra-constructs";
 import { Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
@@ -41,30 +42,21 @@ describe("ReleaseTable", () => {
     });
   });
 
-  // An admin of the account can't either: a deny in the table's policy holds over any allow.
-  it("lets no role but the API's record a release, none but the API's and the worker's change one, none change what was asked for, and none delete one", () => {
+  // An admin of the account can't either, short of rewriting the policy: a deny in the table's
+  // policy holds over any allow.
+  it("lets the API's role alone record a release, it and the workers' change one, none change what was asked for, and none delete one", () => {
+    const deny = (Sid: string, NotAction: string[], Condition: object) => ({
+      Sid,
+      Effect: "Deny",
+      Principal: { AWS: "*" },
+      NotAction,
+      Resource: TABLE_ARN,
+      Condition,
+    });
     Template.fromStack(build()).hasResourceProperties("AWS::DynamoDB::Table", {
       ResourcePolicy: {
         PolicyDocument: {
           Statement: [
-            {
-              Sid: "DenyRecordingButThePipelineApi",
-              Effect: "Deny",
-              Principal: { AWS: "*" },
-              Action: "dynamodb:PutItem",
-              Resource: TABLE_ARN,
-              Condition: { ArnNotEquals: { "aws:PrincipalArn": [RECORDER] } },
-            },
-            {
-              Sid: "DenyChangingButTheApiAndWorker",
-              Effect: "Deny",
-              Principal: { AWS: "*" },
-              Action: "dynamodb:UpdateItem",
-              Resource: TABLE_ARN,
-              Condition: {
-                ArnNotEquals: { "aws:PrincipalArn": [RECORDER, WORKER] },
-              },
-            },
             {
               Sid: "DenyChangingWhatWasAsked",
               Effect: "Deny",
@@ -86,24 +78,23 @@ describe("ReleaseTable", () => {
                 },
               },
             },
-            {
-              Sid: "DenyPartiQLChanges",
-              Effect: "Deny",
-              Principal: { AWS: "*" },
-              Action: ["dynamodb:PartiQLInsert", "dynamodb:PartiQLUpdate"],
-              Resource: TABLE_ARN,
-            },
-            {
-              Sid: "DenyDeleting",
-              Effect: "Deny",
-              Principal: { AWS: "*" },
-              Action: [
-                "dynamodb:BatchWriteItem",
-                "dynamodb:DeleteItem",
-                "dynamodb:PartiQLDelete",
-              ],
-              Resource: TABLE_ARN,
-            },
+            deny(
+              "DenyOthersAllButManagingTheTable",
+              [...TABLE_MANAGEMENT_ACTIONS],
+              {
+                ArnNotLike: { "aws:PrincipalArn": [RECORDER, WORKER] },
+              },
+            ),
+            deny(
+              "DenyPipelineApiAllButItsWork",
+              ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+              { ArnLike: { "aws:PrincipalArn": [RECORDER] } },
+            ),
+            deny(
+              "DenyWorkersAllButItsWork",
+              ["dynamodb:GetItem", "dynamodb:UpdateItem"],
+              { ArnLike: { "aws:PrincipalArn": [WORKER] } },
+            ),
           ],
           Version: "2012-10-17",
         },
