@@ -5,6 +5,7 @@ import {
   ACCOUNT,
   buildNetwork,
   KEYS_OBJECT,
+  KEYS_TABLE,
   UPSTREAM_ACCOUNT,
   UPSTREAM_API,
   UPSTREAM_ROLE,
@@ -27,11 +28,12 @@ function endpoint(
   Resource: unknown,
   resourceAccount?: string,
   principals?: string,
+  privateDns = true,
 ) {
   return {
     ServiceName: `com.amazonaws.eu-west-2.${service}`,
     VpcEndpointType: "Interface",
-    PrivateDnsEnabled: true,
+    PrivateDnsEnabled: privateDns,
     SubnetIds: [
       { Ref: Match.stringLikeRegexp("^NetworkIsolatedeuwest2aSubnet") },
       { Ref: Match.stringLikeRegexp("^NetworkIsolatedeuwest2bSubnet") },
@@ -77,6 +79,7 @@ function endpointsStack(invokableApis: PrivateApiAccess) {
     subnets: subnets.isolated,
     invokableFunctions: "gateway-sandbox-*:live",
     readableObjects: [],
+    readableTables: [],
     readableSecrets: [],
     assumableRoles: [],
     gatewayRoles: "gateway-sandbox-*-execution",
@@ -97,7 +100,8 @@ describe("InterfaceEndpoints", () => {
       "secretsmanager:GetSecretValue",
       UPSTREAM_SECRET,
       undefined,
-      // Only gateways read secrets and assume roles, so nothing else in the account may.
+      // Only gateways read secrets, assume roles and read the caller token's public keys, so
+      // nothing else in the account may.
       GATEWAY_ROLES,
     ],
     ["sts", "sts:AssumeRole", UPSTREAM_ROLE, undefined, GATEWAY_ROLES],
@@ -108,6 +112,8 @@ describe("InterfaceEndpoints", () => {
       // Bucket names are global, so the bucket's owner is named too.
       KEYS_OBJECT.account,
     ],
+    // DynamoDB's endpoint has no private DNS.
+    ["dynamodb", "dynamodb:Scan", KEYS_TABLE, undefined, GATEWAY_ROLES, false],
   ])(
     "has a %s endpoint in the isolated subnets, for this account, one action and what it names",
     (
@@ -116,10 +122,18 @@ describe("InterfaceEndpoints", () => {
       resource,
       resourceAccount?: string,
       principals?: string,
+      privateDns?: boolean,
     ) => {
       buildNetwork().template.hasResourceProperties(
         "AWS::EC2::VPCEndpoint",
-        endpoint(service, action, resource, resourceAccount, principals),
+        endpoint(
+          service,
+          action,
+          resource,
+          resourceAccount,
+          principals,
+          privateDns,
+        ),
       );
     },
   );
@@ -181,7 +195,7 @@ describe("InterfaceEndpoints", () => {
   });
 
   it("has no other endpoint", () => {
-    buildNetwork().template.resourceCountIs("AWS::EC2::VPCEndpoint", 5);
+    buildNetwork().template.resourceCountIs("AWS::EC2::VPCEndpoint", 6);
   });
 
   it("gives each endpoint a group of its own, which lets nothing out and lets in only workloads", () => {
@@ -194,7 +208,7 @@ describe("InterfaceEndpoints", () => {
       }),
     ) as { Properties: Record<string, unknown> }[];
 
-    expect(groups).toHaveLength(5);
+    expect(groups).toHaveLength(6);
     for (const group of groups) {
       expect(group.Properties).not.toHaveProperty("SecurityGroupIngress");
       expect(group.Properties.SecurityGroupEgress).toEqual([
@@ -203,7 +217,7 @@ describe("InterfaceEndpoints", () => {
     }
   });
 
-  it("gives the names the SDK calls each endpoint's API at, for the DNS allowlist, and none for execute-api, where an API has its own", () => {
+  it("gives the names the SDK calls each endpoint's API at, for the DNS allowlist, and none for execute-api, where an API has its own, or dynamodb, which has no private DNS", () => {
     const { stack } = buildNetwork();
     const endpoints = stack.node.findChild("Endpoints") as InterfaceEndpoints;
 
@@ -222,10 +236,43 @@ describe("InterfaceEndpoints", () => {
     });
   });
 
+  it("gives the dynamodb endpoint's own regional name, the first AWS lists, without its hosted zone", () => {
+    const { stack } = buildNetwork();
+    const endpoints = stack.node.findChild("Endpoints") as InterfaceEndpoints;
+
+    expect(stack.resolve(endpoints.dynamoDbAddress)).toEqual({
+      "Fn::Select": [
+        1,
+        {
+          "Fn::Split": [
+            ":",
+            {
+              "Fn::Select": [
+                0,
+                {
+                  "Fn::GetAtt": [
+                    expect.stringMatching("^EndpointsDynamoDb"),
+                    "DnsEntries",
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it("refuses everything through an endpoint with nothing to name", () => {
     const stack = endpointsStack({ apiArns: [], callerAccounts: [] });
 
-    for (const service of ["secretsmanager", "sts", "s3", "execute-api"]) {
+    for (const service of [
+      "secretsmanager",
+      "sts",
+      "s3",
+      "dynamodb",
+      "execute-api",
+    ]) {
       Template.fromStack(stack).hasResourceProperties("AWS::EC2::VPCEndpoint", {
         ServiceName: `com.amazonaws.eu-west-2.${service}`,
         PolicyDocument: {

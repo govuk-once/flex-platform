@@ -9,6 +9,7 @@ import { StringListParameter, StringParameter } from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 
 import {
+  endpointAddressParameterName,
   endpointIdParameterName,
   type Placement,
   securityGroupIdParameterName,
@@ -24,6 +25,8 @@ export interface NetworkParametersProps {
   readonly securityGroups: Readonly<Record<string, ISecurityGroup>>;
   /** Each interface endpoint, by the short name of its service. */
   readonly endpoints: Readonly<Record<string, IInterfaceVpcEndpoint>>;
+  /** The own name of each endpoint without private DNS, by the short name of its service. */
+  readonly endpointAddresses: Readonly<Record<string, string>>;
 }
 
 /**
@@ -66,6 +69,13 @@ export class NetworkParameters extends Construct {
       new StringParameter(this, `${service}EndpointId`, {
         parameterName: endpointIdParameterName(environment, service),
         stringValue: endpoint.vpcEndpointId,
+      });
+    }
+
+    for (const [service, address] of sortedEntries(props.endpointAddresses)) {
+      new StringParameter(this, `${service}EndpointAddress`, {
+        parameterName: endpointAddressParameterName(environment, service),
+        stringValue: address,
       });
     }
   }

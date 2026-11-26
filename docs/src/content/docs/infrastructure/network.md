@@ -61,13 +61,14 @@ only on TCP port 443:
 | Workload | Tier | May reach |
 |---|---|---|
 | `domain` | `isolated` | The `lambda` endpoint |
-| `isolated-gateway` | `isolated` | The `secretsmanager`, `sts`, `s3` and `execute-api` endpoints |
-| `private-gateway` | `private` | The `secretsmanager`, `sts` and `s3` endpoints, and its zone's NAT gateway |
+| `isolated-gateway` | `isolated` | The `secretsmanager`, `sts`, `s3`, `dynamodb` and `execute-api` endpoints |
+| `private-gateway` | `private` | The `secretsmanager`, `sts`, `s3` and `dynamodb` endpoints, and its zone's NAT gateway |
 
 A domain uses the `lambda` endpoint to invoke gateways. A gateway uses `secretsmanager` to read its
 secret, `sts` to assume an upstream's role for
 [`sigV4`](/flex-platform/drivers/openapi-rest/authentication/), and `s3` to read the
-[caller token's keys](#the-caller-tokens-keys). An isolated gateway uses `execute-api` to call an
+[caller token's keys](#the-caller-tokens-keys). The `dynamodb` endpoint reaches the table that
+holds the same keys. An isolated gateway uses `execute-api` to call an
 upstream's [private API](#private-apis). Each endpoint's own security group
 lets in only the workloads that may reach it, and lets nothing out. What a workload may call is its
 role's to decide: an endpoint's policy applies to the requests sent through that endpoint.
@@ -79,8 +80,9 @@ off a group with no other.
 
 ### Endpoints
 
-The isolated subnets reach AWS through interface endpoints, each with private DNS, so the SDK's
-usual hostname resolves to the endpoint. Each endpoint's policy refuses any resource it doesn't
+The isolated subnets reach AWS through interface endpoints. Each but `dynamodb` has private DNS,
+so the SDK's usual hostname resolves to the endpoint. DynamoDB's interface endpoint has no private
+DNS, so a client calls it at its own name: see [the caller token's keys](#the-caller-tokens-keys). Each endpoint's policy refuses any resource it doesn't
 name and any action but its own. Each but `execute-api` refuses any principal outside the account
 too. An endpoint with nothing to name refuses everything, since one with no policy would allow
 everything:
@@ -91,6 +93,7 @@ everything:
 | `secretsmanager` | `secretsmanager:GetSecretValue` on the account's gateways' secrets, by a gateway's role alone |
 | `sts` | `sts:AssumeRole` on each role the account's gateways sign as, by a gateway's role alone |
 | `s3` | `s3:GetObject` on the caller token's public keys alone, in a bucket the frontdoor account owns |
+| `dynamodb` | `dynamodb:Scan` on the caller token's public keys table alone, in the frontdoor account, by a gateway's role alone |
 | `execute-api` | `execute-api:Invoke` on each private API a gateway names, by a principal of the account of a role a gateway signs as |
 
 An upstream's secret and roles come from each gateway's entry in the
@@ -260,6 +263,11 @@ gateway in the domain account declares:
 - `<bucket>.s3.eu-west-2.amazonaws.com` for each bucket the `s3` endpoint names: the SDK calls S3
   at the bucket's own name, which private DNS answers too. `s3.eu-west-2.amazonaws.com` itself
   isn't listed, since nothing calls it.
+- The `dynamodb` endpoint's own regional name, such as
+  `vpce-0123456789abcdef0-abcd1234.dynamodb.eu-west-2.vpce.amazonaws.com`, exactly. AWS chooses it
+  when the endpoint is made, so the stack takes it from the endpoint as it deploys, and it is the
+  one name on the list that isn't checked as config's are. `dynamodb.eu-west-2.amazonaws.com`
+  isn't listed, since nothing in the VPC may call DynamoDB but through the endpoint.
 - Nothing for the `execute-api` endpoint itself. A [private API](#private-apis) is called at its
   own name, which is one of its gateway's.
 - Each gateway's names, from its entry in `gateways` on its domain account in
@@ -368,6 +376,22 @@ ranges, which the network ACLs would have to let out. With no gateway endpoint b
 interface endpoint's private DNS answers every resolver in the VPC, not only inbound ones, so it
 sets `PrivateDnsOnlyForInboundResolverEndpoint` to `AllResolvers`.
 
+The same keys are in [a table](/flex-platform/frontdoor/caller-token/#the-tables) in the
+frontdoor account, which the `dynamodb` endpoint reaches. Its policy names that one table, by ARN.
+DynamoDB's interface endpoint has no private DNS, and AWS advises against a private hosted zone
+that answers for DynamoDB's own names, since those may change. So a client is given the endpoint's
+own regional name, and calls it there over HTTPS. The regional name answers with the endpoint's
+address in every subnet it is in. CloudFormation lists the endpoint's names regional first, then
+zonal, each after its hosted zone's ID. The network writes the first to
+`/flex/network/<environment>/endpoint-address/dynamodb`, and allows it on the
+[allowlist](#the-allowlist).
+
+The regional name lasts as long as the endpoint. Adding or removing one of the network's zones
+changes only the zonal names, which nothing reads. An endpoint that is replaced has a new name. The
+network's stack updates the parameter and the allowlist together, and every stack that reads the
+parameter must then deploy with `--force`, as for [any ID](#ids-other-stacks-read). Until it does,
+it calls the old name, which the allowlist refuses.
+
 ## IDs other stacks read
 
 AWS generates the network's IDs, so the network writes the ones a workload needs to SSM, under
@@ -380,6 +404,7 @@ names derived from config:
 | `/flex/network/<environment>/private-subnet-ids` | The private subnets' IDs, as a list |
 | `/flex/network/<environment>/security-group/<workload>` | A workload's security group |
 | `/flex/network/<environment>/endpoint/<service>` | An interface endpoint's ID, such as `secretsmanager`'s, for a role's `aws:SourceVpce` condition |
+| `/flex/network/<environment>/endpoint-address/dynamodb` | The `dynamodb` endpoint's own regional name, which a client calls it at |
 
 Each account has its own parameters, so the names need no account. A stack reads one with
 `StringParameter.valueForStringParameter` or `StringListParameter.valueForTypedListParameter`.

@@ -1,9 +1,11 @@
-import { cdkApp } from "@repo/infra-constructs";
+import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
+import { cdkApp, NETWORK_REGION } from "@repo/infra-constructs";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { FIXTURE_STAGES, synthesizedStage } from "../../test/helpers.ts";
 import {
+  callerTokenPublicKeysTableArn,
   FrontdoorCallerTokenKeysStack,
   frontdoorCallerTokenKeysStackName,
 } from "./frontdoor-keys.ts";
@@ -56,6 +58,13 @@ describe("FrontdoorCallerTokenKeysStack", () => {
         ]),
       },
     });
+  });
+
+  it("names the public keys table by ARN, in the region every gateway's network is in", () => {
+    expect(SIGNING_KEY_REGION).toBe(NETWORK_REGION);
+    expect(callerTokenPublicKeysTableArn(DEV)).toBe(
+      `arn:aws:dynamodb:eu-west-2:${DEV.frontdoor.account}:table/frontdoor-${DEV.name}-caller-token-public-keys`,
+    );
   });
 
   it("leaves out a domain account that runs no gateway", () => {

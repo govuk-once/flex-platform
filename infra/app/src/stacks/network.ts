@@ -26,6 +26,7 @@ import type {
   DomainAccountConfig,
   EnvironmentConfig,
 } from "../config/types.ts";
+import { callerTokenPublicKeysTableArn } from "./frontdoor-keys.ts";
 import { endpointSecretArn } from "./gateway.ts";
 
 export function networkStackName(
@@ -58,10 +59,11 @@ const WORKLOADS: readonly Workload[] = [
     id: "IsolatedGatewayWorkload",
     workload: "isolated-gateway",
     placement: "isolated",
-    reaches: ({ secretsManager, sts, s3, executeApi }) => [
+    reaches: ({ secretsManager, sts, s3, dynamoDb, executeApi }) => [
       secretsManager,
       sts,
       s3,
+      dynamoDb,
       executeApi,
     ],
   },
@@ -69,7 +71,12 @@ const WORKLOADS: readonly Workload[] = [
     id: "PrivateGatewayWorkload",
     workload: "private-gateway",
     placement: "private",
-    reaches: ({ secretsManager, sts, s3 }) => [secretsManager, sts, s3],
+    reaches: ({ secretsManager, sts, s3, dynamoDb }) => [
+      secretsManager,
+      sts,
+      s3,
+      dynamoDb,
+    ],
   },
 ];
 
@@ -153,6 +160,8 @@ export class NetworkStack extends Stack {
           account: environment.frontdoor.account,
         },
       ],
+      // In the frontdoor account, where key rotation keeps them.
+      readableTables: [callerTokenPublicKeysTableArn(environment)],
       readableSecrets: sortedNames(
         new Set(
           domainAccount.gateways.map((gateway) =>
@@ -175,6 +184,7 @@ export class NetworkStack extends Stack {
         ...endpoints.hostnames,
         ...gateways.flatMap(({ hostnames }) => hostnames),
       ],
+      endpointAddresses: [endpoints.dynamoDbAddress],
     });
 
     const securityGroups: Record<string, ISecurityGroup> = {};
@@ -194,6 +204,7 @@ export class NetworkStack extends Stack {
       subnets: { isolated: subnets.isolated, private: subnets.private },
       securityGroups,
       endpoints: endpoints.byService,
+      endpointAddresses: { dynamodb: endpoints.dynamoDbAddress },
     });
 
     // The values nothing can derive, and the ones upstreams need: the address a private

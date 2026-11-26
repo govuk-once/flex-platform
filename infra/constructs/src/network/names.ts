@@ -57,6 +57,17 @@ export function endpointIdParameterName(
   return `/flex/network/${environment}/endpoint/${service}`;
 }
 
+/**
+ * An interface endpoint's own name, by its service's short name, such as `dynamodb`, for an
+ * endpoint without private DNS, which a client is given to call it at.
+ */
+export function endpointAddressParameterName(
+  environment: string,
+  service: string,
+): string {
+  return `/flex/network/${environment}/endpoint-address/${service}`;
+}
+
 /** Where CDK's function that empties the VPC's default security group logs. */
 export function restrictDefaultSecurityGroupLogGroupName(
   environment: string,

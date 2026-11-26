@@ -727,6 +727,14 @@
         "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
+        "logicalId": "EndpointsDynamoDbF57024CB",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsDynamoDbSecurityGroup5414EDFF",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsExecuteApiA07D90CA",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -795,6 +803,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoDynamoDb1C0F80BC",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoExecuteApi2058DBA7",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -813,6 +825,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToDynamoDbD28DD837",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToExecuteApiCFA98F8E",
@@ -1159,6 +1175,14 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "ParametersdynamodbEndpointAddress46708A70",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersdynamodbEndpointIdA4BC9C3B",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
         "logicalId": "ParametersexecuteapiEndpointId7D8666EF",
         "type": "AWS::SSM::Parameter"
       },
@@ -1195,6 +1219,10 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "PrivateGatewayWorkloadIntoDynamoDb7AEDD4A3",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "PrivateGatewayWorkloadIntoS38AD340EC",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -1209,6 +1237,10 @@
       {
         "logicalId": "PrivateGatewayWorkloadSecurityGroup94165728",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadToDynamoDbEB5B6323",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadToS3B753CC02",
@@ -1295,6 +1327,14 @@
         "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
+        "logicalId": "EndpointsDynamoDbF57024CB",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsDynamoDbSecurityGroup5414EDFF",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsExecuteApiA07D90CA",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -1363,6 +1403,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoDynamoDb1C0F80BC",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoExecuteApi2058DBA7",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -1381,6 +1425,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToDynamoDbD28DD837",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToExecuteApiCFA98F8E",
@@ -1727,6 +1775,14 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "ParametersdynamodbEndpointAddress46708A70",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersdynamodbEndpointIdA4BC9C3B",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
         "logicalId": "ParametersexecuteapiEndpointId7D8666EF",
         "type": "AWS::SSM::Parameter"
       },
@@ -1763,6 +1819,10 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "PrivateGatewayWorkloadIntoDynamoDb7AEDD4A3",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "PrivateGatewayWorkloadIntoS38AD340EC",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -1777,6 +1837,10 @@
       {
         "logicalId": "PrivateGatewayWorkloadSecurityGroup94165728",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadToDynamoDbEB5B6323",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadToS3B753CC02",
@@ -1863,6 +1927,14 @@
         "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
+        "logicalId": "EndpointsDynamoDbF57024CB",
+        "type": "AWS::EC2::VPCEndpoint"
+      },
+      {
+        "logicalId": "EndpointsDynamoDbSecurityGroup5414EDFF",
+        "type": "AWS::EC2::SecurityGroup"
+      },
+      {
         "logicalId": "EndpointsExecuteApiA07D90CA",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -1931,6 +2003,10 @@
         "type": "AWS::S3::BucketPolicy"
       },
       {
+        "logicalId": "IsolatedGatewayWorkloadIntoDynamoDb1C0F80BC",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "IsolatedGatewayWorkloadIntoExecuteApi2058DBA7",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -1949,6 +2025,10 @@
       {
         "logicalId": "IsolatedGatewayWorkloadSecurityGroup8EB6B5F9",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "IsolatedGatewayWorkloadToDynamoDbD28DD837",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToExecuteApiCFA98F8E",
@@ -2295,6 +2375,14 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "ParametersdynamodbEndpointAddress46708A70",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
+        "logicalId": "ParametersdynamodbEndpointIdA4BC9C3B",
+        "type": "AWS::SSM::Parameter"
+      },
+      {
         "logicalId": "ParametersexecuteapiEndpointId7D8666EF",
         "type": "AWS::SSM::Parameter"
       },
@@ -2331,6 +2419,10 @@
         "type": "AWS::SSM::Parameter"
       },
       {
+        "logicalId": "PrivateGatewayWorkloadIntoDynamoDb7AEDD4A3",
+        "type": "AWS::EC2::SecurityGroupIngress"
+      },
+      {
         "logicalId": "PrivateGatewayWorkloadIntoS38AD340EC",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -2345,6 +2437,10 @@
       {
         "logicalId": "PrivateGatewayWorkloadSecurityGroup94165728",
         "type": "AWS::EC2::SecurityGroup"
+      },
+      {
+        "logicalId": "PrivateGatewayWorkloadToDynamoDbEB5B6323",
+        "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
         "logicalId": "PrivateGatewayWorkloadToS3B753CC02",
