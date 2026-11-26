@@ -10,7 +10,7 @@ function build(nag = false) {
   new WildcardCertificate(stack, "Zone", { zone: ZONE });
   const app = stack.node.root;
   assert.instanceOf(app, App);
-  return { app, template: Template.fromStack(stack) };
+  return { app, stack };
 }
 
 describe("WildcardCertificate", () => {
@@ -19,7 +19,8 @@ describe("WildcardCertificate", () => {
   });
 
   it("is one wildcard for the zone, validated in that zone, creating no zone", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::Route53::HostedZone", 0);
     template.resourceCountIs("AWS::CertificateManager::Certificate", 1);
@@ -33,7 +34,8 @@ describe("WildcardCertificate", () => {
   });
 
   it("waits for a CAA record at the apex allowing only Amazon", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     const records = template.findResources("AWS::Route53::RecordSet", {
       Properties: {

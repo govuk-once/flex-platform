@@ -24,7 +24,7 @@ function build(nag = false) {
   });
   const app = stack.node.root;
   assert.instanceOf(app, App);
-  return { app, template: Template.fromStack(stack) };
+  return { app, stack };
 }
 
 const HOST = `domain-a.${ZONE.zoneName}`;
@@ -35,17 +35,21 @@ describe("ApiHost", () => {
   });
 
   it("answers at the domain's host with the certificate given, on TLS 1.3 or 1.2", () => {
-    build().template.hasResourceProperties("AWS::ApiGateway::DomainName", {
-      DomainName: HOST,
-      EndpointConfiguration: { Types: ["REGIONAL"] },
-      RegionalCertificateArn: CERTIFICATE_ARN,
-      SecurityPolicy: "SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09",
-      EndpointAccessMode: "STRICT",
-    });
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::ApiGateway::DomainName",
+      {
+        DomainName: HOST,
+        EndpointConfiguration: { Types: ["REGIONAL"] },
+        RegionalCertificateArn: CERTIFICATE_ARN,
+        SecurityPolicy: "SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09",
+        EndpointAccessMode: "STRICT",
+      },
+    );
   });
 
   it("maps the host's root to the API's stage, under an ID no name changes", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     expect(
       Object.keys(template.findResources("AWS::ApiGateway::BasePathMapping")),
@@ -59,7 +63,8 @@ describe("ApiHost", () => {
   });
 
   it("points the host at the custom domain in the account's zone, over IPv4 alone", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::Route53::RecordSet", 1);
     template.hasResourceProperties("AWS::Route53::RecordSet", {
