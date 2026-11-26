@@ -365,15 +365,15 @@ lets invoke the worker can write its event, and a function's own policy holds no
 refuse it. So a message holds only a release's key, its environment, domain and ID, and the
 worker releases what the table records under it:
 
-- **Only the API records a release, and nothing changes what it asked for.** The table's policy
-  denies, to every principal, putting an item unless it is the API's role, `shared-ci`, changing
-  one unless it is `shared-ci`'s, `shared-release-worker`'s or
-  `shared-release-dead-letter-worker`'s, and deleting one. It also denies, to every principal, an
-  update that names `environment`, `domain`, `version`, `sha256`, `versionId`, `runId`, `commit`
-  or `requestedAt`. So no writer can point a release at another domain or another bundle, and an
-  update that makes an item makes one with none of them, which isn't a release. PartiQL's writes
-  are denied outright, since nothing uses them. A deny in a resource's policy holds whatever any
-  other policy allows. A message that names no release in the table is logged and dropped.
+- **Only the API records a release, and nothing changes what it asked for.** The table's
+  [policy](/flex-platform/infrastructure/overview/#a-tables-policy) denies the API's role,
+  `shared-ci`, everything but getting, putting and updating an item, the workers' roles,
+  `shared-release-worker` and `shared-release-dead-letter-worker`, everything but getting and
+  updating one, and anyone else everything but managing the table. So nothing deletes a release.
+  It also denies, to every principal, an update that names `environment`, `domain`, `version`,
+  `sha256`, `versionId`, `runId`, `commit` or `requestedAt`. So no writer can point a release at
+  another domain or another bundle, and an update that makes an item makes one with none of them,
+  which isn't a release. A message that names no release in the table is logged and dropped.
 - **A final release isn't run again.** Before each attempt, the worker claims the release: it
   marks it `releasing` and counts the attempt, unless it is final. So a message sent again,
   however it was got, runs nothing that is released or refused. Any other release may be tried
@@ -823,8 +823,9 @@ under its domain, partition key `domain`, by its version, sort key `version`, an
 | `runId`, `commit` | The run that recorded it, and its commit, when its token said |
 
 A version is recorded once, by a put that only succeeds where there is none, and never changes.
-The table's policy refuses, to anyone, recording a version unless it is the API's role, and
-changing or deleting one at all, including by a batch write or PartiQL. Like the
+The table's [policy](/flex-platform/infrastructure/overview/#a-tables-policy) denies the API's
+role everything but getting and putting an item, and anyone else everything but managing the
+table, so nothing changes or deletes a version. Like the
 [release table](#the-release-table), it is kept, with point-in-time recovery, when the stack
 goes, and can't be deleted.
 

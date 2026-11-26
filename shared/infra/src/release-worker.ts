@@ -40,6 +40,7 @@ import {
   RELEASE_WORKER_NAME,
   SHARED_REGION,
 } from "./names.ts";
+import { RELEASE_WORKER_ACTIONS } from "./release-table.ts";
 
 /**
  * The longest one attempt at a release may take. A first release creates a function in a VPC,
@@ -189,7 +190,7 @@ export class ReleaseWorker extends Construct {
             }),
             // To read each release, claim it, and record how it went.
             new PolicyStatement({
-              actions: ["dynamodb:GetItem", "dynamodb:UpdateItem"],
+              actions: RELEASE_WORKER_ACTIONS,
               resources: [props.releaseTable.arn],
             }),
             // To hash a bundle, by version, before anything is made of it.

@@ -364,6 +364,32 @@ Each builds in the scope it is given, not in a construct of its own, because con
 contract: the URL is the function's `FunctionUrl`, and a new ID would replace it, with a new host.
 A synth [check](#checks) refuses a function URL with any other authorisation.
 
+## A table's policy
+
+Every DynamoDB table the platform holds gets its policy from `tablePolicy`, in `infra/constructs`.
+The table's construct gives it each set of roles that uses the table, and what each set does to
+its items, and the policy denies:
+
+- to anyone outside those roles, everything but managing the table;
+- to each set, everything but its own work.
+
+Each deny names what it allows rather than what it refuses, so it also covers every other way to an
+item: PartiQL statements, batch writes, exports, backups and restores, and any action DynamoDB
+adds. A deny in a resource's policy holds whatever a principal's own policy allows. A table may
+add statements of its own, such as an allow for another account's roles, or a deny on changing
+certain attributes.
+
+Managing the table means seeing its settings and policy, and what CloudFormation's
+`AWS::DynamoDB::Table` handler does on an update: changing the table, its policy, its tags, its
+time to live, its point-in-time recovery and its contributor insights. The handler's actions that
+reach an item, or copy items to a Kinesis stream or a replica, are left out. So the policy names
+no role a deploy runs as, which the platform doesn't choose, and no deploy is ever locked out of a
+table. That also means a principal whose own policy allows `dynamodb:PutResourcePolicy` can
+rewrite the table's policy, so who may do that in the account matters as much as the policy.
+
+A role appears in one set only, since each set's deny would refuse the other's work. A set may
+name roles by a pattern.
+
 ## Test users
 
 Every stage has a Cognito user pool of test users, `shared-test-users`, in its shared account. It

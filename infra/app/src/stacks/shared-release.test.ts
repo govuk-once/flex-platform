@@ -152,19 +152,26 @@ describe("SharedReleaseStack", () => {
       RoleName: "shared-release-worker",
     });
     built.hasResourceProperties("AWS::DynamoDB::Table", {
+      TableName: "shared-releases",
       ResourcePolicy: {
         PolicyDocument: {
           Statement: Match.arrayWith([
             Match.objectLike({
-              Sid: "DenyRecordingButThePipelineApi",
-              Condition: { ArnNotEquals: { "aws:PrincipalArn": [role] } },
+              Sid: "DenyOthersAllButManagingTheTable",
+              Condition: {
+                ArnNotLike: {
+                  "aws:PrincipalArn": [role, deadLetterWorker, worker],
+                },
+              },
             }),
             Match.objectLike({
-              Sid: "DenyChangingButTheApiAndWorker",
+              Sid: "DenyPipelineApiAllButItsWork",
+              Condition: { ArnLike: { "aws:PrincipalArn": [role] } },
+            }),
+            Match.objectLike({
+              Sid: "DenyWorkersAllButItsWork",
               Condition: {
-                ArnNotEquals: {
-                  "aws:PrincipalArn": [role, worker, deadLetterWorker],
-                },
+                ArnLike: { "aws:PrincipalArn": [deadLetterWorker, worker] },
               },
             }),
           ]),
@@ -195,8 +202,12 @@ describe("SharedReleaseStack", () => {
         PolicyDocument: {
           Statement: Match.arrayWith([
             Match.objectLike({
-              Sid: "DenyRecordingButThePipelineApi",
-              Condition: { ArnNotEquals: { "aws:PrincipalArn": [role] } },
+              Sid: "DenyOthersAllButManagingTheTable",
+              Condition: { ArnNotLike: { "aws:PrincipalArn": [role] } },
+            }),
+            Match.objectLike({
+              Sid: "DenyPipelineApiAllButItsWork",
+              Condition: { ArnLike: { "aws:PrincipalArn": [role] } },
             }),
           ]),
         },
