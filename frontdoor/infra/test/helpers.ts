@@ -59,7 +59,7 @@ export function edgeIn(stack: Stack, functionsStack = stack): Edge {
   });
 }
 
-export function edgeTemplate(nag = false): {
+export function buildEdge(nag = false): {
   edge: Edge;
   app: App;
   stack: Stack;
