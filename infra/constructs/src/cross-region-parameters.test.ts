@@ -197,7 +197,9 @@ describe("CrossRegionParameters", () => {
   });
 
   it("runs every writer in one function, with one role and one log group", () => {
-    const template = build(TWO);
+    const { stack } = testStack();
+    write(stack, TWO);
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("Custom::CrossRegionParameter", 2);
     template.resourceCountIs("AWS::Lambda::Function", 1);
