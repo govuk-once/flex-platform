@@ -13,21 +13,13 @@ import {
 
 import { awsPorts as kindPorts } from "./aws.ts";
 import { CALLER_TOKEN_POLICY } from "./policy.ts";
-import type { KeyRotationConfig, PublicationConfig } from "./types.ts";
-
-const PUBLICATION: PublicationConfig = {
-  bucket: "frontdoor-sandbox-keys-100000000002",
-  account: "100000000002",
-  object: "caller-token-keys.json",
-  region: "eu-west-2",
-};
+import type { KeyRotationConfig } from "./types.ts";
 
 const CONFIG: KeyRotationConfig = {
   kind: "caller-token",
   keyAlias: "alias/frontdoor-sandbox-caller-token",
   privateKeysTable: "frontdoor-sandbox-caller-token-private-keys",
   publicKeysTable: "frontdoor-sandbox-caller-token-public-keys",
-  publication: PUBLICATION,
 };
 
 const awsPorts = (config: KeyRotationConfig, region: string) =>
@@ -40,11 +32,10 @@ interface Call {
   readonly accessKey: string;
 }
 
-// One stand-in for KMS and S3: it answers by the request's target, or as S3 when it has
-// none, and records each call with the region and access key it was signed for.
+// A stand-in for KMS: it answers by the request's target, and records each call with the region
+// and access key it was signed for.
 let server: Server;
 let calls: Call[];
-let objects: Map<string, string>;
 
 const PUBLIC_KEY = generateKeyPairSync("ed25519").publicKey;
 
@@ -58,45 +49,12 @@ function read(request: IncomingMessage): Promise<string> {
 
 beforeEach(async () => {
   calls = [];
-  objects = new Map();
   server = createServer((request, response) => {
     void read(request).then((text) => {
       const authorization = request.headers.authorization ?? "";
       const [, accessKey = "", region = ""] =
         /Credential=([^/]+)\/\d+\/([^/]+)\//.exec(authorization) ?? [];
       const target = String(request.headers["x-amz-target"] ?? "");
-
-      if (target === "") {
-        // S3, addressed by path, since the endpoint is an address. It refuses a call that names
-        // another account as the bucket's owner, as S3 does.
-        const path = (request.url ?? "").split("?")[0] ?? "";
-        if (request.headers["x-amz-expected-bucket-owner"] !== "100000000002") {
-          response.statusCode = 403;
-          response.setHeader("content-type", "application/xml");
-          response.end("<Error><Code>AccessDenied</Code></Error>");
-          return;
-        }
-        calls.push({
-          target: `S3 ${String(request.method)} ${path}`,
-          region,
-          body: { text },
-          accessKey,
-        });
-        if (request.method === "PUT") {
-          objects.set(path, text);
-          response.end();
-          return;
-        }
-        const object = objects.get(path);
-        if (object === undefined) {
-          response.statusCode = 404;
-          response.setHeader("content-type", "application/xml");
-          response.end("<Error><Code>NoSuchKey</Code></Error>");
-          return;
-        }
-        response.end(object);
-        return;
-      }
 
       const body = JSON.parse(text) as Record<string, unknown>;
       calls.push({ target, region, body, accessKey });
@@ -202,40 +160,5 @@ describe("awsPorts", () => {
         privateKey: new Uint8Array(Buffer.from("damaged")),
       }),
     ).rejects.toMatchObject({ name: "InvalidCiphertextException" });
-  });
-
-  it("writes the public keys to the bucket, in its region, and only when they changed", async () => {
-    const ports = awsPorts(CONFIG, "eu-west-2");
-    await ports.publish('{"keys":[]}');
-    await ports.publish('{"keys":[]}');
-
-    const path = "/frontdoor-sandbox-keys-100000000002/caller-token-keys.json";
-    expect(objects.get(path)).toBe('{"keys":[]}');
-    expect(calls.map(({ target, region }) => `${region} ${target}`)).toEqual([
-      `eu-west-2 S3 GET ${path}`,
-      `eu-west-2 S3 PUT ${path}`,
-      `eu-west-2 S3 GET ${path}`,
-    ]);
-  });
-
-  it("never reads or writes a bucket of the same name that another account owns", async () => {
-    const ports = awsPorts(
-      { ...CONFIG, publication: { ...PUBLICATION, account: "999999999999" } },
-      "eu-west-2",
-    );
-    await expect(ports.publish('{"keys":[]}')).rejects.toThrow();
-    expect(objects.size).toBe(0);
-  });
-
-  it("publishes nothing for a kind that has no publication", async () => {
-    const ports = kindPorts(
-      { ...CONFIG, publication: null },
-      { ...CALLER_TOKEN_POLICY, publication: null },
-      "eu-west-2",
-    );
-    await expect(ports.publish('{"keys":[]}')).rejects.toThrow(
-      "The caller-token keys are not published",
-    );
-    expect(calls).toEqual([]);
   });
 });

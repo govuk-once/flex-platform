@@ -93,12 +93,6 @@ describe("WorkloadSecurityGroup", () => {
       },
       {
         "Fn::GetAtt": [
-          expect.stringMatching("^EndpointsS3SecurityGroup"),
-          "GroupId",
-        ],
-      },
-      {
-        "Fn::GetAtt": [
           expect.stringMatching("^EndpointsDynamoDbSecurityGroup"),
           "GroupId",
         ],
@@ -127,7 +121,6 @@ describe("WorkloadSecurityGroup", () => {
           443,
         ],
         ["EndpointsStsSecurityGroup", "PrivateGatewaySecurityGroup", 443, 443],
-        ["EndpointsS3SecurityGroup", "PrivateGatewaySecurityGroup", 443, 443],
         [
           "EndpointsDynamoDbSecurityGroup",
           "PrivateGatewaySecurityGroup",
@@ -136,7 +129,7 @@ describe("WorkloadSecurityGroup", () => {
         ],
       ]),
     );
-    expect(ingress).toHaveLength(5);
+    expect(ingress).toHaveLength(4);
   });
 
   // Each rule is written to the endpoint's one group, which nothing else is let into.

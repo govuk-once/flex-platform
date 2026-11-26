@@ -1,6 +1,6 @@
 ---
 title: The caller token
-description: The token that says who a request is for, how the edge signs it and derives the push ID it holds, how gateways verify it, and how key rotation makes, schedules, publishes and removes its keys.
+description: The token that says who a request is for, how the edge signs it and derives the push ID it holds, how gateways verify it, and how key rotation makes, schedules and removes its keys.
 ---
 
 The caller token is the platform's statement of who a request is for. Lambda@Edge signs it and
@@ -123,7 +123,7 @@ can't know of, so after it the gateway refuses every token until a read works: e
 Holding `iat` to the key's times is what lets a key go quickly. A token signed just before a switch
 verifies for the rest of its minute. A token issued after it, by anyone holding the old private key,
 fails, so the old key verifies nothing a little over a minute after the switch, whenever it leaves
-the public keys. A key published ahead of its time verifies nothing before it starts.
+the public keys. A key made ahead of its time verifies nothing before it starts.
 
 Within its minute, a token can be used for any number of gateway calls, but only for its user.
 The verifier is written on Node's `crypto` alone: it accepts one algorithm, so a library's choice
@@ -146,14 +146,13 @@ A key ID names the time the key was made, such as `20261106T120000Z`, so key IDs
 | `alias/frontdoor-<environment>-caller-token` | KMS, frontdoor account, eu-west-2 | The key that wraps the private keys. Retained, with rotation of its own key material on |
 | `frontdoor-<environment>-caller-token-private-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`; `privateKey`, the private key as KMS encrypted it; `activeFrom`, when it starts; and, once its successor is scheduled, `activeUntil`, when it stops. Times are in seconds since the epoch. The edge reads it |
 | `frontdoor-<environment>-caller-token-public-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`, `publicKey`, as KMS returned it, in DER, and the same times. In a revoked key's place, for a day, its `keyId` and `revokedAt`, when it was revoked. And the item `#version`, how many times rotation has changed the two tables. Every gateway reads it, through its network's [`dynamodb` endpoint](/flex-platform/infrastructure/network/#the-caller-tokens-keys) |
-| `caller-token-keys.json` in `frontdoor-<environment>-keys-<account>` | S3, frontdoor account, eu-west-2 | The public keys, as a JWK set, each with `signsFrom` and, once its successor is scheduled, `signsUntil`. No gateway reads it: each reads the table |
 
 Each private key is encrypted with the encryption context `{ purpose: "flex-caller-token", kid }`.
 A ciphertext decrypts only with the same context, so one key's ciphertext can never be passed off
 as another's, and a role may be given decryption for this purpose alone.
 
-No stack holds an item or the object: key rotation writes them, and a template would put back what
-it last deployed whenever it changed.
+No stack holds an item: key rotation writes them, and a template would put back what it last
+deployed whenever it changed.
 
 ### The tables
 
@@ -181,33 +180,6 @@ it never nears DynamoDB's limit on a policy's size. A domain account is only eve
 so the pattern reaches no other environment's gateways. Each gateway's role grants itself the same
 scan, which is all it may do. No other table lets in another account.
 
-### The public keys' bucket
-
-Rotation also writes the public keys to a bucket, whose policy still lets gateways read them. No
-gateway does: each reads the table. The bucket's name ends in the frontdoor account's ID, since bucket names are
-global, and both come from config, so every stack derives it.
-
-The bucket's policy lets any role named `gateway-<environment>-*-execution`, the pattern every
-gateway's role matches, in each domain account that runs a gateway, read that one object. It names
-the accounts as principals and holds them to the pattern with an `aws:PrincipalArn` condition,
-because a policy naming a role that doesn't exist yet is refused, and a gateway's stack may deploy
-after it. A pattern, not each gateway's role, so adding a gateway leaves the policy as it is, and
-it never nears S3's limit on a policy's size. A domain account is only ever one environment's, so
-the pattern reaches no other environment's gateways. Each gateway's role grants itself the same
-read.
-
-Bucket names are global, and this one is derived from config in a public repository, so anyone can
-make a bucket of the same name in their own account, before the frontdoor's exists or after it is
-gone. So every read and write names the frontdoor account as the bucket's owner, with
-`ExpectedBucketOwner`, and every grant holds the bucket to that account with `aws:ResourceAccount`:
-the gateways' roles, the `s3` endpoint's policy and key rotation's role. A bucket of the same name
-elsewhere is never read, so its keys are never trusted, and never written to. At worst it fails the
-frontdoor's deploy.
-
-The bucket is encrypted with S3's own keys, since a KMS key would need a grant for
-every domain account too. It is retained, versioned, and refuses plain HTTP, as every
-[`PlatformBucket`](/flex-platform/infrastructure/overview/#checks) does.
-
 ## Rotation
 
 Key rotation is a Lambda function, `frontdoor-<environment>-caller-token-key-rotation`, in
@@ -216,22 +188,20 @@ retry. Each run does what is due and nothing more, so a run that fails is simply
 next. Only one copy runs at a time.
 
 Its code is the same for any kind of key. What is particular to the caller token's is its policy:
-an Ed25519 key pair, the encryption context's purpose, the timings on this page, and the public
-keys it publishes to the bucket.
+an Ed25519 key pair, the encryption context's purpose, and the timings on this page.
 
 A switch from one key to the next is a moment, set when the next key is made:
 
 1. **Scheduled.** When there is no next key, a run makes one, to start seven days after the current
    key started, and keeps that moment as when the current key stops. A time that has passed never
-   changes, so a key that has stopped signing never signs again. The new key is published, and given
-   to the edge, in the same run. A key is
-   never scheduled less than an hour ahead, longer than an edge goes between reads or a gateway
+   changes, so a key that has stopped signing never signs again. The new key is given to the edge
+   and to the gateways in the same write. A key is never scheduled less than an hour ahead, longer than an edge goes between reads or a gateway
    keeps the public keys, even after the runs have stopped for longer than seven days.
 2. **Signing.** At that moment every edge signs with it, since each already holds it,
    and every gateway accepts it, since each already holds its public key. The key it replaces stops
    verifying a little over a minute later, when its last token expires.
-3. **Removed.** Five minutes after a key is replaced, a run takes it out of both tables and the
-   public keys. The edge stopped signing with it at the switch.
+3. **Removed.** Five minutes after a key is replaced, a run takes it out of both tables. The edge
+   stopped signing with it at the switch.
 
 Rotation needs no downtime, and no edge or gateway has to read anything at the moment of a switch.
 
@@ -244,21 +214,11 @@ next run makes another. A key made before stops every run until it is
 [revoked](#revoking-a-key). So a key that can't be decrypted is found within 15 minutes, normally
 days before an edge asks for it. See [when a run fails](#when-a-run-fails).
 
-A run then writes, in order:
-
-1. the public keys, with every key the tables hold now and every key they are to hold, so the
-   gateways have a key before any edge can read it;
-2. every change to the two tables, in one transaction, so neither is ever written without the
-   other;
-3. the public keys again, as the tables now hold them, so a key removed or revoked leaves them only
-   once the tables have lost it.
-
-If the public keys can't be written first, nothing is, so no edge holds a key a gateway can't, and
-a key the run made is never used. If the transaction fails, neither table changes, and the next run
-starts again from what they hold. If the last write fails, the run fails and the next run writes
-it. A key is normally scheduled seven days ahead, so there are hundreds of runs to do it in. Each
-run writes only what differs from what is there, so a run with nothing due changes neither table and
-adds no version of the object.
+A run then writes every change to the two tables in one transaction, so neither is ever written
+without the other, and no edge holds a key a gateway can't read. If the transaction fails, neither
+table changes, a key the run made is never used, and the next run starts again from what they
+hold. A key is normally scheduled seven days ahead, so there are hundreds of runs to do it in. A
+run with nothing due writes nothing.
 
 The transaction refuses a run whose view of the tables is stale. Every transaction writes
 `#version` one higher, and only if it is still the count the run read before it read anything
@@ -273,17 +233,17 @@ are made.
 ### Revoking a key
 
 To remove a key at once, invoke the function with `{ "revoke": "<kid>" }`. The key leaves both
-tables and the public keys in that run. If the edge was signing with it, a new key is
+tables in that run. If the edge was signing with it, a new key is
 made that starts at once, and the key it replaced stays stopped. If it was the next key, a new one
 is scheduled for the same moment, or an hour ahead if that is later, and the signing key now stops
 when the new one starts.
 
-A revocation whose writes fail part way can be run again with the same request. Rotation keeps the
-ID of each key it revokes for a day, so it knows the key, reports it as already revoked, and writes
-whatever is still to be written. A key ID it neither holds nor has revoked fails the run, changing
-nothing.
+A revocation can be run again with the same request, such as when the first one's answer was
+lost. Rotation keeps the ID of each key it revokes for a day, so it knows the key, reports it as
+already revoked, and does whatever else is due. A key ID it neither holds nor has revoked fails the
+run, changing nothing.
 
-Once the run has written the public keys, a gateway refuses the revoked key within a minute. One
+Once the run has written the tables, a gateway refuses the revoked key within a minute. One
 that can't read them refuses every token once five minutes have passed since its last read that
 worked. An edge stops signing with the key at its next read, normally within five minutes. One that
 can't read goes on signing with it, and gateways refuse those tokens, as they refuse tokens signed
@@ -321,7 +281,6 @@ The function's role, `frontdoor-<environment>-caller-token-key-rotation`, may:
 - have KMS encrypt a private key again, only under that same key and with that purpose, which is
   how a run [checks](#rotation) one. It can't decrypt one;
 - read its two tables, and put and delete their items;
-- read and write the public keys' object, in its own account's bucket;
 - write to its own log group, `/flex/frontdoor/<environment>/caller-token-key-rotation`.
 
 The schedule runs it as its own role, `frontdoor-<environment>-caller-token-key-rotation-schedule`,
@@ -336,10 +295,9 @@ revokes, by key ID alone. A
 ## Stacks
 
 One stack, `frontdoor-<environment>-caller-token-keys`, in the frontdoor account in eu-west-2,
-holds the signing key and its alias, the [public keys' bucket](#the-public-keys-bucket) and its
-policy, the [push ID's secret](#the-push-id) and its policy, and key rotation's
-[tables](#the-tables), function, role, log group, schedule and alarm. It is protected from
-deletion, and the key, the bucket, the tables and the secret are retained.
+holds the signing key and its alias, the [push ID's secret](#the-push-id) and its policy, and key
+rotation's [tables](#the-tables), function, role, log group, schedule and alarm. It is protected
+from deletion, and the key, the tables and the secret are retained.
 
 A gateway's stack doesn't depend on it: a gateway finds the public keys table by name, and reads it
 only when called.

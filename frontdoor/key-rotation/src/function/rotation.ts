@@ -33,8 +33,6 @@ export interface RotationPorts {
   generate(keyId: string): Promise<GeneratedKey>;
   /** Fails unless KMS can decrypt the private key, as a reader will ask it to. */
   check(key: Pick<HeldKey, "keyId" | "privateKey">): Promise<void>;
-  /** Writes the kind's published document. Only called for a kind that publishes one. */
-  publish(document: string): Promise<void>;
 }
 
 export interface RotationRequest {
@@ -99,7 +97,8 @@ export async function rotate(
     if (!revokedKeys.some(({ keyId }) => keyId === request.revoke)) {
       throw new Error("The key to revoke is not one rotation holds");
     }
-    // Run again after a write failed: the rest of the run writes what is still to be written.
+    // Run again, such as by a person who didn't hear that the first succeeded: the rest of the run
+    // does whatever else is due.
     events.push({ event: "key_already_revoked", keyId: request.revoke });
   }
   if (revoked !== undefined) {
@@ -182,22 +181,8 @@ export async function rotate(
     }
   }
 
-  // Both documents are made before anything is written, so a key that can't be published fails
-  // the run, writing nothing.
-  const published = policy.publication?.(keys);
+  // Both tables change together, so every reader of either sees the same keys.
   const changes = changesBetween(state, { keys, revoked: revokedKeys });
-  if (changes !== undefined) {
-    // Published before the tables have them, so no reader holds a key the public keys lack. A key
-    // the tables lose stays published until they have lost it.
-    const removed = state.keys.filter(
-      ({ keyId }) => !keys.some((key) => key.keyId === keyId),
-    );
-    if (policy.publication !== null) {
-      await ports.publish(policy.publication([...keys, ...removed]));
-    }
-    await ports.commit(state.version, changes);
-  }
-  // On every run, so a write that failed is put right by the next.
-  if (published !== undefined) await ports.publish(published);
+  if (changes !== undefined) await ports.commit(state.version, changes);
   return { events };
 }

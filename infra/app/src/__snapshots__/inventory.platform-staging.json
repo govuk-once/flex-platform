@@ -137,14 +137,6 @@
     "dependencies": [],
     "resources": [
       {
-        "logicalId": "CallerTokenKeysStoreBucket07D88136",
-        "type": "AWS::S3::Bucket"
-      },
-      {
-        "logicalId": "CallerTokenKeysStoreBucketPolicyD54C97C5",
-        "type": "AWS::S3::BucketPolicy"
-      },
-      {
         "logicalId": "KeyRotationFailedRuns9B762AFC",
         "type": "AWS::CloudWatch::Alarm"
       },
@@ -313,14 +305,6 @@
         "type": "AWS::EC2::SecurityGroup"
       },
       {
-        "logicalId": "EndpointsS332DF97CF",
-        "type": "AWS::EC2::VPCEndpoint"
-      },
-      {
-        "logicalId": "EndpointsS3SecurityGroup19D2FA2A",
-        "type": "AWS::EC2::SecurityGroup"
-      },
-      {
         "logicalId": "EndpointsSecretsManager54961936",
         "type": "AWS::EC2::VPCEndpoint"
       },
@@ -373,10 +357,6 @@
         "type": "AWS::EC2::SecurityGroupIngress"
       },
       {
-        "logicalId": "IsolatedGatewayWorkloadIntoS33F4809B8",
-        "type": "AWS::EC2::SecurityGroupIngress"
-      },
-      {
         "logicalId": "IsolatedGatewayWorkloadIntoSecretsManager1AE43854",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
@@ -394,10 +374,6 @@
       },
       {
         "logicalId": "IsolatedGatewayWorkloadToExecuteApiCFA98F8E",
-        "type": "AWS::EC2::SecurityGroupEgress"
-      },
-      {
-        "logicalId": "IsolatedGatewayWorkloadToS31C21682F",
         "type": "AWS::EC2::SecurityGroupEgress"
       },
       {
@@ -697,10 +673,6 @@
         "type": "AWS::SSM::Parameter"
       },
       {
-        "logicalId": "Parameterss3EndpointIdA13B27D2",
-        "type": "AWS::SSM::Parameter"
-      },
-      {
         "logicalId": "ParameterssecretsmanagerEndpointIdE6C2AA1A",
         "type": "AWS::SSM::Parameter"
       },
@@ -710,10 +682,6 @@
       },
       {
         "logicalId": "PrivateGatewayWorkloadIntoDynamoDb7AEDD4A3",
-        "type": "AWS::EC2::SecurityGroupIngress"
-      },
-      {
-        "logicalId": "PrivateGatewayWorkloadIntoS38AD340EC",
         "type": "AWS::EC2::SecurityGroupIngress"
       },
       {
@@ -730,10 +698,6 @@
       },
       {
         "logicalId": "PrivateGatewayWorkloadToDynamoDbEB5B6323",
-        "type": "AWS::EC2::SecurityGroupEgress"
-      },
-      {
-        "logicalId": "PrivateGatewayWorkloadToS3B753CC02",
         "type": "AWS::EC2::SecurityGroupEgress"
       },
       {

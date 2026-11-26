@@ -266,30 +266,6 @@ describe("NetworkStack", () => {
     });
   });
 
-  it("lets gateways read only the caller token's public keys through the s3 endpoint, and resolve the bucket's name", () => {
-    const template = Template.fromStack(build());
-    const bucket = `frontdoor-prod-keys-${PROD_ENVIRONMENT.frontdoor.account}`;
-    template.hasResourceProperties("AWS::EC2::VPCEndpoint", {
-      ServiceName: "com.amazonaws.eu-west-2.s3",
-      PolicyDocument: {
-        Statement: [
-          {
-            Action: "s3:GetObject",
-            Resource: `arn:aws:s3:::${bucket}/caller-token-keys.json`,
-            Condition: {
-              StringEquals: {
-                "aws:ResourceAccount": [PROD_ENVIRONMENT.frontdoor.account],
-              },
-            },
-          },
-        ],
-      },
-    });
-    template.hasResourceProperties("AWS::Route53Resolver::FirewallDomainList", {
-      Domains: Match.arrayWith([`${bucket}.s3.eu-west-2.amazonaws.com`]),
-    });
-  });
-
   it("lets gateways scan only the caller token's public keys through the dynamodb endpoint, resolve its own name, and find that name", () => {
     const template = Template.fromStack(build());
     template.hasResourceProperties("AWS::EC2::VPCEndpoint", {
@@ -322,13 +298,20 @@ describe("NetworkStack", () => {
     });
   });
 
+  it("has no s3 endpoint", () => {
+    expect(
+      JSON.stringify(
+        Template.fromStack(build()).findResources("AWS::EC2::VPCEndpoint"),
+      ),
+    ).not.toContain(".s3");
+  });
+
   it("writes each endpoint's ID, for policies that hold a call to it", () => {
     const template = Template.fromStack(build());
     for (const service of [
       "dynamodb",
       "execute-api",
       "lambda",
-      "s3",
       "secretsmanager",
       "sts",
     ]) {
@@ -433,7 +416,6 @@ describe("NetworkStack", () => {
           Domains: [
             "api.udp.example",
             "auth.udp.example",
-            `frontdoor-prod-keys-${PROD_ENVIRONMENT.frontdoor.account}.s3.eu-west-2.amazonaws.com`,
             "lambda.eu-west-2.amazonaws.com",
             "secretsmanager.eu-west-2.amazonaws.com",
             "sts.eu-west-2.amazonaws.com",
@@ -491,7 +473,6 @@ describe("NetworkStack", () => {
         {
           Name: "network-prod-dns-allowed",
           Domains: [
-            `frontdoor-prod-keys-${PROD_ENVIRONMENT.frontdoor.account}.s3.eu-west-2.amazonaws.com`,
             "lambda.eu-west-2.amazonaws.com",
             "secretsmanager.eu-west-2.amazonaws.com",
             "sts.eu-west-2.amazonaws.com",

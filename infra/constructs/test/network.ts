@@ -45,13 +45,6 @@ export const UPSTREAM_ROLE = `arn:aws:iam::${UPSTREAM_ACCOUNT}:role/udp-consumer
 export const UPSTREAM_API =
   "arn:aws:execute-api:eu-west-2:200000000001:a1b2c3d4e5";
 
-/** The caller token's public keys, in the frontdoor account's bucket. */
-export const KEYS_OBJECT = {
-  bucket: "frontdoor-sandbox-keys-100000000002",
-  key: "caller-token-keys.json",
-  account: "100000000002",
-};
-
 /** The caller token's public keys, in the frontdoor account's table. */
 export const KEYS_TABLE =
   "arn:aws:dynamodb:eu-west-2:100000000002:table/frontdoor-sandbox-caller-token-public-keys";
@@ -97,7 +90,6 @@ export function buildNetwork(
     vpc,
     subnets: subnets.isolated,
     invokableFunctions: "gateway-sandbox-*:live",
-    readableObjects: [KEYS_OBJECT],
     readableTables: [KEYS_TABLE],
     readableSecrets: [UPSTREAM_SECRET],
     assumableRoles: [UPSTREAM_ROLE],
@@ -123,12 +115,7 @@ export function buildNetwork(
     vpc,
     workload: "private-gateway",
     placement: "private",
-    endpoints: [
-      endpoints.secretsManager,
-      endpoints.sts,
-      endpoints.s3,
-      endpoints.dynamoDb,
-    ],
+    endpoints: [endpoints.secretsManager, endpoints.sts, endpoints.dynamoDb],
   });
   new NetworkParameters(stack, "Parameters", {
     environment: "sandbox",

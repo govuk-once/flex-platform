@@ -354,9 +354,6 @@ importers:
       '@aws-sdk/client-kms':
         specifier: 3.1168.0
         version: 3.1168.0
-      '@aws-sdk/client-s3':
-        specifier: 3.1168.0
-        version: 3.1168.0
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../shared

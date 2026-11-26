@@ -58,7 +58,7 @@ describe("createHandler", () => {
       revoke: "20261106T120000Z",
     });
 
-    expect(ports.publishedKids()).not.toContain("20261106T120000Z");
+    expect(ports.publicKids()).not.toContain("20261106T120000Z");
   });
 
   it("logs a key that fails its check by its ID, AWS's name for the error, and whether it was held", async () => {

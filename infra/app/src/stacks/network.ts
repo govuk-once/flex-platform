@@ -1,7 +1,3 @@
-import {
-  CALLER_TOKEN_KEYS_OBJECT,
-  callerTokenKeysBucketName,
-} from "@repo/frontdoor-infra";
 import { gatewayAliasPattern, gatewayRolePattern } from "@repo/gateway-infra";
 import {
   DnsFirewall,
@@ -59,10 +55,9 @@ const WORKLOADS: readonly Workload[] = [
     id: "IsolatedGatewayWorkload",
     workload: "isolated-gateway",
     placement: "isolated",
-    reaches: ({ secretsManager, sts, s3, dynamoDb, executeApi }) => [
+    reaches: ({ secretsManager, sts, dynamoDb, executeApi }) => [
       secretsManager,
       sts,
-      s3,
       dynamoDb,
       executeApi,
     ],
@@ -71,10 +66,9 @@ const WORKLOADS: readonly Workload[] = [
     id: "PrivateGatewayWorkload",
     workload: "private-gateway",
     placement: "private",
-    reaches: ({ secretsManager, sts, s3, dynamoDb }) => [
+    reaches: ({ secretsManager, sts, dynamoDb }) => [
       secretsManager,
       sts,
-      s3,
       dynamoDb,
     ],
   },
@@ -149,17 +143,6 @@ export class NetworkStack extends Stack {
       subnets: subnets.isolated,
       // Any domain may invoke any of its environment's gateways, by the alias its client names.
       invokableFunctions: gatewayAliasPattern(environment.name),
-      // In the frontdoor account, where key rotation writes them.
-      readableObjects: [
-        {
-          bucket: callerTokenKeysBucketName(
-            environment.name,
-            environment.frontdoor.account,
-          ),
-          key: CALLER_TOKEN_KEYS_OBJECT,
-          account: environment.frontdoor.account,
-        },
-      ],
       // In the frontdoor account, where key rotation keeps them.
       readableTables: [callerTokenPublicKeysTableArn(environment)],
       readableSecrets: sortedNames(

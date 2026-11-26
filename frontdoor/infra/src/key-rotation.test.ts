@@ -22,12 +22,6 @@ const PROPS: KeyRotationProps = {
   keyAlias: "alias/frontdoor-sandbox-caller-token",
   privateKeyReaderRoleArns: [EDGE_ROLE],
   publicKeyReaderRoleArns: GATEWAY_ROLES,
-  publication: {
-    bucket: `frontdoor-sandbox-keys-${ACCOUNT}`,
-    account: ACCOUNT,
-    object: "caller-token-keys.json",
-    region: "eu-west-2",
-  },
 };
 
 function build(region = "eu-west-2", nag = false, props = PROPS) {
@@ -250,7 +244,7 @@ describe("KeyRotation", () => {
     template.resourceCountIs("AWS::DynamoDB::Table", 2);
   });
 
-  it("reads and changes only its tables, and the public keys' object", () => {
+  it("reads and changes only its tables", () => {
     Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
@@ -267,14 +261,6 @@ describe("KeyRotation", () => {
                   `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/frontdoor-sandbox-caller-token-private-keys`,
                   `arn:aws:dynamodb:eu-west-2:${ACCOUNT}:table/frontdoor-sandbox-caller-token-public-keys`,
                 ],
-              },
-              {
-                Effect: "Allow",
-                Action: ["s3:GetObject", "s3:PutObject"],
-                Resource: `arn:aws:s3:::frontdoor-sandbox-keys-${ACCOUNT}/caller-token-keys.json`,
-                Condition: {
-                  StringEquals: { "aws:ResourceAccount": ACCOUNT },
-                },
               },
             ]),
           },
@@ -323,14 +309,6 @@ describe("KeyRotation", () => {
         },
       ]),
     });
-  });
-
-  it("refuses a publication the kind's policy doesn't make", () => {
-    expect(() =>
-      Template.fromStack(
-        build("eu-west-2", false, { ...PROPS, publication: null }).stack,
-      ),
-    ).toThrow("The caller-token keys' policy and config disagree");
   });
 
   it("admits no reader to a table that has none", () => {

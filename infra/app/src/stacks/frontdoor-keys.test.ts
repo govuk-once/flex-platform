@@ -30,37 +30,6 @@ describe("FrontdoorCallerTokenKeysStack", () => {
     }
   });
 
-  it("lets every gateway's role in every domain account read the public keys' object, by its name's pattern", () => {
-    const template = Template.fromStack(
-      new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),
-    );
-    const roles = DEV.domainAccounts
-      .map(
-        ({ account }) =>
-          `arn:aws:iam::${account}:role/gateway-${DEV.name}-*-execution`,
-      )
-      .sort();
-    expect(roles.length).toBeGreaterThan(0);
-
-    template.hasResourceProperties("AWS::S3::Bucket", {
-      BucketName: `frontdoor-${DEV.name}-keys-${DEV.frontdoor.account}`,
-    });
-    template.hasResourceProperties("AWS::S3::BucketPolicy", {
-      PolicyDocument: {
-        Statement: Match.arrayWith([
-          Match.objectLike({
-            Action: "s3:GetObject",
-            Condition: {
-              ArnLike: {
-                "aws:PrincipalArn": roles,
-              },
-            },
-          }),
-        ]),
-      },
-    });
-  });
-
   it("lets every gateway's role in every domain account scan the public keys, by its name's pattern, and read them no other way", () => {
     const template = Template.fromStack(
       new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),
@@ -145,30 +114,12 @@ describe("FrontdoorCallerTokenKeysStack", () => {
     });
   });
 
-  it("has key rotation write the public keys to the environment's bucket, and no other account's of the same name", () => {
+  it("keeps no copy of the public keys outside the tables", () => {
     const template = Template.fromStack(
       new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),
     );
-    template.hasResourceProperties("AWS::IAM::Role", {
-      Policies: [
-        {
-          PolicyDocument: {
-            Statement: Match.arrayWith([
-              {
-                Effect: "Allow",
-                Action: ["s3:GetObject", "s3:PutObject"],
-                Resource: `arn:aws:s3:::frontdoor-${DEV.name}-keys-${DEV.frontdoor.account}/caller-token-keys.json`,
-                Condition: {
-                  StringEquals: {
-                    "aws:ResourceAccount": DEV.frontdoor.account,
-                  },
-                },
-              },
-            ]),
-          },
-        },
-      ],
-    });
+    template.resourceCountIs("AWS::S3::Bucket", 0);
+    expect(JSON.stringify(template.toJSON())).not.toContain("s3:");
   });
 
   it("keeps the caller token's private keys where the environment's edge, and key rotation, alone read them", () => {

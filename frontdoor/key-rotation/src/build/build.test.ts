@@ -16,12 +16,6 @@ const CONFIG: KeyRotationConfig = {
   keyAlias: "alias/frontdoor-sandbox-caller-token",
   privateKeysTable: "frontdoor-sandbox-caller-token-private-keys",
   publicKeysTable: "frontdoor-sandbox-caller-token-public-keys",
-  publication: {
-    bucket: "frontdoor-sandbox-keys-100000000002",
-    account: "100000000002",
-    object: "caller-token-keys.json",
-    region: "eu-west-2",
-  },
 };
 
 const directories: string[] = [];
@@ -35,7 +29,7 @@ afterEach(() => {
 describe("buildKeyRotationFunction", () => {
   it("bakes in the config", () => {
     expect(buildKeyRotationFunction(CONFIG)).toContain(
-      "frontdoor-sandbox-keys-100000000002",
+      "frontdoor-sandbox-caller-token-public-keys",
     );
   });
 
@@ -64,11 +58,5 @@ describe("buildKeyRotationFunction", () => {
         kind: "nothing" as KeyRotationConfig["kind"],
       }),
     ).toThrow('No key policy is named "nothing"');
-  });
-
-  it("refuses a publication the kind's policy doesn't make", () => {
-    expect(() =>
-      buildKeyRotationFunction({ ...CONFIG, publication: null }),
-    ).toThrow("The caller-token keys' policy and config disagree");
   });
 });
