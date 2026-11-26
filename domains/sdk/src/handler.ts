@@ -1,5 +1,7 @@
+import type { Logger } from "pino";
 import type { input, output, ZodType } from "zod";
 
+import type { PairwiseId, PushId } from "./caller.ts";
 import type { ServerErrorStatusCode } from "./http.ts";
 import type { RegisteredRouteKey, RegisteredRoutes } from "./register.ts";
 import type { ResponsesOf, StatusCodesOf } from "./types.ts";
@@ -30,19 +32,35 @@ type ResponseOf<Route> = {
 }[StatusCodesOf<Route>];
 
 // A failure that is not the route's own. It has no body of the handler's.
-interface ServerError {
+interface ServerErrorResult {
   readonly status: ServerErrorStatusCode;
   readonly body?: never;
 }
 
+/** Who the request is from, as the caller token names them. */
+export interface Caller {
+  /** The caller's ID for this service. */
+  readonly pairwiseId: PairwiseId;
+  /** The ID the caller's notifications are sent under. */
+  readonly pushId: PushId;
+}
+
+/** What every handler is called with, whatever its route declares. */
+export interface RequestContext {
+  readonly caller: Caller;
+  readonly log: Logger;
+  /** Aborts when the request's deadline passes. Pass it to anything that can be stopped. */
+  readonly signal: AbortSignal;
+}
+
 /** What a handler is called with for a route, given the route's configuration. */
-export type RouteContextOf<Route> = RequestOf<Route>;
+export type RouteContextOf<Route> = RequestContext & RequestOf<Route>;
 
 /**
  * What a handler may answer with for a route: one of the responses it declares, a failure
  * included, or a server error, which no route declares.
  */
-export type RouteResultOf<Route> = ResponseOf<Route> | ServerError;
+export type RouteResultOf<Route> = ResponseOf<Route> | ServerErrorResult;
 
 /** What the handler of the registered route under `Key` is called with. */
 export type RouteContext<Key extends RegisteredRouteKey> = RouteContextOf<

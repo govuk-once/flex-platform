@@ -20,7 +20,7 @@ export function parseRouteKey(key: string): RouteKeyResult {
   if (space < 0) {
     return {
       ok: false,
-      problems: ['must have the format "<METHOD> /<version>/<path>"'],
+      problems: ['invalid route key, must be "<METHOD> /<version>/<path>"'],
     };
   }
 
@@ -31,16 +31,16 @@ export function parseRouteKey(key: string): RouteKeyResult {
 
   if (!isHttpMethod(method)) {
     problems.add(
-      `${JSON.stringify(method)} is not a valid method, must be one of: ${HTTP_METHODS.join(", ")}`,
+      `invalid method ${JSON.stringify(method)}, must be one of: ${HTTP_METHODS.join(", ")}`,
     );
   }
 
   const [, version = "", ...segments] = path.split("/");
 
   if (!path.startsWith("/") || !VERSION.test(version)) {
-    problems.add("the path must start with a version, such as /v1");
+    problems.add("missing version, start the path with one, such as /v1");
   } else if (segments.length === 0) {
-    problems.add("the path must have at least one segment after the version");
+    problems.add("missing path, add a segment after the version");
   }
 
   const parameters: string[] = [];
@@ -55,17 +55,15 @@ export function parseRouteKey(key: string): RouteKeyResult {
 
     if (parameter !== undefined) {
       if (parameters.includes(parameter)) {
-        problems.add(`the path parameter {${parameter}} must appear only once`);
+        problems.add(`duplicate path parameter {${parameter}}, name each once`);
       }
 
       parameters.push(parameter);
     } else if (segment === "") {
-      problems.add(
-        "the path must not have an empty segment or end with a slash",
-      );
+      problems.add("empty path segment, remove the extra or trailing slash");
     } else if (!LITERAL.test(segment)) {
       problems.add(
-        `the segment ${JSON.stringify(segment)} must be lowercase letters, digits and hyphens starting with a letter, or a parameter such as {id}`,
+        `invalid segment ${JSON.stringify(segment)}, must be lowercase letters, digits and hyphens starting with a letter, or a parameter such as {id}`,
       );
     }
   }
@@ -80,7 +78,7 @@ export function parseRouteKey(key: string): RouteKeyResult {
     route: {
       method,
       parameters,
-      shape: `${method} /${version}/${pathSegments.join("/")}`,
+      pattern: `${method} /${version}/${pathSegments.join("/")}`,
     },
   };
 }

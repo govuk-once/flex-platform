@@ -21,7 +21,7 @@ export const TodoParamsSchema = z.object({ id: z.string() });
 
 // An input refuses fields it does not name, so its objects are strict.
 export const TodoQuerySchema = z.strictObject({
-  done: z.stringbool().optional(),
+  done: z.boolean().optional(),
 });
 
 export const CreateTodoSchema = TodoSchema.pick({ title: true }).strict();
