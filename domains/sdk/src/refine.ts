@@ -35,7 +35,7 @@ type FieldCheck<Route> =
     : {
         readonly [
           Field in UnknownFields<Route>
-        ]: Problem<`unknown field "${Field}", must be one of: handler, params, query, body, responses`>;
+        ]: Problem<`unknown field "${Field}", must be one of: handler, operationId, description, params, query, body, responses`>;
       };
 
 // The fields a route's `params` or `query` object declares, each with its schema, and none when

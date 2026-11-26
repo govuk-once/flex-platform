@@ -34,7 +34,9 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 | Hosting   | One API Gateway per domain, running code written by external developers | <Badge text="Built" variant="success" /> |
 | SDK configuration | Declaring a domain's routes and typing its handlers | <Badge text="Built" variant="success" /> |
 | SDK requests | Routing a request, holding it and the handler's result to the route's schemas, the handler's context, and logging | <Badge text="Built" variant="success" /> |
-| SDK serving | Serving a domain's requests from its function, its OpenAPI specification, and examples | <Badge text="Planned" variant="caution" /> |
+| SDK OpenAPI document | Building a domain's OpenAPI document from its configuration | <Badge text="Built" variant="success" /> |
+| SDK serving | Serving a domain's requests from its function, and examples | <Badge text="Planned" variant="caution" /> |
+| Metadata | An endpoint for a domain's metadata uploads, such as its OpenAPI document, to which the platform adds what it applies to every domain, and an endpoint in the Frontdoor to read the published documents | <Badge text="Planned" variant="caution" /> |
 
 | Egress           | What it is                                                    | Status                                     |
 | ---------------- | ------------------------------------------------------------- | ------------------------------------------ |

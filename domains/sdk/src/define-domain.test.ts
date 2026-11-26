@@ -260,7 +260,9 @@ describe("defineDomain", () => {
     );
   });
 
-  it("takes a name and routes, and no function settings", () => {
-    expectTypeOf<keyof DomainConfig>().toEqualTypeOf<"name" | "routes">();
+  it("takes a name, a description and routes, and no function settings", () => {
+    expectTypeOf<keyof DomainConfig>().toEqualTypeOf<
+      "name" | "description" | "routes"
+    >();
   });
 });

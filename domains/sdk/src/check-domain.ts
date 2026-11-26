@@ -2,13 +2,15 @@
 // the configuration is imported, in a domain's tests, its CI and as its function starts. It
 // repeats what the types hold, for a configuration that bypassed them, and adds what the types
 // cannot see: the domain's name, the key grammar in full, two keys that are one route, an input
-// object that takes fields it does not name, a parameter that cannot be read from text. Every
-// problem is collected before anything is thrown, so one run reports them all.
+// object that takes fields it does not name, a parameter that cannot be read from text, an
+// operationId a client generator cannot use or that two routes share. Every problem is collected
+// before anything is thrown, so one run reports them all.
 //
 // A handler is checked only to be a function. The route it was typed for exists only in the
 // types, which hold it there.
 
 import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
+import { isCamelCase } from "@repo/utils/is-camel-case";
 import { isRecord } from "@repo/utils/is-record";
 import { ZodObject, ZodType } from "zod";
 
@@ -18,10 +20,16 @@ import { parameterTypes, strictInputProblems } from "./input-rules.ts";
 import { parseRouteKey } from "./route-key.ts";
 import type { ParsedRouteKey } from "./types.ts";
 
-const DOMAIN_CONFIG_FIELDS: ReadonlySet<string> = new Set(["name", "routes"]);
+const DOMAIN_CONFIG_FIELDS: ReadonlySet<string> = new Set([
+  "name",
+  "description",
+  "routes",
+]);
 
 const ROUTE_CONFIG_FIELDS: ReadonlySet<string> = new Set([
   "handler",
+  "operationId",
+  "description",
   "params",
   "query",
   "body",
@@ -45,6 +53,33 @@ const NULL_BODY_STATUSES: ReadonlySet<string> = new Set(
 
 const NAME_RULE =
   "1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen";
+
+function optionalStringProblems(
+  at: string,
+  value: unknown,
+  problemWith: (text: string) => string | undefined,
+): string[] {
+  if (value === undefined) return [];
+
+  if (typeof value !== "string")
+    return [`${at}: invalid type, must be a string`];
+
+  const problem = problemWith(value);
+
+  return problem === undefined ? [] : [`${at}: ${problem}`];
+}
+
+function operationIdProblem(operationId: string): string | undefined {
+  return isCamelCase(operationId)
+    ? undefined
+    : "invalid format, must be camel case letters and digits, starting with a lowercase letter";
+}
+
+function descriptionProblem(description: string): string | undefined {
+  return description.trim() === ""
+    ? "empty, write a description or leave the field out"
+    : undefined;
+}
 
 function routeAt(key: string): string {
   return `routes[${JSON.stringify(key)}]`;
@@ -179,13 +214,26 @@ function routeProblems(
     (field) => `${at}.${field}`,
   );
 
-  const { handler, params, query, body, responses } = route;
+  const { handler, operationId, description, params, query, body, responses } =
+    route;
 
   if (typeof handler !== "function") {
     problems.push(`${at}.handler: invalid type, must be a function`);
   }
 
-  problems.push(...paramsProblems(`${at}.params`, params, parsed));
+  problems.push(
+    ...optionalStringProblems(
+      `${at}.operationId`,
+      operationId,
+      operationIdProblem,
+    ),
+    ...optionalStringProblems(
+      `${at}.description`,
+      description,
+      descriptionProblem,
+    ),
+    ...paramsProblems(`${at}.params`, params, parsed),
+  );
 
   if (query !== undefined) {
     problems.push(
@@ -233,6 +281,27 @@ function keyCollisionProblems(
     );
 }
 
+function operationIdCollisionProblems(
+  routes: readonly (readonly [string, unknown])[],
+): string[] {
+  const keysById = new Map<string, string[]>();
+
+  for (const [key, route] of routes) {
+    const operationId = isRecord(route) ? route.operationId : undefined;
+
+    if (typeof operationId === "string" && isCamelCase(operationId)) {
+      keysById.set(operationId, [...(keysById.get(operationId) ?? []), key]);
+    }
+  }
+
+  return [...keysById]
+    .filter(([, keys]) => keys.length > 1)
+    .map(
+      ([operationId, keys]) =>
+        `routes: duplicate operationId ${JSON.stringify(operationId)}, give each route its own: ${keyList(keys)}`,
+    );
+}
+
 function keyList(keys: readonly string[]): string {
   return keys.map((key) => JSON.stringify(key)).join(", ");
 }
@@ -262,13 +331,17 @@ function domainProblems(config: unknown): readonly string[] {
     (field) => field,
   );
 
-  const { name, routes } = config;
+  const { name, description, routes } = config;
 
   if (typeof name !== "string") {
     problems.push("name: invalid type, must be a string");
   } else if (!isPlatformName(name)) {
     problems.push(`name: invalid format, must be ${NAME_RULE}`);
   }
+
+  problems.push(
+    ...optionalStringProblems("description", description, descriptionProblem),
+  );
 
   if (!isRecord(routes)) {
     problems.push(
@@ -302,7 +375,11 @@ function domainProblems(config: unknown): readonly string[] {
     );
   }
 
-  return [...problems, ...keyCollisionProblems(parsed)];
+  return [
+    ...problems,
+    ...keyCollisionProblems(parsed),
+    ...operationIdCollisionProblems(entries),
+  ];
 }
 
 /**

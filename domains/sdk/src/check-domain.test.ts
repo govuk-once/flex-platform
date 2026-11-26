@@ -38,7 +38,8 @@ const GET_ROUTE_AT = 'routes["GET /v1/todos/{id}"]';
 // Every status a route may declare, as the problem for any other lists them.
 const RESPONSE_STATUSES = "200, 201, 202, 204, 400, 404, 409, 410, 422, 429";
 
-const ROUTE_FIELDS = "handler, params, query, body, responses";
+const ROUTE_FIELDS =
+  "handler, operationId, description, params, query, body, responses";
 
 describe("checkDomain", () => {
   it.each<[string, unknown]>([
@@ -64,7 +65,7 @@ describe("checkDomain", () => {
     [
       "a domain field it does not have",
       { ...domainWith({ "GET /v1/todos": LIST_ROUTE }), function: {} },
-      ["function: unknown field, must be one of: name, routes"],
+      ["function: unknown field, must be one of: name, description, routes"],
     ],
     [
       "a name that is not a string",
@@ -102,11 +103,46 @@ describe("checkDomain", () => {
         "GET /v1/todos/{id}": GET_ROUTE,
         "GET /v1/todos/{todoId}": {
           ...GET_ROUTE,
+          operationId: "getTodoById",
           params: z.object({ todoId: z.string() }),
         },
       }),
       [
         'routes: duplicate routes, parameter names do not tell apart: "GET /v1/todos/{id}", "GET /v1/todos/{todoId}"',
+      ],
+    ],
+    [
+      "a description that is not a string, or is blank",
+      {
+        ...domainWith({
+          "GET /v1/todos": { ...LIST_ROUTE, description: " " },
+        }),
+        description: 1,
+      },
+      [
+        "description: invalid type, must be a string",
+        `${LIST_ROUTE_AT}.description: empty, write a description or leave the field out`,
+      ],
+    ],
+    [
+      "an operationId that is not a string, or not camel case",
+      domainWith({
+        "GET /v1/todos": { ...LIST_ROUTE, operationId: 1 },
+        "GET /v1/todos/{id}": { ...GET_ROUTE, operationId: "get-todo" },
+      }),
+      [
+        `${LIST_ROUTE_AT}.operationId: invalid type, must be a string`,
+        `${GET_ROUTE_AT}.operationId: invalid format, must be camel case letters and digits, starting with a lowercase letter`,
+      ],
+    ],
+    [
+      "two routes with one operationId",
+      domainWith({
+        "GET /v1/todos": { ...LIST_ROUTE, operationId: "getTodo" },
+        "GET /v1/todos/{id}": GET_ROUTE,
+      }),
+      [
+        'routes: duplicate operationId "getTodo", give each route its own: "GET /v1/todos", "GET /v1/todos/{id}"',
       ],
     ],
     [
