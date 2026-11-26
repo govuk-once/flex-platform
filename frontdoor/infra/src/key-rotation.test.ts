@@ -33,7 +33,7 @@ const PROPS: KeyRotationProps = {
 function build(region = "eu-west-2", nag = false, props = PROPS) {
   const stack = stackIn(region, nag);
   new KeyRotation(stack, "KeyRotation", props);
-  return { stack, template: Template.fromStack(stack) };
+  return { stack };
 }
 
 const root = (account: string) => `arn:aws:iam::${account}:root`;
@@ -91,7 +91,8 @@ function expectedPolicy(table: string, readers: string[], accounts: string[]) {
 
 describe("KeyRotation", () => {
   it("runs one copy at a time, every 15 minutes, logging to its own group", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
     template.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "frontdoor-sandbox-caller-token-key-rotation",
       Runtime: "nodejs24.x",
@@ -128,32 +129,35 @@ describe("KeyRotation", () => {
   });
 
   it("alarms on runs that fail in two of three periods, with no action", () => {
-    build().template.hasResourceProperties("AWS::CloudWatch::Alarm", {
-      AlarmName: "frontdoor-sandbox-caller-token-key-rotation-failed",
-      AlarmDescription: Match.stringLikeRegexp(
-        "^The caller token key rotation in sandbox failed .* See the caller token page ",
-      ),
-      Namespace: "AWS/Lambda",
-      MetricName: "Errors",
-      Dimensions: [
-        {
-          Name: "FunctionName",
-          Value: { Ref: Match.stringLikeRegexp("^KeyRotationFunction") },
-        },
-      ],
-      Statistic: "Sum",
-      Period: 900,
-      Threshold: 1,
-      ComparisonOperator: "GreaterThanOrEqualToThreshold",
-      EvaluationPeriods: 3,
-      DatapointsToAlarm: 2,
-      TreatMissingData: "notBreaching",
-      AlarmActions: Match.absent(),
-    });
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::CloudWatch::Alarm",
+      {
+        AlarmName: "frontdoor-sandbox-caller-token-key-rotation-failed",
+        AlarmDescription: Match.stringLikeRegexp(
+          "^The caller token key rotation in sandbox failed .* See the caller token page ",
+        ),
+        Namespace: "AWS/Lambda",
+        MetricName: "Errors",
+        Dimensions: [
+          {
+            Name: "FunctionName",
+            Value: { Ref: Match.stringLikeRegexp("^KeyRotationFunction") },
+          },
+        ],
+        Statistic: "Sum",
+        Period: 900,
+        Threshold: 1,
+        ComparisonOperator: "GreaterThanOrEqualToThreshold",
+        EvaluationPeriods: 3,
+        DatapointsToAlarm: 2,
+        TreatMissingData: "notBreaching",
+        AlarmActions: Match.absent(),
+      },
+    );
   });
 
   it("makes key pairs only under the signing key, by alias, for the caller token's purpose", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       RoleName: "frontdoor-sandbox-caller-token-key-rotation",
       Policies: [
         {
@@ -181,7 +185,8 @@ describe("KeyRotation", () => {
   });
 
   it("checks a key decrypts only by encrypting it again under the same key, and can't decrypt", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
     template.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "frontdoor-sandbox-caller-token-key-rotation",
       Policies: [
@@ -214,7 +219,8 @@ describe("KeyRotation", () => {
   });
 
   it("keeps the kind's keys in two tables, which only it may change, and only it and each table's readers read", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
     for (const [name, readers, accounts] of [
       ["frontdoor-sandbox-caller-token-private-keys", [EDGE_ROLE], [ACCOUNT]],
       [
@@ -245,7 +251,7 @@ describe("KeyRotation", () => {
   });
 
   it("reads and changes only its tables, and the public keys' object", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
           PolicyDocument: {
@@ -278,7 +284,7 @@ describe("KeyRotation", () => {
   });
 
   it("is run by a schedule whose role may only invoke the function, assumed only through the account's default schedule group", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       RoleName: "frontdoor-sandbox-caller-token-key-rotation-schedule",
       AssumeRolePolicyDocument: Match.exact({
         Statement: [
@@ -321,15 +327,18 @@ describe("KeyRotation", () => {
 
   it("refuses a publication the kind's policy doesn't make", () => {
     expect(() =>
-      build("eu-west-2", false, { ...PROPS, publication: null }),
+      Template.fromStack(
+        build("eu-west-2", false, { ...PROPS, publication: null }).stack,
+      ),
     ).toThrow("The caller-token keys' policy and config disagree");
   });
 
   it("admits no reader to a table that has none", () => {
-    const { template } = build("eu-west-2", false, {
+    const { stack } = build("eu-west-2", false, {
       ...PROPS,
       publicKeyReaderRoleArns: [],
     });
+    const template = Template.fromStack(stack);
     const policy = JSON.stringify(
       template.findResources("AWS::DynamoDB::Table"),
     );
@@ -338,22 +347,26 @@ describe("KeyRotation", () => {
 
   it("refuses a reader whose ARN names no account", () => {
     expect(() =>
-      build("eu-west-2", false, {
-        ...PROPS,
-        publicKeyReaderRoleArns: ["arn:aws:iam::gateways:role/gateway-*"],
-      }),
+      Template.fromStack(
+        build("eu-west-2", false, {
+          ...PROPS,
+          publicKeyReaderRoleArns: ["arn:aws:iam::gateways:role/gateway-*"],
+        }).stack,
+      ),
     ).toThrow(
       "The role ARN arn:aws:iam::gateways:role/gateway-* names no account",
     );
   });
 
   it("is built in the signing region alone", () => {
-    expect(() => build("us-east-1")).toThrow(
+    expect(() => Template.fromStack(build("us-east-1").stack)).toThrow(
       "Key rotation runs in eu-west-2, beside the signing key, not us-east-1",
     );
   });
 
   it("has no unacknowledged cdk-nag finding", () => {
-    expect(() => build("eu-west-2", true)).not.toThrow();
+    expect(() =>
+      Template.fromStack(build("eu-west-2", true).stack),
+    ).not.toThrow();
   });
 });

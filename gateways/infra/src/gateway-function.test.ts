@@ -37,12 +37,14 @@ const PROPS: GatewayFunctionProps = {
 function build(props: GatewayFunctionProps = PROPS, nag = false) {
   const scope = stack(nag);
   const gateway = new GatewayFunction(scope, "Gateway", props);
-  return { scope, gateway, template: Template.fromStack(scope) };
+  return { scope, gateway };
 }
 
 describe("GatewayFunction", () => {
   it("runs the bundle on Node.js 24, named, with its environment", () => {
-    build().template.hasResourceProperties("AWS::Lambda::Function", {
+    const template = Template.fromStack(build().scope);
+
+    template.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "gateway-sandbox-udp",
       Runtime: "nodejs24.x",
       Architectures: ["arm64"],
@@ -58,7 +60,7 @@ describe("GatewayFunction", () => {
   });
 
   it("runs in its placement's subnets and security group, as the network writes them to SSM", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().scope);
     const parameters = template.toJSON().Parameters as Record<
       string,
       { Type: string; Default: string }
@@ -81,7 +83,7 @@ describe("GatewayFunction", () => {
   });
 
   it("is invoked through the live alias, on a version the stack publishes", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().scope);
     template.resourceCountIs("AWS::Lambda::Version", 1);
     template.hasResourceProperties("AWS::Lambda::Alias", {
       Name: "live",
@@ -95,7 +97,7 @@ describe("GatewayFunction", () => {
   });
 
   it("never runs an invoke sent as an event again, on the function, its version or the alias", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().scope);
     const version = {
       "Fn::GetAtt": [
         Match.stringLikeRegexp("^GatewayFunctionCurrentVersion"),
@@ -123,7 +125,9 @@ describe("GatewayFunction", () => {
   });
 
   it("writes to its own log group, kept for a year and encrypted", () => {
-    build().template.hasResourceProperties("AWS::Logs::LogGroup", {
+    const template = Template.fromStack(build().scope);
+
+    template.hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: "/flex/gateway/sandbox/udp/function",
       RetentionInDays: 365,
       KmsKeyId: Match.anyValue(),
@@ -131,7 +135,7 @@ describe("GatewayFunction", () => {
   });
 
   it("gives its role its logs, its network interfaces and the grants it is given, and nothing else", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().scope);
     const logGroup = `arn:aws:logs:eu-west-2:${ACCOUNT}:log-group:/flex/gateway/sandbox/udp/function`;
     template.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "gateway-sandbox-udp-execution",
@@ -214,6 +218,6 @@ describe("GatewayFunction", () => {
   });
 
   it("has no unacknowledged cdk-nag finding", () => {
-    expect(() => build(PROPS, true).scope.node.root).not.toThrow();
+    expect(() => Template.fromStack(build(PROPS, true).scope)).not.toThrow();
   });
 });

@@ -22,7 +22,7 @@ function build(region = "us-east-1", apiAccounts = API_ACCOUNTS) {
   return {
     app,
     originRequest,
-    template: Template.fromStack(stack),
+    stack,
   };
 }
 
@@ -57,11 +57,14 @@ const SIGNING_GRANTS = [
 
 describe("OriginRequestFunction", () => {
   it("refuses any region but us-east-1", () => {
-    expect(() => build("eu-west-2")).toThrow("us-east-1");
+    expect(() => Template.fromStack(build("eu-west-2").stack)).toThrow(
+      "us-east-1",
+    );
   });
 
   it("runs on Node.js 24 on x86-64, with 1,024 MB and 10 seconds, and is retained", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.hasResource("AWS::Lambda::Function", {
       DeletionPolicy: "Retain",
@@ -85,7 +88,8 @@ describe("OriginRequestFunction", () => {
 
   // Lambda@Edge refuses a function with environment variables, a VPC, layers or tracing.
   it("sets nothing Lambda@Edge refuses", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
     const [resource] = Object.values(
       template.findResources("AWS::Lambda::Function"),
     );
@@ -104,11 +108,12 @@ describe("OriginRequestFunction", () => {
   });
 
   it("creates no log group, so none exists where the function doesn't write", () => {
-    build().template.resourceCountIs("AWS::Logs::LogGroup", 0);
+    Template.fromStack(build().stack).resourceCountIs("AWS::Logs::LogGroup", 0);
   });
 
   it("deploys the bundle built with the environment's issuers", () => {
-    const { app, template } = build();
+    const { app, stack } = build();
+    const template = Template.fromStack(stack);
     const [resource] = Object.values(
       template.findResources("AWS::Lambda::Function"),
     );
@@ -132,7 +137,8 @@ describe("OriginRequestFunction", () => {
   });
 
   it("has a role of its own that Lambda@Edge can assume, writing logs and calling domain APIs", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::IAM::Role", 1);
     template.resourceCountIs("AWS::IAM::Policy", 0);
@@ -181,13 +187,16 @@ describe("OriginRequestFunction", () => {
   });
 
   it("can call no API when the environment has no domain accounts, but still reads its signing key and the push ID's secret", () => {
-    build("us-east-1", []).template.hasResourceProperties("AWS::IAM::Role", {
-      Policies: [
-        {
-          PolicyName: "Edge",
-          PolicyDocument: { Statement: SIGNING_GRANTS },
-        },
-      ],
-    });
+    Template.fromStack(build("us-east-1", []).stack).hasResourceProperties(
+      "AWS::IAM::Role",
+      {
+        Policies: [
+          {
+            PolicyName: "Edge",
+            PolicyDocument: { Statement: SIGNING_GRANTS },
+          },
+        ],
+      },
+    );
   });
 });

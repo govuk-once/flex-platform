@@ -16,18 +16,19 @@ function build(readerRoles: readonly string[] = READERS, nag = false) {
     bucketName: "frontdoor-sandbox-keys-123456789012",
     readerRoles,
   });
-  return Template.fromStack(stack);
+  return stack;
 }
 
 describe("CallerTokenKeysBucket", () => {
   it("takes the name it is given", () => {
-    build().hasResourceProperties("AWS::S3::Bucket", {
+    Template.fromStack(build()).hasResourceProperties("AWS::S3::Bucket", {
       BucketName: "frontdoor-sandbox-keys-123456789012",
     });
   });
 
   it("lets the roles the patterns match, and no other, read the public keys' object, and nothing else", () => {
-    const statements = build().findResources("AWS::S3::BucketPolicy");
+    const template = Template.fromStack(build());
+    const statements = template.findResources("AWS::S3::BucketPolicy");
     const [policy] = Object.values(statements) as {
       Properties: { PolicyDocument: { Statement: unknown[] } };
     }[];
@@ -62,7 +63,7 @@ describe("CallerTokenKeysBucket", () => {
 
   it("lets nothing read it while no gateway is deployed", () => {
     const statements = Object.values(
-      build([]).findResources("AWS::S3::BucketPolicy"),
+      Template.fromStack(build([])).findResources("AWS::S3::BucketPolicy"),
     ).flatMap(
       (policy) =>
         (policy as { Properties: { PolicyDocument: { Statement: unknown[] } } })
@@ -74,6 +75,6 @@ describe("CallerTokenKeysBucket", () => {
   });
 
   it("has no unacknowledged cdk-nag finding", () => {
-    expect(() => build(READERS, true)).not.toThrow();
+    expect(() => Template.fromStack(build(READERS, true))).not.toThrow();
   });
 });

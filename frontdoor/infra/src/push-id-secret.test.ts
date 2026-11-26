@@ -7,16 +7,19 @@ import { PushIdSecret } from "./push-id-secret.ts";
 function build(region = "eu-west-2", nag = false) {
   const stack = stackIn(region, nag);
   new PushIdSecret(stack, "PushIdSecret", { environment: "sandbox" });
-  return { stack, template: Template.fromStack(stack) };
+  return { stack };
 }
 
 describe("PushIdSecret", () => {
   it("refuses any region but the one the edge reads it in", () => {
-    expect(() => build("us-east-1")).toThrow("eu-west-2");
+    expect(() => Template.fromStack(build("us-east-1").stack)).toThrow(
+      "eu-west-2",
+    );
   });
 
   it("is created empty, for a person to put its value, and retained", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::SecretsManager::Secret", 1);
     const [secret] = Object.values(
@@ -35,7 +38,8 @@ describe("PushIdSecret", () => {
   });
 
   it("lets nothing but the edge's role read it, whatever else allows it", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::SecretsManager::ResourcePolicy", {
       ResourcePolicy: {
@@ -58,6 +62,8 @@ describe("PushIdSecret", () => {
   });
 
   it("has no unacknowledged cdk-nag finding", () => {
-    expect(() => build("eu-west-2", true)).not.toThrow();
+    expect(() =>
+      Template.fromStack(build("eu-west-2", true).stack),
+    ).not.toThrow();
   });
 });
