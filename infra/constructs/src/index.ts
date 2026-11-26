@@ -66,6 +66,7 @@ export {
 } from "./network/layout.ts";
 export type { Placement } from "./network/names.ts";
 export {
+  endpointAddressParameterName,
   endpointIdParameterName,
   securityGroupIdParameterName,
   subnetIdsParameterName,

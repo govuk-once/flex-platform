@@ -52,6 +52,10 @@ export const KEYS_OBJECT = {
   account: "100000000002",
 };
 
+/** The caller token's public keys, in the frontdoor account's table. */
+export const KEYS_TABLE =
+  "arn:aws:dynamodb:eu-west-2:100000000002:table/frontdoor-sandbox-caller-token-public-keys";
+
 export const UPSTREAM: UpstreamNames = {
   hostnames: ["api.upstream.example", "auth.upstream.example"],
 };
@@ -94,6 +98,7 @@ export function buildNetwork(
     subnets: subnets.isolated,
     invokableFunctions: "gateway-sandbox-*:live",
     readableObjects: [KEYS_OBJECT],
+    readableTables: [KEYS_TABLE],
     readableSecrets: [UPSTREAM_SECRET],
     assumableRoles: [UPSTREAM_ROLE],
     gatewayRoles: "gateway-sandbox-*-execution",
@@ -106,6 +111,7 @@ export function buildNetwork(
     environment: "sandbox",
     vpc,
     hostnames: [...endpoints.hostnames, ...upstream.hostnames],
+    endpointAddresses: [endpoints.dynamoDbAddress],
   });
   const domain = new WorkloadSecurityGroup(stack, "Domain", {
     vpc,
@@ -117,7 +123,12 @@ export function buildNetwork(
     vpc,
     workload: "private-gateway",
     placement: "private",
-    endpoints: [endpoints.secretsManager, endpoints.sts, endpoints.s3],
+    endpoints: [
+      endpoints.secretsManager,
+      endpoints.sts,
+      endpoints.s3,
+      endpoints.dynamoDb,
+    ],
   });
   new NetworkParameters(stack, "Parameters", {
     environment: "sandbox",
@@ -128,6 +139,7 @@ export function buildNetwork(
       "private-gateway": gateway.securityGroup,
     },
     endpoints: endpoints.byService,
+    endpointAddresses: { dynamodb: endpoints.dynamoDbAddress },
   });
 
   return { app, stack, template: Template.fromStack(stack) };

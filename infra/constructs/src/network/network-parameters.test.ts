@@ -44,6 +44,7 @@ describe("NetworkParameters", () => {
     }
     for (const [service, endpoint] of [
       ["execute-api", "ExecuteApi"],
+      ["dynamodb", "DynamoDb"],
       ["lambda", "Lambda"],
       ["s3", "S3"],
       ["secretsmanager", "SecretsManager"],
@@ -57,7 +58,32 @@ describe("NetworkParameters", () => {
         },
       });
     }
-    template.resourceCountIs("AWS::SSM::Parameter", 10);
+    template.hasResourceProperties("AWS::SSM::Parameter", {
+      Name: "/flex/network/sandbox/endpoint-address/dynamodb",
+      Type: "String",
+      Value: {
+        "Fn::Select": [
+          1,
+          {
+            "Fn::Split": [
+              ":",
+              {
+                "Fn::Select": [
+                  0,
+                  {
+                    "Fn::GetAtt": [
+                      Match.stringLikeRegexp("^EndpointsDynamoDb"),
+                      "DnsEntries",
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    template.resourceCountIs("AWS::SSM::Parameter", 12);
   });
 });
 

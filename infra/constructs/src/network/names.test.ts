@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  endpointAddressParameterName,
   natGatewayAlarmName,
   restrictDefaultSecurityGroupLogGroupName,
   securityGroupIdParameterName,
@@ -22,6 +23,9 @@ describe("network names", () => {
     );
     expect(securityGroupIdParameterName("dev", "domain")).toBe(
       "/flex/network/dev/security-group/domain",
+    );
+    expect(endpointAddressParameterName("dev", "dynamodb")).toBe(
+      "/flex/network/dev/endpoint-address/dynamodb",
     );
     expect(restrictDefaultSecurityGroupLogGroupName("dev")).toBe(
       "/flex/network/dev/restrict-default-security-group",

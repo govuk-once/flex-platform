@@ -4,6 +4,7 @@ import {
   callerTokenKeysBucketName,
   edgeRoleName,
   KeyRotation,
+  publicKeysTableName,
   PushIdSecret,
   SigningKey,
   signingKeyAliasName,
@@ -20,6 +21,18 @@ export function frontdoorCallerTokenKeysStackName(
   environment: EnvironmentConfig,
 ): string {
   return `frontdoor-${environment.name}-caller-token-keys`;
+}
+
+/**
+ * The caller token's public keys table, by ARN, which every gateway reads, across accounts,
+ * through its network's `dynamodb` endpoint. An interface endpoint reaches its own region's tables
+ * alone, so the table's region is the networks', which a test holds.
+ */
+export function callerTokenPublicKeysTableArn(
+  environment: EnvironmentConfig,
+): string {
+  const table = publicKeysTableName(environment.name, "caller-token");
+  return `arn:aws:dynamodb:${SIGNING_KEY_REGION}:${environment.frontdoor.account}:table/${table}`;
 }
 
 /**

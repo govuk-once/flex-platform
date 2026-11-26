@@ -15,6 +15,29 @@ import { NetworkStack, networkStackName } from "./network.ts";
 const PROD = FIXTURE_STAGES[2];
 const [, , PROD_ENVIRONMENT] = PROD.environments;
 
+// The dynamodb endpoint's own name, which AWS gives it when it is made.
+const DYNAMODB_ADDRESS = {
+  "Fn::Select": [
+    1,
+    {
+      "Fn::Split": [
+        ":",
+        {
+          "Fn::Select": [
+            0,
+            {
+              "Fn::GetAtt": [
+                Match.stringLikeRegexp("^EndpointsDynamoDb"),
+                "DnsEntries",
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 function template(): Template {
   const assembly = synthesizedStage(PROD);
   return Template.fromJSON(
@@ -270,8 +293,41 @@ describe("NetworkStack", () => {
     );
   });
 
+  it("lets gateways scan only the caller token's public keys through the dynamodb endpoint, resolve its own name, and find that name", () => {
+    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+      ServiceName: "com.amazonaws.eu-west-2.dynamodb",
+      PrivateDnsEnabled: false,
+      PolicyDocument: {
+        Statement: [
+          {
+            Action: "dynamodb:Scan",
+            Resource: `arn:aws:dynamodb:eu-west-2:${PROD_ENVIRONMENT.frontdoor.account}:table/frontdoor-prod-caller-token-public-keys`,
+            Condition: {
+              StringEquals: {
+                "aws:PrincipalAccount":
+                  PROD_ENVIRONMENT.domainAccounts[0].account,
+              },
+              ArnLike: {
+                "aws:PrincipalArn": `arn:aws:iam::${PROD_ENVIRONMENT.domainAccounts[0].account}:role/gateway-prod-*-execution`,
+              },
+            },
+          },
+        ],
+      },
+    });
+    template().hasResourceProperties(
+      "AWS::Route53Resolver::FirewallDomainList",
+      { Domains: Match.arrayWith([DYNAMODB_ADDRESS]) },
+    );
+    template().hasResourceProperties("AWS::SSM::Parameter", {
+      Name: "/flex/network/prod/endpoint-address/dynamodb",
+      Value: DYNAMODB_ADDRESS,
+    });
+  });
+
   it("writes each endpoint's ID, for policies that hold a call to it", () => {
     for (const service of [
+      "dynamodb",
       "execute-api",
       "lambda",
       "s3",
@@ -381,6 +437,7 @@ describe("NetworkStack", () => {
             "lambda.eu-west-2.amazonaws.com",
             "secretsmanager.eu-west-2.amazonaws.com",
             "sts.eu-west-2.amazonaws.com",
+            DYNAMODB_ADDRESS,
           ],
         },
       );
@@ -438,6 +495,7 @@ describe("NetworkStack", () => {
             "lambda.eu-west-2.amazonaws.com",
             "secretsmanager.eu-west-2.amazonaws.com",
             "sts.eu-west-2.amazonaws.com",
+            DYNAMODB_ADDRESS,
           ],
         },
       );

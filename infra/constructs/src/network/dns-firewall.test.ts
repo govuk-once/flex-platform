@@ -19,13 +19,41 @@ const BASELINE = [
   "sts.eu-west-2.amazonaws.com",
 ];
 
+// The dynamodb endpoint's own name, which AWS gives it at deploy, after every checked name.
+const DYNAMODB_ADDRESS = {
+  "Fn::Select": [
+    1,
+    {
+      "Fn::Split": [
+        ":",
+        {
+          "Fn::Select": [
+            0,
+            {
+              "Fn::GetAtt": [
+                Match.stringLikeRegexp("^EndpointsDynamoDb"),
+                "DnsEntries",
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 describe("DnsFirewall", () => {
-  it("allows the endpoints' names and the upstream's, sorted, and nothing broader", () => {
+  it("allows the endpoints' names and the upstream's, sorted, then the dynamodb endpoint's own, and nothing broader", () => {
     buildNetwork().template.hasResourceProperties(
       "AWS::Route53Resolver::FirewallDomainList",
       {
         Name: "network-sandbox-dns-allowed",
-        Domains: ["api.upstream.example", "auth.upstream.example", ...BASELINE],
+        Domains: [
+          "api.upstream.example",
+          "auth.upstream.example",
+          ...BASELINE,
+          DYNAMODB_ADDRESS,
+        ],
       },
     );
   });
@@ -121,7 +149,7 @@ describe("DnsFirewall", () => {
 
     template.hasResourceProperties("AWS::Route53Resolver::FirewallDomainList", {
       Name: "network-sandbox-dns-allowed",
-      Domains: ["auth.upstream.example", ...BASELINE],
+      Domains: ["auth.upstream.example", ...BASELINE, DYNAMODB_ADDRESS],
     });
   });
 

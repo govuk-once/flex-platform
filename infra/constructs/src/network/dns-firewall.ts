@@ -31,6 +31,12 @@ export interface DnsFirewallProps {
   readonly vpc: IVpc;
   /** Exact names the VPC's workloads may resolve: AWS's, and every name a gateway connects to. */
   readonly hostnames: readonly string[];
+  /**
+   * The own names of the network's endpoints without private DNS, which AWS chooses when each is
+   * made, so they are known only at deploy and can't be checked as `hostnames` are. Each is
+   * allowed exactly, as AWS gives it.
+   */
+  readonly endpointAddresses: readonly string[];
 }
 
 /**
@@ -62,7 +68,7 @@ export class DnsFirewall extends Construct {
 
     const allowed = new CfnFirewallDomainList(this, "AllowedNames", {
       name: name("allowed"),
-      domains: dnsAllowlist(props.hostnames),
+      domains: [...dnsAllowlist(props.hostnames), ...props.endpointAddresses],
     });
     const everything = new CfnFirewallDomainList(this, "EveryName", {
       name: name("every-name"),

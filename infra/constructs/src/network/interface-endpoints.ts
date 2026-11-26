@@ -1,4 +1,4 @@
-import { ArnFormat, Stack } from "aws-cdk-lib";
+import { ArnFormat, Fn, Stack } from "aws-cdk-lib";
 import {
   InterfaceVpcEndpoint,
   InterfaceVpcEndpointAwsService,
@@ -37,6 +37,11 @@ export interface InterfaceEndpointsProps {
   /** The objects the `s3` endpoint may read, which may be in another account's bucket. */
   readonly readableObjects: readonly S3Object[];
   /**
+   * The DynamoDB tables the `dynamodb` endpoint may scan, by ARN, which may be in another
+   * account. Each is in this region: the endpoint reaches no other.
+   */
+  readonly readableTables: readonly string[];
+  /**
    * The secrets the `secretsmanager` endpoint may read, by ARN, or by a pattern for those Secrets
    * Manager names. An upstream may hold a gateway's secret in its own account.
    */
@@ -44,8 +49,8 @@ export interface InterfaceEndpointsProps {
   /** The roles the `sts` endpoint may assume, by ARN, which may be in an upstream's account. */
   readonly assumableRoles: readonly string[];
   /**
-   * The roles in this account that may call the `secretsmanager` and `sts` endpoints, as a name
-   * pattern such as `gateway-dev-*-execution`.
+   * The roles in this account that may call the `secretsmanager`, `sts` and `dynamodb` endpoints,
+   * as a name pattern such as `gateway-dev-*-execution`.
    */
   readonly gatewayRoles: string;
   /** The private APIs the `execute-api` endpoint may invoke, and who may invoke them. */
@@ -53,15 +58,17 @@ export interface InterfaceEndpointsProps {
 }
 
 /**
- * The AWS APIs the isolated subnets reach, each through an endpoint with private DNS, so the
- * SDK's usual hostname resolves to it. No endpoint lets anything in until a workload's security
- * group is let in with `WorkloadSecurityGroup`, and each refuses any resource it doesn't name and
- * any action but its own. One with no resource to name refuses everything.
+ * The AWS APIs the isolated subnets reach, each through an endpoint. Every one but `dynamodb` has
+ * private DNS, so the SDK's usual hostname resolves to it. DynamoDB's has none, so a client is
+ * given the endpoint's own name, `address`. No endpoint lets anything in until a workload's
+ * security group is let in with `WorkloadSecurityGroup`, and each refuses any resource it doesn't
+ * name and any action but its own. One with no resource to name refuses everything.
  *
  * - `lambda`: invoking the functions named.
  * - `secretsmanager`: reading the secrets named, as a gateway's role.
  * - `sts`: assuming the roles named, as a gateway's role.
  * - `s3`: reading the objects named.
+ * - `dynamodb`: scanning the tables named, as a gateway's role.
  * - `execute-api`: invoking the private APIs named, as a principal of an account named with them.
  *
  * Every endpoint but `execute-api` refuses any principal outside this account. A private API is
@@ -80,12 +87,18 @@ export class InterfaceEndpoints extends Construct {
    * addresses. The DNS allowlist starts from these.
    */
   public readonly hostnames: readonly string[];
+  /**
+   * The `dynamodb` endpoint's own regional name, which a client calls it at, since it has no
+   * private DNS. AWS chooses it when the endpoint is made, so it is known only at deploy.
+   */
+  public readonly dynamoDbAddress: string;
   /** Every endpoint, by the short name of its service, such as `secretsmanager`. */
   public readonly byService: Readonly<Record<string, InterfaceVpcEndpoint>>;
   public readonly lambda: InterfaceVpcEndpoint;
   public readonly secretsManager: InterfaceVpcEndpoint;
   public readonly sts: InterfaceVpcEndpoint;
   public readonly s3: InterfaceVpcEndpoint;
+  public readonly dynamoDb: InterfaceVpcEndpoint;
   public readonly executeApi: InterfaceVpcEndpoint;
 
   readonly #byService: Record<string, InterfaceVpcEndpoint> = {};
@@ -157,6 +170,24 @@ export class InterfaceEndpoints extends Construct {
       props.readableObjects.map(
         ({ bucket }) => `${bucket}.s3.${stack.region}.amazonaws.com`,
       ),
+    );
+    this.dynamoDb = this.endpoint(
+      props,
+      "DynamoDb",
+      InterfaceVpcEndpointAwsService.DYNAMODB,
+      this.inAccount({
+        actions: ["dynamodb:Scan"],
+        resources: [...props.readableTables],
+        principals: gatewayRoles,
+      }),
+      // Its own name is allowed instead, which is known only at deploy.
+      [],
+      false,
+    );
+    // Each entry is `<hosted zone ID>:<name>`, the regional name first and then one per zone.
+    this.dynamoDbAddress = Fn.select(
+      1,
+      Fn.split(":", Fn.select(0, this.dynamoDb.vpcEndpointDnsEntries)),
     );
     this.executeApi = this.endpoint(
       props,
@@ -248,6 +279,7 @@ export class InterfaceEndpoints extends Construct {
     hostnames: readonly string[] = [
       `${service.shortName}.${Stack.of(this).region}.amazonaws.com`,
     ],
+    privateDnsEnabled = true,
   ): InterfaceVpcEndpoint {
     // An endpoint only answers, so its group lets nothing out, and nothing in until a workload's
     // group is let in. CDK's own would let the whole VPC in, and allow everything out.
@@ -260,7 +292,7 @@ export class InterfaceEndpoints extends Construct {
       vpc,
       service,
       subnets: { subnets: [...subnets] },
-      privateDnsEnabled: true,
+      privateDnsEnabled,
       // S3 alone offers both kinds of endpoint, and would otherwise answer the VPC's own lookups
       // only through a gateway endpoint, which the network has none of.
       ...(service.shortName === "s3" && {

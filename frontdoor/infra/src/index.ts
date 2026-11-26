@@ -7,6 +7,7 @@ export {
   edgeRoleName,
   ORIGIN_REQUEST_LOG_REGION,
   originRequestLogGroupName,
+  publicKeysTableName,
   signingKeyAliasName,
 } from "./names.ts";
 export { OriginRequestFunction } from "./origin-request-function.ts";
