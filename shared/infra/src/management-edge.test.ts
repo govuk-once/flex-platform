@@ -1,6 +1,6 @@
 import { CONTENT_SECURITY_POLICY } from "@repo/infra-constructs";
 import { CI_TOKEN_HEADER } from "@repo/shared-viewer-request";
-import { Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +11,12 @@ import {
   ZONE,
 } from "../test/helpers.ts";
 import { REDACTED_HEADERS, WITHHELD_HEADERS } from "./management-edge.ts";
+
+function build() {
+  const stack = stackIn("us-east-1");
+  const edge = managementEdgeIn(stack);
+  return { stack, edge };
+}
 
 interface Rule {
   Name: string;
@@ -37,7 +43,8 @@ describe("ManagementEdge", () => {
   });
 
   it("answers at its zone's apex, with a certificate for it, behind the web ACL", () => {
-    const { edge, template } = managementEdgeTemplate();
+    const { edge, stack } = build();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.objectLike({
@@ -63,7 +70,8 @@ describe("ManagementEdge", () => {
   });
 
   it("writes an alias for IPv4 and IPv6 and a CAA record at the apex, creating no zone", () => {
-    const { template } = managementEdgeTemplate();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::Route53::HostedZone", 0);
     template.resourceCountIs("AWS::Route53::RecordSet", 3);
@@ -78,7 +86,8 @@ describe("ManagementEdge", () => {
 
   // The CloudFront Function refuses any path that isn't the pipeline API's before it gets here.
   it("sends every path to the pipeline API, caching nothing", () => {
-    const { template } = managementEdgeTemplate();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.objectLike({
@@ -102,7 +111,8 @@ describe("ManagementEdge", () => {
 
   // How the origin is reached and signed is `functionUrlOrigin`'s, and tested with it.
   it("signs requests to the pipeline API with an access control of the shared account's names", () => {
-    const { template } = managementEdgeTemplate();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::OriginAccessControl", {
       OriginAccessControlConfig: Match.objectLike({
@@ -128,7 +138,8 @@ describe("ManagementEdge", () => {
   // CloudFront refuses `x-amz-content-sha256` in a list of headers to forward, and signs with it.
   // So the policy names what is withheld. The function URL answers only to its own host.
   it("forwards every viewer header but host to the pipeline API, and no cookies or query strings", () => {
-    const { template } = managementEdgeTemplate();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     expect(WITHHELD_HEADERS).toEqual(["host"]);
     template.hasResourceProperties("AWS::CloudFront::OriginRequestPolicy", {
@@ -154,7 +165,8 @@ describe("ManagementEdge", () => {
   });
 
   it("runs the given CloudFront Function on every viewer request", () => {
-    const { template } = managementEdgeTemplate();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.objectLike({
@@ -177,7 +189,8 @@ describe("ManagementEdge", () => {
   });
 
   it("sets the security headers on every response, keeps it out of caches, and strips Lambda's trace header", () => {
-    const { template } = managementEdgeTemplate();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
       ResponseHeadersPolicyConfig: Match.objectLike({
@@ -205,7 +218,8 @@ describe("ManagementEdge", () => {
   // The limit's key is the token header's exact value, which the CloudFront Function holds to
   // one form per token.
   it("limits each pipeline token to 100 requests and each address to 500 in five minutes", () => {
-    const { edge, template } = managementEdgeTemplate();
+    const { edge, stack } = build();
+    const template = Template.fromStack(stack);
     const [webAcl] = Object.values(
       template.findResources("AWS::WAFv2::WebACL"),
     );
@@ -227,7 +241,8 @@ describe("ManagementEdge", () => {
 
   // A token in a log is a token anyone who reads the log can use until it expires.
   it("keeps the pipeline's token out of the web ACL's logs and samples", () => {
-    const { template } = managementEdgeTemplate();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     expect(REDACTED_HEADERS).toEqual([
       "x-flex-ci-token",
@@ -255,7 +270,8 @@ describe("ManagementEdge", () => {
   });
 
   it("delivers access logs to a retained log group through standard logging v2", () => {
-    const { template } = managementEdgeTemplate();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::Logs::DeliverySource", {
       Name: "shared-management-access-logs",

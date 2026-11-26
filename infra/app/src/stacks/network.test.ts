@@ -38,13 +38,11 @@ const DYNAMODB_ADDRESS = {
   ],
 };
 
-function template(): Template {
-  const assembly = synthesizedStage(PROD);
-  return Template.fromJSON(
-    assembly.getStackByName(
-      networkStackName(PROD_ENVIRONMENT, PROD_ENVIRONMENT.domainAccounts[0]),
-    ).template as Record<string, unknown>,
-  );
+function build() {
+  return new NetworkStack(cdkAppForTest(), {
+    environment: PROD_ENVIRONMENT,
+    domainAccount: PROD_ENVIRONMENT.domainAccounts[0],
+  });
 }
 
 describe("NetworkStack", () => {
@@ -69,7 +67,7 @@ describe("NetworkStack", () => {
   });
 
   it("lays out the zones its domain account's config lists", () => {
-    const zones = template().toJSON().Resources as Record<
+    const zones = Template.fromStack(build()).toJSON().Resources as Record<
       string,
       { Type: string; Properties: { AvailabilityZone?: string } }
     >;
@@ -85,7 +83,7 @@ describe("NetworkStack", () => {
   });
 
   it("lets its domains invoke only the environment's gateways", () => {
-    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+    Template.fromStack(build()).hasResourceProperties("AWS::EC2::VPCEndpoint", {
       ServiceName: "com.amazonaws.eu-west-2.lambda",
       PolicyDocument: {
         Statement: [
@@ -99,12 +97,13 @@ describe("NetworkStack", () => {
   });
 
   it("lets only the account's gateways read their upstreams' secrets and assume their roles, through the endpoints", () => {
+    const template = Template.fromStack(build());
     const gatewayRoles = {
       ArnLike: {
         "aws:PrincipalArn": `arn:aws:iam::${PROD_ENVIRONMENT.domainAccounts[0].account}:role/gateway-prod-*-execution`,
       },
     };
-    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+    template.hasResourceProperties("AWS::EC2::VPCEndpoint", {
       ServiceName: "com.amazonaws.eu-west-2.secretsmanager",
       PolicyDocument: {
         Statement: [
@@ -116,7 +115,7 @@ describe("NetworkStack", () => {
         ],
       },
     });
-    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+    template.hasResourceProperties("AWS::EC2::VPCEndpoint", {
       ServiceName: "com.amazonaws.eu-west-2.sts",
       PolicyDocument: {
         Statement: [
@@ -259,7 +258,7 @@ describe("NetworkStack", () => {
   });
 
   it("refuses everything through the execute-api endpoint when no gateway calls a private API", () => {
-    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+    Template.fromStack(build()).hasResourceProperties("AWS::EC2::VPCEndpoint", {
       ServiceName: "com.amazonaws.eu-west-2.execute-api",
       PolicyDocument: {
         Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }],
@@ -268,8 +267,9 @@ describe("NetworkStack", () => {
   });
 
   it("lets gateways read only the caller token's public keys through the s3 endpoint, and resolve the bucket's name", () => {
+    const template = Template.fromStack(build());
     const bucket = `frontdoor-prod-keys-${PROD_ENVIRONMENT.frontdoor.account}`;
-    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+    template.hasResourceProperties("AWS::EC2::VPCEndpoint", {
       ServiceName: "com.amazonaws.eu-west-2.s3",
       PolicyDocument: {
         Statement: [
@@ -285,16 +285,14 @@ describe("NetworkStack", () => {
         ],
       },
     });
-    template().hasResourceProperties(
-      "AWS::Route53Resolver::FirewallDomainList",
-      {
-        Domains: Match.arrayWith([`${bucket}.s3.eu-west-2.amazonaws.com`]),
-      },
-    );
+    template.hasResourceProperties("AWS::Route53Resolver::FirewallDomainList", {
+      Domains: Match.arrayWith([`${bucket}.s3.eu-west-2.amazonaws.com`]),
+    });
   });
 
   it("lets gateways scan only the caller token's public keys through the dynamodb endpoint, resolve its own name, and find that name", () => {
-    template().hasResourceProperties("AWS::EC2::VPCEndpoint", {
+    const template = Template.fromStack(build());
+    template.hasResourceProperties("AWS::EC2::VPCEndpoint", {
       ServiceName: "com.amazonaws.eu-west-2.dynamodb",
       PrivateDnsEnabled: false,
       PolicyDocument: {
@@ -315,17 +313,17 @@ describe("NetworkStack", () => {
         ],
       },
     });
-    template().hasResourceProperties(
-      "AWS::Route53Resolver::FirewallDomainList",
-      { Domains: Match.arrayWith([DYNAMODB_ADDRESS]) },
-    );
-    template().hasResourceProperties("AWS::SSM::Parameter", {
+    template.hasResourceProperties("AWS::Route53Resolver::FirewallDomainList", {
+      Domains: Match.arrayWith([DYNAMODB_ADDRESS]),
+    });
+    template.hasResourceProperties("AWS::SSM::Parameter", {
       Name: "/flex/network/prod/endpoint-address/dynamodb",
       Value: DYNAMODB_ADDRESS,
     });
   });
 
   it("writes each endpoint's ID, for policies that hold a call to it", () => {
+    const template = Template.fromStack(build());
     for (const service of [
       "dynamodb",
       "execute-api",
@@ -334,22 +332,24 @@ describe("NetworkStack", () => {
       "secretsmanager",
       "sts",
     ]) {
-      template().hasResourceProperties("AWS::SSM::Parameter", {
+      template.hasResourceProperties("AWS::SSM::Parameter", {
         Name: `/flex/network/prod/endpoint/${service}`,
       });
     }
   });
 
   it("writes a security group for each workload", () => {
+    const template = Template.fromStack(build());
     for (const workload of ["domain", "isolated-gateway", "private-gateway"]) {
-      template().hasResourceProperties("AWS::SSM::Parameter", {
+      template.hasResourceProperties("AWS::SSM::Parameter", {
         Name: `/flex/network/prod/security-group/${workload}`,
       });
     }
   });
 
   it("outputs each zone's NAT address, for upstreams to allowlist, and the endpoint a private API lets in", () => {
-    const outputs = template().findOutputs("*");
+    const template = Template.fromStack(build());
+    const outputs = template.findOutputs("*");
 
     expect(Object.keys(outputs).sort()).toEqual([
       "ExecuteApiEndpointId",
@@ -380,7 +380,7 @@ describe("NetworkStack", () => {
 
   describe("DNS Firewall", () => {
     it("filters, fails closed and logs queries", () => {
-      const network = template();
+      const network = Template.fromStack(build());
       const rules = Object.values(
         network.findResources("AWS::Route53Resolver::FirewallRuleGroup"),
       ).map(
@@ -426,7 +426,7 @@ describe("NetworkStack", () => {
     });
 
     it("allows the endpoints' names and every name its account's gateways declare", () => {
-      template().hasResourceProperties(
+      Template.fromStack(build()).hasResourceProperties(
         "AWS::Route53Resolver::FirewallDomainList",
         {
           Name: "network-prod-dns-allowed",

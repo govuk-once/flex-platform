@@ -130,7 +130,7 @@ describe("DomainStack", () => {
   });
 
   it("answers at the domain's host under its account's zone, with the account's certificate", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
     const parameters = template.toJSON().Parameters as Record<
       string,
       { Default: string }
@@ -151,21 +151,24 @@ describe("DomainStack", () => {
   it("lets in only the environment's edge role, from the frontdoor account", () => {
     const edgeRole = `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-dev-edge`;
 
-    build().template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-      Policy: {
-        Statement: Match.arrayWith([
-          Match.objectLike({
-            Effect: "Allow",
-            Principal: { AWS: `arn:aws:iam::${DEV.frontdoor.account}:root` },
-            Condition: { ArnEquals: { "aws:PrincipalArn": edgeRole } },
-          }),
-        ]),
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::ApiGateway::RestApi",
+      {
+        Policy: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: "Allow",
+              Principal: { AWS: `arn:aws:iam::${DEV.frontdoor.account}:root` },
+              Condition: { ArnEquals: { "aws:PrincipalArn": edgeRole } },
+            }),
+          ]),
+        },
       },
-    });
+    );
   });
 
   it("lets only the stage's release worker, in the shared account, assume the deploy role", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       RoleName: "domain-dev-domain-a-deploy",
       AssumeRolePolicyDocument: {
         Statement: [
@@ -184,7 +187,7 @@ describe("DomainStack", () => {
 
   // The bucket the pipeline API uploads to, so Lambda can read a bundle as the deploy role.
   it("lets the deploy role read its own domain's bundles in the shared account's code bucket", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       RoleName: "domain-dev-domain-a-deploy",
       Policies: [
         {
@@ -203,7 +206,7 @@ describe("DomainStack", () => {
   });
 
   it("holds the deploy role to the network's IDs", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
     const parameters = template.toJSON().Parameters as Record<
       string,
       { Default: string }
@@ -241,13 +244,16 @@ describe("DomainStack", () => {
   });
 
   it("creates the log group the domain's function logs to, named from config", () => {
-    build().template.hasResourceProperties("AWS::Logs::LogGroup", {
-      LogGroupName: "/flex/domain/dev/domain-a/function",
-    });
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::Logs::LogGroup",
+      {
+        LogGroupName: "/flex/domain/dev/domain-a/function",
+      },
+    );
   });
 
   it("gives the execution role the log group's key", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       RoleName: "domain-dev-domain-a-execution",
       Policies: [
         {
@@ -267,7 +273,7 @@ describe("DomainStack", () => {
   });
 
   it("lets the domain's function invoke the environment's gateways, by their live alias and through the network's lambda endpoint alone", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
     const parameters = template.toJSON().Parameters as Record<
       string,
       { Default: string }

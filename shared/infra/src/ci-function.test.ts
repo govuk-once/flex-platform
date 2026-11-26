@@ -51,10 +51,6 @@ function bundle(): string {
   return readFileSync(path.join(directory, asset, "index.js"), "utf8");
 }
 
-function template(): Template {
-  return Template.fromStack(build().stack);
-}
-
 describe("CiFunction", () => {
   it("refuses any region but the shared account's", () => {
     expect(() => build("us-east-1")).toThrow("runs in eu-west-2");
@@ -65,7 +61,9 @@ describe("CiFunction", () => {
   });
 
   it("is named from the shared account's names, with a short timeout and few copies at once", () => {
-    template().hasResourceProperties("AWS::Lambda::Function", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "shared-ci",
       Runtime: "nodejs24.x",
       Architectures: ["arm64"],
@@ -77,7 +75,7 @@ describe("CiFunction", () => {
   });
 
   it("logs to a log group of the platform's, by its name", () => {
-    const built = template();
+    const built = Template.fromStack(build().stack);
 
     built.hasResource("AWS::Logs::LogGroup", {
       DeletionPolicy: "Retain",
@@ -90,7 +88,7 @@ describe("CiFunction", () => {
 
   // No managed policy, which would let it create a log group.
   it("runs as a role that may only write to its own log group, upload a bundle and ask for a release", () => {
-    const built = template();
+    const built = Template.fromStack(build().stack);
 
     built.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "shared-ci",
@@ -126,7 +124,9 @@ describe("CiFunction", () => {
   // The signature on an upload carries the role's permission and no more, so this is the most
   // any upload can do: write a key shaped like a bundle's. Never delete.
   it("may write and read only keys shaped like a bundle's, in the code bucket, and list it", () => {
-    template().hasResourceProperties("AWS::IAM::Role", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
           PolicyDocument: {
@@ -149,7 +149,9 @@ describe("CiFunction", () => {
   });
 
   it("may record a release in the release table, change one and read one, and in no other table", () => {
-    template().hasResourceProperties("AWS::IAM::Role", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
           PolicyDocument: {
@@ -172,7 +174,9 @@ describe("CiFunction", () => {
 
   // A version is recorded once, where there is none, and never changed.
   it("may record a version in the artefacts table, and read one, and never change one", () => {
-    template().hasResourceProperties("AWS::IAM::Role", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
           PolicyDocument: {
@@ -190,7 +194,9 @@ describe("CiFunction", () => {
   });
 
   it("may put a release on the release queue, and on no other", () => {
-    template().hasResourceProperties("AWS::IAM::Role", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
           PolicyDocument: {
@@ -229,7 +235,9 @@ describe("CiFunction", () => {
   });
 
   it("runs the pipeline API's bundle, staged as an asset", () => {
-    template().hasResourceProperties("AWS::Lambda::Function", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::Lambda::Function", {
       Code: { S3Key: Match.stringLikeRegexp(String.raw`\.zip$`) },
     });
   });

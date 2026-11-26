@@ -64,10 +64,6 @@ function build(region = "eu-west-2", nag = false, props = PROPS) {
   return { stack, worker };
 }
 
-function template(props = PROPS): Template {
-  return Template.fromStack(build("eu-west-2", false, props).stack);
-}
-
 // The function's code as CDK staged it for upload: the one asset of the stack.
 function bundle(): string {
   const { directory } = appOf(build().stack).synth();
@@ -102,7 +98,7 @@ describe("ReleaseWorker", () => {
   });
 
   it("takes releases from a FIFO queue, moving one that fails a few times aside", () => {
-    const built = template();
+    const built = Template.fromStack(build().stack);
 
     built.hasResourceProperties("AWS::SQS::Queue", {
       QueueName: "shared-release.fifo",
@@ -128,7 +124,7 @@ describe("ReleaseWorker", () => {
 
   // A deny in the queue's policy holds whatever a principal's own policy allows.
   it("refuses, from anyone, a release sent by any role but the pipeline API's, or taken by any but the worker's", () => {
-    const built = template();
+    const built = Template.fromStack(build().stack);
     const [roleId] = Object.keys(built.findResources("AWS::IAM::Role"));
 
     expect(queueStatements(built, "shared-release.fifo")).toEqual(
@@ -164,7 +160,7 @@ describe("ReleaseWorker", () => {
   // A purge drops releases asked for. A message sent to the dead-letter queue would be taken for a
   // release the queue gave up on.
   it("refuses, from anyone, a purge, moving messages out of either queue, and sending one to the dead-letter queue", () => {
-    const built = template();
+    const built = Template.fromStack(build().stack);
     const denied = (queueName: string) =>
       queueStatements(built, queueName)
         .filter(({ Effect, Condition }) => Effect === "Deny" && !Condition)
@@ -181,7 +177,9 @@ describe("ReleaseWorker", () => {
   });
 
   it("lets only the release queue use the dead-letter queue", () => {
-    template().hasResourceProperties("AWS::SQS::Queue", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::SQS::Queue", {
       QueueName: "shared-release-dead-letter.fifo",
       RedriveAllowPolicy: {
         redrivePermission: "byQueue",
@@ -193,7 +191,9 @@ describe("ReleaseWorker", () => {
   });
 
   it("refuses to take a message over anything but TLS", () => {
-    template().resourcePropertiesCountIs(
+    const template = Template.fromStack(build().stack);
+
+    template.resourcePropertiesCountIs(
       "AWS::SQS::QueuePolicy",
       {
         PolicyDocument: {
@@ -210,7 +210,9 @@ describe("ReleaseWorker", () => {
   });
 
   it("runs one release at a time per call, giving back only the one that failed", () => {
-    template().hasResourceProperties("AWS::Lambda::EventSourceMapping", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::Lambda::EventSourceMapping", {
       EventSourceArn: {
         "Fn::GetAtt": [Match.stringLikeRegexp("^ReleaseQueue"), "Arn"],
       },
@@ -221,7 +223,7 @@ describe("ReleaseWorker", () => {
   });
 
   it("is named from the shared account's names, with time for a function to become ready", () => {
-    const built = template();
+    const built = Template.fromStack(build().stack);
 
     built.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "shared-release-worker",
@@ -240,7 +242,7 @@ describe("ReleaseWorker", () => {
   });
 
   it("may take the queue's messages, read and change a release, read a bundle and assume each deploy role it releases with, and nothing else", () => {
-    const built = template();
+    const built = Template.fromStack(build().stack);
 
     built.hasResourceProperties("AWS::IAM::Role", {
       RoleName: "shared-release-worker",
@@ -274,9 +276,11 @@ describe("ReleaseWorker", () => {
   });
 
   it("assumes no role when it releases nothing", () => {
-    const actions = roleStatements(template({ ...PROPS, targets: [] })).map(
-      ({ Action }) => Action,
-    );
+    const actions = roleStatements(
+      Template.fromStack(
+        build("eu-west-2", false, { ...PROPS, targets: [] }).stack,
+      ),
+    ).map(({ Action }) => Action);
 
     expect(actions).not.toContain("sts:AssumeRole");
   });

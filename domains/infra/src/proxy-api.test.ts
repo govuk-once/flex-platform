@@ -17,7 +17,7 @@ function build(nag = false) {
   return {
     app,
     proxyApi,
-    template: Template.fromStack(stack),
+    stack,
   };
 }
 
@@ -34,7 +34,8 @@ describe("ProxyApi", () => {
 
   describe("the API", () => {
     it("is one regional API, reachable only through a custom domain, publishing no URL", () => {
-      const { template } = build();
+      const { stack } = build();
+      const template = Template.fromStack(stack);
 
       template.resourceCountIs("AWS::ApiGateway::RestApi", 1);
       template.hasResourceProperties("AWS::ApiGateway::RestApi", {
@@ -50,39 +51,46 @@ describe("ProxyApi", () => {
     });
 
     it("lets in only the Frontdoor's edge role, and denies everyone else", () => {
-      build().template.hasResourceProperties("AWS::ApiGateway::RestApi", {
-        Policy: Match.exact({
-          Statement: [
-            {
-              Action: "execute-api:Invoke",
-              Effect: "Allow",
-              Principal: { AWS: `arn:aws:iam::${EDGE_ROLE.account}:root` },
-              Resource: "execute-api:/*",
-              Condition: { ArnEquals: { "aws:PrincipalArn": EDGE_ROLE_ARN } },
-            },
-            {
-              Action: "execute-api:Invoke",
-              Effect: "Deny",
-              Principal: { AWS: "*" },
-              Resource: "execute-api:/*",
-              Condition: {
-                ArnNotEquals: { "aws:PrincipalArn": EDGE_ROLE_ARN },
+      Template.fromStack(build().stack).hasResourceProperties(
+        "AWS::ApiGateway::RestApi",
+        {
+          Policy: Match.exact({
+            Statement: [
+              {
+                Action: "execute-api:Invoke",
+                Effect: "Allow",
+                Principal: { AWS: `arn:aws:iam::${EDGE_ROLE.account}:root` },
+                Resource: "execute-api:/*",
+                Condition: { ArnEquals: { "aws:PrincipalArn": EDGE_ROLE_ARN } },
               },
-            },
-          ],
-          Version: "2012-10-17",
-        }),
-      });
+              {
+                Action: "execute-api:Invoke",
+                Effect: "Deny",
+                Principal: { AWS: "*" },
+                Resource: "execute-api:/*",
+                Condition: {
+                  ArnNotEquals: { "aws:PrincipalArn": EDGE_ROLE_ARN },
+                },
+              },
+            ],
+            Version: "2012-10-17",
+          }),
+        },
+      );
     });
 
     it("creates no logging role or account setting of its own", () => {
-      build().template.resourceCountIs("AWS::ApiGateway::Account", 0);
+      Template.fromStack(build().stack).resourceCountIs(
+        "AWS::ApiGateway::Account",
+        0,
+      );
     });
   });
 
   describe("the routes", () => {
     it("pass every method on the root and every path below it to the function's live alias, with IAM authorisation", () => {
-      const { template } = build();
+      const { stack } = build();
+      const template = Template.fromStack(stack);
 
       const methods = Object.values(
         template.findResources("AWS::ApiGateway::Method"),
@@ -115,7 +123,8 @@ describe("ProxyApi", () => {
     // Exact, so a condition can't come back: API Gateway sends no `aws:SourceAccount` when it
     // assumes the role, and one that names it refuses every request.
     it("invoke through a role API Gateway assumes, under no condition, which may invoke only this domain's live alias", () => {
-      const { template } = build();
+      const { stack } = build();
+      const template = Template.fromStack(stack);
 
       template.resourceCountIs("AWS::IAM::Role", 1);
       template.hasResourceProperties("AWS::IAM::Role", {
@@ -148,7 +157,8 @@ describe("ProxyApi", () => {
     });
 
     it("add nothing to the function, and no WAF", () => {
-      const { template } = build();
+      const { stack } = build();
+      const template = Template.fromStack(stack);
 
       for (const type of [
         "AWS::Lambda::Function",
@@ -165,23 +175,27 @@ describe("ProxyApi", () => {
 
   describe("the stage", () => {
     it("is named default, traced, and logs errors without request or response bodies", () => {
-      build().template.hasResourceProperties("AWS::ApiGateway::Stage", {
-        StageName: "default",
-        TracingEnabled: true,
-        // CDK's default turns data tracing off, which keeps bodies out of the execution logs.
-        MethodSettings: Match.exact([
-          {
-            HttpMethod: "*",
-            ResourcePath: "/*",
-            LoggingLevel: "ERROR",
-            DataTraceEnabled: false,
-          },
-        ]),
-      });
+      Template.fromStack(build().stack).hasResourceProperties(
+        "AWS::ApiGateway::Stage",
+        {
+          StageName: "default",
+          TracingEnabled: true,
+          // CDK's default turns data tracing off, which keeps bodies out of the execution logs.
+          MethodSettings: Match.exact([
+            {
+              HttpMethod: "*",
+              ResourcePath: "/*",
+              LoggingLevel: "ERROR",
+              DataTraceEnabled: false,
+            },
+          ]),
+        },
+      );
     });
 
     it("writes JSON access logs, with the X-Ray trace ID, to the domain's own log group", () => {
-      const { template } = build();
+      const { stack } = build();
+      const template = Template.fromStack(stack);
 
       template.hasResourceProperties("AWS::Logs::LogGroup", {
         LogGroupName: "/flex/domain/sandbox/domain-a/api-access",
@@ -212,7 +226,8 @@ describe("ProxyApi", () => {
     });
 
     it("creates its execution log group before the stage, so API Gateway never does", () => {
-      const { template } = build();
+      const { stack } = build();
+      const template = Template.fromStack(stack);
       const groups = Object.keys(
         template.findResources("AWS::Logs::LogGroup", {
           Properties: {
@@ -248,17 +263,20 @@ describe("ProxyApi", () => {
     ])(
       "count %s from the access log, in the API's own namespace",
       (name, pattern) => {
-        build().template.hasResourceProperties("AWS::Logs::MetricFilter", {
-          LogGroupName: { Ref: Match.stringLikeRegexp("^DomainAccessLogs") },
-          FilterPattern: pattern,
-          MetricTransformations: Match.exact([
-            {
-              MetricNamespace: NAMESPACE,
-              MetricName: name,
-              MetricValue: "1",
-            },
-          ]),
-        });
+        Template.fromStack(build().stack).hasResourceProperties(
+          "AWS::Logs::MetricFilter",
+          {
+            LogGroupName: { Ref: Match.stringLikeRegexp("^DomainAccessLogs") },
+            FilterPattern: pattern,
+            MetricTransformations: Match.exact([
+              {
+                MetricNamespace: NAMESPACE,
+                MetricName: name,
+                MetricValue: "1",
+              },
+            ]),
+          },
+        );
       },
     );
 
@@ -268,25 +286,28 @@ describe("ProxyApi", () => {
     ])(
       "alarm on sustained %s, with no action until alerting exists",
       (name, threshold) => {
-        build().template.hasResourceProperties("AWS::CloudWatch::Alarm", {
-          AlarmName: `domain-sandbox-domain-a-api-${name}`,
-          AlarmDescription: Match.stringLikeRegexp(
-            "Investigating an origin refusal alarm",
-          ),
-          Namespace: NAMESPACE,
-          MetricName: name,
-          Dimensions: Match.absent(),
-          Statistic: "Sum",
-          Period: 300,
-          Threshold: threshold,
-          EvaluationPeriods: 3,
-          DatapointsToAlarm: Match.absent(),
-          ComparisonOperator: "GreaterThanOrEqualToThreshold",
-          TreatMissingData: "notBreaching",
-          AlarmActions: Match.absent(),
-          OKActions: Match.absent(),
-          InsufficientDataActions: Match.absent(),
-        });
+        Template.fromStack(build().stack).hasResourceProperties(
+          "AWS::CloudWatch::Alarm",
+          {
+            AlarmName: `domain-sandbox-domain-a-api-${name}`,
+            AlarmDescription: Match.stringLikeRegexp(
+              "Investigating an origin refusal alarm",
+            ),
+            Namespace: NAMESPACE,
+            MetricName: name,
+            Dimensions: Match.absent(),
+            Statistic: "Sum",
+            Period: 300,
+            Threshold: threshold,
+            EvaluationPeriods: 3,
+            DatapointsToAlarm: Match.absent(),
+            ComparisonOperator: "GreaterThanOrEqualToThreshold",
+            TreatMissingData: "notBreaching",
+            AlarmActions: Match.absent(),
+            OKActions: Match.absent(),
+            InsufficientDataActions: Match.absent(),
+          },
+        );
       },
     );
 
@@ -307,7 +328,8 @@ describe("ProxyApi", () => {
     });
 
     it("has no other metric filter or alarm", () => {
-      const { template } = build();
+      const { stack } = build();
+      const template = Template.fromStack(stack);
 
       template.resourceCountIs("AWS::Logs::MetricFilter", 2);
       template.resourceCountIs("AWS::CloudWatch::Alarm", 2);
@@ -315,7 +337,8 @@ describe("ProxyApi", () => {
   });
 
   it("answers its own refusals in the Frontdoor's shape, saying API Gateway refused", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     const responses = Object.fromEntries(
       Object.values(

@@ -66,7 +66,7 @@ describe("DomainAccountStack", () => {
   });
 
   it("builds the certificate in the account's zone, and writes its ARN to SSM", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
 
     template.hasResourceProperties("AWS::CertificateManager::Certificate", {
       DomainName: `*.${MAIN.zone.name}`,

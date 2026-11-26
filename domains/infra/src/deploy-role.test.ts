@@ -25,7 +25,7 @@ function build(nag = false) {
   });
   const app = stack.node.root;
   assert.instanceOf(app, App);
-  return { app, template: Template.fromStack(stack) };
+  return { app, stack };
 }
 
 // The template parameter CDK adds to read an SSM parameter at deploy.
@@ -64,7 +64,7 @@ describe("DeployRole", () => {
   });
 
   it("is assumed only by the stage's release worker, with a fixed name", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       RoleName: "domain-sandbox-domain-a-deploy",
       AssumeRolePolicyDocument: Match.exact({
         Statement: [
@@ -85,10 +85,8 @@ describe("DeployRole", () => {
   });
 
   it("reads its placement from SSM at deploy, as the parameters' types", () => {
-    const parameters = build().template.toJSON().Parameters as Record<
-      string,
-      { Type: string; Default: string }
-    >;
+    const parameters = Template.fromStack(build().stack).toJSON()
+      .Parameters as Record<string, { Type: string; Default: string }>;
     const reads = Object.fromEntries(
       Object.values(parameters)
         .filter(({ Default }) => Default.startsWith("/flex/"))
@@ -102,7 +100,8 @@ describe("DeployRole", () => {
   });
 
   it("may release its domain's function, read its own domain's bundles and its placement, pass that domain's execution role to Lambda, never touch a gateway, and place every function as the parameters it reads say", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
     const subnets = parameterReading(template, SUBNETS_PARAMETER);
     const securityGroup = parameterReading(template, SECURITY_GROUP_PARAMETER);
 

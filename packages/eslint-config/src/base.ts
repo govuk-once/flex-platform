@@ -4,6 +4,7 @@ import eslint from "@eslint/js";
 import { defineConfig, includeIgnoreFile } from "eslint/config";
 import prettier from "eslint-plugin-prettier/recommended";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
+import sonarjs from "eslint-plugin-sonarjs";
 import tseslint from "typescript-eslint";
 
 import { findUpSync } from "./find-up.ts";
@@ -37,6 +38,14 @@ export const base = defineConfig(
       "@typescript-eslint/no-non-null-assertion": "error",
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
+    },
+  },
+  {
+    // The same check as SonarQube's S2699, so a test it would flag fails lint first.
+    files: ["**/*.test.ts"],
+    plugins: { sonarjs },
+    rules: {
+      "sonarjs/assertions-in-tests": "error",
     },
   },
 );

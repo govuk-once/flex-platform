@@ -12,7 +12,7 @@ function build(nag = false) {
   });
   const app = stack.node.root;
   assert.instanceOf(app, App);
-  return { app, template: Template.fromStack(stack) };
+  return { app, stack };
 }
 
 const ARN = `eu-west-2:${ACCOUNT}`;
@@ -25,7 +25,8 @@ describe("ApiGatewayLogging", () => {
   });
 
   it("is set on the account, through a role API Gateway assumes", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::ApiGateway::Account", 1);
     template.hasResourceProperties("AWS::ApiGateway::Account", {
@@ -36,7 +37,7 @@ describe("ApiGatewayLogging", () => {
   });
 
   it("is assumed by API Gateway alone", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       AssumeRolePolicyDocument: Match.exact({
         Statement: [
           {
@@ -51,7 +52,8 @@ describe("ApiGatewayLogging", () => {
   });
 
   it("has AWS's policy for writing logs, which API Gateway requires", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::Logs::LogGroup", 0);
     template.hasResourceProperties("AWS::IAM::Role", {
@@ -71,7 +73,7 @@ describe("ApiGatewayLogging", () => {
   });
 
   it("may encrypt only through CloudWatch Logs, for the domains' API log groups", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       Policies: Match.exact([
         {
           PolicyName: "EncryptLogs",

@@ -13,12 +13,12 @@ function build(nag = false) {
     readerArn: READER,
     endpointId: "vpce-0secretsmanager",
   });
-  return { scope, template: Template.fromStack(scope) };
+  return scope;
 }
 
 describe("GatewaySecret", () => {
   it("is created without a value, for a person to put, and kept when its stack goes", () => {
-    const { template } = build();
+    const template = Template.fromStack(build());
     const [secret] = Object.values(
       template.findResources("AWS::SecretsManager::Secret"),
     ) as { Properties: Record<string, unknown>; DeletionPolicy: string }[];
@@ -31,34 +31,33 @@ describe("GatewaySecret", () => {
   });
 
   it("can be read by its gateway's role alone, through the endpoint alone", () => {
-    build().template.hasResourceProperties(
-      "AWS::SecretsManager::ResourcePolicy",
-      {
-        ResourcePolicy: {
-          Statement: [
-            {
-              Effect: "Deny",
-              Principal: { AWS: "*" },
-              Action: "secretsmanager:GetSecretValue",
-              Resource: "*",
-              Condition: { StringNotEquals: { "aws:PrincipalArn": READER } },
+    const template = Template.fromStack(build());
+
+    template.hasResourceProperties("AWS::SecretsManager::ResourcePolicy", {
+      ResourcePolicy: {
+        Statement: [
+          {
+            Effect: "Deny",
+            Principal: { AWS: "*" },
+            Action: "secretsmanager:GetSecretValue",
+            Resource: "*",
+            Condition: { StringNotEquals: { "aws:PrincipalArn": READER } },
+          },
+          {
+            Effect: "Deny",
+            Principal: { AWS: "*" },
+            Action: "secretsmanager:GetSecretValue",
+            Resource: "*",
+            Condition: {
+              StringNotEquals: { "aws:SourceVpce": "vpce-0secretsmanager" },
             },
-            {
-              Effect: "Deny",
-              Principal: { AWS: "*" },
-              Action: "secretsmanager:GetSecretValue",
-              Resource: "*",
-              Condition: {
-                StringNotEquals: { "aws:SourceVpce": "vpce-0secretsmanager" },
-              },
-            },
-          ],
-        },
+          },
+        ],
       },
-    );
+    });
   });
 
   it("has no unacknowledged cdk-nag finding", () => {
-    expect(() => build(true)).not.toThrow();
+    expect(() => Template.fromStack(build(true))).not.toThrow();
   });
 });

@@ -17,7 +17,7 @@ function build(nag = false) {
   });
   const app = stack.node.root;
   assert.instanceOf(app, App);
-  return { app, template: Template.fromStack(stack) };
+  return { app, stack };
 }
 
 const ARN = `eu-west-2:${ACCOUNT}`;
@@ -92,7 +92,7 @@ describe("ExecutionRole", () => {
   });
 
   it("is assumed by Lambda alone, with a fixed name", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       RoleName: "domain-sandbox-domain-a-execution",
       AssumeRolePolicyDocument: Match.exact({
         Statement: [
@@ -108,7 +108,7 @@ describe("ExecutionRole", () => {
   });
 
   it("may invoke the gateways named through the endpoint alone, write its own domain's logs and its traces and run in a VPC, and denies the network to its code", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       Policies: Match.exact([
         {
           PolicyName: "Execution",
@@ -119,7 +119,8 @@ describe("ExecutionRole", () => {
   });
 
   it("is bounded by the same limits", () => {
-    const { template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
 
     const boundaries = template.findResources("AWS::IAM::ManagedPolicy");
     const [boundary] = Object.keys(boundaries);

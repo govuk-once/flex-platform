@@ -37,12 +37,12 @@ function build() {
       Execution: new PolicyDocument({ statements: execution.statements }),
     },
   });
-  return { execution, template: Template.fromStack(stack) };
+  return { execution, stack };
 }
 
 describe("functionRoleStatements", () => {
   it("writes to its own log group, through its key, and lets Lambda alone manage its network interfaces", () => {
-    build().template.hasResourceProperties("AWS::IAM::Role", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::IAM::Role", {
       Policies: Match.exact([
         {
           PolicyName: "Execution",

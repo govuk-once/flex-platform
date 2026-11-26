@@ -18,10 +18,6 @@ function build(region = "us-east-1", checks = false) {
   return { app, stack };
 }
 
-function template(): Template {
-  return Template.fromStack(build().stack);
-}
-
 describe("cloudFrontFunctionLogGroupName", () => {
   it("is the name CloudFront writes a function's logs to", () => {
     expect(cloudFrontFunctionLogGroupName("example-viewer-request")).toBe(
@@ -40,17 +36,20 @@ describe("PlatformCloudFrontFunction", () => {
   });
 
   it("holds the code it is given, under the name it is given, for cloudfront-js-2.0", () => {
-    template().hasResourceProperties("AWS::CloudFront::Function", {
-      Name: "example-viewer-request",
-      AutoPublish: true,
-      FunctionConfig: { Runtime: "cloudfront-js-2.0" },
-      FunctionCode: CODE,
-    });
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::CloudFront::Function",
+      {
+        Name: "example-viewer-request",
+        AutoPublish: true,
+        FunctionConfig: { Runtime: "cloudfront-js-2.0" },
+        FunctionCode: CODE,
+      },
+    );
   });
 
   // CloudFront would create the group itself, with no retention, if the function ran first.
   it("creates the log group CloudFront writes it to before the function exists", () => {
-    const built = template();
+    const built = Template.fromStack(build().stack);
 
     built.hasResource("AWS::Logs::LogGroup", {
       DeletionPolicy: "Retain",
@@ -68,7 +67,7 @@ describe("PlatformCloudFrontFunction", () => {
   });
 
   it("lets CloudFront's logger use the log group's key, for that log group alone", () => {
-    template().hasResourceProperties("AWS::KMS::Key", {
+    Template.fromStack(build().stack).hasResourceProperties("AWS::KMS::Key", {
       KeyPolicy: {
         Statement: Match.arrayWith([
           {

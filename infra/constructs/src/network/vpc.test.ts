@@ -1,5 +1,5 @@
 import { Stack } from "aws-cdk-lib";
-import type { Template } from "aws-cdk-lib/assertions";
+import { Template } from "aws-cdk-lib/assertions";
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
@@ -128,7 +128,7 @@ describe("NetworkVpc", () => {
   });
 
   it("alarms on each NAT gateway failing to allocate ports, with no action", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     for (const zone of ["eu-west-2a", "eu-west-2b"]) {
       template.hasResourceProperties("AWS::CloudWatch::Alarm", {
@@ -158,7 +158,7 @@ describe("NetworkVpc", () => {
   });
 
   it("alarms on each NAT gateway dropping more than 0.01% of its packets, with no action", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     for (const zone of ["eu-west-2a", "eu-west-2b"]) {
       const natGateway = {
@@ -203,7 +203,7 @@ describe("NetworkVpc", () => {
   });
 
   it("empties the default security group, logging to a log group of the platform's", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     template.resourceCountIs("Custom::VpcRestrictDefaultSG", 1);
     template.hasResourceProperties("AWS::Logs::LogGroup", {

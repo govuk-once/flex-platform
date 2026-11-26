@@ -64,7 +64,8 @@ describe("GatewayStack", () => {
   });
 
   it("names its function as the client invokes it, and the stack after the account it's in", () => {
-    const { stack, template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
     expect(stack.stackName).toBe("gateway-dev-main-udp");
     template.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "gateway-dev-udp",
@@ -73,7 +74,7 @@ describe("GatewayStack", () => {
   });
 
   it("runs in its placement's subnets and security group", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
     template.hasResourceProperties("AWS::Lambda::Function", {
       VpcConfig: {
         SubnetIds: {
@@ -90,7 +91,9 @@ describe("GatewayStack", () => {
       },
     });
 
-    const isolated = build({ ...UDP, placement: "isolated" }).template;
+    const isolated = Template.fromStack(
+      build({ ...UDP, placement: "isolated" }).stack,
+    );
     isolated.hasResourceProperties("AWS::Lambda::Function", {
       VpcConfig: {
         SubnetIds: {
@@ -109,7 +112,7 @@ describe("GatewayStack", () => {
   });
 
   it("reads an upstream's secret, with its key, and assumes the upstream's role, only through the endpoints", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
 
     template.hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
@@ -168,7 +171,7 @@ describe("GatewayStack", () => {
   });
 
   it("creates a secret of its own, which its role alone may read, through the endpoint alone, when config says to", () => {
-    const { template } = build(OWN_SECRET_GATEWAY);
+    const template = Template.fromStack(build(OWN_SECRET_GATEWAY).stack);
 
     template.hasResourceProperties("AWS::SecretsManager::Secret", {
       Name: "gateway-dev-udp",
@@ -243,7 +246,7 @@ describe("GatewayStack", () => {
   });
 
   it("verifies the caller token with the edge's public keys, scanned through its network's endpoint, for its environment's audience", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
     const table = `arn:aws:dynamodb:eu-west-2:${DEV.frontdoor.account}:table/frontdoor-dev-caller-token-public-keys`;
     template.hasResourceProperties("AWS::Lambda::Function", {
       Environment: {

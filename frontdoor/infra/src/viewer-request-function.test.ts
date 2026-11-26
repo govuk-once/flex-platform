@@ -4,13 +4,13 @@ import { describe, expect, it } from "vitest";
 import { ISSUERS, stackIn } from "../test/helpers.ts";
 import { ViewerRequestFunction } from "./viewer-request-function.ts";
 
-function template(): Template {
+function build() {
   const stack = stackIn("us-east-1");
   new ViewerRequestFunction(stack, "ViewerRequest", {
     environment: "sandbox",
     issuers: ISSUERS,
   });
-  return Template.fromStack(stack);
+  return stack;
 }
 
 describe("ViewerRequestFunction", () => {
@@ -25,7 +25,8 @@ describe("ViewerRequestFunction", () => {
   });
 
   it("is built for the cloudfront-js-2.0 runtime with the environment's issuers baked in", () => {
-    template().hasResourceProperties("AWS::CloudFront::Function", {
+    const template = Template.fromStack(build());
+    template.hasResourceProperties("AWS::CloudFront::Function", {
       Name: "frontdoor-sandbox-viewer-request",
       AutoPublish: true,
       FunctionConfig: { Runtime: "cloudfront-js-2.0" },
@@ -34,7 +35,7 @@ describe("ViewerRequestFunction", () => {
   });
 
   it("creates the log group CloudFront writes it to before the function exists", () => {
-    const built = template();
+    const built = Template.fromStack(build());
 
     built.hasResource("AWS::Logs::LogGroup", {
       DeletionPolicy: "Retain",
@@ -53,7 +54,8 @@ describe("ViewerRequestFunction", () => {
   });
 
   it("lets CloudFront's logger use the log group's key, for that log group alone", () => {
-    template().hasResourceProperties("AWS::KMS::Key", {
+    const template = Template.fromStack(build());
+    template.hasResourceProperties("AWS::KMS::Key", {
       KeyPolicy: {
         Statement: Match.arrayWith([
           {

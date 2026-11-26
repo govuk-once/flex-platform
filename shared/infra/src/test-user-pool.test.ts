@@ -10,7 +10,7 @@ function build(nag = false) {
   new TestUserPool(stack, "TestUsers");
   const app = stack.node.root;
   assert.instanceOf(app, App);
-  return { app, template: Template.fromStack(stack) };
+  return { app, stack };
 }
 
 describe("TestUserPool", () => {
@@ -19,8 +19,9 @@ describe("TestUserPool", () => {
   });
 
   it("is a pool and its client, and nothing else", () => {
+    const template = Template.fromStack(build().stack);
     const resources = Object.values(
-      build().template.toJSON().Resources as Record<string, { Type: string }>,
+      template.toJSON().Resources as Record<string, { Type: string }>,
     ).map(({ Type }) => Type);
 
     expect(resources.toSorted()).toEqual([
@@ -31,7 +32,7 @@ describe("TestUserPool", () => {
 
   // Cognito generates the IDs the Frontdoor's config names, so the pool must never be replaced.
   it("is retained, and protected from deletion", () => {
-    const { template } = build();
+    const template = Template.fromStack(build().stack);
 
     template.hasResource("AWS::Cognito::UserPool", {
       DeletionPolicy: "Retain",
@@ -44,7 +45,9 @@ describe("TestUserPool", () => {
   });
 
   it("lets only an administrator create a user, and recovers no account", () => {
-    build().template.hasResourceProperties("AWS::Cognito::UserPool", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::Cognito::UserPool", {
       AdminCreateUserConfig: { AllowAdminCreateUserOnly: true },
       AccountRecoverySetting: {
         RecoveryMechanisms: [{ Name: "admin_only", Priority: 1 }],
@@ -55,7 +58,9 @@ describe("TestUserPool", () => {
   });
 
   it("accepts only a long password, as a generated one is", () => {
-    build().template.hasResourceProperties("AWS::Cognito::UserPool", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::Cognito::UserPool", {
       Policies: {
         PasswordPolicy: Match.objectLike({
           MinimumLength: MIN_PASSWORD_LENGTH,
@@ -69,7 +74,9 @@ describe("TestUserPool", () => {
   });
 
   it("signs in with a password through the public API, and through nothing else", () => {
-    build().template.hasResourceProperties("AWS::Cognito::UserPoolClient", {
+    const template = Template.fromStack(build().stack);
+
+    template.hasResourceProperties("AWS::Cognito::UserPoolClient", {
       ClientName: "shared-test-users",
       ExplicitAuthFlows: Match.exact([
         "ALLOW_USER_PASSWORD_AUTH",

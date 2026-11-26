@@ -139,25 +139,28 @@ describe("InterfaceEndpoints", () => {
   );
 
   it("has an execute-api endpoint that lets a principal of an upstream's account, and no other, invoke its private API", () => {
-    buildNetwork().template.hasResourceProperties("AWS::EC2::VPCEndpoint", {
-      ServiceName: "com.amazonaws.eu-west-2.execute-api",
-      VpcEndpointType: "Interface",
-      PrivateDnsEnabled: true,
-      PolicyDocument: {
-        Statement: [
-          {
-            Effect: "Allow",
-            Principal: { AWS: "*" },
-            Action: "execute-api:Invoke",
-            Resource: `${UPSTREAM_API}/*`,
-            // The role is the upstream's, so no condition holds the caller to this account.
-            Condition: {
-              StringEquals: { "aws:PrincipalAccount": [UPSTREAM_ACCOUNT] },
+    Template.fromStack(buildNetwork().stack).hasResourceProperties(
+      "AWS::EC2::VPCEndpoint",
+      {
+        ServiceName: "com.amazonaws.eu-west-2.execute-api",
+        VpcEndpointType: "Interface",
+        PrivateDnsEnabled: true,
+        PolicyDocument: {
+          Statement: [
+            {
+              Effect: "Allow",
+              Principal: { AWS: "*" },
+              Action: "execute-api:Invoke",
+              Resource: `${UPSTREAM_API}/*`,
+              // The role is the upstream's, so no condition holds the caller to this account.
+              Condition: {
+                StringEquals: { "aws:PrincipalAccount": [UPSTREAM_ACCOUNT] },
+              },
             },
-          },
-        ],
+          ],
+        },
       },
-    });
+    );
   });
 
   it("names every private API in one statement, however many there are, so the policy grows by an ARN for each", () => {
@@ -195,7 +198,10 @@ describe("InterfaceEndpoints", () => {
   });
 
   it("has no other endpoint", () => {
-    buildNetwork().template.resourceCountIs("AWS::EC2::VPCEndpoint", 6);
+    Template.fromStack(buildNetwork().stack).resourceCountIs(
+      "AWS::EC2::VPCEndpoint",
+      6,
+    );
   });
 
   it("gives each endpoint a group of its own, which lets nothing out and lets in only workloads", () => {
@@ -230,10 +236,15 @@ describe("InterfaceEndpoints", () => {
   });
 
   it("answers the VPC's own lookups of S3's names, with no gateway endpoint beside it", () => {
-    buildNetwork().template.hasResourceProperties("AWS::EC2::VPCEndpoint", {
-      ServiceName: "com.amazonaws.eu-west-2.s3",
-      DnsOptions: { PrivateDnsOnlyForInboundResolverEndpoint: "AllResolvers" },
-    });
+    Template.fromStack(buildNetwork().stack).hasResourceProperties(
+      "AWS::EC2::VPCEndpoint",
+      {
+        ServiceName: "com.amazonaws.eu-west-2.s3",
+        DnsOptions: {
+          PrivateDnsOnlyForInboundResolverEndpoint: "AllResolvers",
+        },
+      },
+    );
   });
 
   it("gives the dynamodb endpoint's own regional name, the first AWS lists, without its hosted zone", () => {

@@ -39,12 +39,12 @@ function build(checks = false) {
     distribution,
   });
   apexAliases(stack, zone, ZONE.zoneName, distribution);
-  return { app, stack, logGroup, template: () => Template.fromStack(stack) };
+  return { app, stack, logGroup };
 }
 
 describe("apexCertificate", () => {
   it("validates a certificate for the apex in the zone it is given, creating no zone", () => {
-    const built = build().template();
+    const built = Template.fromStack(build().stack);
 
     built.resourceCountIs("AWS::Route53::HostedZone", 0);
     built.hasResourceProperties("AWS::CertificateManager::Certificate", {
@@ -58,7 +58,7 @@ describe("apexCertificate", () => {
 
   // ACM checks CAA before it issues.
   it("lets only Amazon issue for the zone, before the certificate is asked for", () => {
-    const built = build().template();
+    const built = Template.fromStack(build().stack);
 
     const [caaId] = Object.keys(
       built.findResources("AWS::Route53::RecordSet", {
@@ -81,9 +81,9 @@ describe("apexAliases", () => {
   it.each(["A", "AAAA"])(
     "writes an %s alias to the distribution at the apex",
     (type) => {
-      build()
-        .template()
-        .hasResourceProperties("AWS::Route53::RecordSet", {
+      Template.fromStack(build().stack).hasResourceProperties(
+        "AWS::Route53::RecordSet",
+        {
           Type: type,
           Name: `${ZONE.zoneName}.`,
           HostedZoneId: ZONE.hostedZoneId,
@@ -95,19 +95,23 @@ describe("apexAliases", () => {
               ],
             },
           },
-        });
+        },
+      );
     },
   );
 
   it("writes nothing else in the zone", () => {
-    build().template().resourceCountIs("AWS::Route53::RecordSet", 3);
+    Template.fromStack(build().stack).resourceCountIs(
+      "AWS::Route53::RecordSet",
+      3,
+    );
   });
 });
 
 describe("deliverAccessLogs", () => {
   it("delivers the distribution's access logs to a retained log group through standard logging v2", () => {
-    const { logGroup, stack, template } = build();
-    const built = template();
+    const { logGroup, stack } = build();
+    const built = Template.fromStack(stack);
     const logGroupArn = stack.resolve(logGroup.logGroupArn) as unknown;
 
     built.hasResourceProperties("AWS::Logs::DeliverySource", {
@@ -136,9 +140,10 @@ describe("deliverAccessLogs", () => {
 
   // The account's resource policy is what lets the delivery service write.
   it("lets the delivery service write to that log group, for this source alone", () => {
-    const { stack, template } = build();
+    const { stack } = build();
+    const template = Template.fromStack(stack);
     const [policy] = Object.values(
-      template().findResources("AWS::Logs::ResourcePolicy"),
+      template.findResources("AWS::Logs::ResourcePolicy"),
     );
     const properties = policy?.Properties as {
       PolicyName: string;

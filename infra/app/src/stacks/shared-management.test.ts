@@ -13,8 +13,8 @@ import { SHARED_RELEASE_STACK_NAME } from "./shared-release.ts";
 
 const [, , PROD] = FIXTURE_STAGES;
 
-function template(): Template {
-  return Template.fromStack(new SharedManagementStack(cdkApp(), PROD.shared));
+function build() {
+  return new SharedManagementStack(cdkApp(), PROD.shared);
 }
 
 describe("SharedManagementStack", () => {
@@ -49,17 +49,20 @@ describe("SharedManagementStack", () => {
   });
 
   it("answers at the apex of the shared account's zone", () => {
-    template().hasResourceProperties("AWS::CloudFront::Distribution", {
-      DistributionConfig: Match.objectLike({
-        Aliases: [PROD.shared.zone.name],
-      }),
-    });
+    Template.fromStack(build()).hasResourceProperties(
+      "AWS::CloudFront::Distribution",
+      {
+        DistributionConfig: Match.objectLike({
+          Aliases: [PROD.shared.zone.name],
+        }),
+      },
+    );
   });
 
   // No cross-stack reference: the release stack is in another region, and an export would tie
   // the two together.
   it("reads the pipeline API's host from SSM in its own region, as its one origin", () => {
-    const built = template();
+    const built = Template.fromStack(build());
     const { Parameters } = built.toJSON() as {
       Parameters: Record<string, { Type: string; Default: string }>;
     };
@@ -83,16 +86,19 @@ describe("SharedManagementStack", () => {
   // A job asks GitHub for a token with this audience, so each stage's function accepts only
   // tokens asked for it.
   it("builds the CloudFront Function for GitHub's tokens, with the stage's own address as their audience", () => {
-    template().hasResourceProperties("AWS::CloudFront::Function", {
-      Name: "shared-management-viewer-request",
-      FunctionCode: Match.stringLikeRegexp(
-        `https://token\\.actions\\.githubusercontent\\.com.*https://${PROD.shared.zone.name.replaceAll(".", String.raw`\.`)}/ci`,
-      ),
-    });
+    Template.fromStack(build()).hasResourceProperties(
+      "AWS::CloudFront::Function",
+      {
+        Name: "shared-management-viewer-request",
+        FunctionCode: Match.stringLikeRegexp(
+          `https://token\\.actions\\.githubusercontent\\.com.*https://${PROD.shared.zone.name.replaceAll(".", String.raw`\.`)}/ci`,
+        ),
+      },
+    );
   });
 
   it("outputs the distribution's domain name, and exports nothing", () => {
-    const built = template();
+    const built = Template.fromStack(build());
     const [distribution] = Object.keys(
       built.findResources("AWS::CloudFront::Distribution"),
     );

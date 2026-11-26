@@ -1,8 +1,8 @@
 import { CONTENT_SECURITY_POLICY } from "@repo/infra-constructs";
-import { Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
-import { edgeIn, edgeTemplate, stackIn, ZONE } from "../test/helpers.ts";
+import { buildEdge, edgeIn, stackIn, ZONE } from "../test/helpers.ts";
 import { REDACTED_HEADERS } from "./edge.ts";
 
 interface Rule {
@@ -24,13 +24,14 @@ describe("Edge", () => {
   });
 
   it("has no unacknowledged cdk-nag finding", () => {
-    const { app } = edgeTemplate(true);
+    const { app } = buildEdge(true);
 
     expect(() => app.synth()).not.toThrow();
   });
 
   it("answers at its zone's apex, with a certificate for it, behind the web ACL", () => {
-    const { edge, template } = edgeTemplate();
+    const { edge, stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.objectLike({
@@ -50,7 +51,8 @@ describe("Edge", () => {
   });
 
   it("validates its certificate in the zone it is given, creating no zone", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::Route53::HostedZone", 0);
     template.resourceCountIs("AWS::CertificateManager::Certificate", 1);
@@ -81,7 +83,8 @@ describe("Edge", () => {
   });
 
   it("writes an alias for IPv4 and IPv6 and a CAA record at the apex, and nothing else", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     const records = Object.values(
       template.findResources("AWS::Route53::RecordSet"),
@@ -125,7 +128,8 @@ describe("Edge", () => {
   });
 
   it("sends every path to the one default origin, caching nothing", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: {
@@ -176,7 +180,8 @@ describe("Edge", () => {
   });
 
   it("forwards five headers and every query string to the origin, and no cookies", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::CloudFront::OriginRequestPolicy", 1);
     template.hasResourceProperties("AWS::CloudFront::OriginRequestPolicy", {
@@ -199,7 +204,8 @@ describe("Edge", () => {
   });
 
   it("keeps an empty, private default origin, which nothing signs requests to", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.resourceCountIs("AWS::S3::Bucket", 1);
     template.hasResource("AWS::S3::Bucket", {
@@ -239,7 +245,8 @@ describe("Edge", () => {
   });
 
   it("runs the given CloudFront Function on every viewer request", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: {
@@ -261,7 +268,8 @@ describe("Edge", () => {
   });
 
   it("runs the given Lambda@Edge version at origin request, with the body", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: {
@@ -283,7 +291,8 @@ describe("Edge", () => {
   });
 
   it("sets the security headers on every response, keeps it out of caches, and strips API Gateway's", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
       ResponseHeadersPolicyConfig: {
@@ -336,7 +345,8 @@ describe("Edge", () => {
   });
 
   it("limits each token to 1,000 requests and each address to 5,000 in five minutes", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
     const [webAcl] = Object.values(
       template.findResources("AWS::WAFv2::WebACL"),
     );
@@ -357,7 +367,8 @@ describe("Edge", () => {
 
   // A token in a log is a token anyone who reads the log can use until it expires.
   it("keeps credentials out of the web ACL's logs and samples", () => {
-    const { template } = edgeTemplate();
+    const { stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     expect(REDACTED_HEADERS).toEqual(["authorization", "cookie"]);
     template.hasResourceProperties("AWS::Logs::LogGroup", {
@@ -381,7 +392,8 @@ describe("Edge", () => {
   });
 
   it("delivers access logs to a retained log group through standard logging v2", () => {
-    const { edge, template } = edgeTemplate();
+    const { edge, stack } = buildEdge();
+    const template = Template.fromStack(stack);
 
     template.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.not(

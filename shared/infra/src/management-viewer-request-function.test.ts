@@ -9,7 +9,7 @@ function build(region = "us-east-1") {
   new ManagementViewerRequestFunction(stack, "ViewerRequest", {
     zoneName: ZONE.zoneName,
   });
-  return Template.fromStack(stack);
+  return stack;
 }
 
 describe("ManagementViewerRequestFunction", () => {
@@ -18,19 +18,22 @@ describe("ManagementViewerRequestFunction", () => {
   });
 
   it("is built for the cloudfront-js-2.0 runtime, for GitHub's tokens asked for this stage's pipeline API", () => {
-    build().hasResourceProperties("AWS::CloudFront::Function", {
-      Name: "shared-management-viewer-request",
-      AutoPublish: true,
-      FunctionConfig: { Runtime: "cloudfront-js-2.0" },
-      FunctionCode: Match.stringLikeRegexp(
-        String.raw`https://token\.actions\.githubusercontent\.com.*https://sandbox\.flex-shared\.example/ci`,
-      ),
-    });
+    Template.fromStack(build()).hasResourceProperties(
+      "AWS::CloudFront::Function",
+      {
+        Name: "shared-management-viewer-request",
+        AutoPublish: true,
+        FunctionConfig: { Runtime: "cloudfront-js-2.0" },
+        FunctionCode: Match.stringLikeRegexp(
+          String.raw`https://token\.actions\.githubusercontent\.com.*https://sandbox\.flex-shared\.example/ci`,
+        ),
+      },
+    );
   });
 
   // CloudFront would create the group itself, with no retention, if the function ran first.
   it("creates the log group CloudFront writes it to", () => {
-    build().hasResourceProperties("AWS::Logs::LogGroup", {
+    Template.fromStack(build()).hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: "/aws/cloudfront/function/shared-management-viewer-request",
       RetentionInDays: 365,
     });

@@ -13,7 +13,7 @@ function build(nag = false) {
     env: { account: "123456789012", region: "eu-west-2" },
   });
   new OriginRequestLogs(stack, "Logs", { environment: "sandbox" });
-  return { app, template: Template.fromStack(stack) };
+  return { app, stack };
 }
 
 const LOG_GROUP_ARN =
@@ -25,44 +25,52 @@ describe("OriginRequestLogs", () => {
   });
 
   it("creates the function's log group, named from config", () => {
-    build().template.hasResourceProperties("AWS::Logs::LogGroup", {
-      LogGroupName: "/flex/frontdoor/sandbox/origin-request",
-    });
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::Logs::LogGroup",
+      {
+        LogGroupName: "/flex/frontdoor/sandbox/origin-request",
+      },
+    );
   });
 
   it("provides a policy, named from config, to write to that group with its own key alone", () => {
-    build().template.hasResourceProperties("AWS::IAM::ManagedPolicy", {
-      ManagedPolicyName: "frontdoor-sandbox-origin-request-logs-eu-west-2",
-      PolicyDocument: {
-        Statement: [
-          {
-            Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
-            Effect: "Allow",
-            Resource: `${LOG_GROUP_ARN}:*`,
-          },
-          {
-            Action: ["kms:Encrypt", "kms:GenerateDataKey*"],
-            Effect: "Allow",
-            Resource: {
-              "Fn::GetAtt": [Match.stringLikeRegexp("^LogGroupKey"), "Arn"],
+    Template.fromStack(build().stack).hasResourceProperties(
+      "AWS::IAM::ManagedPolicy",
+      {
+        ManagedPolicyName: "frontdoor-sandbox-origin-request-logs-eu-west-2",
+        PolicyDocument: {
+          Statement: [
+            {
+              Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+              Effect: "Allow",
+              Resource: `${LOG_GROUP_ARN}:*`,
             },
-            Condition: {
-              StringEquals: {
-                "kms:ViaService": "logs.eu-west-2.amazonaws.com",
+            {
+              Action: ["kms:Encrypt", "kms:GenerateDataKey*"],
+              Effect: "Allow",
+              Resource: {
+                "Fn::GetAtt": [Match.stringLikeRegexp("^LogGroupKey"), "Arn"],
               },
-              ArnEquals: {
-                "kms:EncryptionContext:aws:logs:arn": LOG_GROUP_ARN,
+              Condition: {
+                StringEquals: {
+                  "kms:ViaService": "logs.eu-west-2.amazonaws.com",
+                },
+                ArnEquals: {
+                  "kms:EncryptionContext:aws:logs:arn": LOG_GROUP_ARN,
+                },
               },
             },
-          },
-        ],
+          ],
+        },
       },
-    });
+    );
   });
 
   it("attaches the policy to nothing: the role attaches it by name", () => {
     const [policy] = Object.values(
-      build().template.findResources("AWS::IAM::ManagedPolicy"),
+      Template.fromStack(build().stack).findResources(
+        "AWS::IAM::ManagedPolicy",
+      ),
     );
     expect(policy?.Properties).not.toHaveProperty("Roles");
   });

@@ -1,11 +1,11 @@
-import { Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 
 import { buildNetwork } from "../../test/network.ts";
 
 describe("NetworkParameters", () => {
   it("writes the IDs other stacks and the release pipeline read, under names from config", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     template.hasResourceProperties("AWS::SSM::Parameter", {
       Name: "/flex/network/sandbox/vpc-id",
