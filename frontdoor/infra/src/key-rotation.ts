@@ -15,6 +15,7 @@ import {
   PlatformLogGroup,
   tablePolicy,
 } from "@repo/infra-constructs";
+import { sortedNames } from "@repo/utils/sorted-names";
 import { Duration, RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
 import {
   Alarm,
@@ -23,6 +24,7 @@ import {
 } from "aws-cdk-lib/aws-cloudwatch";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import {
+  AccountPrincipal,
   Effect,
   PolicyDocument,
   PolicyStatement,
@@ -69,8 +71,16 @@ export interface KeyRotationProps {
   readonly kind: KeyKind;
   /** The alias of the KMS key that wraps the kind's private keys, in this account. */
   readonly keyAlias: string;
-  /** The roles, by ARN, that may read the private keys besides rotation's own. */
+  /**
+   * The roles, by ARN, that may read the private keys besides rotation's own, in this account. Each
+   * is named exactly.
+   */
   readonly privateKeyReaderRoleArns: readonly string[];
+  /**
+   * The roles, by ARN, that may read the public keys, which may be in other accounts and may hold a
+   * wildcard: in each account, a pattern every reader's role matches.
+   */
+  readonly publicKeyReaderRoleArns: readonly string[];
   /** Where the kind's public keys are published, for a kind whose policy publishes them. */
   readonly publication: PublicationConfig | null;
 }
@@ -83,10 +93,11 @@ export interface KeyRotationProps {
  * kind's purpose; have KMS encrypt one again under the same key, which proves it decrypts without
  * returning it; and read and change only its two tables and the published object.
  *
- * Each table's policy is a `tablePolicy`: anything to a reader but a scan, and anything to
- * rotation but its scans, puts and deletes, is denied, and so is anything else to anyone but
- * managing the table. Both tables are kept, with their backups, when the stack goes: without
- * them, no reader has a key.
+ * Each table's policy admits its readers to scan it, by their accounts, held to their roles by
+ * condition, and is a `tablePolicy`: anything to a reader but a scan, and anything to rotation but
+ * its scans, puts and deletes, is denied, and so is anything else to anyone but managing the
+ * table. Both tables are kept, with their backups, when the stack goes: without them, no reader
+ * has a key.
  */
 export class KeyRotation extends Construct {
   public readonly function: LambdaFunction;
@@ -130,8 +141,28 @@ export class KeyRotation extends Construct {
       id: string,
       tableName: string,
       readerRoleArns: readonly string[],
-    ) =>
-      new Table(this, id, {
+    ) => {
+      const readers = sortedNames(new Set(readerRoleArns));
+      // By name, since the policy is part of the table, which can't name its own ARN.
+      const arn = tableArn(tableName);
+      // By account, held to the roles by condition: a role named as a principal must exist when
+      // the policy is written, and a reader's stack may deploy after this one.
+      const admit =
+        readers.length === 0
+          ? []
+          : [
+              new PolicyStatement({
+                sid: "AllowItsReadersToScan",
+                effect: Effect.ALLOW,
+                principals: sortedNames(new Set(readers.map(accountOf))).map(
+                  (account) => new AccountPrincipal(account),
+                ),
+                actions: READER_ACTIONS,
+                resources: [arn],
+                conditions: { ArnLike: { "aws:PrincipalArn": readers } },
+              }),
+            ];
+      return new Table(this, id, {
         tableName,
         partitionKey: { name: "keyId", type: AttributeType.STRING },
         billingMode: BillingMode.PAY_PER_REQUEST,
@@ -139,28 +170,29 @@ export class KeyRotation extends Construct {
         deletionProtection: true,
         removalPolicy: RemovalPolicy.RETAIN,
         resourcePolicy: tablePolicy({
-          // By name, since the policy is part of the table, which can't name its own ARN.
-          tableArn: tableArn(tableName),
+          tableArn: arn,
           roles: [
             {
               name: "KeyRotation",
               roleArns: [roleArn],
               actions: ROTATION_ACTIONS,
             },
-            {
-              name: "Readers",
-              roleArns: readerRoleArns,
-              actions: READER_ACTIONS,
-            },
+            { name: "Readers", roleArns: readers, actions: READER_ACTIONS },
           ],
+          statements: admit,
         }),
       });
+    };
     this.privateKeys = table(
       "PrivateKeys",
       privateKeysTable,
       props.privateKeyReaderRoleArns,
     );
-    this.publicKeys = table("PublicKeys", publicKeysTable, []);
+    this.publicKeys = table(
+      "PublicKeys",
+      publicKeysTable,
+      props.publicKeyReaderRoleArns,
+    );
 
     const logGroupName = keyRotationLogGroupName(environment, kind);
     const { logGroup, key: logGroupKey } = new PlatformLogGroup(this, "Logs", {
@@ -317,6 +349,15 @@ export class KeyRotation extends Construct {
         "KMS generates the key's ID, so the grant names its alias by condition, which holds it to the one key.",
     });
   }
+}
+
+// A role's ARN, arn:aws:iam::<account>:role/<name>.
+function accountOf(roleArn: string): string {
+  const account = roleArn.split(":")[4] ?? "";
+  if (!/^\d{12}$/.test(account)) {
+    throw new Error(`The role ARN ${roleArn} names no account`);
+  }
+  return account;
 }
 
 // The bundle is per environment, so it's built at synth, into a directory of its own for CDK to

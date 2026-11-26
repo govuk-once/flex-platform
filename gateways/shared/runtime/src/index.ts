@@ -6,9 +6,8 @@ export type {
 } from "./caller-token.ts";
 export {
   CALLER_TOKEN_AUDIENCE_ENV,
-  CALLER_TOKEN_KEYS_ACCOUNT_ENV,
-  CALLER_TOKEN_KEYS_BUCKET_ENV,
-  CALLER_TOKEN_KEYS_OBJECT_ENV,
+  CALLER_TOKEN_KEYS_ENDPOINT_ENV,
+  CALLER_TOKEN_KEYS_TABLE_ENV,
   createCallerTokenKeys,
   createCallerTokenVerifier,
   readCallerTokenVerifier,

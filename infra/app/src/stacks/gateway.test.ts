@@ -236,40 +236,38 @@ describe("GatewayStack", () => {
       Object.keys(fn?.Properties.Environment.Variables ?? {}).sort(),
     ).toEqual([
       "FLEX_CALLER_TOKEN_AUDIENCE",
-      "FLEX_CALLER_TOKEN_KEYS_ACCOUNT",
-      "FLEX_CALLER_TOKEN_KEYS_BUCKET",
-      "FLEX_CALLER_TOKEN_KEYS_OBJECT",
+      "FLEX_CALLER_TOKEN_KEYS_ENDPOINT",
+      "FLEX_CALLER_TOKEN_KEYS_TABLE",
       "FLEX_UPSTREAM_SECRET_ARN",
     ]);
   });
 
-  it("verifies the caller token with the edge's public keys, for its environment's audience", () => {
+  it("verifies the caller token with the edge's public keys, scanned through its network's endpoint, for its environment's audience", () => {
     const { template } = build();
+    const table = `arn:aws:dynamodb:eu-west-2:${DEV.frontdoor.account}:table/frontdoor-dev-caller-token-public-keys`;
     template.hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
         Variables: {
-          FLEX_CALLER_TOKEN_KEYS_BUCKET: `frontdoor-dev-keys-${DEV.frontdoor.account}`,
-          FLEX_CALLER_TOKEN_KEYS_OBJECT: "caller-token-keys.json",
-          FLEX_CALLER_TOKEN_KEYS_ACCOUNT: DEV.frontdoor.account,
+          FLEX_CALLER_TOKEN_KEYS_TABLE: table,
+          FLEX_CALLER_TOKEN_KEYS_ENDPOINT: {
+            Ref: Match.stringLikeRegexp(
+              "^SsmParameterValueflexnetworkdevendpointaddressdynamodb",
+            ),
+          },
           FLEX_CALLER_TOKEN_AUDIENCE: "flex:dev:gateways",
         },
       },
+    });
+    template.hasParameter("*", {
+      Type: "AWS::SSM::Parameter::Value<String>",
+      Default: "/flex/network/dev/endpoint-address/dynamodb",
     });
     template.hasResourceProperties("AWS::IAM::Role", {
       Policies: [
         {
           PolicyDocument: {
             Statement: Match.arrayWith([
-              {
-                Effect: "Allow",
-                Action: "s3:GetObject",
-                Resource: `arn:aws:s3:::frontdoor-dev-keys-${DEV.frontdoor.account}/caller-token-keys.json`,
-                Condition: {
-                  StringEquals: {
-                    "aws:ResourceAccount": DEV.frontdoor.account,
-                  },
-                },
-              },
+              { Effect: "Allow", Action: "dynamodb:Scan", Resource: table },
             ]),
           },
         },

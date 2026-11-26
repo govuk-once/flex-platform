@@ -58,20 +58,21 @@ export class FrontdoorCallerTokenKeysStack extends Stack {
     // Derived once, and given to both as a plain string: key rotation bakes it into its function.
     const { account } = environment.frontdoor;
     const bucketName = callerTokenKeysBucketName(environment.name, account);
+    // Every gateway's role, by its name's pattern, in each domain account that runs a gateway. A
+    // pattern, so adding a gateway doesn't change this stack, nor grow a policy toward its size
+    // limit. An account is only ever one environment's, which config validation holds, so the
+    // pattern reaches no other environment's gateways.
+    const gatewayRoles = environment.domainAccounts
+      .filter(({ gateways }) => gateways.length > 0)
+      .map(
+        ({ account: domainAccount }) =>
+          `arn:aws:iam::${domainAccount}:role/${gatewayRolePattern(environment.name)}`,
+      );
 
     new SigningKey(this, "SigningKey", { environment: environment.name });
     new CallerTokenKeysBucket(this, "CallerTokenKeys", {
       bucketName,
-      // Every gateway's role, by its name's pattern, in each domain account that runs a gateway. A
-      // pattern, so adding a gateway doesn't change this stack, nor grow the policy toward its
-      // size limit. An account is only ever one environment's, which config validation holds, so
-      // the pattern reaches no other environment's gateways.
-      readerRoles: environment.domainAccounts
-        .filter(({ gateways }) => gateways.length > 0)
-        .map(
-          ({ account }) =>
-            `arn:aws:iam::${account}:role/${gatewayRolePattern(environment.name)}`,
-        ),
+      readerRoles: gatewayRoles,
     });
     new PushIdSecret(this, "PushIdSecret", { environment: environment.name });
     new KeyRotation(this, "KeyRotation", {
@@ -82,6 +83,7 @@ export class FrontdoorCallerTokenKeysStack extends Stack {
       privateKeyReaderRoleArns: [
         `arn:aws:iam::${account}:role/${edgeRoleName(environment.name)}`,
       ],
+      publicKeyReaderRoleArns: gatewayRoles,
       // The gateways' own region, where they read the public keys.
       publication: {
         bucket: bucketName,

@@ -2,27 +2,30 @@
 // unchanged. Its claims are what an operation's secure bindings compare the input with.
 //
 // The token is a compact JWS, EdDSA over Ed25519 and nothing else. The keys are the edge's public
-// keys, which key rotation writes to one object in the frontdoor account, read from S3 and kept for
-// a minute, so a revoked key is refused within a minute. A key ID the gateway hasn't seen reads
-// them again, but not more than once every ten seconds, so a caller can't make every call read
-// them.
+// keys, which key rotation keeps in a table in the frontdoor account. The gateway reads the table
+// whole and keeps the keys for a minute, so a revoked key is refused within a minute. A key ID the
+// gateway hasn't seen reads them again, but not more than once every ten seconds, so a caller can't
+// make every call read them.
 //
 // Each key comes with the times it signs between, and verifies only a token issued in them. So a
-// key published ahead of its time verifies nothing yet, and a key that has been replaced verifies
+// key made ahead of its time verifies nothing yet, and a key that has been replaced verifies
 // nothing a token's life after, whether or not it has been removed.
 
 import { createPublicKey, type KeyObject, verify } from "node:crypto";
 
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  type AttributeValue,
+  DynamoDBClient,
+  ScanCommand,
+} from "@aws-sdk/client-dynamodb";
 import { SECURE_CLAIMS, type SecureClaims } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 
 import { GatewayError } from "./errors.ts";
 import { readGatewayRegion } from "./upstream-target.ts";
 
-export const CALLER_TOKEN_KEYS_BUCKET_ENV = "FLEX_CALLER_TOKEN_KEYS_BUCKET";
-export const CALLER_TOKEN_KEYS_OBJECT_ENV = "FLEX_CALLER_TOKEN_KEYS_OBJECT";
-export const CALLER_TOKEN_KEYS_ACCOUNT_ENV = "FLEX_CALLER_TOKEN_KEYS_ACCOUNT";
+export const CALLER_TOKEN_KEYS_TABLE_ENV = "FLEX_CALLER_TOKEN_KEYS_TABLE";
+export const CALLER_TOKEN_KEYS_ENDPOINT_ENV = "FLEX_CALLER_TOKEN_KEYS_ENDPOINT";
 export const CALLER_TOKEN_AUDIENCE_ENV = "FLEX_CALLER_TOKEN_AUDIENCE";
 
 /** How long the gateway keeps the public keys before reading them again. */
@@ -50,13 +53,11 @@ const MAX_TOKEN_LENGTH = 4096;
 
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
-// The only key the edge publishes, and the only one a gateway takes. A key is built from this and
-// its checked `x` alone, so nothing else the key set holds reaches it.
-const ED25519_JWK = { kty: "OKP", crv: "Ed25519" } as const;
-
-// RFC 8032 fixes both lengths.
-const ED25519_PUBLIC_KEY_BYTES = 32;
+// RFC 8032 fixes the length.
 const ED25519_SIGNATURE_BYTES = 64;
+
+// The item key rotation keeps its count of changes in, beside the keys.
+const VERSION_ITEM = "#version";
 
 // The UTC time the key was made, as key rotation names keys, such as `20261106T120000Z`.
 const KEY_ID = /^\d{8}T\d{6}Z$/;
@@ -234,51 +235,85 @@ export function createCallerTokenVerifier(
   };
 }
 
+/** One item of the public keys table, as DynamoDB gives it. */
+export type KeyItem = Readonly<Record<string, AttributeValue>>;
+
 export interface CallerTokenKeysOptions {
-  /** Reads the public keys, as a JWK set's JSON. */
-  readonly read: () => Promise<string>;
+  /** Reads every item of the public keys table. */
+  readonly read: () => Promise<readonly KeyItem[]>;
   readonly now?: () => number;
 }
 
-const isSeconds = (value: unknown): value is number =>
-  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const seconds = (value: AttributeValue | undefined): number | undefined => {
+  if (value?.N === undefined) return undefined;
+  const number = Number(value.N);
+  return Number.isSafeInteger(number) && number >= 0 ? number : undefined;
+};
 
-// The JWK set key rotation writes, each key with the times it signs between. A set with any key
-// the gateway can't use is refused whole: it was not written as rotation writes it.
-function parseKeySet(text: string): Map<string, CallerTokenKey> {
-  const value: unknown = JSON.parse(text);
-  const keys = isRecord(value) ? own(value, "keys") : undefined;
-  if (!Array.isArray(keys)) throw new Error("not a JWK set");
+// The public key as KMS made it: DER, as a SubjectPublicKeyInfo. Anything but Ed25519 is refused.
+function ed25519Key(der: Uint8Array): KeyObject | undefined {
+  try {
+    const key = createPublicKey({
+      key: Buffer.from(der),
+      format: "der",
+      type: "spki",
+    });
+    return key.asymmetricKeyType === "ed25519" ? key : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The table as key rotation writes it: a key's item gives the key and the times it signs between.
+// A revoked key's record and the version item hold no key, and are passed over. Anything else
+// refuses the read whole: the table was not written as rotation writes it.
+function parseKeyItems(items: readonly KeyItem[]): Map<string, CallerTokenKey> {
   const parsed = new Map<string, CallerTokenKey>();
-  for (const jwk of keys) {
-    if (!isRecord(jwk)) throw new Error("a key is not an object");
-    const kid = own(jwk, "kid");
-    const x = own(jwk, "x");
-    const signsFrom = own(jwk, "signsFrom");
-    const signsUntil = own(jwk, "signsUntil");
+  for (const item of items) {
+    const kid = item.keyId?.S;
+    if (kid === VERSION_ITEM) continue;
+    if (kid === undefined || !KEY_ID.test(kid)) {
+      throw new Error("an item has no key ID");
+    }
+    if (item.revokedAt !== undefined && item.publicKey === undefined) continue;
+    const publicKey = item.publicKey?.B;
+    const key = publicKey === undefined ? undefined : ed25519Key(publicKey);
+    const signsFrom = seconds(item.activeFrom);
+    const signsUntil = seconds(item.activeUntil);
     if (
-      typeof kid !== "string" ||
-      !KEY_ID.test(kid) ||
-      own(jwk, "kty") !== ED25519_JWK.kty ||
-      own(jwk, "crv") !== ED25519_JWK.crv ||
-      typeof x !== "string" ||
-      decodeSegment(x)?.length !== ED25519_PUBLIC_KEY_BYTES ||
-      !isSeconds(signsFrom) ||
-      (signsUntil !== undefined &&
-        (!isSeconds(signsUntil) || signsUntil <= signsFrom))
+      key === undefined ||
+      signsFrom === undefined ||
+      (item.activeUntil !== undefined &&
+        (signsUntil === undefined || signsUntil <= signsFrom))
     ) {
-      throw new Error("a key is not an Ed25519 public key with its times");
+      throw new Error("an item is not an Ed25519 public key with its times");
     }
     parsed.set(kid, {
-      key: createPublicKey({
-        key: { ...ED25519_JWK, x },
-        format: "jwk",
-      }),
+      key,
       signsFrom,
       ...(signsUntil !== undefined && { signsUntil }),
     });
   }
   return parsed;
+}
+
+/**
+ * Reads every item of the table, in one page. A table that needs another isn't one rotation
+ * keeps, which is a few keys, so the read fails rather than go on page by page.
+ */
+export function scanKeyTable(
+  dynamodb: Pick<DynamoDBClient, "send">,
+  table: string,
+): () => Promise<readonly KeyItem[]> {
+  return async () => {
+    const { Items, LastEvaluatedKey } = await dynamodb.send(
+      new ScanCommand({ TableName: table }),
+    );
+    if (Items === undefined || LastEvaluatedKey !== undefined) {
+      throw new Error("the table answered with more than one page");
+    }
+    return Items;
+  };
 }
 
 /**
@@ -299,10 +334,10 @@ export function createCallerTokenKeys(
   async function refresh(at: number): Promise<void> {
     triedAt = at;
     try {
-      keys = parseKeySet(await options.read());
+      keys = parseKeyItems(await options.read());
       readAt = at;
     } catch {
-      // Neither the store's error nor the text that failed to parse is kept.
+      // Neither the store's error nor the item that failed to parse is kept.
     }
   }
 
@@ -340,30 +375,57 @@ function required(env: Env, name: string): string {
   return value;
 }
 
-const ACCOUNT_ID = /^\d{12}$/;
+// A DynamoDB table's ARN, which names its region and account: the table is in the frontdoor's.
+const TABLE_ARN =
+  /^arn:aws[a-z-]*:dynamodb:([a-z0-9-]+):\d{12}:table\/[A-Za-z0-9_.-]{3,255}$/;
+
+function tableArn(env: Env, region: string): string {
+  const arn = required(env, CALLER_TOKEN_KEYS_TABLE_ENV);
+  const match = TABLE_ARN.exec(arn);
+  if (match === null) {
+    throw new Error(
+      `Environment variable ${CALLER_TOKEN_KEYS_TABLE_ENV} must be a DynamoDB table's ARN`,
+    );
+  }
+  // The endpoint reaches its own region's tables alone.
+  if (match[1] !== region) {
+    throw new Error(
+      `Environment variable ${CALLER_TOKEN_KEYS_TABLE_ENV} must name a table in ${region}`,
+    );
+  }
+  return arn;
+}
+
+// A hostname alone: no scheme, port or path. The gateway always calls it over HTTPS.
+const HOSTNAME = /^(?:(?!-)[a-z0-9-]{1,63}(?<!-)\.)+[a-z][a-z0-9-]{0,62}$/;
+
+function endpointUrl(env: Env): string {
+  const name = required(env, CALLER_TOKEN_KEYS_ENDPOINT_ENV);
+  if (!HOSTNAME.test(name)) {
+    throw new Error(
+      `Environment variable ${CALLER_TOKEN_KEYS_ENDPOINT_ENV} must be an endpoint's name`,
+    );
+  }
+  return `https://${name}`;
+}
 
 /**
- * The verifier as deployed: the keys from the S3 object the deployment names, in a bucket in the
- * gateway's region, and the audience it names. Nothing is read until the first call.
+ * The verifier as deployed: the keys from the table the deployment names by ARN, in the frontdoor
+ * account, and the audience it names. Nothing is read until the first call.
  *
- * Every read names the account that owns the bucket. Bucket names are global, so without it a
- * bucket of the same name in another account, made before the frontdoor's or after it is gone,
- * would be read, and its keys trusted.
+ * DynamoDB's interface endpoint has no private DNS, so the SDK's usual name for DynamoDB doesn't
+ * reach it, and the DNS allowlist refuses it. Every read goes to the endpoint's own name instead.
  */
 export function readCallerTokenVerifier(
   env: Env = process.env,
 ): VerifyCallerToken {
-  const bucket = required(env, CALLER_TOKEN_KEYS_BUCKET_ENV);
-  const object = required(env, CALLER_TOKEN_KEYS_OBJECT_ENV);
-  const owner = required(env, CALLER_TOKEN_KEYS_ACCOUNT_ENV);
-  if (!ACCOUNT_ID.test(owner)) {
-    throw new Error(
-      `Environment variable ${CALLER_TOKEN_KEYS_ACCOUNT_ENV} must be an AWS account ID`,
-    );
-  }
+  const region = readGatewayRegion(env);
+  const table = tableArn(env, region);
+  const endpoint = endpointUrl(env);
   const audience = required(env, CALLER_TOKEN_AUDIENCE_ENV);
-  const s3 = new S3Client({
-    region: readGatewayRegion(env),
+  const dynamodb = new DynamoDBClient({
+    region,
+    endpoint,
     requestHandler: {
       connectionTimeout: 2_000,
       requestTimeout: 5_000,
@@ -372,18 +434,6 @@ export function readCallerTokenVerifier(
   });
   return createCallerTokenVerifier({
     audience,
-    keys: createCallerTokenKeys({
-      async read() {
-        const { Body } = await s3.send(
-          new GetObjectCommand({
-            Bucket: bucket,
-            Key: object,
-            ExpectedBucketOwner: owner,
-          }),
-        );
-        if (Body === undefined) throw new Error("no body");
-        return Body.transformToString("utf8");
-      },
-    }),
+    keys: createCallerTokenKeys({ read: scanKeyTable(dynamodb, table) }),
   });
 }

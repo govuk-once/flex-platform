@@ -3,7 +3,7 @@ title: Environment
 description: The environment variables a deployed gateway reads, and the secret it expects.
 ---
 
-A deployed gateway reads six environment variables of its own, and `AWS_REGION`, which Lambda
+A deployed gateway reads five environment variables of its own, and `AWS_REGION`, which Lambda
 sets. Only the generated entry point reads them, through `readUpstreamOptions` and
 `readCallerTokenVerifier`. Gateway code never
 names a deployed address, a credential or an environment. These belong to the deployment.
@@ -11,9 +11,8 @@ names a deployed address, a credential or an environment. These belong to the de
 | Variable | Required | Purpose |
 |---|---|---|
 | `FLEX_UPSTREAM_SECRET_ARN` | Yes, for every gateway, including one that sends no credential | The AWS Secrets Manager secret that the driver reads its credentials from. The secret may also hold the target. |
-| `FLEX_CALLER_TOKEN_KEYS_BUCKET` | Yes | The S3 bucket holding the edge's public keys, which the [caller token](/flex-platform/frontdoor/caller-token/) is verified with, in the gateway's region |
-| `FLEX_CALLER_TOKEN_KEYS_OBJECT` | Yes | The public keys' object in that bucket |
-| `FLEX_CALLER_TOKEN_KEYS_ACCOUNT` | Yes | The frontdoor account, which owns that bucket. Every read names it, so a bucket of the same name in another account is refused |
+| `FLEX_CALLER_TOKEN_KEYS_TABLE` | Yes | The DynamoDB table holding the edge's public keys, which the [caller token](/flex-platform/frontdoor/caller-token/) is verified with, by its ARN, which names the frontdoor account. It must be in the gateway's region |
+| `FLEX_CALLER_TOKEN_KEYS_ENDPOINT` | Yes | The own name of the network's `dynamodb` endpoint, a hostname alone, which the gateway reads that table through, over HTTPS. The endpoint has no private DNS, so DynamoDB's usual name doesn't reach it |
 | `FLEX_CALLER_TOKEN_AUDIENCE` | Yes | The `aud` the token must name: `flex:<environment>:gateways` |
 | `FLEX_UPSTREAM_TARGET` | Yes, unless the driver takes the target from a field of the secret | Where the upstream is. The driver decides what it means. |
 
@@ -56,7 +55,7 @@ codegen writes, with these settings:
 | Invokes sent as an event | Run once at most, and dropped if not started within 60 seconds |
 | Logs | `/flex/gateway/<environment>/<id>/function`, a `PlatformLogGroup` in the stack |
 | Subnets and security group | Its placement's, which the [network](/flex-platform/infrastructure/network/#ids-other-stacks-read) writes to SSM |
-| Variables | `FLEX_UPSTREAM_SECRET_ARN`, `FLEX_CALLER_TOKEN_KEYS_BUCKET`, `FLEX_CALLER_TOKEN_KEYS_OBJECT`, `FLEX_CALLER_TOKEN_KEYS_ACCOUNT`, `FLEX_CALLER_TOKEN_AUDIENCE`, and `FLEX_UPSTREAM_TARGET` unless config's `target` is `null` |
+| Variables | `FLEX_UPSTREAM_SECRET_ARN`, `FLEX_CALLER_TOKEN_KEYS_TABLE`, `FLEX_CALLER_TOKEN_KEYS_ENDPOINT`, `FLEX_CALLER_TOKEN_AUDIENCE`, and `FLEX_UPSTREAM_TARGET` unless config's `target` is `null` |
 
 The stack owns the code, the version and the alias, so a gateway is released only by deploying its
 stack. The alias moves to a new version once the version exists, so no call meets new code with
@@ -75,10 +74,10 @@ Its role, `gateway-<environment>-<id>-execution`, may:
   every gateway's function stops the function's own code doing the same;
 - read its secret, and decrypt it with an upstream's key where the upstream holds it;
 - assume the roles config lists for it;
-- read the edge's public keys, `caller-token-keys.json` in the frontdoor account's
-  `frontdoor-<environment>-keys-<account>`, through the network's `s3` endpoint, only while that
-  account owns the bucket. The bucket's policy names the role too: see
-  [the public keys' bucket](/flex-platform/frontdoor/caller-token/#the-public-keys-bucket).
+- scan the edge's public keys, the frontdoor account's
+  `frontdoor-<environment>-caller-token-public-keys` table, through the network's `dynamodb`
+  endpoint. The table's policy names the role too: see
+  [the tables](/flex-platform/frontdoor/caller-token/#the-tables).
 
 It may read the secret and assume the roles only through the network's `secretsmanager` and `sts`
 endpoints: a deny on any other `aws:SourceVpce` refuses the same calls through NAT, or from outside
