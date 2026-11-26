@@ -80,6 +80,10 @@ change you are making.
   handlers, because there will be many gateways and a deployment is what exercises each one.
 - Test literal operation-key inference at the type level. Widening it to `string` loses
   information that codegen and handler authors need.
+- A CDK test calls `Template.fromStack` itself, and a helper returns the stack. Lint and SonarQube
+  find a test's assertions by following `template` back to that call. A template that comes out of
+  a helper, returned or destructured, reads as a test with no assertions. Lint refuses it with
+  `sonarjs/assertions-in-tests`, the same check as SonarQube's S2699.
 
 ## Finishing a change
 
