@@ -11,6 +11,11 @@ export {
   type PlatformCloudFrontFunctionProps,
 } from "./cloudfront/function.ts";
 export {
+  cloudFrontFunctionUrl,
+  functionUrlOrigin,
+  type FunctionUrlOriginProps,
+} from "./cloudfront/function-url.ts";
+export {
   ApiResponseHeadersPolicy,
   type ApiResponseHeadersPolicyProps,
   CONTENT_SECURITY_POLICY,

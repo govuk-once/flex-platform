@@ -586,14 +586,10 @@ It has the same TLS policy, sets the same security
 - **The rate limits.** One token may make 100 requests in five minutes and one address 500. The
   token's limit counts the exact value of `x-flex-ci-token`, and the web ACL keeps that header
   out of its logs and samples.
-- **The origin.** Every path goes to the API's function, at its Lambda function URL. The URL
-  takes only requests signed with SigV4 by a caller IAM allows, and the function's policy admits
-  CloudFront alone, for the shared account's distributions. CloudFront signs every request it
-  forwards, so a request sent straight to the URL from outside the shared account is refused
-  before the function runs. In the account, as for any function, a principal whose own policy
-  allows the call can make it. The function relies on the token it verifies either way. A synth
-  [check](/flex-platform/infrastructure/overview/#checks) refuses a function URL with any other
-  authorisation.
+- **The origin.** Every path goes to the API's function, at its Lambda function URL, which only
+  CloudFront may call from outside the shared account, as for any
+  [function behind CloudFront](/flex-platform/infrastructure/overview/#a-function-behind-cloudfront).
+  The function relies on the token it verifies, never on where a request came from.
 - **What the origin sees.** Every header the caller sent except `host`, and the
   `x-correlation-id` the CloudFront Function set. No cookie or query string. The function URL
   answers only to its own host. The headers aren't held to a list, because CloudFront refuses

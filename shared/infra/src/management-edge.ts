@@ -4,6 +4,7 @@ import {
   ApiResponseHeadersPolicy,
   CloudFrontWebAcl,
   deliverAccessLogs,
+  functionUrlOrigin,
 } from "@repo/infra-constructs";
 import { CI_TOKEN_HEADER } from "@repo/shared-viewer-request";
 import { Stack, Validations } from "aws-cdk-lib";
@@ -13,22 +14,17 @@ import {
   CachePolicy,
   Distribution,
   FunctionEventType,
-  FunctionUrlOriginAccessControl,
   HttpVersion,
   type IFunction,
-  OriginProtocolPolicy,
   OriginRequestCookieBehavior,
   OriginRequestHeaderBehavior,
   OriginRequestPolicy,
   OriginRequestQueryStringBehavior,
-  OriginSslPolicy,
   PriceClass,
   SecurityPolicyProtocol,
-  Signing,
   SSLMethod,
   ViewerProtocolPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
-import { HttpOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import type { LogGroup } from "aws-cdk-lib/aws-logs";
 import { HostedZone, type HostedZoneAttributes } from "aws-cdk-lib/aws-route53";
 import { Construct } from "constructs";
@@ -83,9 +79,8 @@ export interface ManagementEdgeProps {
  * zone, with its certificate, web ACL and logs. CloudFront takes a web ACL and a certificate from
  * us-east-1 only, so it is built there.
  *
- * Every path goes to the pipeline API, the one origin there is. The CloudFront Function refuses
- * any path that isn't the API's before it gets there. CloudFront signs each request for the
- * origin, a Lambda function URL that takes no unsigned request.
+ * Every path goes to the pipeline API's function URL, the one origin there is. The CloudFront
+ * Function refuses any path that isn't the API's before it gets there.
  */
 export class ManagementEdge extends Construct {
   public readonly webAcl: CloudFrontWebAcl;
@@ -124,16 +119,6 @@ export class ManagementEdge extends Construct {
       redactedHeaders: REDACTED_HEADERS,
     });
 
-    // Always signs, replacing any Authorization header a caller sent with CloudFront's own.
-    const originAccessControl = new FunctionUrlOriginAccessControl(
-      this,
-      "CiOriginAccessControl",
-      {
-        originAccessControlName: CI_ORIGIN_ACCESS_CONTROL_NAME,
-        signing: Signing.SIGV4_ALWAYS,
-      },
-    );
-
     this.distribution = new Distribution(this, "Distribution", {
       comment: "Flex management",
       domainNames: [domainName],
@@ -145,12 +130,10 @@ export class ManagementEdge extends Construct {
       priceClass: PriceClass.PRICE_CLASS_100,
       webAclId: this.webAcl.webAcl.attrArn,
       defaultBehavior: {
-        // Named, since CDK's default ID is built from the stack's name.
-        origin: new HttpOrigin(props.ciOriginHost, {
+        origin: functionUrlOrigin(this, "CiOriginAccessControl", {
+          host: props.ciOriginHost,
           originId: "ci",
-          originAccessControlId: originAccessControl.originAccessControlId,
-          protocolPolicy: OriginProtocolPolicy.HTTPS_ONLY,
-          originSslProtocols: [OriginSslPolicy.TLS_V1_2],
+          originAccessControlName: CI_ORIGIN_ACCESS_CONTROL_NAME,
         }),
         viewerProtocolPolicy: ViewerProtocolPolicy.HTTPS_ONLY,
         allowedMethods: AllowedMethods.ALLOW_ALL,

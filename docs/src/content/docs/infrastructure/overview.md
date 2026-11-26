@@ -337,6 +337,33 @@ Before building any stage, the app checks every stage's config:
   by region: CDK runs every such custom resource in a stack in one function, which here runs as a
   role that may write only those parameters, and logs to a log group the stack names.
 
+## A function behind CloudFront
+
+A Lambda function that only CloudFront may call is reached at its function URL, and two functions
+in `infra/constructs` set it up, one on each side:
+
+- `cloudFrontFunctionUrl`, in the function's stack, gives the function a URL with IAM
+  authorisation, so Lambda takes only requests signed with SigV4 by a caller IAM allows. The
+  function's policy admits CloudFront alone, for any distribution in the function's account. Lambda
+  checks two actions for a call through a URL, `lambda:InvokeFunctionUrl` and
+  `lambda:InvokeFunction`, so the policy allows both, and holds the second to calls through the
+  URL, so CloudFront can't invoke the function any other way. It names no one distribution: AWS
+  chooses a distribution's ID, and the distribution needs the URL's host first, so naming it would
+  make each wait for the other. It returns the URL's host.
+- `functionUrlOrigin`, in the distribution's stack, gives the origin for that host, reached over
+  HTTPS and TLS 1.2, with an origin access control that signs every request, replacing any
+  `Authorization` header a caller sent with CloudFront's own.
+
+A request sent straight to the URL from outside the account is refused before the function runs.
+In the account, as for any function, a principal whose own policy allows the call can make it, so
+the function relies on what it checks itself, never on where a request came from. The platform
+builds a distribution in us-east-1, so when the function is elsewhere, its stack passes the host on
+through [`CrossRegionParameters`](#rules-for-stacks-and-constructs).
+
+Each builds in the scope it is given, not in a construct of its own, because construct IDs are a
+contract: the URL is the function's `FunctionUrl`, and a new ID would replace it, with a new host.
+A synth [check](#checks) refuses a function URL with any other authorisation.
+
 ## Test users
 
 Every stage has a Cognito user pool of test users, `shared-test-users`, in its shared account. It
@@ -390,7 +417,7 @@ construct creates for itself, and each rule has a construct that meets it:
 | `LogGroupCheck` | `Flex-LogGroup` | `PlatformLogGroup` | Keep its logs for a year, be encrypted with a KMS key, be protected from deletion, and be retained when its stack is deleted |
 | `BucketHttpsCheck` | `Flex-BucketHttps` | `PlatformBucket` | Have a policy that denies, to anyone, every request to the bucket and its objects over plain HTTP, and over TLS older than 1.2, each in a statement with no other condition |
 | `ApiIamCheck` | `Flex-ApiIam` | `ProxyApi`, in `@repo/domain-infra` | Be an API Gateway method with IAM authorisation, so API Gateway verifies each request's SigV4 signature and holds the signer to the API's resource policy, which for a domain admits the Frontdoor's edge role alone |
-| `FunctionUrlIamCheck` | `Flex-FunctionUrlIam` | `CiFunction`, in `@repo/shared-infra` | Be a Lambda function URL with IAM authorisation, so Lambda verifies each request's SigV4 signature and runs the function only for a signer IAM allows. The pipeline API's function has a policy that admits CloudFront alone |
+| `FunctionUrlIamCheck` | `Flex-FunctionUrlIam` | [`cloudFrontFunctionUrl`](#a-function-behind-cloudfront) | Be a Lambda function URL with IAM authorisation, so Lambda verifies each request's SigV4 signature and runs the function only for a signer IAM allows |
 
 A new rule is a `ResourceCheck`: the type it applies to, and the locations at fault in a resource
 of that type.
