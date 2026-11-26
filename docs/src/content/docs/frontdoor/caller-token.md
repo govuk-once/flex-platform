@@ -113,12 +113,21 @@ be reached isn't asked by every call either.
 Each read scans the whole table, in one page: a table that would need a second isn't one rotation
 keeps, and the read fails. Each key's item gives an Ed25519 public key, in DER, and the times it
 signs between. A revoked key's record and `#version` hold no key, and are passed over. A table that
-holds anything else, or a key of any other type, fails the read whole.
+holds anything else, or a key of any other type, fails the read whole. So does a revoked key's
+record that holds a key, which rotation's own read refuses too: an item is a key or the record of
+one revoked, never both.
 
 A read that fails keeps the keys it has, for five minutes from the last read that worked, which is
 time for a failed read to be tried again many times. A key revoked in that time is one the gateway
 can't know of, so after it the gateway refuses every token until a read works: each call is
 `INTERNAL`, since no caller can have caused it. So is a call with no keys at all.
+
+Each read that fails is logged as a warning, `The caller token's keys could not be read`, so a
+table a gateway can't read shows in its log at once, not when calls fail five minutes later. The
+line's `reason` is AWS's name for the error, such as `AccessDeniedException`, or, when the gateway
+itself refused what the table held, one of `item_without_key_id`, `item_not_a_key`,
+`revoked_item_with_key` and `more_than_one_page`. An error with no name of that kind is
+`unnamed_error`. The line never holds the error's message, an item or a key.
 
 Holding `iat` to the key's times is what lets a key go quickly. A token signed just before a switch
 verifies for the rest of its minute. A token issued after it, by anyone holding the old private key,
@@ -143,7 +152,7 @@ A key ID names the time the key was made, such as `20261106T120000Z`, so key IDs
 
 | What | Where | Holds |
 |---|---|---|
-| `alias/frontdoor-<environment>-caller-token` | KMS, frontdoor account, eu-west-2 | The key that wraps the private keys. Retained, with rotation of its own key material on |
+| `alias/frontdoor-<environment>-caller-token` | KMS, frontdoor account, eu-west-2 | The key that wraps the private keys. Retained, with rotation of its own key material on. Its [policy](#the-signing-keys-policy) says who may use it |
 | `frontdoor-<environment>-caller-token-private-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`; `privateKey`, the private key as KMS encrypted it; `activeFrom`, when it starts; and, once its successor is scheduled, `activeUntil`, when it stops. Times are in seconds since the epoch. The edge reads it |
 | `frontdoor-<environment>-caller-token-public-keys` | DynamoDB, frontdoor account, eu-west-2 | An item for each key rotation holds: `keyId`, `publicKey`, as KMS returned it, in DER, and the same times. In a revoked key's place, for a day, its `keyId` and `revokedAt`, when it was revoked. And the item `#version`, how many times rotation has changed the two tables. Every gateway reads it, through its network's [`dynamodb` endpoint](/flex-platform/infrastructure/network/#the-caller-tokens-keys) |
 
@@ -153,6 +162,29 @@ as another's, and a role may be given decryption for this purpose alone.
 
 No stack holds an item: key rotation writes them, and a template would put back what it last
 deployed whenever it changed.
+
+### The signing key's policy
+
+The KMS key's policy leaves managing the key to IAM, and denies, whatever a principal's own policy
+allows:
+
+- `kms:Decrypt` to anyone but the edge's role, `frontdoor-<environment>-edge`;
+- `kms:Encrypt`, `kms:GenerateDataKey*` and `kms:ReEncrypt*` to anyone but key rotation's role,
+  `frontdoor-<environment>-caller-token-key-rotation`;
+- to key rotation's role, each of those but `kms:GenerateDataKeyPairWithoutPlaintext` and
+  `kms:ReEncrypt*`, which are all it [uses](#permissions);
+- `kms:ReEncrypt*` to anyone unless it is onto the same key, so a private key is never encrypted
+  again under a key someone else can use.
+
+So a principal in the account whose own policy allows `kms:Decrypt` on every key can't decrypt a
+private key. A deny grants nothing: each role's own policy still has to allow what it does. Both
+roles are named exactly, by the names their stacks create them with, and one named by a pattern is
+refused at synth.
+
+The policy names no role a deploy runs as, which the platform doesn't choose, and denies nothing
+that manages the key, so no deploy is ever locked out of it. That also means a principal whose own
+policy allows `kms:PutKeyPolicy` can rewrite it, so who may do that in the account matters as much
+as the policy.
 
 ### The tables
 
@@ -167,7 +199,8 @@ Both tables are billed on demand, with point-in-time recovery, encrypted with Dy
 protected from deletion and retained.
 
 The private keys' one reader is the edge's role, `frontdoor-<environment>-edge`, in the frontdoor
-account.
+account. It is named exactly: a policy matches a role's ARN as a pattern, so a private keys reader
+whose ARN holds `*` or `?` is refused at synth.
 
 The public keys are in one place, which every gateway in every domain account reads, so a key is
 in every gateway's reach the moment rotation writes it, and adding a domain account adds nothing
@@ -232,18 +265,33 @@ are made.
 
 ### Revoking a key
 
-To remove a key at once, invoke the function with `{ "revoke": "<kid>" }`. The key leaves both
-tables in that run. If the edge was signing with it, a new key is
-made that starts at once, and the key it replaced stays stopped. If it was the next key, a new one
-is scheduled for the same moment, or an hour ahead if that is later, and the signing key now stops
-when the new one starts.
+To remove a key at once, invoke the function with `{ "revoke": "<kid>" }`. The function revokes
+the key, then does a run like any other.
+
+The revocation needs nothing but the tables. It reads them, and writes one transaction: the key's
+item deleted from the private keys, its record written in its item's place in the public keys, and,
+if it was the next key, the end cleared on the key that was to hand over to it. It asks nothing of
+KMS: it makes no key and checks none. So a key leaves both tables while the KMS key is disabled or
+throttled, while another key fails its check, and while no key can be made in its place. The
+function then logs `key_revoked`.
+
+The run reads the tables again, as the revocation left them. If the edge was signing with the
+revoked key, no key signs, so the run makes one that starts at once, and the key the revoked one
+replaced stays stopped. If it was the next key, none is scheduled, so the run schedules one for
+the same moment, or an hour ahead if that is later, and the signing key stops when the new one
+starts.
+
+If the run fails, the revocation stays, and the function fails, as for any
+[failed run](#when-a-run-fails). Every run after it tries again. Until one succeeds, a revoked
+signing key has no replacement: the edge has no key to sign with, and every signed request is its
+500.
 
 A revocation can be run again with the same request, such as when the first one's answer was
-lost. Rotation keeps the ID of each key it revokes for a day, so it knows the key, reports it as
-already revoked, and does whatever else is due. A key ID it neither holds nor has revoked fails the
-run, changing nothing.
+lost. Rotation keeps the ID of each key it revokes for a day, so it knows the key, logs
+`key_already_revoked`, changes nothing, and goes on to the run. A key ID it neither holds nor has
+revoked fails the function, changing nothing.
 
-Once the run has written the tables, a gateway refuses the revoked key within a minute. One
+Once the revocation has written the tables, a gateway refuses the revoked key within a minute. One
 that can't read them refuses every token once five minutes have passed since its last read that
 worked. An edge stops signing with the key at its next read, normally within five minutes. One that
 can't read goes on signing with it, and gateways refuse those tokens, as they refuse tokens signed
@@ -263,14 +311,23 @@ KMS key.
 
 | `reason` | Means | Do |
 |---|---|---|
-| `InvalidCiphertextException`, `IncorrectKeyException` | The private key rotation holds isn't what KMS encrypted for that key ID | [Revoke](#revoking-a-key) the key. If it was stored, look in CloudTrail for a change to the private keys table's policy, which is what would let anything but rotation's role write to it |
-| `DisabledException`, `KMSInvalidStateException` | The KMS key is disabled or scheduled for deletion, so no edge can decrypt either | Enable the KMS key, or cancel its deletion, and look in CloudTrail for who changed it |
-| `AccessDeniedException` | The role's policy or the KMS key's no longer allows the check | Compare both with what the stack deploys |
+| `InvalidCiphertextException`, `IncorrectKeyException` | The private key rotation holds isn't what KMS encrypted for that key ID | [Revoke](#revoking-a-key) the key, which doesn't wait on the check. If it was stored, look in CloudTrail for a change to the private keys table's policy, which is what would let anything but rotation's role write to it |
+| `DisabledException`, `KMSInvalidStateException` | The KMS key is disabled or scheduled for deletion, so no edge can decrypt either | Enable the KMS key, or cancel its deletion, and look in CloudTrail for who changed it. A key can still be revoked meanwhile, but none is made in its place until KMS answers |
+| `AccessDeniedException` | The role's policy or the [KMS key's](#the-signing-keys-policy) no longer allows the check | Compare both with what the stack deploys |
 | Throttling, or a timeout | KMS didn't answer | Nothing, unless every run says it |
 
 Any other failure is logged as `key_rotation_failed`, with the AWS error's name and the source
 locations. So is a run that found the tables holding anything it can't read, which writes nothing,
-and a run whose view of the tables was stale.
+a run whose view of the tables was stale, and a run that KMS wouldn't make a key for, whose error
+has one of the names above.
+
+After a [revocation](#revoking-a-key), the log says how far it got:
+
+| The log holds | Means | Do |
+|---|---|---|
+| `key_revoked`, then a failure | The key is revoked, and the run after it failed. If the key was signing, no key signs | See to the failure, as above. The next run that succeeds makes or schedules the replacement, so nothing has to be invoked again |
+| A failure, and no `key_revoked` before it | The revocation itself failed, and the key is still held | See to the failure, then invoke the revocation again. One whose view of the tables was stale only has to be invoked again |
+| `key_already_revoked` | The key was revoked by an earlier invocation | Nothing |
 
 ### Permissions
 
@@ -279,7 +336,9 @@ The function's role, `frontdoor-<environment>-caller-token-key-rotation`, may:
 - make key pairs only under the signing key, found by its alias, since KMS generates the key's ID,
   and only with the caller token's encryption context purpose;
 - have KMS encrypt a private key again, only under that same key and with that purpose, which is
-  how a run [checks](#rotation) one. It can't decrypt one;
+  how a run [checks](#rotation) one. It can't decrypt one, and the
+  [signing key's policy](#the-signing-keys-policy) denies it that, and every other way to encrypt
+  with the key, whatever its own policy says;
 - read its two tables, and put and delete their items;
 - write to its own log group, `/flex/frontdoor/<environment>/caller-token-key-rotation`.
 
@@ -289,8 +348,9 @@ which may only invoke the function. Scheduler names a schedule's group, not the 
 assumes a role.
 
 It logs each key it makes, as `keyId`, with when it starts, as `activeFrom`, and each it removes or
-revokes, by key ID alone. A
-[failed run](#when-a-run-fails) logs why, and fails, so Lambda's error metric counts it.
+revokes, by key ID alone. A revocation is logged as soon as it is written, before the run that
+follows it. A [failed run](#when-a-run-fails) logs why, and fails, so Lambda's error metric counts
+it.
 
 ## Stacks
 

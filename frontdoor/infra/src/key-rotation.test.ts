@@ -43,7 +43,7 @@ function expectedPolicy(table: string, readers: string[], accounts: string[]) {
     Effect: "Deny",
     Principal: { AWS: "*" },
     NotAction,
-    Resource,
+    Resource: [Resource, `${Resource}/index/*`],
     Condition,
   });
   const principals = accounts.map(root);
@@ -334,6 +334,24 @@ describe("KeyRotation", () => {
     ).toThrow(
       "The role ARN arn:aws:iam::gateways:role/gateway-* names no account",
     );
+  });
+
+  it("refuses a private key reader named by a pattern, which would let every role it matches read", () => {
+    for (const pattern of [
+      `arn:aws:iam::${ACCOUNT}:role/frontdoor-sandbox-*`,
+      `arn:aws:iam::${ACCOUNT}:role/frontdoor-sandbox-edg?`,
+    ]) {
+      expect(() =>
+        build("eu-west-2", false, {
+          ...PROPS,
+          privateKeyReaderRoleArns: [EDGE_ROLE, pattern],
+        }),
+      ).toThrow(
+        `The role that reads the private keys is named exactly, not by a pattern: ${pattern}`,
+      );
+    }
+    // The public keys' readers are every gateway's role, by pattern.
+    expect(() => build()).not.toThrow();
   });
 
   it("is built in the signing region alone", () => {

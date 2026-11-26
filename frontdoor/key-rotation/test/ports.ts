@@ -45,6 +45,12 @@ export function applied(state: KeyState, changes: KeyChanges): KeyState {
   };
 }
 
+function disabled(): Error {
+  const error = new Error("The KMS key is disabled");
+  error.name = "DisabledException";
+  return error;
+}
+
 /** Rotation's ports, held in memory, recording what each run did and in what order. */
 export class MemoryPorts implements RotationPorts {
   state: KeyState = EMPTY_STATE;
@@ -52,6 +58,8 @@ export class MemoryPorts implements RotationPorts {
   failCommit = false;
   /** The ID of a key KMS can't decrypt. */
   undecryptable: string | undefined;
+  /** Whether KMS fails every call, as a disabled KMS key does. */
+  kmsDisabled = false;
 
   read(): Promise<KeyState> {
     return Promise.resolve(this.state);
@@ -71,6 +79,7 @@ export class MemoryPorts implements RotationPorts {
 
   generate(keyId: string): Promise<GeneratedKey> {
     this.calls.push(`generate ${keyId}`);
+    if (this.kmsDisabled) return Promise.reject(disabled());
     return Promise.resolve({
       publicKey: publicKeyDer(),
       privateKey: new Uint8Array(Buffer.from(`private ${keyId}`)),
@@ -79,6 +88,7 @@ export class MemoryPorts implements RotationPorts {
 
   check({ keyId }: Pick<HeldKey, "keyId">): Promise<void> {
     this.calls.push(`check ${keyId}`);
+    if (this.kmsDisabled) return Promise.reject(disabled());
     if (keyId === this.undecryptable) {
       const error = new Error("KMS refused the ciphertext");
       error.name = "InvalidCiphertextException";

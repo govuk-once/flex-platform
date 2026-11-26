@@ -379,10 +379,17 @@ adds. A deny in a resource's policy holds whatever a principal's own policy allo
 add statements of its own, such as an allow for another account's roles, or a deny on changing
 certain attributes.
 
+Each deny names the table and every index of it, `table/<name>/index/*`. An index is a resource of
+its own, which a statement naming the table alone doesn't reach, so an index added to a table is
+no way around its policy.
+
 Managing the table means seeing its settings and policy, and what CloudFormation's
 `AWS::DynamoDB::Table` handler does on an update: changing the table, its policy, its tags, its
-time to live, its point-in-time recovery and its contributor insights. The handler's actions that
-reach an item, or copy items to a Kinesis stream or a replica, are left out. So the policy names
+point-in-time recovery and its contributor insights. The handler's actions that reach an item, or
+copy items to a Kinesis stream or a replica, are left out. So is setting a time to live,
+`dynamodb:UpdateTimeToLive`, which no one may do: no table uses one, and one set on an attribute
+that holds a time, such as the moment a key starts, would have DynamoDB delete every item whose
+time has passed. So the policy names
 no role a deploy runs as, which the platform doesn't choose, and no deploy is ever locked out of a
 table. That also means a principal whose own policy allows `dynamodb:PutResourcePolicy` can
 rewrite the table's policy, so who may do that in the account matters as much as the policy.

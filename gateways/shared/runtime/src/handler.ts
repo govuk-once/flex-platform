@@ -288,7 +288,11 @@ export function createHandler<const TOps extends AnyOperations>(
 
       // Step 2: Verify the caller token
       step = "token";
-      const caller = await deps.verifyCallerToken(envelope.secure?.token);
+      // With the logger, for a read of the keys that fails, which may fail no call.
+      const caller = await deps.verifyCallerToken(
+        envelope.secure?.token,
+        logger,
+      );
       // A verified token's ID is CloudFront's, so every line from here joins the edge's.
       frontdoorRequestId = caller.tokenId;
 

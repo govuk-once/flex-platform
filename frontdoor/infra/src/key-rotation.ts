@@ -39,6 +39,7 @@ import {
 import { CfnSchedule } from "aws-cdk-lib/aws-scheduler";
 import { Construct } from "constructs";
 
+import { exactRoleArn } from "./exact-role-arn.ts";
 import {
   keyRotationAlarmName,
   keyRotationFunctionName,
@@ -72,7 +73,7 @@ export interface KeyRotationProps {
   readonly keyAlias: string;
   /**
    * The roles, by ARN, that may read the private keys besides rotation's own, in this account. Each
-   * is named exactly.
+   * is named exactly: a pattern is refused.
    */
   readonly privateKeyReaderRoleArns: readonly string[];
   /**
@@ -183,7 +184,9 @@ export class KeyRotation extends Construct {
     this.privateKeys = table(
       "PrivateKeys",
       privateKeysTable,
-      props.privateKeyReaderRoleArns,
+      props.privateKeyReaderRoleArns.map((arn) =>
+        exactRoleArn(arn, "reads the private keys"),
+      ),
     );
     this.publicKeys = table(
       "PublicKeys",

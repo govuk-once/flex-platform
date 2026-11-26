@@ -16,6 +16,10 @@ import {
   vi,
 } from "vitest";
 
+import {
+  createCallerTokenKeys,
+  createCallerTokenVerifier,
+} from "./caller-token.ts";
 import { GatewayError } from "./errors.ts";
 import type { AnyGatewayConfig, HandlerDeps } from "./handler.ts";
 import { createHandler as createGatewayHandler } from "./handler.ts";
@@ -405,6 +409,44 @@ describe("createHandler", () => {
       expect(
         await handler(envelope({ secure: { token: 7 } as never })),
       ).toEqual({ ok: false, error: { code: "INVALID_INPUT" } });
+    });
+
+    it("logs a read of the caller token's keys that fails as its own line, with AWS's name for the error and no message", async () => {
+      const denied = new Error("SYNTHETIC store error");
+      denied.name = "AccessDeniedException";
+      const handler = createHandler(
+        testConfig(),
+        testDeps({
+          verifyCallerToken: createCallerTokenVerifier({
+            audience: "flex:sandbox:gateways",
+            keys: createCallerTokenKeys({ read: () => Promise.reject(denied) }),
+          }),
+        }),
+      );
+      // Enough of a token to ask for a key: a header that names one, and a signature's length.
+      const header = Buffer.from(
+        JSON.stringify({ alg: "EdDSA", kid: "20261106T120000Z" }),
+      ).toString("base64url");
+      const signature = Buffer.alloc(64).toString("base64url");
+
+      expect(
+        await handler(
+          envelope({ secure: { token: `${header}.e30.${signature}` } }),
+        ),
+      ).toEqual({ ok: false, error: { code: "INTERNAL" } });
+
+      const [read, call] = capturedRecords();
+      expect(read).toEqual({
+        level: 40,
+        time: expect.any(Number) as unknown,
+        pid: expect.any(Number) as unknown,
+        hostname: expect.any(String) as unknown,
+        name: "test-gw",
+        reason: "AccessDeniedException",
+        msg: "The caller token's keys could not be read",
+      });
+      expect(call).toMatchObject({ code: "INTERNAL" });
+      expect(capturedOutput()).not.toContain("SYNTHETIC");
     });
 
     it("logs the verified token's ID on every line after it, and never the token or its claims", async () => {

@@ -20,12 +20,13 @@ const deny = (Sid: string, NotAction: unknown, Condition?: object) => ({
   Effect: "Deny",
   Principal: { AWS: "*" },
   NotAction,
-  Resource: TABLE,
+  // The table and every index of it, which is a resource of its own.
+  Resource: [TABLE, `${TABLE}/index/*`],
   ...(Condition !== undefined && { Condition }),
 });
 
 describe("tablePolicy", () => {
-  it("denies others all but managing the table, and each set of roles all but its work", () => {
+  it("denies others all but managing the table, and each set of roles all but its work, on the table and its indexes", () => {
     const allow = new PolicyStatement({
       sid: "AllowReaders",
       effect: Effect.ALLOW,
@@ -81,18 +82,31 @@ describe("tablePolicy", () => {
 
   // So a deploy works under whatever role it runs as, and the policy can always be rewritten.
   it("never denies changing the table or its policy, nor reads or writes an item for anyone", () => {
-    expect(TABLE_MANAGEMENT_ACTIONS).toEqual(
-      expect.arrayContaining([
-        "dynamodb:DeleteResourcePolicy",
-        "dynamodb:PutResourcePolicy",
-        "dynamodb:UpdateTable",
-      ]),
-    );
+    expect(TABLE_MANAGEMENT_ACTIONS).toEqual([
+      "dynamodb:DeleteResourcePolicy",
+      "dynamodb:Describe*",
+      "dynamodb:GetResourcePolicy",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:PutResourcePolicy",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
+      "dynamodb:UpdateContinuousBackups",
+      "dynamodb:UpdateContributorInsights",
+      "dynamodb:UpdateTable",
+    ]);
     for (const action of TABLE_MANAGEMENT_ACTIONS) {
       expect(action).not.toMatch(
         /Item|PartiQL|Query|Scan|Export|Import|CreateBackup|Restore|Replica|Kinesis/,
       );
     }
+  });
+
+  // One set on an attribute that holds a time would delete every item that has it.
+  it("lets no one set a time to live", () => {
+    expect(TABLE_MANAGEMENT_ACTIONS).not.toContain("dynamodb:UpdateTimeToLive");
+    expect(
+      TABLE_MANAGEMENT_ACTIONS.filter((action) => action.endsWith("*")),
+    ).toEqual(["dynamodb:Describe*"]);
   });
 
   it("leaves out a set with no roles", () => {

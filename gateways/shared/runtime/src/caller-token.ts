@@ -71,8 +71,14 @@ export interface VerifiedCaller {
   readonly tokenId: string;
 }
 
+/** Where a read of the keys that failed is logged: the gateway's own logger. */
+export interface KeyReadLog {
+  warn(fields: object, message: string): void;
+}
+
 export type VerifyCallerToken = (
   token: string | undefined,
+  log?: KeyReadLog,
 ) => Promise<VerifiedCaller>;
 
 /** One of the edge's public keys, and the times it signs between, in seconds since the epoch. */
@@ -83,9 +89,9 @@ export interface CallerTokenKey {
   readonly signsUntil?: number;
 }
 
-/** The edge's public keys, by key ID. */
+/** The edge's public keys, by key ID. A read made for the call that fails is logged to `log`. */
 export interface CallerTokenKeys {
-  get(kid: string): Promise<CallerTokenKey | undefined>;
+  get(kid: string, log?: KeyReadLog): Promise<CallerTokenKey | undefined>;
 }
 
 export interface CallerTokenVerifierOptions {
@@ -211,7 +217,7 @@ export function createCallerTokenVerifier(
 ): VerifyCallerToken {
   const now = options.now ?? Date.now;
 
-  return async (token) => {
+  return async (token, log) => {
     const jws = splitToken(token);
     const kid = readKeyId(jws.header);
 
@@ -219,7 +225,7 @@ export function createCallerTokenVerifier(
     if (signature?.length !== ED25519_SIGNATURE_BYTES)
       throw invalid("signature");
 
-    const key = await options.keys.get(kid);
+    const key = await options.keys.get(kid, log);
     if (key === undefined) throw invalid("unknown key");
 
     const signed = Buffer.from(`${jws.header}.${jws.payload}`);
@@ -264,18 +270,51 @@ function ed25519Key(der: Uint8Array): KeyObject | undefined {
   }
 }
 
+// Why the gateway itself refused what a read gave it. Each is fixed, and says nothing of the item.
+type KeysRefusal =
+  | "item_without_key_id"
+  | "item_not_a_key"
+  | "revoked_item_with_key"
+  | "more_than_one_page";
+
+class KeysRefused extends Error {
+  constructor(readonly reason: KeysRefusal) {
+    super(`The caller token's keys were refused: ${reason}`);
+  }
+}
+
+// AWS's names for its errors, such as AccessDeniedException. No refusal of the gateway's own has
+// this shape, so one is never read as the other.
+const ERROR_NAME = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
+
+// Why a read failed, as a log may say it: the gateway's own reason, or the error's name, which
+// for an answer from DynamoDB is AWS's code for it. Never the message, which can hold what the
+// store sent, and never anything of an item.
+function readFailure(error: unknown): string {
+  if (error instanceof KeysRefused) return error.reason;
+  return error instanceof Error && ERROR_NAME.test(error.name)
+    ? error.name
+    : "unnamed_error";
+}
+
 // The table as key rotation writes it: a key's item gives the key and the times it signs between.
 // A revoked key's record and the version item hold no key, and are passed over. Anything else
-// refuses the read whole: the table was not written as rotation writes it.
+// refuses the read whole: the table was not written as rotation writes it. So does a revoked key's
+// record that holds a key, as rotation's own read of it does: it is one or the other.
 function parseKeyItems(items: readonly KeyItem[]): Map<string, CallerTokenKey> {
   const parsed = new Map<string, CallerTokenKey>();
   for (const item of items) {
     const kid = item.keyId?.S;
     if (kid === VERSION_ITEM) continue;
     if (kid === undefined || !KEY_ID.test(kid)) {
-      throw new Error("an item has no key ID");
+      throw new KeysRefused("item_without_key_id");
     }
-    if (item.revokedAt !== undefined && item.publicKey === undefined) continue;
+    if (item.revokedAt !== undefined) {
+      if (item.publicKey !== undefined) {
+        throw new KeysRefused("revoked_item_with_key");
+      }
+      continue;
+    }
     const publicKey = item.publicKey?.B;
     const key = publicKey === undefined ? undefined : ed25519Key(publicKey);
     const signsFrom = seconds(item.activeFrom);
@@ -286,7 +325,7 @@ function parseKeyItems(items: readonly KeyItem[]): Map<string, CallerTokenKey> {
       (item.activeUntil !== undefined &&
         (signsUntil === undefined || signsUntil <= signsFrom))
     ) {
-      throw new Error("an item is not an Ed25519 public key with its times");
+      throw new KeysRefused("item_not_a_key");
     }
     parsed.set(kid, {
       key,
@@ -310,7 +349,7 @@ export function scanKeyTable(
       new ScanCommand({ TableName: table }),
     );
     if (Items === undefined || LastEvaluatedKey !== undefined) {
-      throw new Error("the table answered with more than one page");
+      throw new KeysRefused("more_than_one_page");
     }
     return Items;
   };
@@ -320,7 +359,8 @@ export function scanKeyTable(
  * The public keys, read once, kept for a minute, and read again sooner for a key ID they don't
  * hold, but never more than once in ten seconds. A read that fails keeps the keys the gateway has,
  * for five minutes from the last read that worked. With none, the call fails as INTERNAL, since
- * a caller can't have caused it.
+ * a caller can't have caused it. Each read that fails is logged, with why, so a table the gateway
+ * can't read shows before any call fails.
  */
 export function createCallerTokenKeys(
   options: CallerTokenKeysOptions,
@@ -331,23 +371,33 @@ export function createCallerTokenKeys(
   let triedAt = Number.NEGATIVE_INFINITY;
   let inFlight: Promise<void> | undefined;
 
-  async function refresh(at: number): Promise<void> {
+  async function refresh(at: number, log?: KeyReadLog): Promise<void> {
     triedAt = at;
     try {
       keys = parseKeyItems(await options.read());
       readAt = at;
-    } catch {
-      // Neither the store's error nor the item that failed to parse is kept.
+    } catch (error) {
+      // Neither the store's error nor the item that failed to parse is kept: the log says why
+      // in a word. Logging never fails the call, which goes on with the keys it has.
+      try {
+        log?.warn(
+          { reason: readFailure(error) },
+          "The caller token's keys could not be read",
+        );
+      } catch {
+        // The call is answered either way.
+      }
     }
   }
 
   return {
-    async get(kid) {
+    async get(kid, log) {
       const at = now();
       const due =
         keys === undefined || at - readAt >= KEYS_MAX_AGE_MS || !keys.has(kid);
       if (due && at - triedAt >= KEYS_MIN_INTERVAL_MS) {
-        inFlight ??= refresh(at).finally(() => {
+        // Logged through the call that started it, whichever calls then share it.
+        inFlight ??= refresh(at, log).finally(() => {
           inFlight = undefined;
         });
       }

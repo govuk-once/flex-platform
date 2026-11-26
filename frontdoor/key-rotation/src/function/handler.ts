@@ -1,26 +1,23 @@
 // Key rotation's Lambda handler. The schedule invokes it with its own event, which asks for a run;
-// a person invokes it with `{ "revoke": "<kid>" }` to remove a key at once.
+// a person invokes it with `{ "revoke": "<kid>" }` to remove a key at once, before the run.
 
 import { isKeyId } from "@repo/frontdoor-shared";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
 import type { KeyPolicy } from "./policy.ts";
-import {
-  KeyCheckFailed,
-  rotate,
-  type RotationPorts,
-  type RotationRequest,
-} from "./rotation.ts";
+import { revoke } from "./revoke.ts";
+import { KeyCheckFailed, rotate, type RotationPorts } from "./rotation.ts";
 
-function requestOf(event: unknown): RotationRequest {
+// The key a person asked to revoke, if the event names one.
+function keyToRevoke(event: unknown): string | undefined {
   if (typeof event === "object" && event !== null && "revoke" in event) {
-    const { revoke } = event;
-    if (typeof revoke !== "string" || !isKeyId(revoke)) {
+    const { revoke: keyId } = event;
+    if (typeof keyId !== "string" || !isKeyId(keyId)) {
       throw new Error("revoke must name a key ID");
     }
-    return { revoke };
+    return keyId;
   }
-  return {};
+  return undefined;
 }
 
 function log(
@@ -44,7 +41,15 @@ export function createHandler(
 ) {
   return async (event: unknown): Promise<void> => {
     try {
-      const report = await rotate(ports, policy, now(), requestOf(event));
+      const at = now();
+      const keyId = keyToRevoke(event);
+      if (keyId !== undefined) {
+        // Written and logged before the run, which needs KMS: whatever the run then fails at,
+        // the key has gone. The run reads the tables again, as the revocation left them.
+        const { event: name, ...details } = await revoke(ports, at, keyId);
+        log("INFO", name, details);
+      }
+      const report = await rotate(ports, policy, at);
       for (const { event: name, ...details } of report.events)
         log("INFO", name, details);
     } catch (error) {
