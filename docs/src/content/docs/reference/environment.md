@@ -49,7 +49,7 @@ codegen writes, with these settings:
 | Name | `gateway-<environment>-<id>`, invoked through its alias, `live` |
 | Code | `.gen/runtime/bundle.mjs`, alone |
 | Handler | `bundle.handler` |
-| Runtime | Node.js 24, on arm64 |
+| Runtime | Node.js 26, on arm64 |
 | Memory | 1024 MB |
 | Timeout | 28 seconds, since a domain answers within API Gateway's 29 |
 | Invokes sent as an event | Run once at most, and dropped if not started within 60 seconds |

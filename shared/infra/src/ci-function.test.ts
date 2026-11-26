@@ -65,7 +65,7 @@ describe("CiFunction", () => {
 
     template.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "shared-ci",
-      Runtime: "nodejs24.x",
+      Runtime: "nodejs26.x",
       Architectures: ["arm64"],
       Handler: "index.handler",
       Timeout: 10,

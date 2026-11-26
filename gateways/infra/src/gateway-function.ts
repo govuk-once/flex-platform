@@ -102,7 +102,7 @@ export class GatewayFunction extends Construct {
 
     this.function = new Function(this, "Function", {
       functionName: props.functionName,
-      runtime: Runtime.NODEJS_24_X,
+      runtime: Runtime.NODEJS_26_X,
       architecture: Architecture.ARM_64,
       // The bundle alone: codegen writes what it was built from beside it.
       code: Code.fromAsset(dirname(props.bundle), {

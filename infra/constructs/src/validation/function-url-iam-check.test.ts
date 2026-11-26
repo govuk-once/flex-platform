@@ -21,7 +21,7 @@ function checkedFunction() {
     env: { account: "123456789012", region: "eu-west-2" },
   });
   const fn = new LambdaFunction(stack, "Function", {
-    runtime: Runtime.NODEJS_24_X,
+    runtime: Runtime.NODEJS_26_X,
     handler: "index.handler",
     code: Code.fromInline("exports.handler = async () => ({});"),
   });

@@ -20,7 +20,7 @@ export function buildOriginRequestFunction(
     write: false,
     format: "cjs",
     platform: "node",
-    target: "node24",
+    target: "node26",
     define: { ORIGIN_REQUEST_CONFIG: JSON.stringify(config) },
     // Not minified, so the source locations a failure logs point at a line worth reading.
   });

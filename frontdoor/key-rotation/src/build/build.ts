@@ -19,7 +19,7 @@ export function buildKeyRotationFunction(config: KeyRotationConfig): string {
     write: false,
     format: "cjs",
     platform: "node",
-    target: "node24",
+    target: "node26",
     define: { KEY_ROTATION_CONFIG: JSON.stringify(config) },
   });
 

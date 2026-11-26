@@ -227,7 +227,7 @@ describe("ReleaseWorker", () => {
 
     built.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "shared-release-worker",
-      Runtime: "nodejs24.x",
+      Runtime: "nodejs26.x",
       Architectures: ["arm64"],
       Handler: "index.handler",
       Timeout: 900,

@@ -479,7 +479,7 @@ A release sets the function's:
 - `FLEX_ENVIRONMENT`, the environment's name, which the code uses only to build names, such as a
   gateway's function name, and never to choose what it does;
 - tracing, active, so Lambda sends its traces to X-Ray;
-- runtime, `nodejs24.x`, on arm64, with the handler `index.handler`, 1,024 MB of memory and a
+- runtime, `nodejs26.x`, on arm64, with the handler `index.handler`, 1,024 MB of memory and a
   29-second timeout. A domain doesn't choose these. The timeout is how long the domain's API
   waits for the function, so a function never runs on after no one is waiting;
 - code, the bundle's object by its S3 version. Lambda reads the code from the bucket in place and

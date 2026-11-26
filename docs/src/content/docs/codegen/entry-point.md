@@ -53,7 +53,7 @@ declaration files: a TypeScript module could not import them.
 ## The bundle
 
 `.gen/runtime/bundle.mjs` is `entry.js` and everything it imports, bundled by esbuild as ESM for
-Node 24. Its handler is `bundle.handler`.
+Node 26. Its handler is `bundle.handler`.
 
 The bundle includes everything the handler imports except Node's builtins. This includes the AWS
 SDK, even though the Lambda runtime ships its own copy. An import left out of the bundle would be
