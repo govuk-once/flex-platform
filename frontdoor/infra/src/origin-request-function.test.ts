@@ -26,14 +26,15 @@ function build(region = "us-east-1", apiAccounts = API_ACCOUNTS) {
   };
 }
 
-// The signing key's parameter, decrypting with its key, by alias, for the caller token's purpose
-// alone, and the push ID's secret, whose ARN Secrets Manager ends in six characters of its own.
+// The caller token's private keys table, decrypting with its key, by alias, for the caller token's
+// purpose alone, and the push ID's secret, whose ARN Secrets Manager ends in six characters of its
+// own.
 const SIGNING_GRANTS = [
   {
-    Action: "ssm:GetParameter",
+    Action: "dynamodb:Scan",
     Effect: "Allow",
     Resource:
-      "arn:aws:ssm:eu-west-2:123456789012:parameter/flex/frontdoor/sandbox/caller-token-signing-key",
+      "arn:aws:dynamodb:eu-west-2:123456789012:table/frontdoor-sandbox-caller-token-private-keys",
   },
   {
     Action: "kms:Decrypt",
@@ -124,7 +125,7 @@ describe("OriginRequestFunction", () => {
         issuers: ISSUERS,
         routes: ROUTES,
         callerTokenAudience: "flex:sandbox:gateways",
-        signingKeyParameter: "/flex/frontdoor/sandbox/caller-token-signing-key",
+        privateKeysTable: "frontdoor-sandbox-caller-token-private-keys",
         pushIdSecret: "frontdoor-sandbox-push-id-secret",
       }),
     );

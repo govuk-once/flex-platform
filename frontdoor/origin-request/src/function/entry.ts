@@ -1,8 +1,8 @@
 // What Lambda@Edge runs. Only the build bundles this module: it replaces ORIGIN_REQUEST_CONFIG
 // with an environment's config, because Lambda@Edge has no environment variables of its own.
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { KMSClient } from "@aws-sdk/client-kms";
 import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
-import { SSMClient } from "@aws-sdk/client-ssm";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 
 import {
@@ -32,9 +32,9 @@ export const handler = createOriginRequestHandler({
   signCallerToken: createCallerTokenSigner({
     audience: ORIGIN_REQUEST_CONFIG.callerTokenAudience,
     loadKey: createSigningKeyLoader({
-      ssm: new SSMClient(SIGNING_REGION_CLIENT),
+      dynamodb: new DynamoDBClient(SIGNING_REGION_CLIENT),
       kms: new KMSClient(SIGNING_REGION_CLIENT),
-      parameterName: ORIGIN_REQUEST_CONFIG.signingKeyParameter,
+      tableName: ORIGIN_REQUEST_CONFIG.privateKeysTable,
     }),
     derivePushId: createPushIdDeriver({
       secrets: new SecretsManagerClient(SIGNING_REGION_CLIENT),

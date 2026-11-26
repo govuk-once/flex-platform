@@ -1,7 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 import { MemoryPorts } from "../../test/ports.ts";
-import { createHandler } from "./handler.ts";
+import { createHandler as createKindHandler } from "./handler.ts";
+import { CALLER_TOKEN_POLICY } from "./policy.ts";
+import type { RotationPorts } from "./rotation.ts";
+
+const createHandler = (ports: RotationPorts, now: () => Date) =>
+  createKindHandler(ports, CALLER_TOKEN_POLICY, now);
 
 const NOW = new Date("2026-11-06T12:00:00Z");
 
@@ -29,14 +34,17 @@ describe("createHandler", () => {
       telemetry: {
         event: "key_generated",
         details: {
-          kid: "20261106T120000Z",
-          signsFrom: NOW.getTime() / 1000,
+          keyId: "20261106T120000Z",
+          activeFrom: NOW.getTime() / 1000,
         },
       },
     });
+    const privateKey = ports.state.keys[0]?.privateKey;
+    assert(privateKey !== undefined);
     expect(JSON.stringify(lines)).not.toContain(
-      ports.state.keys[0]?.privateKey,
+      Buffer.from(privateKey).toString("base64"),
     );
+    expect(JSON.stringify(lines)).not.toContain("private ");
   });
 
   it("revokes the key a person names", async () => {
@@ -69,7 +77,7 @@ describe("createHandler", () => {
         telemetry: {
           event: "key_check_failed",
           details: {
-            kid: "20261106T120000Z",
+            keyId: "20261106T120000Z",
             reason: "InvalidCiphertextException",
             stored: true,
           },

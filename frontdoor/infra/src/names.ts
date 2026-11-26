@@ -83,19 +83,14 @@ export function callerTokenKeysBucketName(
 /** The public keys' object in that bucket, a JWK set. Key rotation writes it; no stack does. */
 export const CALLER_TOKEN_KEYS_OBJECT = "caller-token-keys.json";
 
-/** Key rotation's own role, in the frontdoor account. */
-export function keyRotationRoleName(environment: string): string {
-  return `frontdoor-${environment}-key-rotation`;
+/** A kind of key's rotation role, in the frontdoor account. */
+export function keyRotationRoleName(environment: string, kind: string): string {
+  return `frontdoor-${environment}-${kind}-key-rotation`;
 }
 
 /** The alias of the key that wraps the caller token's signing keys. */
 export function signingKeyAliasName(environment: string): string {
   return `alias/frontdoor-${environment}-caller-token`;
-}
-
-/** Where the edge reads the keys it signs with. Key rotation writes it. */
-export function signingKeyParameterName(environment: string): string {
-  return `/flex/frontdoor/${environment}/caller-token-signing-key`;
 }
 
 /**
@@ -106,27 +101,50 @@ export function pushIdSecretName(environment: string): string {
   return `frontdoor-${environment}-push-id-secret`;
 }
 
-/** Where key rotation keeps its state. Key rotation writes it. */
-export function keyRotationStateParameterName(environment: string): string {
-  return `/flex/frontdoor/${environment}/caller-token-key-state`;
+/**
+ * A kind of key's private keys, such as the caller token's, which its readers read. Key rotation
+ * writes them; no stack does.
+ */
+export function privateKeysTableName(
+  environment: string,
+  kind: string,
+): string {
+  return `frontdoor-${environment}-${kind}-private-keys`;
 }
 
-/** Key rotation's function, and the schedule that runs it. */
-export function keyRotationFunctionName(environment: string): string {
-  return `frontdoor-${environment}-key-rotation`;
+/** A kind of key's public keys, and key rotation's own record of them. Key rotation writes them. */
+export function publicKeysTableName(environment: string, kind: string): string {
+  return `frontdoor-${environment}-${kind}-public-keys`;
 }
 
-/** The role EventBridge Scheduler runs key rotation's schedule as, in the frontdoor account. */
-export function keyRotationScheduleRoleName(environment: string): string {
-  return `frontdoor-${environment}-key-rotation-schedule`;
+/** A kind of key's rotation function, and the schedule that runs it. */
+export function keyRotationFunctionName(
+  environment: string,
+  kind: string,
+): string {
+  return `frontdoor-${environment}-${kind}-key-rotation`;
 }
 
-/** The alarm on key rotation's failed runs. */
-export function keyRotationAlarmName(environment: string): string {
-  return `frontdoor-${environment}-key-rotation-failed`;
+/** The role EventBridge Scheduler runs a kind of key's rotation as, in the frontdoor account. */
+export function keyRotationScheduleRoleName(
+  environment: string,
+  kind: string,
+): string {
+  return `frontdoor-${environment}-${kind}-key-rotation-schedule`;
 }
 
-/** Key rotation's log group. */
-export function keyRotationLogGroupName(environment: string): string {
-  return `/flex/frontdoor/${environment}/key-rotation`;
+/** The alarm on a kind of key's failed rotation runs. */
+export function keyRotationAlarmName(
+  environment: string,
+  kind: string,
+): string {
+  return `frontdoor-${environment}-${kind}-key-rotation-failed`;
+}
+
+/** A kind of key's rotation log group. */
+export function keyRotationLogGroupName(
+  environment: string,
+  kind: string,
+): string {
+  return `/flex/frontdoor/${environment}/${kind}-key-rotation`;
 }

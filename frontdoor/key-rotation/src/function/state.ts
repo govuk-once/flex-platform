@@ -1,125 +1,78 @@
-// What key rotation keeps between runs: every key it has made and not yet removed, and the keys
-// revoked in the last day, so a revocation that failed part way can be run again.
+// What key rotation keeps between runs, in a kind's two tables: every key it has made and not yet
+// removed, and the keys revoked in the last day, so a revocation that failed part way can be run
+// again.
 //
-// Each key signs from the time it was scheduled for until the time it stops, which is set when the
-// next key is scheduled. The edge signs with it only between the two, and gateways accept it only
-// for a token issued between the two. A time that has passed never changes, so a key that has
-// stopped signing never signs again, whatever else is revoked.
+// Each key is used from the time it was scheduled for until the time it stops, which is set when
+// the next key is scheduled. A time that has passed never changes, so a key that has stopped is
+// never used again, whatever else is revoked.
 
-import { isKeyId, type SigningKey } from "@repo/frontdoor-shared";
-
-export interface StoredKey {
-  readonly kid: string;
-  /** The public key, as a JWK's `x`: its 32 bytes, base64url. */
-  readonly x: string;
-  /** The private key as KMS encrypted it, base64. */
-  readonly privateKey: string;
-  /** When it starts to sign, in seconds since the epoch. */
-  readonly signsFrom: number;
+export interface HeldKey {
+  readonly keyId: string;
+  /** The public key as KMS returned it: DER, as a SubjectPublicKeyInfo. */
+  readonly publicKey: Uint8Array;
+  /** The private key as KMS encrypted it. */
+  readonly privateKey: Uint8Array;
+  /** When it is first used, in seconds since the epoch. */
+  readonly activeFrom: number;
   /** When it stops: when the key after it starts. Not set until that key is scheduled. */
-  readonly signsUntil?: number;
+  readonly activeUntil?: number;
 }
 
 export interface RevokedKey {
-  readonly kid: string;
+  readonly keyId: string;
   /** When it was revoked, in seconds since the epoch. */
   readonly revokedAt: number;
 }
 
 export interface KeyState {
-  readonly keys: readonly StoredKey[];
+  /**
+   * How many times the tables have changed: 0 before the first. A change is written only if the
+   * tables are still at the version it was worked out from.
+   */
+  readonly version: number;
+  readonly keys: readonly HeldKey[];
   readonly revoked: readonly RevokedKey[];
 }
 
-export const EMPTY_STATE: KeyState = { keys: [], revoked: [] };
+export const EMPTY_STATE: KeyState = { version: 0, keys: [], revoked: [] };
 
-const BASE64URL = /^[A-Za-z0-9_-]+$/;
-const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
-
-function isStoredKey(value: unknown): value is StoredKey {
-  if (typeof value !== "object" || value === null) return false;
-  const key = value as Record<string, unknown>;
-  return (
-    typeof key.kid === "string" &&
-    isKeyId(key.kid) &&
-    typeof key.x === "string" &&
-    BASE64URL.test(key.x) &&
-    typeof key.privateKey === "string" &&
-    BASE64.test(key.privateKey) &&
-    typeof key.signsFrom === "number" &&
-    Number.isInteger(key.signsFrom) &&
-    (key.signsUntil === undefined ||
-      (typeof key.signsUntil === "number" &&
-        Number.isInteger(key.signsUntil) &&
-        key.signsUntil > key.signsFrom))
-  );
+/** What one run changes, written together or not at all. */
+export interface KeyChanges {
+  /** Keys made, or whose end has changed. Written whole. */
+  readonly put: readonly HeldKey[];
+  /** Keys removed, by ID, and not revoked in this run. */
+  readonly remove: readonly string[];
+  /** Keys revoked in this run. Each is no longer held. */
+  readonly revoke: readonly RevokedKey[];
+  /** Revocations older than rotation keeps, by key ID. */
+  readonly forget: readonly string[];
 }
 
-function isRevokedKey(value: unknown): value is RevokedKey {
-  if (typeof value !== "object" || value === null) return false;
-  const key = value as Record<string, unknown>;
-  return (
-    typeof key.kid === "string" &&
-    isKeyId(key.kid) &&
-    typeof key.revokedAt === "number" &&
-    Number.isInteger(key.revokedAt)
-  );
-}
+/** The changes from one state to the next, or none if the two hold the same. */
+export function changesBetween(
+  from: KeyState,
+  to: Pick<KeyState, "keys" | "revoked">,
+): KeyChanges | undefined {
+  const held = new Map(from.keys.map((key) => [key.keyId, key]));
+  const kept = new Set(to.keys.map(({ keyId }) => keyId));
+  const wasRevoked = new Set(from.revoked.map(({ keyId }) => keyId));
+  const stillRevoked = new Set(to.revoked.map(({ keyId }) => keyId));
 
-/** Reads the state parameter's value. A state it can't read stops the run, changing nothing. */
-export function parseState(text: string): KeyState {
-  const value: unknown = JSON.parse(text);
-  if (typeof value !== "object" || value === null) {
-    throw new Error("The key rotation state is not a key state");
-  }
-  const { keys, revoked } = value as Record<string, unknown>;
-  if (
-    !Array.isArray(keys) ||
-    !keys.every(isStoredKey) ||
-    !Array.isArray(revoked) ||
-    !revoked.every(isRevokedKey)
-  ) {
-    throw new Error("The key rotation state is not a key state");
-  }
-  return { keys, revoked };
-}
-
-function byKid(a: StoredKey, b: StoredKey): number {
-  if (a.kid < b.kid) return -1;
-  return a.kid > b.kid ? 1 : 0;
-}
-
-/**
- * The public keys every gateway accepts, as a JWK set. Beside each key, the times it signs
- * between, which a gateway holds a token's `iat` to.
- */
-export function publicKeySet(state: KeyState): string {
-  return JSON.stringify({
-    keys: [...state.keys]
-      .sort(byKid)
-      .map(({ kid, x, signsFrom, signsUntil }) => ({
-        kty: "OKP",
-        crv: "Ed25519",
-        alg: "EdDSA",
-        use: "sig",
-        kid,
-        x,
-        signsFrom,
-        ...(signsUntil !== undefined && { signsUntil }),
-      })),
+  // A key's other fields never change once it is made.
+  const put = to.keys.filter((key) => {
+    const before = held.get(key.keyId);
+    return before === undefined || before.activeUntil !== key.activeUntil;
   });
-}
+  const revoke = to.revoked.filter(({ keyId }) => !wasRevoked.has(keyId));
+  const revoking = new Set(revoke.map(({ keyId }) => keyId));
+  const remove = from.keys
+    .map(({ keyId }) => keyId)
+    .filter((keyId) => !kept.has(keyId) && !revoking.has(keyId));
+  const forget = from.revoked
+    .map(({ keyId }) => keyId)
+    .filter((keyId) => !stillRevoked.has(keyId));
 
-/**
- * The signing key parameter: the keys the edge signs with now or later. A key that has stopped
- * signing is left out, so no edge holds it.
- */
-export function signingKeys(state: KeyState, nowSeconds: number): string {
-  const keys: SigningKey[] = state.keys
-    .filter(
-      ({ signsUntil }) => signsUntil === undefined || signsUntil > nowSeconds,
-    )
-    .sort(byKid)
-    .map(({ kid, privateKey, signsFrom }) => ({ kid, privateKey, signsFrom }));
-  return JSON.stringify({ keys });
+  return put.length + remove.length + revoke.length + forget.length === 0
+    ? undefined
+    : { put, remove, revoke, forget };
 }
