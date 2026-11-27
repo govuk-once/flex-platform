@@ -46,6 +46,17 @@ function reasonFor(
 // Whether a package builds as its record entry releases it: the same contents, at a version its
 // build can be released as. A derived package's build writes its major and minor, and the release
 // its patch.
+/** The names of the packages with changes no release has published. */
+export function pendingNames(
+  statuses: Iterable<Pick<Status, "pkg" | "reason">>,
+): Set<string> {
+  return new Set(
+    [...statuses]
+      .filter((s) => s.reason !== undefined)
+      .map((s) => nameOf(s.pkg)),
+  );
+}
+
 export function buildsAsRecorded({ pkg, released, digest }: Status): boolean {
   if (released?.digest !== digest) return false;
   if (pkg.source.versioning === "declared") {

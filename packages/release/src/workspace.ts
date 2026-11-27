@@ -1,12 +1,11 @@
-import { execFile as execFileCb } from "node:child_process";
 import { globSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import { isRecord } from "@repo/utils/is-record";
 import { sortedNames } from "@repo/utils/sorted-names";
 
+import { execFile } from "./exec-file.ts";
 import type { Source } from "./sources.ts";
 import { parseVersion } from "./versions.ts";
 
@@ -67,8 +66,6 @@ export function sourceDirectories(root: string, source: Source): string[] {
     ),
   );
 }
-
-const execFile = promisify(execFileCb);
 
 // What a command wrote before it failed, from the error execFile rejects with.
 function outputOf(error: unknown): string {
