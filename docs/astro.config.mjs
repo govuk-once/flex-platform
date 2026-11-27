@@ -112,7 +112,14 @@ export default defineConfig({
         },
         {
           label: "Infrastructure",
-          items: ["infrastructure/overview", "infrastructure/network"],
+          items: [
+            "infrastructure/overview",
+            "infrastructure/config",
+            "infrastructure/deploying",
+            "infrastructure/building-blocks",
+            "infrastructure/checks-and-tests",
+            "infrastructure/network",
+          ],
         },
         {
           label: "Reference",

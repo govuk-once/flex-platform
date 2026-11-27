@@ -104,7 +104,7 @@ nothing to name refuses everything, since an endpoint with no policy would allow
 | `execute-api` | `execute-api:Invoke` on each private API a gateway names, by a principal of the account of a role a gateway signs as |
 
 An upstream's secret and roles come exactly from each gateway's entry in the
-[config](/flex-platform/infrastructure/overview/#config). So if a gateway's upstream holds its
+[config](/flex-platform/infrastructure/config/). So if a gateway's upstream holds its
 secret or role in its own account, the policy lets the gateway through to that one alone. A call
 through an endpoint is logged in the account of the resource it names. So a wider policy would let
 a workload signal out to an account someone else controls, through a secret's name or a role's
@@ -144,7 +144,7 @@ takes calls from. So give the upstream this network's endpoint ID, with the doma
 The stack outputs the endpoint ID as `ExecuteApiEndpointId`. Each environment's network has its
 own endpoint.
 
-The gateway's entry in [config](/flex-platform/infrastructure/overview/#config) then names the API:
+The gateway's entry in [config](/flex-platform/infrastructure/config/) then names the API:
 
 ```ts
 gateways: [
@@ -294,7 +294,7 @@ every gateway in the domain account declares:
 - Nothing for the `execute-api` endpoint itself. A [private API](#private-apis) is called at its
   own name, which is one of its gateway's names.
 - Each gateway's names, from its entry in `gateways` on its domain account in
-  [config](/flex-platform/infrastructure/overview/#config). These are the names it connects to:
+  [config](/flex-platform/infrastructure/config/). These are the names it connects to:
   its upstream's API and any host it takes a token from.
 
 ```ts

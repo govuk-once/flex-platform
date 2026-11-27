@@ -233,7 +233,7 @@ the platform places it.
 ### Who can call it
 
 Every method uses IAM authorisation. Synth fails for any API Gateway method in the app without it.
-See [checks](/flex-platform/infrastructure/overview/#checks). The Frontdoor signs each request with
+See [checks](/flex-platform/infrastructure/checks-and-tests/#checks). The Frontdoor signs each request with
 SigV4 as its edge role. The resource policy allows the Frontdoor's account only if the caller is
 that role, and denies everyone else. So it refuses even a principal in the domain account that has
 permission to invoke APIs.

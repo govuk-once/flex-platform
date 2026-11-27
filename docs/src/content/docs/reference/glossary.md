@@ -40,7 +40,7 @@ Lambda proxy integration, in isolated subnets. See [Domains](/flex-platform/doma
 ## Domain account
 
 An AWS account that holds an environment's domains, the gateways they call, and the network both
-run in. See [Stages and environments](/flex-platform/infrastructure/overview/#stages-and-environments).
+run in. See [Accounts](/flex-platform/infrastructure/overview/#accounts).
 
 ## Domain SDK
 
@@ -77,7 +77,7 @@ The single CloudFront distribution that every request to the platform enters thr
 ## Frontdoor account
 
 The AWS account that holds an environment's Frontdoor, and the caller token's keys. See
-[Stages and environments](/flex-platform/infrastructure/overview/#stages-and-environments).
+[Accounts](/flex-platform/infrastructure/overview/#accounts).
 
 ## Gateway
 
@@ -154,7 +154,7 @@ version must be [compatible](/flex-platform/gateways/compatibility/) with every 
 
 The AWS account each stage has for what spans its environments: the test user pool, and the
 pipeline API, with the bucket and tables domain releases use. See
-[Stages and environments](/flex-platform/infrastructure/overview/#stages-and-environments).
+[Accounts](/flex-platform/infrastructure/overview/#accounts).
 
 ## Stage
 

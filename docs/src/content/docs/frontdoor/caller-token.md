@@ -219,7 +219,7 @@ account matters as much as the policy.
 ### The tables
 
 Each table is keyed by `keyId`. Each table's own policy lets its readers scan it. As
-[every table's policy](/flex-platform/infrastructure/overview/#a-tables-policy) does, it also
+[every table's policy](/flex-platform/infrastructure/building-blocks/#a-tables-policy) does, it also
 denies:
 
 - everything to anyone but key rotation's role and the table's readers, except managing the table;

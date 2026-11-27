@@ -26,7 +26,7 @@ built from. It has the same TLS policy, sets the same security
   its logs and samples.
 - **The origin.** Every path goes to the API's function, at its Lambda function URL. Only
   CloudFront may call the URL from outside the shared account, as for any
-  [function behind CloudFront](/flex-platform/infrastructure/overview/#a-function-behind-cloudfront).
+  [function behind CloudFront](/flex-platform/infrastructure/building-blocks/#a-function-behind-cloudfront).
   The function relies on the token it verifies, never on where a request came from.
 - **What the origin sees.** It sees every header the caller sent except `host`, and the
   `x-correlation-id` the CloudFront Function set. It sees no cookie or query string. The function
@@ -102,7 +102,7 @@ request, in order, it:
    verified token says only which repository's pipeline is calling. The pipeline is allowed if:
    - the stage has the environment, and the environment hosts the domain;
    - the token's `repository_id` and `repository_owner_id` are the ones the stage's
-     [config](/flex-platform/infrastructure/overview/#config) holds for the domain. It checks both,
+     [config](/flex-platform/infrastructure/config/) holds for the domain. It checks both,
      so a repository transferred to another owner is no longer the one registered. A domain with no
      repository in config can't be released;
    - the token's `environment` is the path's. GitHub sets that claim only for a job that runs in
@@ -206,7 +206,7 @@ its domain, with partition key `domain`, and by its version, with sort key `vers
 | `runId`, `commit` | The run that recorded it, and its commit, if its token held them |
 
 The API records a version once, with a put that succeeds only if there is none, and the version
-never changes. The table's [policy](/flex-platform/infrastructure/overview/#a-tables-policy) denies
+never changes. The table's [policy](/flex-platform/infrastructure/building-blocks/#a-tables-policy) denies
 the API's role everything but getting and putting an item. It denies anyone else everything but
 managing the table. So nothing changes or deletes a version. Like the
 [release table](#the-release-table), the table is kept, with point-in-time recovery, if the stack
@@ -260,7 +260,7 @@ could refuse it. So a message holds only a release's key: its environment, domai
 worker releases what the table records under that key. Three rules hold this together:
 
 - **Only the API records a release, and nothing changes what it asked for.** The table's
-  [policy](/flex-platform/infrastructure/overview/#a-tables-policy) denies:
+  [policy](/flex-platform/infrastructure/building-blocks/#a-tables-policy) denies:
   - the API's role, `shared-ci`, everything but getting, putting and updating an item;
   - the workers' roles, `shared-release-worker` and `shared-release-dead-letter-worker`, everything
     but getting and updating an item;

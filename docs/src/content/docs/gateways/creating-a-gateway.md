@@ -132,7 +132,7 @@ which every [gateway client](/flex-platform/domains/calling-gateways/) invokes.
 To deploy it:
 
 1. List it in `gateways` on each domain account that runs it, in the
-   [CDK app's config](/flex-platform/infrastructure/overview/#config).
+   [CDK app's config](/flex-platform/infrastructure/config/).
 2. Add its package to `@repo/infra-app`'s dependencies.
 
 The config entry names every host the gateway connects to: its upstream's API, and any host it

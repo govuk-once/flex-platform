@@ -18,7 +18,8 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 - **[Egress](/flex-platform/gateways/overview/).** The gateways, one Lambda function per upstream,
   generated from config in this repository. A domain uses them to reach other services.
 
-Each stage also has a shared account, for what spans its environments: the
+Each stage also has a [shared account](/flex-platform/infrastructure/overview/#accounts), for what spans its
+environments: the
 [test users](/flex-platform/infrastructure/overview/#test-users), and the
 [pipeline API](/flex-platform/domains/release-pipeline/#the-pipeline-api) that domains release their code
 through.

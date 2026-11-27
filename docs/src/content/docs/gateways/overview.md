@@ -69,7 +69,7 @@ A gateway runs in one of two placements. The placement depends on how its upstre
 | `private`  | Reached over the internet                            | A NAT gateway. Filtering its traffic beyond DNS is planned |
 
 The gateway's code is the same in both placements. Placement belongs to its deployment, in the
-[CDK app's config](/flex-platform/infrastructure/overview/#config), not to the gateway's
+[CDK app's config](/flex-platform/infrastructure/config/), not to the gateway's
 configuration. The upstream's address and the secret the gateway uses to authenticate to it are
 deployment values too. See [Environment](/flex-platform/reference/environment/).
 
