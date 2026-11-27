@@ -1,5 +1,5 @@
-import { functionRoleStatements } from "@repo/infra-constructs";
-import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
+import { functionArn, functionRoleStatements } from "@repo/infra-constructs";
+import { Stack, Validations } from "aws-cdk-lib";
 import {
   Effect,
   ManagedPolicy,
@@ -53,12 +53,7 @@ export class ExecutionRole extends Construct {
 
     const stack = Stack.of(this);
 
-    const gateways = stack.formatArn({
-      service: "lambda",
-      resource: "function",
-      resourceName: gatewayAliases,
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
+    const gateways = functionArn(stack, gatewayAliases);
 
     const execution = functionRoleStatements(this, {
       logGroupName: functionLogGroupName(environment, domain),

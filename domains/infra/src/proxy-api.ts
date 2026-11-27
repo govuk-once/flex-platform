@@ -1,5 +1,5 @@
-import { PlatformLogGroup } from "@repo/infra-constructs";
-import { ArnFormat, Duration, Stack, Validations } from "aws-cdk-lib";
+import { functionArn, PlatformLogGroup, roleArn } from "@repo/infra-constructs";
+import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   AccessLogField,
   AccessLogFormat,
@@ -156,13 +156,7 @@ export class ProxyApi extends Construct {
 
     // Named as a condition, never as the principal: API Gateway refuses a policy naming a role that
     // doesn't exist yet.
-    const edgeRoleArn = stack.formatArn({
-      service: "iam",
-      region: "",
-      account: edgeRole.account,
-      resource: "role",
-      resourceName: edgeRole.name,
-    });
+    const edgeRoleArn = roleArn(stack, edgeRole.name, edgeRole.account);
 
     const accessLogs = new PlatformLogGroup(this, "AccessLogs", {
       logGroupName: apiAccessLogGroupName(environment, domain),
@@ -312,12 +306,10 @@ export class ProxyApi extends Construct {
       domain,
     }: { stack: Stack; environment: string; domain: string },
   ): void {
-    const liveFunction = stack.formatArn({
-      service: "lambda",
-      resource: "function",
-      resourceName: `${domainFunctionName(environment, domain)}:${LIVE_ALIAS}`,
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
+    const liveFunction = functionArn(
+      stack,
+      `${domainFunctionName(environment, domain)}:${LIVE_ALIAS}`,
+    );
 
     // With no condition on `aws:SourceAccount`: API Gateway doesn't send it when it assumes an
     // integration's role, so the condition refuses the role and every request gets a 500. A role

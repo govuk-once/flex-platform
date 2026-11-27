@@ -1,11 +1,4 @@
-import {
-  ArnFormat,
-  CfnResource,
-  Duration,
-  Stack,
-  Tags,
-  Validations,
-} from "aws-cdk-lib";
+import { CfnResource, Duration, Stack, Tags, Validations } from "aws-cdk-lib";
 import {
   Alarm,
   ComparisonOperator,
@@ -23,13 +16,10 @@ import {
   type Subnet,
   Vpc,
 } from "aws-cdk-lib/aws-ec2";
-import {
-  CfnPolicy,
-  PolicyDocument,
-  PolicyStatement,
-} from "aws-cdk-lib/aws-iam";
+import { CfnPolicy, PolicyDocument } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
+import { logGroupWriteStatements } from "../function-role.ts";
 import { PlatformLogGroup } from "../log-group.ts";
 import { NETWORK_REGION, subnetCidr, VPC_CIDR } from "./layout.ts";
 import {
@@ -254,55 +244,20 @@ export class NetworkVpc extends Construct {
       LogGroup: logGroup.logGroupName,
     });
 
-    const logGroupArn = stack.formatArn({
-      service: "logs",
-      resource: "log-group",
-      resourceName: logGroupName,
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+    const logs = logGroupWriteStatements(this, {
+      logGroupName,
+      logGroupKey: key,
     });
-    // A log group encrypted with a customer managed key takes the key to write to, through
-    // CloudWatch Logs, for this log group alone.
     const policy = new CfnPolicy(
       this,
       "RestrictDefaultSecurityGroupLogsPolicy",
       {
         policyName: "WriteLogs",
         roles: [role.ref],
-        policyDocument: new PolicyDocument({
-          statements: [
-            new PolicyStatement({
-              actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
-              resources: [`${logGroupArn}:*`],
-            }),
-            new PolicyStatement({
-              actions: ["kms:Encrypt", "kms:GenerateDataKey*"],
-              resources: [key.keyArn],
-              conditions: {
-                StringEquals: {
-                  "kms:ViaService": `logs.${stack.region}.amazonaws.com`,
-                },
-                ArnEquals: {
-                  "kms:EncryptionContext:aws:logs:arn": logGroupArn,
-                },
-              },
-            }),
-          ],
-        }),
+        policyDocument: new PolicyDocument({ statements: logs.statements }),
       },
     );
     handler.node.addDependency(policy);
-
-    Validations.of(policy).acknowledge(
-      {
-        id: `AwsSolutions-IAM5[Resource::${logGroupArn}:*]`,
-        reason:
-          "Lambda names each log stream itself, so the grant covers every stream in the one log group.",
-      },
-      {
-        id: "AwsSolutions-IAM5[Action::kms:GenerateDataKey*]",
-        reason:
-          "CloudWatch Logs chooses which GenerateDataKey call it makes; the grant holds only for the one key and log group.",
-      },
-    );
+    Validations.of(policy).acknowledge(...logs.acknowledgements);
   }
 }

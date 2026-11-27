@@ -1,4 +1,5 @@
-import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
+import { functionArn, roleArn } from "@repo/infra-constructs";
+import { Stack, Validations } from "aws-cdk-lib";
 import {
   AccountPrincipal,
   Effect,
@@ -59,30 +60,21 @@ export class DeployRole extends Construct {
 
     const stack = Stack.of(this);
 
-    const domainFunction = stack.formatArn({
-      service: "lambda",
-      resource: "function",
-      resourceName: domainFunctionName(environment, domain),
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
+    const domainFunction = functionArn(
+      stack,
+      domainFunctionName(environment, domain),
+    );
 
     // The function, and its versions and aliases, such as `:live`. A function's name holds no
     // colon, so no other function's ARN matches.
     const domainFunctions = [domainFunction, `${domainFunction}:*`];
 
-    const gateways = stack.formatArn({
-      service: "lambda",
-      resource: "function",
-      resourceName: gatewayFunctions,
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
+    const gateways = functionArn(stack, gatewayFunctions);
 
-    const executionRole = stack.formatArn({
-      service: "iam",
-      region: "",
-      resource: "role",
-      resourceName: executionRoleName(environment, domain),
-    });
+    const executionRole = roleArn(
+      stack,
+      executionRoleName(environment, domain),
+    );
 
     const subnetIds = StringListParameter.valueForTypedListParameter(
       this,
@@ -187,13 +179,11 @@ export class DeployRole extends Construct {
       }),
     ];
 
-    const releaseRoleArn = stack.formatArn({
-      service: "iam",
-      region: "",
-      account: releaseRole.account,
-      resource: "role",
-      resourceName: releaseRole.name,
-    });
+    const releaseRoleArn = roleArn(
+      stack,
+      releaseRole.name,
+      releaseRole.account,
+    );
 
     const role = new Role(this, "Role", {
       roleName: deployRoleName(environment, domain),

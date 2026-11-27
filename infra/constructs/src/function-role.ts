@@ -1,7 +1,9 @@
-import { type Acknowledgment, ArnFormat, Stack } from "aws-cdk-lib";
+import { type Acknowledgment, Stack } from "aws-cdk-lib";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { IKey } from "aws-cdk-lib/aws-kms";
 import type { IConstruct } from "constructs";
+
+import { functionArn, logGroupArn } from "./arns.ts";
 
 // Lambda creates, reuses and removes a function's network interfaces in its subnets as the
 // function's role.
@@ -34,13 +36,8 @@ export function logGroupWriteStatements(
 ): RoleStatements {
   const stack = Stack.of(scope);
 
-  const logGroupArn = stack.formatArn({
-    service: "logs",
-    resource: "log-group",
-    resourceName: logGroupName,
-    arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-  });
-  const logStreams = `${logGroupArn}:*`;
+  const logGroup = logGroupArn(stack, logGroupName);
+  const logStreams = `${logGroup}:*`;
 
   return {
     statements: [
@@ -59,7 +56,7 @@ export function logGroupWriteStatements(
           StringEquals: {
             "kms:ViaService": `logs.${stack.region}.amazonaws.com`,
           },
-          ArnEquals: { "kms:EncryptionContext:aws:logs:arn": logGroupArn },
+          ArnEquals: { "kms:EncryptionContext:aws:logs:arn": logGroup },
         },
       }),
     ],
@@ -95,12 +92,7 @@ export function functionRoleStatements(
 ): RoleStatements {
   const { statements, acknowledgements } = logGroupWriteStatements(scope, logs);
 
-  const functionArns = Stack.of(scope).formatArn({
-    service: "lambda",
-    resource: "function",
-    resourceName: functions,
-    arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-  });
+  const functionArns = functionArn(scope, functions);
 
   return {
     statements: [

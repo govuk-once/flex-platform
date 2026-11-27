@@ -1,4 +1,5 @@
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
+import { roleArn } from "@repo/infra-constructs";
 import { RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { type CfnSecret, Secret } from "aws-cdk-lib/aws-secretsmanager";
@@ -53,12 +54,7 @@ export class PushIdSecret extends Construct {
         resources: ["*"],
         conditions: {
           StringNotEquals: {
-            "aws:PrincipalArn": stack.formatArn({
-              service: "iam",
-              region: "",
-              resource: "role",
-              resourceName: edgeRoleName(environment),
-            }),
+            "aws:PrincipalArn": roleArn(stack, edgeRoleName(environment)),
           },
         },
       }),

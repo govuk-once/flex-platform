@@ -17,6 +17,7 @@ import {
   SIGNING_KEY_REGION,
   type TrustedIssuer,
 } from "@repo/frontdoor-shared";
+import { tableArn } from "@repo/infra-constructs";
 import {
   ArnFormat,
   Duration,
@@ -131,14 +132,7 @@ export class OriginRequestFunction extends Construct {
       new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ["dynamodb:Scan"],
-        resources: [
-          stack.formatArn({
-            service: "dynamodb",
-            region: SIGNING_KEY_REGION,
-            resource: "table",
-            resourceName: privateKeysTable,
-          }),
-        ],
+        resources: [tableArn(stack, privateKeysTable, SIGNING_KEY_REGION)],
       }),
       new PolicyStatement({
         effect: Effect.ALLOW,

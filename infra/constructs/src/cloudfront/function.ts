@@ -1,4 +1,4 @@
-import { ArnFormat, Stack } from "aws-cdk-lib";
+import { Stack } from "aws-cdk-lib";
 import {
   Function as CloudFrontFunction,
   FunctionCode,
@@ -8,6 +8,7 @@ import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
+import { logGroupArn, roleArn } from "../arns.ts";
 import { PlatformLogGroup } from "../log-group.ts";
 
 // The service-linked role CloudFront writes function logs as, with its path.
@@ -75,18 +76,11 @@ export class PlatformCloudFrontFunction extends Construct {
             "kms:ViaService": `logs.${region}.amazonaws.com`,
           },
           ArnEquals: {
-            "aws:PrincipalArn": stack.formatArn({
-              service: "iam",
-              region: "",
-              resource: "role",
-              resourceName: CLOUDFRONT_LOGGER_ROLE,
-            }),
-            "kms:EncryptionContext:aws:logs:arn": stack.formatArn({
-              service: "logs",
-              resource: "log-group",
-              resourceName: logGroupName,
-              arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-            }),
+            "aws:PrincipalArn": roleArn(stack, CLOUDFRONT_LOGGER_ROLE),
+            "kms:EncryptionContext:aws:logs:arn": logGroupArn(
+              stack,
+              logGroupName,
+            ),
           },
         },
       }),

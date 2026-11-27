@@ -1,3 +1,4 @@
+export { functionArn, logGroupArn, roleArn, tableArn } from "./arns.ts";
 export { PlatformBucket } from "./bucket.ts";
 export { cdkApp } from "./cdk-app.ts";
 export {

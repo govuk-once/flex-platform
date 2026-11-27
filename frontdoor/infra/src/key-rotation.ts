@@ -11,6 +11,8 @@ import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 import {
   logGroupWriteStatements,
   PlatformLogGroup,
+  roleArn,
+  tableArn,
   tablePolicy,
 } from "@repo/infra-constructs";
 import { sortedNames } from "@repo/utils/sorted-names";
@@ -120,20 +122,9 @@ export class KeyRotation extends Construct {
     // As the docs name it, such as "caller token".
     const title = kind.replaceAll("-", " ");
 
-    const roleArn = stack.formatArn({
-      service: "iam",
-      region: "",
-      resource: "role",
-      resourceName: keyRotationRoleName(environment, kind),
-    });
+    const rotationRole = roleArn(stack, keyRotationRoleName(environment, kind));
     const privateKeysTable = privateKeysTableName(environment, kind);
     const publicKeysTable = publicKeysTableName(environment, kind);
-    const tableArn = (name: string) =>
-      stack.formatArn({
-        service: "dynamodb",
-        resource: "table",
-        resourceName: name,
-      });
     const table = (
       id: string,
       tableName: string,
@@ -141,7 +132,7 @@ export class KeyRotation extends Construct {
     ) => {
       const readers = sortedNames(new Set(readerRoleArns));
       // By name, since the policy is part of the table, which can't name its own ARN.
-      const arn = tableArn(tableName);
+      const arn = tableArn(stack, tableName);
       // By account, held to the roles by condition: a role named as a principal must exist when
       // the policy is written, and a reader's stack may deploy after this one.
       const admit =
@@ -171,7 +162,7 @@ export class KeyRotation extends Construct {
           roles: [
             {
               name: "KeyRotation",
-              roleArns: [roleArn],
+              roleArns: [rotationRole],
               actions: ROTATION_ACTIONS,
             },
             { name: "Readers", roleArns: readers, actions: READER_ACTIONS },
@@ -232,7 +223,10 @@ export class KeyRotation extends Construct {
       new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ROTATION_ACTIONS,
-        resources: [tableArn(privateKeysTable), tableArn(publicKeysTable)],
+        resources: [
+          tableArn(stack, privateKeysTable),
+          tableArn(stack, publicKeysTable),
+        ],
       }),
     ];
 

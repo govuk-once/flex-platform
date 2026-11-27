@@ -1,4 +1,4 @@
-import { ArnFormat, Duration, Stack, Validations } from "aws-cdk-lib";
+import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   FlowLog,
   FlowLogDestination,
@@ -11,6 +11,7 @@ import { PolicyStatement, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import { type Bucket, type IBucket, StorageClass } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
+import { logGroupArn } from "../arns.ts";
 import { PlatformBucket } from "../bucket.ts";
 import { PlatformLogGroup } from "../log-group.ts";
 import { rejectedFlowLogGroupName } from "./names.ts";
@@ -86,12 +87,7 @@ export class FlowLogs extends Construct {
     const stack = Stack.of(this);
     const logGroupName = rejectedFlowLogGroupName(environment);
     const rejected = new PlatformLogGroup(this, "Rejected", { logGroupName });
-    const logGroupArn = stack.formatArn({
-      service: "logs",
-      resource: "log-group",
-      resourceName: logGroupName,
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
+    const logGroup = logGroupArn(stack, logGroupName);
 
     // CDK gives the role what it needs to write to the group; the key is ours to grant, through
     // CloudWatch Logs, for this log group alone.
@@ -108,7 +104,7 @@ export class FlowLogs extends Construct {
           StringEquals: {
             "kms:ViaService": `logs.${stack.region}.amazonaws.com`,
           },
-          ArnEquals: { "kms:EncryptionContext:aws:logs:arn": logGroupArn },
+          ArnEquals: { "kms:EncryptionContext:aws:logs:arn": logGroup },
         },
       }),
     );

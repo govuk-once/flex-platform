@@ -1,7 +1,7 @@
-import { PlatformBucket } from "@repo/infra-constructs";
+import { functionArn, PlatformBucket } from "@repo/infra-constructs";
 import { UPLOAD_EXPIRES_SECONDS } from "@repo/shared-ci";
 import { bundleKey } from "@repo/shared-release";
-import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
+import { Validations } from "aws-cdk-lib";
 import {
   AccountPrincipal,
   AnyPrincipal,
@@ -146,13 +146,7 @@ export class DomainCodeBucket extends Construct {
           conditions: {
             StringEquals: { "aws:SourceAccount": account },
             ArnLike: {
-              "aws:SourceArn": Stack.of(this).formatArn({
-                service: "lambda",
-                account,
-                resource: "function",
-                resourceName: functionNames,
-                arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-              }),
+              "aws:SourceArn": functionArn(this, functionNames, account),
             },
           },
         }),

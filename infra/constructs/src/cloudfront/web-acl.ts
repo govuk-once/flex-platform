@@ -1,8 +1,9 @@
-import { ArnFormat, Stack } from "aws-cdk-lib";
+import { Stack } from "aws-cdk-lib";
 import type { LogGroup } from "aws-cdk-lib/aws-logs";
 import { CfnLoggingConfiguration, CfnWebACL } from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 
+import { logGroupArn } from "../arns.ts";
 import { PlatformLogGroup } from "../log-group.ts";
 import {
   BODY_INSPECTION_LIMIT,
@@ -82,14 +83,7 @@ export class CloudFrontWebAcl extends Construct {
     new CfnLoggingConfiguration(this, "Logging", {
       resourceArn: this.webAcl.attrArn,
       // WAF wants the log group's ARN without the `:*` the attribute carries.
-      logDestinationConfigs: [
-        stack.formatArn({
-          service: "logs",
-          resource: "log-group",
-          resourceName: this.logGroup.logGroupName,
-          arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-        }),
-      ],
+      logDestinationConfigs: [logGroupArn(stack, this.logGroup.logGroupName)],
       redactedFields: redactedHeaders.map((header) => ({
         singleHeader: { Name: header },
       })),
