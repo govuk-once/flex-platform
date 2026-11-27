@@ -1,6 +1,5 @@
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
-
-const TRACE_ID = /^1-[0-9a-f]{8}-[0-9a-f]{24}$/;
+import { isTraceId } from "@repo/utils/is-trace-id";
 
 // The trace ID the CloudFront Function set on this request, as `x-correlation-id`, so every log
 // line for the request carries the same one. Its last 24 digits come from the request ID alone,
@@ -14,7 +13,7 @@ export function requestTraceId(
   const derived = traceIdFor(requestId, nowSeconds);
   if (
     correlationId !== undefined &&
-    TRACE_ID.test(correlationId) &&
+    isTraceId(correlationId) &&
     correlationId.slice(11) === derived.slice(11)
   ) {
     return correlationId;

@@ -1,5 +1,6 @@
 // What a pipeline says of the bundle it is about to upload, or asks to release.
 
+import { isSha256Hex } from "@repo/cloudfront-js-utils/is-sha256-hex";
 import { isBundleVersion } from "@repo/shared-release";
 
 import type { FunctionUrlEvent } from "./types.ts";
@@ -14,8 +15,6 @@ export const MAX_BUNDLE_BYTES = 250 * 1024 * 1024;
 const MAX_BODY_LENGTH = 1024;
 
 // A SHA-256 in hex, in lowercase, so one bundle has one key.
-const SHA256_HEX = /^[0-9a-f]{64}$/;
-
 export interface Bundle {
   /** The zip's SHA-256, in lowercase hex. */
   readonly sha256: string;
@@ -105,7 +104,7 @@ function isVersion(value: unknown): value is string {
 }
 
 function isSha256(value: unknown): value is string {
-  return typeof value === "string" && SHA256_HEX.test(value);
+  return typeof value === "string" && isSha256Hex(value);
 }
 
 function bodyText(event: FunctionUrlEvent): string | undefined {

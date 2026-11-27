@@ -16,6 +16,7 @@ import { GatewayInvocationError } from "@govuk-once/flex-gateway-client";
 import { withCallerContext } from "@govuk-once/flex-gateway-client/caller";
 import { isJsonContentType } from "@repo/cloudfront-js-utils/is-json-content-type";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
+import { isTraceId } from "@repo/utils/is-trace-id";
 import { routeMatcher } from "@repo/utils/route-matcher";
 import type { Logger } from "pino";
 import type { ZodType } from "zod";
@@ -54,8 +55,6 @@ export interface App {
 export interface CreateAppOptions {
   readonly logger?: Logger;
 }
-
-const TRACE_ID = /^1-[0-9a-f]{8}-[0-9a-f]{24}$/;
 
 interface Outcome {
   readonly level: LogLevel;
@@ -123,7 +122,7 @@ function refusedPart(
 function traceIdOf(request: Request): string | undefined {
   const sent = request.headers.get(CORRELATION_ID_HEADER);
 
-  if (sent === null || !TRACE_ID.test(sent)) return undefined;
+  if (sent === null || !isTraceId(sent)) return undefined;
 
   return sent;
 }

@@ -2,6 +2,7 @@ import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 import { CI_TOKEN_HEADER } from "@repo/shared-viewer-request";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 import { heldValue } from "@repo/utils/held-value";
+import { isTraceId } from "@repo/utils/is-trace-id";
 
 import type { CiOptions } from "./options.ts";
 import {
@@ -22,8 +23,6 @@ import type { Pipeline } from "./token.ts";
 import type { FunctionUrlEvent, FunctionUrlResult } from "./types.ts";
 
 export type { CiOptions } from "./options.ts";
-
-const TRACE_ID = /^1-[0-9a-f]{8}-[0-9a-f]{24}$/;
 
 // Verify the token, find the route, decide whether this pipeline may use it, and only then run the
 // route's handler, which reads what it asks for. The token comes first, so a caller without one
@@ -128,7 +127,7 @@ function authorisedTarget(
 // Anything else is replaced with one made from Lambda's ID for the request.
 function requestTraceId(event: FunctionUrlEvent, nowMs: number): string {
   const correlationId = event.headers["x-correlation-id"];
-  if (correlationId !== undefined && TRACE_ID.test(correlationId)) {
+  if (correlationId !== undefined && isTraceId(correlationId)) {
     return correlationId;
   }
   return traceIdFor(event.requestContext.requestId, nowMs / 1000);
