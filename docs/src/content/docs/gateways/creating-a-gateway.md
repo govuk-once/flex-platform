@@ -4,8 +4,8 @@ description: Add a gateway package for a new upstream, from package.json to gene
 ---
 
 A gateway is a package under `gateways/services/`. It holds a configuration, its versioned schemas
-and any custom handlers. It has no tests of its own apart from tests for its handlers. The
-libraries' tests cover generation, bundling and dispatch.
+and any custom handlers. Its only tests are tests for its handlers. The libraries' tests cover
+generation, bundling and dispatch.
 
 This walk-through uses the [openapi-rest driver](/flex-platform/drivers/openapi-rest/overview/).
 If that driver cannot reach your upstream,
@@ -64,8 +64,8 @@ Pin `eslint` at the same version as the rest of the workspace.
 export { service as default } from "@repo/eslint-config";
 ```
 
-The `service` preset blocks common network globals and builtins to help keep upstream access in
-the driver. It is a lint check, not complete network isolation; review dependencies and custom
+The `service` preset blocks common network globals and builtins, to help keep upstream access in
+the driver. It is a lint check, not complete network isolation. Review dependencies and custom
 handlers for transport access too. Run `pnpm install` to link the package.
 
 ## 2. Configure the gateway
@@ -93,7 +93,7 @@ export default defineGateway({
 });
 ```
 
-Choose `id` carefully. It is the gateway's identity, and if the contract has to break later, the
+Choose `id` carefully. It is the gateway's identity. If the contract has to break later, the
 gateway needs a new one. See [Configuring a gateway](/flex-platform/gateways/configuration/) for
 every field, and [the openapi-rest overview](/flex-platform/drivers/openapi-rest/overview/) for
 `upstream` and `parameters`.
@@ -104,7 +104,7 @@ every field, and [the openapi-rest overview](/flex-platform/drivers/openapi-rest
 pnpm --filter @repo/gateway-service-example schemas
 ```
 
-When there are no versions yet, this writes `schemas/0001.json` from the OpenAPI document. It also
+If there are no versions yet, this writes `schemas/0001.json` from the OpenAPI document. It also
 prints notes for a reviewer to read, such as:
 
 - an input object it closed
@@ -119,33 +119,38 @@ Read the file before you commit it. It is the contract that callers will compile
 pnpm --filter @repo/gateway-service-example codegen
 ```
 
-This checks the configuration against the schemas and writes `.gen/`. It checks in stages, and
-lists every problem the first failing stage finds, so fixing those can uncover more. Run it until
-it passes. See [What codegen checks](/flex-platform/codegen/checks/).
+This checks the configuration against the schemas and writes `.gen/`. It checks in stages. It
+lists every problem that the first failing stage finds, so fixing those can uncover more. Run it
+until it passes. See [What codegen checks](/flex-platform/codegen/checks/).
 
 ## 5. Prepare for deployment
 
-The gateway deploys as a Lambda function named `gateway-<environment>-<id>`, by
-`gatewayFunctionName` in `@repo/gateway-core`, with one alias, `live`, which every
-[gateway client](/flex-platform/domains/overview/#calling-gateways) invokes.
+The gateway deploys as a Lambda function named `gateway-<environment>-<id>`.
+`gatewayFunctionName` in `@repo/gateway-core` builds the name. The function has one alias, `live`,
+which every [gateway client](/flex-platform/domains/overview/#calling-gateways) invokes.
 
-To deploy it, list it in `gateways` on each domain account that runs it, in the
-[CDK app's config](/flex-platform/infrastructure/overview/#config), and add its package to
-`@repo/infra-app`'s dependencies. The entry names every host it connects to, its upstream's API
-and any host it takes a token from, since the network resolves only the names on its DNS
-allowlist, and a name left off doesn't resolve. See
-[the allowlist](/flex-platform/infrastructure/network/#the-allowlist). It also gives the gateway's
-placement, its secret, its target and the roles it signs as. A secret its stack creates starts
-empty: put its value before the gateway is called, or it fails as it starts.
+To deploy it:
 
-What the function runs, the variables it reads and what its role needs are in
-[Environment](/flex-platform/reference/environment/). Callers install
-the [client package](/flex-platform/codegen/overview/#the-client-package) in `.gen/client/package/`,
-which holds the [call contract](/flex-platform/codegen/call-contract/) and a function that creates
-a client typed by it.
+1. List it in `gateways` on each domain account that runs it, in the
+   [CDK app's config](/flex-platform/infrastructure/overview/#config).
+2. Add its package to `@repo/infra-app`'s dependencies.
+
+The config entry names every host the gateway connects to: its upstream's API, and any host it
+takes a token from. The network resolves only the names on its DNS allowlist, and a name left off
+doesn't resolve. See [the allowlist](/flex-platform/infrastructure/network/#the-allowlist). The
+entry also gives the gateway's placement, its secret, its target and the roles it signs as.
+
+A secret that the gateway's stack creates starts empty. Put its value before anything calls the
+gateway, or the gateway fails as it starts.
+
+[Environment](/flex-platform/reference/environment/) covers what the function runs, the variables
+it reads and what its role needs. Callers install the
+[client package](/flex-platform/codegen/overview/#the-client-package) in `.gen/client/package/`. It
+holds the [call contract](/flex-platform/codegen/call-contract/), and a function that creates a
+client typed by it.
 
 ## Changing it later
 
 To follow the upstream, point `spec` at its newer release and run `schemas` again. If the change
-is safe for callers, it writes `0002.json`. If it is not, it fails and lists every break. Never
-edit a merged version. CI refuses it.
+is safe for callers, the command writes `0002.json`. If it is not, the command fails and lists
+every break. Never edit a merged version. CI refuses the change.

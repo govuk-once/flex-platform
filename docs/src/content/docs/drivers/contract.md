@@ -31,14 +31,14 @@ gateway.
 
 ### `type`
 
-A literal string naming the driver, such as `"openapi-rest"`. It brands the driver's handlers and
-keys its operation refinements, so it must be unique across drivers.
+A literal string naming the driver, such as `"openapi-rest"`. It brands the driver's handlers, and
+it is the key for the driver's operation refinements. So it must be unique across drivers.
 
 ### `TOpFields`
 
 The fields the driver adds to every operation, such as openapi-rest's `upstream` and
 `parameters`. `defineGateway` intersects them with the fields every operation has (`description`,
-`log`, `secure` and `handler`), and a misspelt key is a type error.
+`log`, `secure` and `handler`). So a misspelt key is a type error.
 
 ### `createExecutor`
 
@@ -70,25 +70,25 @@ method parameters.
 
 ### `ExecutorOptions`
 
-The options the entry point passes. `readUpstreamOptions` reads them from the environment. None
-of them names a transport or says what the secret holds.
+The entry point passes these options to `createExecutor`. `readUpstreamOptions` reads them from
+the environment. None of them names a transport or says what the secret holds.
 
 | Option | Purpose |
 |---|---|
 | `target` | `FLEX_UPSTREAM_TARGET`, if the deployment sets it. The driver decides what it means. A driver may take the location from a field of the secret instead. It refuses to start if it has neither. |
-| `secret` | A `SecretProvider` for the secret `FLEX_UPSTREAM_SECRET_ARN` names. `get()` returns the parsed JSON object, cached for a bounded age; `get({ fresh: true })` bypasses the cache. |
+| `secret` | A `SecretProvider` for the secret `FLEX_UPSTREAM_SECRET_ARN` names. `get()` returns the parsed JSON object, cached for a bounded age. `get({ fresh: true })` bypasses the cache. |
 | `log` | Where the driver logs while its executor is created. Optional. |
 
 ### `checkSchemas`
 
-Optional. Codegen calls it with the configuration and the latest schemas before it writes
-anything. It returns every problem it finds as a message, and the run fails if it returns any.
+Optional. Codegen calls it with the configuration and the latest schemas, before it writes
+anything. It returns every problem it finds as a message. The run fails if it returns any.
 
 This is where a driver relates its operation fields to the schemas, for example a path template to
 the input fields that fill it. A mismatch then fails generation, not a request in production.
 Keeping these checks in the driver keeps transport vocabulary out of the generator.
 
-A driver needs one whenever its operation fields refer to fields of the schemas, or its transport
+A driver needs one if its operation fields refer to fields of the schemas, or if its transport
 limits what a schema may declare. A driver whose operation fields say nothing about the schemas
 can leave it out. The [driver tutorial](/flex-platform/drivers/writing-a-driver/#4-the-build-time-check)
 has a complete example.
@@ -96,10 +96,15 @@ has a complete example.
 ### `deriveSchemasModule`
 
 Required. A `file:` URL to the module that derives a gateway's schemas. No version is written by
-hand. A driver derives from the upstream's own description where it publishes one, such as an
-OpenAPI document. Where it publishes none, as with a DynamoDB table, the driver derives from
-schemas the configuration declares. A driver can also do both, as openapi-rest's `narrow` does for
-what a document leaves open. Build the URL from the driver's module URL:
+hand:
+
+- If the upstream publishes its own description, such as an OpenAPI document, the driver derives
+  from that.
+- If it publishes none, as with a DynamoDB table, the driver derives from schemas the
+  configuration declares.
+- A driver can also do both, as openapi-rest's `narrow` does for what a document leaves open.
+
+Build the URL from the driver's module URL:
 
 ```ts
 const DERIVE_MODULE = new URL("../derive/index.ts", import.meta.url).href;
@@ -150,8 +155,8 @@ By the time it is called:
 - `input` has passed the operation's input validator and its secure bindings;
 - the deadline is set.
 
-The result it returns is validated against the schema for the outcome it names. An outcome the
-schemas do not declare is `UPSTREAM_CONTRACT_VIOLATION`.
+The runtime validates the result against the schema for the outcome it names. If the schemas do
+not declare that outcome, the runtime answers with `UPSTREAM_CONTRACT_VIOLATION`.
 
 ### `DriverContext`
 
@@ -166,7 +171,7 @@ interface DriverContext {
 | Member | Use |
 |---|---|
 | `upstream(fn)` | Make each upstream call through this, once per call. The runtime limits the attempt by the policy timeout and the request's remaining time budget. It passes a fresh abort signal, and reports an attempt that runs out of time or is aborted as `UPSTREAM_TIMEOUT`. |
-| `meta(name, value)` | Report something about the exchange beside its result, such as an upstream request id. It is kept only if the gateway's schemas declare the name, and it is validated. Nothing reported can fail a call. Report it as soon as it is known: if the driver then fails, the value is still returned. |
+| `meta(name, value)` | Report something about the exchange beside its result, such as an upstream request id. The runtime keeps it only if the gateway's schemas declare the name, and validates it. Nothing reported can fail a call. Report it as soon as it is known. Then, if the driver fails, the value is still returned. |
 | `log.info`, `log.warn` | A message and scalar fields of the driver's own, written under `driver` beside the matched operation. |
 
 ### Failures
@@ -178,18 +183,17 @@ log:
 throw new GatewayError("UPSTREAM_ERROR", `Operation "${operation}": upstream returned a server error`);
 ```
 
-The runtime logs a `GatewayError`'s message as written and returns its code. Any other error is
-logged only as its source locations, and returned as `INTERNAL`. So a driver raises its own
-request-time failures as `GatewayError` to keep the diagnosis, with `INTERNAL` for configuration
-bugs. See [error codes](/flex-platform/gateways/responses/#error-codes) for what each code means
+The runtime logs a `GatewayError`'s message as written and returns its code. It logs any other
+error only as its source locations, and returns `INTERNAL`. So a driver raises its own
+request-time failures as `GatewayError`, to keep the diagnosis. It uses `INTERNAL` for
+configuration bugs. See [error codes](/flex-platform/gateways/responses/#error-codes) for what each code means
 and how it counts towards upstream health.
 
 ## Custom handlers
 
 A driver may let an operation replace its automatic behaviour with a handler. The handler type
 is a `BrandedHandler` that carries the driver's `type`. Only the driver's `defineHandler` produces
-one. So a plain function, or a handler written for another driver, is a type error where it is
-set:
+one. So setting a plain function, or a handler written for another driver, is a type error:
 
 ```ts
 export type MyHandler<TInput = never, TOutcome extends string = string> = BrandedHandler<
@@ -205,8 +209,8 @@ export function defineHandler<TInput, TOutcome extends string>(
 ```
 
 The brand exists only at the type level. The driver declares the handler type as the second type
-parameter of its definition, and `HandlerOf<D>` reads it back. The driver's executor dispatches to
-`config.operations[name].handler` when one is set. Anything the handler is given for reaching the
+parameter of its definition, and `HandlerOf<D>` reads it back. If an operation sets a handler, the
+driver's executor dispatches to `config.operations[name].handler`. Anything the handler is given for reaching the
 upstream must still make each call through `ctx.upstream`.
 
 ## Operation refinements

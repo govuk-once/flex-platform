@@ -13,13 +13,14 @@ for an integration does not mean that integration is implemented.
    Adding a transport should not need transport-specific logic in the dispatcher or generator.
    - `gateways/drivers/openapi-rest` is the only package that names methods, paths, status codes
      or headers. Callers see outcome names such as `ok` and `no_content`, never a status.
-   - Every driver derives its gateways' schemas, from the upstream's own description or from
-     schemas the configuration declares, so no version is written by hand. It gives the deriving
-     module as `deriveSchemasModule`, a `file:` URL built from its own module, and never imports
-     it. The entry point imports the configuration, and the bundler follows every import from
-     there, so an import would put the upstream description parser into the deployed gateway.
-     `gateway-schemas` loads it to write a version, and codegen loads it with the network refused
-     to check the latest version is still what it derives. Nothing bundles it.
+   - Every driver derives its gateways' schemas, either from the upstream's own description or from
+     schemas the configuration declares, so no version is written by hand.
+   - A driver gives its deriving module as `deriveSchemasModule`, a `file:` URL built from its own
+     module, and never imports it. The entry point imports the configuration, and the bundler
+     follows every import from there. So an import would put the upstream description parser into
+     the deployed gateway. Two things load the module, and nothing bundles it:
+     - `gateway-schemas`, to write a version;
+     - codegen, with the network refused, to check the latest version is still what it derives.
    - Output from either command (a report, or the error that stopped it) contains upstream text.
      It goes out through `printable`, which writes any character that does not display as its code
      point.
@@ -65,12 +66,12 @@ for an integration does not mean that integration is implemented.
      request.
    - Look up outcome validators in a `Map`, never a plain object. The outcome name comes from the
      driver at request time, and an object lookup finds inherited members.
-   - A validator reads only the fields an object holds, never inherited ones, for the same
-     reason. Every value it sees came from `JSON.parse`, so `Object.prototype` is behind it. A
-     schema naming `constructor`, `toString` or any other prototype member would otherwise be
-     answered by the prototype. Ask Ajv for own properties explicitly wherever a schema is
-     read. Refusing `__proto__` does not cover this: these names belong to the prototype itself,
-     so no schema has to mention them for a caller to be held to the values they hold.
+   - A validator reads only the fields an object holds itself, never inherited ones, for the same
+     reason. Every value it sees came from `JSON.parse`, so `Object.prototype` is behind it.
+     Otherwise the prototype would answer for a schema that names `constructor`, `toString` or any
+     other prototype member. Ask Ajv for own properties explicitly wherever a schema is read.
+   - Refusing `__proto__` doesn't cover this. These names belong to the prototype itself, so a
+     caller could be held to the values they hold without any schema mentioning them.
 
    Each step owns an error code:
 
@@ -122,13 +123,16 @@ for an integration does not mean that integration is implemented.
 
    See [responses and errors](/flex-platform/gateways/responses/).
 
-5. **Error codes declare health semantics.** Every code in `ERROR_CODES` has a signal ruling.
-   `NOT_FOUND` and `UPSTREAM_REJECTED` represent an upstream response. Contract violations and
-   timeouts represent failures. Gateway-side rate limits and breaker rejections must stay neutral
-   to upstream health, so a control's own output is not fed back into it. The runtime currently
-   logs these classifications and does not operate a breaker. An upstream 429 also maps to
-   `RATE_LIMITED` and keeps that neutral ruling. The gateway's own limit should sit below any
-   upstream threshold, so reaching an upstream limit is a gateway configuration problem.
+5. **Error codes declare health semantics.** Every code in `ERROR_CODES` has a signal ruling:
+   - `NOT_FOUND` and `UPSTREAM_REJECTED` represent an upstream response.
+   - Contract violations and timeouts represent failures.
+   - Gateway-side rate limits and breaker rejections must stay neutral to upstream health, so a
+     control's own output is never fed back into it.
+   - An upstream 429 also maps to `RATE_LIMITED`, and keeps that neutral ruling. The gateway's own
+     limit should sit below any upstream threshold, so reaching an upstream limit means the
+     gateway is configured wrongly.
+
+   The runtime currently logs these rulings. It doesn't operate a breaker.
 
    See [health rulings](/flex-platform/gateways/responses/#health-rulings).
 
@@ -167,13 +171,14 @@ for an integration does not mean that integration is implemented.
    The rules are in [the compatibility guide](/flex-platform/gateways/compatibility/).
 
 8. **Avoid duplicate upstream writes.** Any invocation client must turn off automatic SDK retries
-   (`maxAttempts: 1`). A retry decision needs to know the operation and the deadline. Transport
-   retries alone do not, and neither would an attempt count in the policy, which is why there is
-   none. Nothing retries a call today. That includes Lambda: each gateway's function is set to
-   never run an invoke sent as an event again. The single replay after a refused credential is for
-   a GET only. A 401 or a 403 does not show that the upstream refused before acting, because
-   Amazon API Gateway passes on whatever status the service behind it chose. So a write that is
-   refused is never sent again.
+   (`maxAttempts: 1`).
+   - A retry decision needs to know the operation and the deadline. Transport retries don't know
+     either, and an attempt count in the policy wouldn't either, which is why the policy has none.
+   - Nothing retries a call today. That includes Lambda: each gateway's function is set never to
+     run an invoke sent as an event a second time.
+   - The single replay after a refused credential is for a GET only. A 401 or a 403 doesn't show
+     that the upstream refused before acting, because Amazon API Gateway passes on whatever status
+     the service behind it chose. So a write that is refused is never sent again.
 
    See [refused credentials](/flex-platform/drivers/openapi-rest/authentication/#when-the-upstream-refuses-a-credential),
    [calling gateways](/flex-platform/domains/overview/#calling-gateways) and
@@ -194,10 +199,9 @@ for an integration does not mean that integration is implemented.
    See [validators](/flex-platform/codegen/overview/#validators).
 
 10. **Keep shared types independent of execution.** `@repo/gateway-core` depends only on
-    `@repo/cloudfront-js-utils`, for the rule a name follows, which depends on no other workspace
-    package, so consumers can name envelopes and error codes without installing the runtime or
-    generator. Parsing and `GatewayError` belong
-    in the runtime.
+    `@repo/cloudfront-js-utils`, for the rule a name follows. That package depends on no other
+    workspace package. So consumers can name envelopes and error codes without installing the
+    runtime or the generator. Parsing and `GatewayError` belong in the runtime.
     - Import a shared type from the package that declares it. No package re-exports another's
       types, and every package that uses one declares the dependency itself.
     - Keep literal operation names in `defineGateway` types.
@@ -255,22 +259,26 @@ for an integration does not mean that integration is implemented.
       Assuming a role is the one exception to the transport: it goes to STS through the AWS SDK,
       the same way the secret is read.
     - Token and session expiry are the part's responsibility.
-    - When the upstream refuses the gateway's credentials with a 401 or a 403, the driver reads the
-      secret again from the store, not the cache, because a rotation replaces credentials faster
-      than the cache expires. It has every part drop what it holds. A GET is then sent once more,
-      inside the same attempt, and only the second answer is mapped and counted. Any other method
-      is not sent again (constraint 8), and its refusal stays the result even if that read fails.
-      This applies only to a gateway that sends a credential.
+    - When the upstream refuses the gateway's credentials with a 401 or a 403, and the gateway
+      sends a credential, the driver:
+      1. reads the secret again from the store, not the cache, because a rotation replaces
+         credentials faster than the cache expires;
+      2. has every part drop what it holds;
+      3. sends a GET once more, inside the same attempt. Only the second answer is mapped and
+         counted.
+
+      It doesn't send any other method again (constraint 8). That refusal stays the result, even if
+      the read fails.
 
     See [authentication](/flex-platform/drivers/openapi-rest/authentication/).
 
 13. **Schema text is data, wherever it is written.** A version's descriptions can come from an
     upstream's own document, and the call contract writes them into code a caller compiles.
-    - `docComment` is the only way text becomes a comment. It stops `*/` from ending the comment.
-      It writes every `@` as a character reference, so no text can open a JSDoc tag anywhere. It
-      writes every line of the text inside one block comment, and the block starts on a line of its
-      own, because the compiler attaches nothing to a comment that shares a line with the token
-      before it.
+    - `docComment` is the only way text becomes a comment. It:
+      - stops `*/` from ending the comment;
+      - writes every `@` as a character reference, so no text can open a JSDoc tag anywhere;
+      - writes every line of the text inside one block comment, which starts on a line of its own.
+        The compiler attaches nothing to a comment that shares a line with the token before it.
     - Every tag in the contract is one the generator wrote from what a schema declares.
     - Escaping an `@`, instead of replacing it, is not enough. `stripInternal` reads the comment
       text, and would remove a declaration while code that refers to it stays.
@@ -284,13 +292,14 @@ for an integration does not mean that integration is implemented.
 
     See [the call contract's comments](/flex-platform/codegen/call-contract/#comments).
 
-14. **Inputs are held to everything, outcomes to their shape.** When deriving:
-    - for an input, it closes every object that names its fields and says nothing about the rest,
-      except one inside `allOf`, `anyOf` or `oneOf`, which closing would break. It keeps every
-      constraint and `enum` exactly;
-    - for an outcome, it opens closed objects, drops bounds, `pattern` and `format`, and turns an
-      `enum` of one string, number or integer type into the known values alongside that type. Any
-      other `enum` stays closed, with a note.
+14. **Inputs are held to everything, outcomes to their shape.** Deriving treats the two sides
+    differently:
+    - **An input:** deriving closes every object that names its fields and says nothing about the
+      rest. The exception is an object inside `allOf`, `anyOf` or `oneOf`, which closing would
+      break. It keeps every constraint and `enum` exactly.
+    - **An outcome:** deriving opens closed objects, and drops bounds, `pattern` and `format`. It
+      turns an `enum` of one string, number or integer type into the known values alongside that
+      type. Any other `enum` stays closed, with a note.
 
     The reason is the direction each side can change without breaking a caller. An input can be
     loosened later but never tightened. An upstream adds fields, values and length to what it sends

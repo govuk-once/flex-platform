@@ -4,9 +4,12 @@ description: The fields of a domain's configuration, the rules each is held to, 
 ---
 
 A domain declares its name and routes in `src/domain.ts`, with `defineDomain` from the
-[domain SDK](/flex-platform/domains/overview/#domain-sdk). The SDK types each handler from it,
-checks it as it loads, and uses it to [answer requests](/flex-platform/domains/requests/) and build
-the domain's [OpenAPI document](/flex-platform/domains/overview/#api-specifications).
+[domain SDK](/flex-platform/domains/overview/#domain-sdk). The SDK uses this configuration to:
+
+- type each handler;
+- check the configuration as it loads;
+- [answer requests](/flex-platform/domains/requests/);
+- build the domain's [OpenAPI document](/flex-platform/domains/overview/#api-specifications).
 
 ## An example
 
@@ -51,16 +54,17 @@ routes, its schemas and its handlers.
 
 ## Route keys
 
-A route key has the format `<METHOD> /<version>/<path>`, such as `GET /v1/todos/{id}`:
+A route key names a route's method and path. It has the format `<METHOD> /<version>/<path>`, such
+as `GET /v1/todos/{id}`:
 
 - the method is `GET`, `POST`, `PUT`, `PATCH` or `DELETE`;
 - the path starts with a version, such as `/v1`, followed by at least one segment;
-- a segment is lowercase letters, digits and hyphens, starting with a letter, or a path parameter
-  in camel case, such as `{id}` or `{linkId}`, named once.
+- a segment is either lowercase letters, digits and hyphens, starting with a letter, or a path
+  parameter in camel case, such as `{id}` or `{linkId}`. Each parameter is named once.
 
-Two keys that differ only in a parameter's name, such as `{id}` and `{todoId}`, are the same route,
-and are refused. Two keys that can match one request, such as `GET /v1/todos/{id}` and
-`GET /v1/todos/archived`, are accepted: see [Routing](/flex-platform/domains/requests/#routing).
+Two keys that differ only in a parameter's name, such as `{id}` and `{todoId}`, are the same route.
+The SDK refuses them. Two keys that can match one request, such as `GET /v1/todos/{id}` and
+`GET /v1/todos/archived`, are accepted. See [Routing](/flex-platform/domains/requests/#routing).
 
 ## Routes
 
@@ -74,13 +78,13 @@ and are refused. Two keys that can match one request, such as `GET /v1/todos/{id
 | `body` | No | A [strict](#strict-inputs) Zod schema. Refused on `GET` and `DELETE` |
 | `responses` | Yes | A Zod schema, or `null` for no body, for each status the route answers with: see [Responses](#responses) |
 
-A route declares no headers: the Frontdoor forwards only the
+A route declares no headers, because the Frontdoor forwards only the
 [headers it signs](/flex-platform/frontdoor/lambda-edge/#signing).
 
 ### Path and query fields
 
-A path or query parameter arrives as text, and the SDK reads it by the type its field declares
-before the schema validates it. So each field's type must say how to read it:
+A path or query parameter arrives as text. Before the schema validates it, the SDK converts it to
+the type its field declares. So each field's type must say how to read it:
 
 | Field | Path | Query |
 |---|---|---|
@@ -91,28 +95,28 @@ before the schema validates it. So each field's type must say how to read it:
 
 A field may carry refinements, which check a value without changing it.
 
-Each value is read strictly. Only text written the one way its type is written is converted, and
-anything else stays text, for the schema to refuse:
+The SDK reads each value strictly. It converts only text written in the one way its type is
+written. Anything else stays text, and the schema refuses it:
 
 - a number is a plain decimal: `-12`, `0` or `2.5`, not `+7`, `007`, `1e3`, `0x10`, `.5`, `-0` or
-  `Infinity`. A whole number past 2<sup>53</sup>, which has no exact double, stays text;
+  `Infinity`. A whole number past 2<sup>53</sup> has no exact double, so it stays text;
 - a boolean is `true` or `false`, in lower case;
 - a string is the text as it is.
 
-A query parameter sent once is one value, and sent more than once a list. A field declared as an
-array takes either as a list. Any other field takes one value, so a parameter sent twice is refused.
-A parameter the schema doesn't declare is refused by the strict object.
+A query parameter sent once is one value. A query parameter sent more than once is a list. A field
+declared as an array takes either as a list. Any other field takes one value, so it refuses a
+parameter sent twice. The strict object refuses a parameter that the schema doesn't declare.
 
 ### Strict inputs
 
-Every object in `query` and `body` that names its fields must refuse others, at any depth: use
-`z.strictObject` or `.strict()`. An input can be loosened later, but never tightened without
-breaking a caller. An object that names no field, and each side of an intersection, stay open.
-Responses need not be strict.
+Every object in `query` and `body` that names its fields must refuse any other field, at any
+depth. Use `z.strictObject` or `.strict()`. This matters because an input can be loosened later,
+but never tightened without breaking a caller. An object that names no field stays open, and so
+does each side of an intersection. Responses need not be strict.
 
-No input converts its value before checking it: `z.coerce`, `z.stringbool()` and `z.preprocess`
-are refused in `params`, `query` and `body`, since they accept far more than they appear to, such
-as an empty string read as 0. A transform after the check is kept in `body`.
+No input may convert its value before checking it. The SDK refuses `z.coerce`, `z.stringbool()` and
+`z.preprocess` in `params`, `query` and `body`, because they accept far more than they appear to.
+For example, they read an empty string as 0. A transform after the check is kept in `body`.
 
 ### Responses
 
@@ -128,8 +132,8 @@ responses: { 200: TodoSchema, 404: TodoErrorSchema }
 | 204 | `null` only |
 | 400, 404, 409, 410, 422, 429 | A schema of the domain's own, or `null`. The SDK gives a failure's body no shape |
 
-A route may declare each status a handler decides from the request it is given. Every other status
-is refused:
+A route may declare any status that a handler decides from the request it is given. The SDK
+refuses every other status:
 
 - 401 and 403, because the app reads either as an
   [expired token](/flex-platform/frontdoor/cloudfront-function/#rejections) and sends the request
@@ -143,7 +147,8 @@ is refused:
 
 ## Handlers
 
-Each handler is annotated with its route's key, which it finds through the `Register` declaration:
+Annotate each handler with its route's key. The type finds the route through the `Register`
+declaration:
 
 ```ts
 // src/routes/get-todo.ts
@@ -168,29 +173,39 @@ export const getTodo: Handler<"GET /v1/todos/{id}"> = ({ params, log }) => {
 ```
 
 The type gives a handler the [context](/flex-platform/domains/requests/#the-handlers-context) its
-route declares, and nothing else. A handler returns one of the route's `responses` as
-`{ status, body }`, with the body typed by its schema's input, or a 500, 502, 503 or 504 with no
-body. It may be `async`.
+route declares, and nothing else. A handler returns either:
 
-The SDK exports a function for each common failure, which returns the response written out:
-`notFound()` is `{ status: 404 }`, and `notFound(body)` is `{ status: 404, body }`.
+- one of the route's `responses` as `{ status, body }`, with the body typed by its schema's input;
+- a 500, 502, 503 or 504 with no body.
+
+A handler may be `async`.
+
+The SDK exports a function for each common failure. Each function returns the response written out.
+For example, `notFound()` returns `{ status: 404 }`, and `notFound(body)` returns
+`{ status: 404, body }`.
 
 | Function | Status | Body |
 |---|---|---|
 | `badRequest`, `notFound`, `conflict`, `unprocessable`, `tooManyRequests` | 400, 404, 409, 422, 429 | The one the route declares for that status, or none |
 | `internalError`, `badGateway`, `unavailable`, `gatewayTimeout` | 500, 502, 503, 504 | None |
 
-Use `Handler<...>` as an annotation, not with `satisfies`, which the compiler reports as a circular
-reference. A handler with no annotation, or one annotated with another route's key, is refused on
-its route's `handler`. A program registers one domain.
+Use `Handler<...>` as an annotation, not with `satisfies`. The compiler reports `satisfies` as a
+circular reference. The compiler refuses a handler on its route's `handler` field if the handler
+has no annotation, or is annotated with another route's key. A program registers one domain.
 
 ## Errors
 
 The compiler reports most broken rules on the field that broke them. `defineDomain` checks the
-rest as `src/domain.ts` is imported, and throws a `DomainConfigError` listing every problem: the
-domain's name, strict and unconverted inputs, path and query fields that can't be read from text,
-two keys for one route, and an `operationId` used twice. It checks what the types hold too, for a
-configuration that bypassed them. Each problem is written as `<field>: <problem>, <fix>`:
+rest as `src/domain.ts` is imported:
+
+- the domain's name;
+- strict and unconverted inputs;
+- path and query fields that can't be read from text;
+- two keys for one route;
+- an `operationId` used twice.
+
+It also checks what the types hold, in case a configuration bypassed them. It throws a
+`DomainConfigError` that lists every problem, each written as `<field>: <problem>, <fix>`:
 
 ```text
 The domain's configuration is not valid:
@@ -200,4 +215,5 @@ The domain's configuration is not valid:
   - routes: duplicate routes, parameter names do not tell apart: "GET /v1/todos/{id}", "GET /v1/todos/{todoId}"
 ```
 
-Whatever imports `src/domain.ts`, such as a domain's tests and its CI, fails on the same problems.
+Anything that imports `src/domain.ts`, such as a domain's tests and its CI, fails on the same
+problems.

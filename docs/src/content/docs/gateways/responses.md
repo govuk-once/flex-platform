@@ -3,10 +3,11 @@ title: Responses and errors
 description: The response envelope, response metadata, error codes and their health rulings.
 ---
 
-Success responses have the shape `{ ok: true, outcome, data }`. Failures are
-`{ ok: false, error: { code } }`. Error messages are logged, not returned, to keep diagnostic
-detail out of the response contract. The outcome is kept separate from the upstream's fields. It is
-a name such as `ok` or `created`, never a status code.
+A gateway answers every call with an envelope. A success has the shape
+`{ ok: true, outcome, data }`. A failure has the shape `{ ok: false, error: { code } }`. The gateway
+logs error messages and never returns them, to keep diagnostic detail out of the response
+contract. The outcome sits apart from the upstream's fields. It is a name such as `ok` or
+`created`, never a status code.
 
 ```ts
 type EnvelopeResponse =
@@ -21,13 +22,13 @@ A caller must handle those separately from an `ok: false` response.
 ## Response metadata
 
 Either response may also carry `meta`. This is what the gateway reports about a call alongside its
-result, such as the upstream's own id for the request. That id is what the upstream's support
-team asks for.
+result, such as the upstream's own id for the request. The upstream's support team asks for that
+id.
 
 A gateway's schemas declare each name under `meta` with the schema of one scalar: a string, a
 number, an integer or a boolean. It is never an object or a list. A driver reports a value through
 its context, `ctx.meta(name, value)`, not in its result. This is because a driver that fails
-throws, and what it learnt before it threw is what a caller most needs.
+throws, and a caller most needs what the driver learnt before it threw.
 
 The runtime:
 
@@ -36,31 +37,35 @@ The runtime:
 - returns the values that pass, on a failure as well as a success
 - writes them to that call's log line
 
-A value that fails validation is left out. The log records the schema location that refused it,
-never the value. A name the gateway did not declare is left out too, and logged by name. The name
+The runtime leaves out a value that fails validation. The log records the schema location that
+refused it, never the value. The runtime also leaves out a name the gateway did not declare, and
+logs it by name. The name
 comes from the driver's own code, never from a caller or an upstream. Nothing reported in `meta`
 can make a call fail.
 
-Every part of `meta` is optional to a caller, and so is `meta` as a whole. A request refused
-before it reached the upstream, or one whose response never arrived, has nothing to report. A call
+Every part of `meta` is optional to a caller, and so is `meta` as a whole. A request has nothing to
+report if the gateway refused it before it reached the upstream, or if its response never
+arrived. A call
 that timed out still reports what the driver recorded before the timeout.
 
 `meta` is not a second channel for diagnostics. Only declared, validated scalars travel in it.
 
 Between [versions](/flex-platform/gateways/compatibility/), a name may be added or removed. Every
-name is optional, so a caller already handles one being absent. A name that stays is compared in
-the same way as an outcome's data, because both flow from the upstream to the caller.
+name is optional, so a caller already handles one being absent. Codegen compares a name that stays
+in the same way as an outcome's data, because both flow from the upstream to the caller.
 
-For openapi-rest, `meta` values are read from response headers. See
+For openapi-rest, the driver reads `meta` values from response headers. See
 [Response metadata](/flex-platform/drivers/openapi-rest/metadata/).
 
 ## Error codes
 
 `ERROR_CODES` in `@repo/gateway-core` defines each code and its health ruling. The table below
-gives what each one means. A code
-being defined does not mean its control is implemented. Circuit breaking and gateway-side rate
-limiting do not currently emit their reserved errors. The
-driver decides which upstream responses produce which codes. See
+gives what each one means.
+
+A defined code does not mean its control is implemented. Circuit breaking and gateway-side rate
+limiting do not currently emit their reserved errors.
+
+The driver decides which upstream responses produce which codes. See
 [openapi-rest outcomes and errors](/flex-platform/drivers/openapi-rest/outcomes/).
 
 | Code | Meaning | Health ruling |
@@ -97,7 +102,7 @@ yet operate a circuit breaker.
 A `GatewayError` declares that its message is safe to log, and the runtime records the message as
 written.
 
-Any other error is logged only as its source locations and the dispatcher step. Its message, name,
-properties, cause and stack text are never logged, because a library or a custom handler can put a
-payload in any of them. The locations are read from V8's structured stack frames, as file, line
-and column only.
+The runtime logs any other error only as its source locations and the dispatcher step. It never
+logs the error's message, name, properties, cause or stack text, because a library or a custom
+handler can put a payload in any of them. The runtime reads the locations from V8's structured
+stack frames, as file, line and column only.

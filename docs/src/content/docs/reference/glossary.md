@@ -5,20 +5,20 @@ description: The terms these docs use, and what each means on the platform.
 
 ## API Gateway
 
-Amazon API Gateway. These docs always name it in full to keep it separate from a _gateway_. Each
-domain is an API Gateway, and many upstreams run on it too.
+Amazon API Gateway. These docs always name it in full, to keep it separate from a _gateway_.
+Each domain is an API Gateway, and many upstreams run on it too.
 
 ## Call contract
 
-The TypeScript types that codegen writes to `.gen/client/rpc.ts`: each operation's input and the
-union of its outcomes. A caller compiles against it, and the gateway client is typed by it. See
+The TypeScript types that codegen writes to `.gen/client/rpc.ts`. They give each operation's
+input and the union of its outcomes. A caller compiles against the call contract, and it types
+the gateway client. See
 [The call contract](/flex-platform/codegen/call-contract/).
 
 ## CloudFront Function
 
 The Frontdoor's first check on a request. It checks the request's structure before anything else
-acts on it. See
-[CloudFront Function](/flex-platform/frontdoor/cloudfront-function/).
+acts on it. See [CloudFront Function](/flex-platform/frontdoor/cloudfront-function/).
 
 ## Domain
 
@@ -28,8 +28,8 @@ Lambda proxy integration, in isolated subnets. See [Domains](/flex-platform/doma
 
 ## Domain SDK
 
-`@govuk-once/flex-domain-sdk`, the package a domain's code uses to declare its configuration, type
-its handlers and answer its requests. See [Domain SDK](/flex-platform/domains/overview/#domain-sdk).
+`@govuk-once/flex-domain-sdk`. A domain's code uses this package to declare its configuration,
+type its handlers and answer its requests. See [Domain SDK](/flex-platform/domains/overview/#domain-sdk).
 
 ## Driver
 
@@ -38,19 +38,19 @@ paths, status codes or headers. See [The driver contract](/flex-platform/drivers
 
 ## Egress
 
-The section of the platform that domains use to reach upstreams: the gateways and the network
-around them.
+The section of the platform that domains use to reach upstreams. It is made up of the gateways
+and the network around them.
 
 ## Envelope
 
 What a gateway's handler receives and returns. It receives `{ operation, input, secure }`. It
-returns `{ ok, outcome, data }` or `{ ok, error: { code } }`, either with an optional `meta`. See
+returns `{ ok, outcome, data }` or `{ ok, error: { code } }`. Either may carry an optional `meta`. See
 [Responses and errors](/flex-platform/gateways/responses/).
 
 ## Environment
 
 One Frontdoor and its domain accounts, as the app uses them. Domain teams use the development,
-staging and production environments, all in the platform-prod stage. See
+staging and production environments. All three are in the platform-prod stage. See
 [Infrastructure](/flex-platform/infrastructure/overview/#stages-and-environments).
 
 ## Frontdoor
@@ -65,9 +65,9 @@ its operations to domains. See [How a gateway works](/flex-platform/gateways/ove
 
 ## Gateway client
 
-`@govuk-once/flex-gateway-client`, which a domain calls a gateway through. It invokes the gateway's
-Lambda function directly, by a name derived from the gateway's id. Each gateway's client package
-creates one typed by the gateway's call contract. See
+`@govuk-once/flex-gateway-client`. A domain calls a gateway through it. The client invokes the
+gateway's Lambda function directly, by a name derived from the gateway's id. Each gateway's client
+package creates a client typed by the gateway's call contract. See
 [Calling gateways](/flex-platform/domains/overview/#calling-gateways).
 
 ## Lambda@Edge
@@ -91,8 +91,8 @@ Where a workload's Lambda runs. There are two placements:
 
 - `isolated`: no route to the internet. A domain's function always runs here, and so does a
   gateway whose upstream it reaches through a VPC endpoint.
-- `private`: the gateway reaches the internet through a NAT gateway. Egress filtering is planned
-  between them.
+- `private`: the gateway reaches the internet through a NAT gateway. Egress filtering between the
+  two is planned.
 
 Each is a tier of subnets in the domain account's
 [network](/flex-platform/infrastructure/network/#tiers).
@@ -104,23 +104,23 @@ version must be [compatible](/flex-platform/gateways/compatibility/) with every 
 
 ## Stage
 
-One of the three copies of the platform the platform team deploys through: platform-dev,
-platform-staging and platform-prod. Each has its own accounts, and one or more environments. See
+One of the three copies of the platform that the platform team deploys through: platform-dev,
+platform-staging and platform-prod. Each stage has its own accounts, and one or more environments. See
 [Infrastructure](/flex-platform/infrastructure/overview/#stages-and-environments).
 
 ## Test user
 
-A user in a stage's test user pool, which software signs in as with a generated password, to test
-an environment from outside the platform. See
+A user in a stage's test user pool. Software signs in as this user with a generated password, to
+test an environment from outside the platform. See
 [Test users](/flex-platform/infrastructure/overview/#test-users).
 
 ## Upstream
 
-The system a gateway calls, which holds data a domain needs. It can be another team's API, an
+The system a gateway calls. It holds data a domain needs. It can be another team's API, an
 AWS-hosted service or a third party.
 
 ## User Data Platform
 
 The upstream that holds what GOV.UK keeps for a user of the app, such as their linked accounts and
-notification preferences. Also called UDP. Its gateway is the implemented example in this
+notification preferences. It is also called UDP. Its gateway is the implemented example in this
 repository.
