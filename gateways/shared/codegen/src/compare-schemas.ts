@@ -899,7 +899,12 @@ class Comparison {
     }
 
     const pairing = pairBranches(rest(previous), rest(next));
-    for (const [was, is] of pairing.same) {
+    // Branches left over on each side in equal numbers are read in order, as `allOf`'s are.
+    const paired = pairing.previous.length === pairing.next.length;
+    for (const [was, is] of [
+      ...pairing.same,
+      ...(paired ? inOrder(pairing.previous, pairing.next) : []),
+    ]) {
       this.schema(
         was.branch,
         is.branch,
@@ -908,18 +913,7 @@ class Comparison {
         depth + 1,
       );
     }
-    if (pairing.previous.length === pairing.next.length) {
-      for (const [was, is] of inOrder(pairing.previous, pairing.next)) {
-        this.schema(
-          was.branch,
-          is.branch,
-          position,
-          `${at}.${String(is.index)}`,
-          depth + 1,
-        );
-      }
-      return;
-    }
+    if (paired) return;
     // Branches that only came, or only went, move the whole the way they move it. Some of each
     // is a union that changed too much to place.
     this.add(
