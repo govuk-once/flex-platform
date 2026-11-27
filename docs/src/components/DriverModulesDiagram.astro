@@ -1,0 +1,144 @@
+---
+// A driver package's parts, which of them the deployed bundle holds, and which commands load the
+// rest. The bundle's boundary is the point: derive/ stays outside it. Drawn with Starlight's
+// colour variables so it follows the light and dark themes.
+import Diagram from "./Diagram.astro";
+---
+
+<Diagram title="A driver package's parts" minWidth={580} maxWidth={880}>
+  <svg
+    viewBox="0 0 880 560"
+    role="img"
+    aria-labelledby="driver-modules-title driver-modules-desc"
+  >
+    <title id="driver-modules-title">A driver package's parts</title>
+    <desc id="driver-modules-desc">
+      A driver package holds src/index.ts, what a configuration imports, src/types.ts, the
+      vocabulary both halves use, and three folders: config/, runtime/ and derive/. The
+      deployed bundle, .gen/runtime/bundle.mjs, follows every import from the generated entry
+      point, entry.js. entry.js imports gateway.config.ts, which imports the driver's
+      src/index.ts, which imports config/. config/ reaches runtime/ only through
+      createExecutor's dynamic import, which the bundler also follows. So the bundle holds
+      src/index.ts, src/types.ts, config/ and runtime/. config/ names derive/ only by a file:
+      URL, deriveSchemasModule, which the bundler never follows, so derive/ is outside the
+      bundle. gateway-codegen and gateway-schemas both load config/ and derive/: codegen loads
+      config/ when it loads a configuration, and derive/ with the network refused, and
+      gateway-schemas uses the network. The driver's eslint.config.ts refuses imports from
+      config/ and src/*.ts into runtime/ or derive/, from runtime/ into derive/, and from
+      derive/ into runtime/, though runtime/'s types may cross.
+    </desc>
+    <defs>
+      <marker
+        id="driver-modules-arrow"
+        viewBox="0 0 10 10"
+        refX="9"
+        refY="5"
+        markerWidth="7"
+        markerHeight="7"
+        orient="auto-start-reverse"
+      >
+        <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+      </marker>
+    </defs>
+
+    <!-- Driver package -->
+    <rect class="section" x="40" y="140" width="826" height="250" rx="10"></rect>
+    <text class="section-title" x="56" y="168">Driver package</text>
+
+    <!-- The deployed bundle, drawn over the package it cuts across -->
+    <rect class="bundle" x="30" y="10" width="530" height="390" rx="12"></rect>
+    <text class="title bundle-title" x="46" y="38">The deployed bundle</text>
+    <text class="note mono" x="232" y="37">.gen/runtime/bundle.mjs</text>
+
+    <rect class="box" x="50" y="60" width="200" height="56" rx="6"></rect>
+    <text class="label mono" x="150" y="84">entry.js</text>
+    <text class="sub" x="150" y="104">the generated entry point</text>
+
+    <rect class="box" x="330" y="60" width="220" height="56" rx="6"></rect>
+    <text class="label mono" x="440" y="84">gateway.config.ts</text>
+    <text class="sub" x="440" y="104">the gateway's configuration</text>
+
+    <rect class="box" x="50" y="186" width="200" height="56" rx="6"></rect>
+    <text class="label mono" x="150" y="210">src/types.ts</text>
+    <text class="sub" x="150" y="230">vocabulary both halves use</text>
+
+    <rect class="box" x="330" y="186" width="220" height="56" rx="6"></rect>
+    <text class="label mono" x="440" y="210">src/index.ts</text>
+    <text class="sub" x="440" y="230">what a configuration imports</text>
+
+    <rect class="box" x="50" y="290" width="200" height="76" rx="6"></rect>
+    <text class="label mono" x="150" y="316">runtime/</text>
+    <text class="sub" x="150" y="337">the executor, loaded by</text>
+    <text class="sub" x="150" y="354">createExecutor on first call</text>
+
+    <rect class="box" x="330" y="290" width="220" height="76" rx="6"></rect>
+    <text class="label mono" x="440" y="316">config/</text>
+    <text class="sub" x="440" y="337">definition · check · handler</text>
+    <text class="sub" x="440" y="354">no network, secret or environment</text>
+
+    <rect class="box accent" x="620" y="290" width="230" height="76" rx="6"></rect>
+    <text class="label mono" x="735" y="316">derive/</text>
+    <text class="sub" x="735" y="337">named by deriveSchemasModule,</text>
+    <text class="sub" x="735" y="354">a file: URL · never bundled</text>
+
+    <!-- What loads config/ and derive/ -->
+    <rect class="box" x="330" y="476" width="220" height="56" rx="6"></rect>
+    <text class="label mono" x="440" y="500">gateway-codegen</text>
+    <text class="sub" x="440" y="520">derive/ with the network refused</text>
+
+    <rect class="box" x="620" y="476" width="230" height="56" rx="6"></rect>
+    <text class="label mono" x="735" y="500">gateway-schemas</text>
+    <text class="sub" x="735" y="520">uses the network</text>
+
+    <!-- What the driver's lint rule refuses -->
+    <text class="label small start mono" x="50" y="440">eslint.config.ts</text>
+    <text class="note" x="50" y="462">refuses these imports:</text>
+    <text class="note" x="50" y="482">config/, src/*.ts → runtime/, derive/</text>
+    <text class="note" x="50" y="502">runtime/ → derive/</text>
+    <text class="note" x="50" y="522">derive/ → runtime/</text>
+    <text class="note" x="50" y="542">but runtime/'s types may cross</text>
+
+    <!-- Imports the bundler follows -->
+    <line class="flow" x1="250" y1="88" x2="328" y2="88"></line>
+    <line class="flow" x1="440" y1="116" x2="440" y2="184"></line>
+    <line class="flow" x1="440" y1="242" x2="440" y2="288"></line>
+    <line class="flow dashed" x1="330" y1="328" x2="252" y2="328"></line>
+
+    <!-- A name, not an import -->
+    <line class="link" x1="550" y1="328" x2="618" y2="328"></line>
+    <text class="note" x="590" y="320" text-anchor="middle">URL</text>
+
+    <!-- Loaders -->
+    <line class="bus" x1="440" y1="436" x2="735" y2="436"></line>
+    <line class="bus" x1="440" y1="476" x2="440" y2="436"></line>
+    <line class="bus" x1="735" y1="476" x2="735" y2="436"></line>
+    <line class="flow" x1="440" y1="436" x2="440" y2="368"></line>
+    <line class="flow" x1="735" y1="436" x2="735" y2="368"></line>
+    <text class="note" x="588" y="428" text-anchor="middle">both load</text>
+  </svg>
+  <Fragment slot="caption">
+    Solid arrows are imports. The dashed one is createExecutor's dynamic import, which the bundler
+    follows too. The dotted line is a URL, which it never follows.
+  </Fragment>
+</Diagram>
+
+<style>
+  .flow {
+    marker-end: url(#driver-modules-arrow);
+  }
+  .bundle {
+    fill: none;
+    stroke: var(--sl-color-accent);
+    stroke-width: 2;
+    stroke-dasharray: 8 4;
+  }
+  .bundle-title {
+    fill: var(--sl-color-text-accent);
+  }
+  .link {
+    fill: none;
+    stroke: var(--sl-color-gray-3);
+    stroke-width: 1.5;
+    stroke-dasharray: 2 4;
+  }
+</style>

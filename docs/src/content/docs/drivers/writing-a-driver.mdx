@@ -3,6 +3,8 @@ title: Writing a driver
 description: "Add a transport: the package layout, the definition, the executor, and the rules a driver must keep."
 ---
 
+import DriverModulesDiagram from "../../../components/DriverModulesDiagram.astro";
+
 You need a new driver when no existing driver can reach an upstream. For example, the upstream
 uses a different protocol, or it is an AWS service called through its SDK.
 
@@ -43,6 +45,8 @@ Each folder is loaded at a different time:
 - `runtime/` is loaded when the gateway starts.
 - `derive/` is loaded by `gateway-schemas`, and by codegen with the network refused. It is never
   bundled.
+
+<DriverModulesDiagram />
 
 Copy openapi-rest's `eslint.config.ts` to keep the three apart. It stops:
 

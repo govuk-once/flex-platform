@@ -3,6 +3,8 @@ title: How a gateway works
 description: How a gateway is built, what runs when, and what happens to a request.
 ---
 
+import GatewayBuildDiagram from "../../../components/GatewayBuildDiagram.astro";
+
 A gateway is how the platform calls one upstream. It is a Lambda function, generated from a
 configuration in this repository. A domain invokes it to call that upstream. See
 [The platform](/flex-platform/start/platform/) for where gateways sit.
@@ -35,6 +37,8 @@ packages/          Shared TypeScript, ESLint and Vitest tooling, and generic uti
 ## Build time and run time
 
 A gateway goes through two commands and then a deployment.
+
+<GatewayBuildDiagram />
 
 1. **`gateway-schemas`**: a person runs it. It uses the gateway's driver to derive schemas from
    the upstream's own description, or from schemas the configuration declares. It compares them
