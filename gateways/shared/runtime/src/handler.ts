@@ -193,12 +193,7 @@ function acceptedMeta(
 // the data, so under a dictionary schema they are the caller's own keys, and this message is
 // logged. Payload fields reach a log only through `log.input`. The keywords' own messages are
 // written from the schema, never from the value, so they stay.
-function formatValidationErrors(
-  errors:
-    | Array<{ instancePath: string; schemaPath: string; message?: string }>
-    | null
-    | undefined,
-): string {
+function formatValidationErrors(errors: Validator["errors"]): string {
   if (!errors || errors.length === 0) return "Input validation failed";
   return errors
     .map((e) => `${e.schemaPath || "#"}: ${e.message ?? "invalid"}`)
