@@ -49,9 +49,9 @@ A gateway goes through two commands and then a deployment.
    - the client package a domain installs
 
    See [Code generation](/flex-platform/codegen/overview/).
-3. **The bundle**: it runs as a Lambda function in the egress section. Deploying it is planned.
-   It will be placed `isolated` or `private`, depending on how its upstream is reached. When the
-   bundle loads, the entry point:
+3. **The bundle**: it runs as a Lambda function in the egress section, which its
+   [stack](/flex-platform/infrastructure/overview/#stacks) deploys. It is placed `isolated` or
+   `private`, depending on how its upstream is reached. When the bundle loads, the entry point:
    - reads the environment
    - asks the driver for its executor, which retrieves and validates the gateway's secret
    - compiles the handler

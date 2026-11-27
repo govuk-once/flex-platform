@@ -45,7 +45,7 @@ gateways/services/example/
     "@repo/gateway-codegen": "workspace:*",
     "@repo/gateway-core": "workspace:*",
     "@repo/tsconfig": "workspace:*",
-    "eslint": "10.13.0"
+    "eslint": "10.15.0"
   }
 }
 ```

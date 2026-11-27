@@ -6,7 +6,7 @@ description: The VPC in each domain account that domains and gateways run in, it
 Each domain account has one network in each environment, in its own stack,
 `network-<environment>-<account>`, in eu-west-2. Domains and gateways run in it. A domain's stack
 holds its function to the network's [placement](/flex-platform/domains/hosting/#network), and a
-gateway's stack runs its function in its placement. Releasing a domain's function is planned.
+gateway's stack runs its function in its placement.
 
 The network's constructs are in `infra/constructs/src/network/`, and
 `infra/app/src/stacks/network.ts` puts them together.

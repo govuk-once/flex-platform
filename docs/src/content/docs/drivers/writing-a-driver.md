@@ -74,8 +74,8 @@ So the definition names it by URL instead.
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.13.0",
-    "vitest": "5.0.5"
+    "eslint": "10.15.0",
+    "vitest": "5.1.1"
   }
 }
 ```
