@@ -8,6 +8,7 @@ import { sortedEntries } from "@repo/utils/sorted-entries";
 import { sortedNames } from "@repo/utils/sorted-names";
 import { stringsIn } from "@repo/utils/strings-in";
 
+import { ProblemsError } from "./problems-error.ts";
 import type { SchemaVersion } from "./schema-store.ts";
 
 // Whether one version of a gateway's schemas can follow another without breaking a caller written
@@ -1254,20 +1255,16 @@ function compareDefinitions(
 
 // A version a caller of one before it would not survive. Every break between every pair is
 // reported together, since the command prints a message and nothing else.
-export class SchemaCompatibilityError extends Error {
-  readonly problems: readonly string[];
-
+export class SchemaCompatibilityError extends ProblemsError {
   constructor(gatewayId: string, problems: readonly string[]) {
     super(
+      `Gateway "${gatewayId}" has a version of its schemas that breaks one before it:`,
+      problems,
       [
-        `Gateway "${gatewayId}" has a version of its schemas that breaks one before it:`,
-        ...problems.map((problem) => `  - ${problem}`),
         "A version not yet merged can be fixed, or removed and the versions after it renumbered.",
         "An incompatible contract needs a gateway of its own, under another id.",
-      ].join("\n"),
+      ],
     );
-    this.name = "SchemaCompatibilityError";
-    this.problems = problems;
   }
 }
 

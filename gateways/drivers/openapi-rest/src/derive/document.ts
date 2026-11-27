@@ -1,3 +1,4 @@
+import { ProblemsError } from "@repo/gateway-codegen";
 import type { SchemaSources } from "@repo/gateway-config";
 import { isRecord } from "@repo/utils/is-record";
 import { normalize, upgrade, validate } from "@scalar/openapi-parser";
@@ -9,18 +10,9 @@ import { normalize, upgrade, validate } from "@scalar/openapi-parser";
 
 export type OpenApiDocument = Readonly<Record<string, unknown>>;
 
-export class OpenApiDeriveError extends Error {
-  readonly problems: readonly string[];
-
+export class OpenApiDeriveError extends ProblemsError {
   constructor(location: string, problems: readonly string[]) {
-    super(
-      [
-        `Cannot derive schemas from ${location}:`,
-        ...problems.map((problem) => `  - ${problem}`),
-      ].join("\n"),
-    );
-    this.name = "OpenApiDeriveError";
-    this.problems = problems;
+    super(`Cannot derive schemas from ${location}:`, problems);
   }
 }
 

@@ -7,24 +7,19 @@ import {
 import { isRecord } from "@repo/utils/is-record";
 
 import type { AnyGatewayConfig } from "./load-config.ts";
+import { ProblemsError } from "./problems-error.ts";
 
 // Everything that must hold before anything is emitted. A configuration and its schemas are
 // written separately, so they can disagree: an operation with no schemas, a schema for an
 // operation that no longer exists, an input field the requests have nowhere to put. Each is a
 // request that would fail in production, and each is visible here.
 
-export class GatewayCheckError extends Error {
-  readonly problems: readonly string[];
-
+export class GatewayCheckError extends ProblemsError {
   constructor(gatewayId: string, problems: readonly string[]) {
     super(
-      [
-        `Gateway ${JSON.stringify(gatewayId)} configuration and schemas do not agree:`,
-        ...problems.map((problem) => `  - ${problem}`),
-      ].join("\n"),
+      `Gateway ${JSON.stringify(gatewayId)} configuration and schemas do not agree:`,
+      problems,
     );
-    this.name = "GatewayCheckError";
-    this.problems = problems;
   }
 }
 

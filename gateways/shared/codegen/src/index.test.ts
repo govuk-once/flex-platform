@@ -13,6 +13,7 @@ describe("@repo/gateway-codegen", () => {
       "ENTRY_MODULE",
       "GENERATED_DIR",
       "GatewayCheckError",
+      "ProblemsError",
       "RUNTIME_DIR",
       "SchemaCompatibilityError",
       "SchemaStoreError",
