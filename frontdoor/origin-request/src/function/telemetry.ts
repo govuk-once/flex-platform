@@ -2,6 +2,7 @@
 // the platform derived, or a source location. Never the token, its claims, or a library's error
 // text, which can quote a claim.
 
+import { logTelemetry } from "@repo/cloudfront-js-utils/log-telemetry";
 import type { UnexpectedErrorSummary } from "@repo/utils/describe-unexpected-error";
 
 export type OriginRequestEventName =
@@ -34,26 +35,15 @@ export function logOutcome(
   ids: RequestIds,
   details: OutcomeDetails = {},
 ): void {
-  write("INFO", event, { ...ids, ...details });
+  logTelemetry("INFO", event, { ...ids, ...details });
 }
 
 export function logFailure(
   ids: RequestIds,
   error: UnexpectedErrorSummary,
 ): void {
-  write("ERROR", "origin_request_failed", { ...ids, frames: error.frames });
-}
-
-function write(
-  level: "INFO" | "ERROR",
-  event: OriginRequestEventName,
-  details: Record<string, unknown>,
-): void {
-  console.log(
-    JSON.stringify({
-      level,
-      message: "telemetry",
-      telemetry: { event, details },
-    }),
-  );
+  logTelemetry("ERROR", "origin_request_failed", {
+    ...ids,
+    frames: error.frames,
+  });
 }
