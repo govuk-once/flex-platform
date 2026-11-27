@@ -1,10 +1,19 @@
-import { cdkApp, LogGroupCheck } from "@repo/infra-constructs";
+import {
+  cdkApp,
+  LogGroupCheck,
+  PlatformCloudFrontFunction,
+} from "@repo/infra-constructs";
+import { buildViewerRequestFunction } from "@repo/shared-viewer-request/build";
 import { App, Stack, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { assert } from "vitest";
 
 import { ManagementEdge } from "../src/management-edge.ts";
-import { ManagementViewerRequestFunction } from "../src/management-viewer-request-function.ts";
+import {
+  ciAudience,
+  MANAGEMENT_VIEWER_REQUEST_FUNCTION_NAME,
+  PIPELINE_TOKEN_ISSUER,
+} from "../src/names.ts";
 
 export const ACCOUNT = "123456789012";
 
@@ -41,10 +50,16 @@ export function managementEdgeIn(
   stack: Stack,
   functionStack = stack,
 ): ManagementEdge {
-  const viewerRequest = new ManagementViewerRequestFunction(
+  const viewerRequest = new PlatformCloudFrontFunction(
     functionStack,
     "ViewerRequest",
-    { zoneName: ZONE.zoneName },
+    {
+      functionName: MANAGEMENT_VIEWER_REQUEST_FUNCTION_NAME,
+      code: buildViewerRequestFunction({
+        issuer: PIPELINE_TOKEN_ISSUER,
+        audience: ciAudience(ZONE.zoneName),
+      }),
+    },
   );
   return new ManagementEdge(stack, "Edge", {
     zone: ZONE,

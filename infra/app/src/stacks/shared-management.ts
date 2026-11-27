@@ -1,9 +1,13 @@
+import { PlatformCloudFrontFunction } from "@repo/infra-constructs";
 import {
   CI_ORIGIN_HOST_PARAMETER,
+  ciAudience,
   MANAGEMENT_REGION,
+  MANAGEMENT_VIEWER_REQUEST_FUNCTION_NAME,
   ManagementEdge,
-  ManagementViewerRequestFunction,
+  PIPELINE_TOKEN_ISSUER,
 } from "@repo/shared-infra";
+import { buildViewerRequestFunction } from "@repo/shared-viewer-request/build";
 import { CfnOutput, Stack } from "aws-cdk-lib";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
@@ -29,10 +33,17 @@ export class SharedManagementStack extends Stack {
       terminationProtection: true,
     });
 
-    const viewerRequest = new ManagementViewerRequestFunction(
+    // Checks each request, with the issuer and the audience a pipeline's token must name.
+    const viewerRequest = new PlatformCloudFrontFunction(
       this,
       "ViewerRequest",
-      { zoneName: shared.zone.name },
+      {
+        functionName: MANAGEMENT_VIEWER_REQUEST_FUNCTION_NAME,
+        code: buildViewerRequestFunction({
+          issuer: PIPELINE_TOKEN_ISSUER,
+          audience: ciAudience(shared.zone.name),
+        }),
+      },
     );
 
     const edge = new ManagementEdge(this, "Edge", {

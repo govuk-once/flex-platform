@@ -809,6 +809,9 @@ importers:
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../../frontdoor/shared
+      '@repo/frontdoor-viewer-request':
+        specifier: workspace:*
+        version: link:../../frontdoor/viewer-request
       '@repo/gateway-core':
         specifier: workspace:*
         version: link:../../gateways/shared/core
@@ -827,6 +830,9 @@ importers:
       '@repo/shared-release':
         specifier: workspace:*
         version: link:../../shared/release
+      '@repo/shared-viewer-request':
+        specifier: workspace:*
+        version: link:../../shared/viewer-request
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils
