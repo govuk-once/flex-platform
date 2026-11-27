@@ -1,4 +1,4 @@
-import { platformFunction } from "@repo/infra-constructs";
+import { platformFunction, requireRegion } from "@repo/infra-constructs";
 import {
   bundleKey,
   RELEASE_TIMEOUT_SECONDS,
@@ -90,11 +90,11 @@ export class ReleaseWorker extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    if (stack.region !== SHARED_REGION) {
-      throw new Error(
-        `The release worker runs in ${SHARED_REGION}, not ${stack.region}`,
-      );
-    }
+    requireRegion(
+      this,
+      SHARED_REGION,
+      `The release worker runs in ${SHARED_REGION}`,
+    );
 
     const queueArn = stack.formatArn({
       service: "sqs",

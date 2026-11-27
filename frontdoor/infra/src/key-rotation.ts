@@ -3,6 +3,7 @@ import { buildKeyRotationFunction } from "@repo/frontdoor-key-rotation/build";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 import {
   platformFunction,
+  requireRegion,
   roleArn,
   tableArn,
   tablePolicy,
@@ -99,11 +100,11 @@ export class KeyRotation extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    if (stack.region !== SIGNING_KEY_REGION) {
-      throw new Error(
-        `Key rotation runs in ${SIGNING_KEY_REGION}, beside the signing key, not ${stack.region}`,
-      );
-    }
+    requireRegion(
+      this,
+      SIGNING_KEY_REGION,
+      `Key rotation runs in ${SIGNING_KEY_REGION}, beside the signing key`,
+    );
     const { environment, kind, keyAlias } = props;
     const { purpose } = KEY_POLICIES[kind];
     // As the docs name it, such as "caller token".

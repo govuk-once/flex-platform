@@ -10,6 +10,7 @@ import { Construct } from "constructs";
 
 import { logGroupArn, roleArn } from "../arns.ts";
 import { PlatformLogGroup } from "../log-group.ts";
+import { requireRegion } from "../require-region.ts";
 
 // The service-linked role CloudFront writes function logs as, with its path.
 const CLOUDFRONT_LOGGER_ROLE =
@@ -46,12 +47,11 @@ export class PlatformCloudFrontFunction extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    const { region } = stack;
-    if (region !== "us-east-1") {
-      throw new Error(
-        `A CloudFront Function must be created in us-east-1, where CloudFront writes its logs, not ${region}`,
-      );
-    }
+    requireRegion(
+      this,
+      "us-east-1",
+      "A CloudFront Function must be created in us-east-1, where CloudFront writes its logs",
+    );
 
     const logGroupName = cloudFrontFunctionLogGroupName(props.functionName);
     const { logGroup, key } = new PlatformLogGroup(this, "Logs", {
@@ -73,7 +73,7 @@ export class PlatformCloudFrontFunction extends Construct {
         conditions: {
           StringEquals: {
             "kms:CallerAccount": stack.account,
-            "kms:ViaService": `logs.${region}.amazonaws.com`,
+            "kms:ViaService": `logs.${stack.region}.amazonaws.com`,
           },
           ArnEquals: {
             "aws:PrincipalArn": roleArn(stack, CLOUDFRONT_LOGGER_ROLE),

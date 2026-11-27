@@ -5,9 +5,10 @@ import {
   CloudFrontWebAcl,
   deliverAccessLogs,
   functionUrlOrigin,
+  requireRegion,
 } from "@repo/infra-constructs";
 import { CI_TOKEN_HEADER } from "@repo/shared-viewer-request";
-import { Stack, Validations } from "aws-cdk-lib";
+import { Validations } from "aws-cdk-lib";
 import type { Certificate } from "aws-cdk-lib/aws-certificatemanager";
 import {
   AllowedMethods,
@@ -94,12 +95,11 @@ export class ManagementEdge extends Construct {
   constructor(scope: Construct, id: string, props: ManagementEdgeProps) {
     super(scope, id);
 
-    const stack = Stack.of(this);
-    if (stack.region !== MANAGEMENT_REGION) {
-      throw new Error(
-        `The management distribution must be created in ${MANAGEMENT_REGION}, where CloudFront takes its web ACL and certificate from, not ${stack.region}`,
-      );
-    }
+    requireRegion(
+      this,
+      MANAGEMENT_REGION,
+      `The management distribution must be created in ${MANAGEMENT_REGION}, where CloudFront takes its web ACL and certificate from`,
+    );
 
     // The zone isn't ours to create, so it is named, not looked up: synth reads nothing from an
     // account.

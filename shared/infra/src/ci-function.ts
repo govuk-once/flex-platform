@@ -1,6 +1,7 @@
 import {
   cloudFrontFunctionUrl,
   platformFunction,
+  requireRegion,
 } from "@repo/infra-constructs";
 import type { CiDomain, CiEnvironment } from "@repo/shared-ci";
 import { buildCiFunction } from "@repo/shared-ci/build";
@@ -75,11 +76,11 @@ export class CiFunction extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    if (stack.region !== SHARED_REGION) {
-      throw new Error(
-        `The pipeline API's function runs in ${SHARED_REGION}, not ${stack.region}`,
-      );
-    }
+    requireRegion(
+      this,
+      SHARED_REGION,
+      `The pipeline API's function runs in ${SHARED_REGION}`,
+    );
 
     // Every key a bundle can have: any domain's, any hash. The function signs only the key of
     // the domain a pipeline is allowed for.

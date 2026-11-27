@@ -1,5 +1,5 @@
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
-import { roleArn } from "@repo/infra-constructs";
+import { requireRegion, roleArn } from "@repo/infra-constructs";
 import { RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { type CfnSecret, Secret } from "aws-cdk-lib/aws-secretsmanager";
@@ -28,11 +28,11 @@ export class PushIdSecret extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    if (stack.region !== SIGNING_KEY_REGION) {
-      throw new Error(
-        `The push ID secret is kept in ${SIGNING_KEY_REGION}, where the edge reads it, not ${stack.region}`,
-      );
-    }
+    requireRegion(
+      this,
+      SIGNING_KEY_REGION,
+      `The push ID secret is kept in ${SIGNING_KEY_REGION}, where the edge reads it`,
+    );
 
     this.secret = new Secret(this, "Secret", {
       secretName: pushIdSecretName(environment),

@@ -5,6 +5,7 @@ import { Construct } from "constructs";
 
 import { logGroupArn } from "../arns.ts";
 import { PlatformLogGroup } from "../log-group.ts";
+import { requireRegion } from "../require-region.ts";
 import {
   BODY_INSPECTION_LIMIT,
   CUSTOM_RESPONSE_BODIES,
@@ -40,11 +41,11 @@ export class CloudFrontWebAcl extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    if (stack.region !== "us-east-1") {
-      throw new Error(
-        `A CloudFront web ACL must be created in us-east-1, not ${stack.region}`,
-      );
-    }
+    requireRegion(
+      this,
+      "us-east-1",
+      "A CloudFront web ACL must be created in us-east-1",
+    );
 
     const { name, redactedHeaders } = props;
     const rules = webAclRules(props);

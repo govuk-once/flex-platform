@@ -13,7 +13,7 @@ import {
   SIGNING_KEY_REGION,
   type TrustedIssuer,
 } from "@repo/frontdoor-shared";
-import { bundledCode, tableArn } from "@repo/infra-constructs";
+import { bundledCode, requireRegion, tableArn } from "@repo/infra-constructs";
 import {
   ArnFormat,
   Duration,
@@ -93,11 +93,11 @@ export class OriginRequestFunction extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    if (stack.region !== "us-east-1") {
-      throw new Error(
-        `A Lambda@Edge function must be created in us-east-1, not ${stack.region}`,
-      );
-    }
+    requireRegion(
+      this,
+      "us-east-1",
+      "A Lambda@Edge function must be created in us-east-1",
+    );
 
     const logGroupName = originRequestLogGroupName(props.environment);
     // Its permissions: the policy the log group's stack provides, attached by name, and calling

@@ -83,6 +83,7 @@ export {
   platformFunction,
   type PlatformFunctionProps,
 } from "./platform-function.ts";
+export { requireRegion } from "./require-region.ts";
 export {
   TABLE_MANAGEMENT_ACTIONS,
   tablePolicy,
