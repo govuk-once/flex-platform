@@ -67,7 +67,7 @@ The type error shows the corrected `parameters` shape. That is either the missin
 the parameter, or an entry whose `name` must be one of the template's.
 
 Codegen also sees the schemas, so it reports more. See
-[What codegen checks](/flex-platform/drivers/openapi-rest/overview/#what-codegen-checks).
+[What is checked, and when](/flex-platform/drivers/openapi-rest/overview/#what-is-checked-and-when).
 
 ### How values are sent
 
@@ -89,58 +89,40 @@ that allows additional properties lets the caller choose the names.
   error.
 - Every request sends `Accept: application/json`.
 
-### Configuration errors
+## What is checked, and when
 
-The executor refuses to be created if the configuration has any of these:
+Codegen checks each operation against its schemas before it emits anything, through the driver's
+[`checkSchemas`](/flex-platform/drivers/contract/#checkschemas). The executor checks what it can
+without the schemas when it is created, so a gateway that skipped codegen still refuses to start.
 
-- an `upstream` that codegen would refuse (see [What codegen checks](#what-codegen-checks));
-- `payload` mapped as a parameter;
-- a template parameter without an entry;
-- an entry naming a path parameter the template does not declare;
-- two fields feeding one upstream name;
-- a header that is not a valid name, or one the driver sets (`content-type`, `content-length`,
-  `host`, `transfer-encoding`, `connection`);
-- a mapping onto a header the authentication owns;
-- a handler that is not a function.
+| Problem | Codegen | Startup |
+|---|---|---|
+| `upstream` is not `"<METHOD> /<path>"` with a supported method | Yes | Yes |
+| The `upstream` path holds a query, a fragment, whitespace, a backslash, a dot segment or an incomplete `%` escape | Yes | Yes |
+| A `{param}` in the path has an invalid name, appears twice, or has an unmatched brace | Yes | Yes |
+| A `{param}` has no `parameters` entry with `in: "path"`, or an entry names a parameter the template lacks | Yes | Yes |
+| Two fields supply the same path parameter, query parameter or header. Header names are compared without regard to case | Yes | Yes |
+| `payload` is mapped as a parameter | Yes | Yes |
+| A mapping names a header that is not a valid name, one the driver sets (`content-type`, `content-length`, `host`, `transfer-encoding`, `connection`), or one the authentication owns | Yes | Yes |
+| The input schema does not describe an object, or its `$ref` resolves to no shared definition, or back to one it is reached from | Yes | |
+| A mapped field is not a field of the input schema | Yes | |
+| An input field is neither mapped nor `payload`, so nothing would carry it upstream | Yes | |
+| A path parameter's input field is not required, which would leave a segment of the path with no value | Yes | |
+| The input schema declares `payload` for a method that cannot carry a body | Yes | |
+| The driver's `metadata` is malformed, or it and the schemas' `meta` disagree. See [Agreement with the schemas](/flex-platform/drivers/openapi-rest/metadata/#agreement-with-the-schemas) | Yes | |
+| A handler is not a function | | Yes |
 
-A misspelled key inside a parameter mapping is a type error at `defineGateway`.
-
-## What codegen checks
-
-Codegen checks each operation against its schemas before it emits anything. It passes the
-configuration and the schemas to the driver's
-[`checkSchemas`](/flex-platform/drivers/contract/#checkschemas), and fails when:
-
-- `upstream` is not `"<METHOD> /<path>"` with a supported method;
-- the `upstream` path holds a query, a fragment, whitespace, a backslash, a dot segment or an
-  incomplete `%` escape;
-- a `{param}` in the `upstream` path has an invalid name, appears twice, or has an unmatched
-  brace;
-- the input schema does not describe an object;
-- the input schema's `$ref` resolves to no shared definition, or back to one it is reached from;
-- a `{param}` in the template has no `parameters` entry with `in: "path"` naming it, or an entry
-  names a parameter the template does not declare;
-- a mapped field, for a path, query or header parameter, is not a field of the input schema;
-- an input field is neither mapped nor `payload`, so nothing would carry it upstream;
-- a path parameter's input field is not required by the schema, which would leave a segment of
-  the path with no value;
-- two fields supply the same path parameter, query parameter or header, so only one would be
-  sent. Header names are compared without regard to case;
-- `payload` is mapped as a parameter, or the input schema declares it for a method that cannot
-  carry a body;
-- a mapping names a header that is not a valid name, one the driver sets (`content-type`,
-  `content-length`, `host`, `transfer-encoding`, `connection`), or one the gateway's
-  authentication owns;
-- the driver's `metadata` is malformed, or it and the schemas' `meta` disagree. See
-  [Agreement with the schemas](/flex-platform/drivers/openapi-rest/metadata/#agreement-with-the-schemas).
-
-An operation with a custom handler builds its own request, so some of these are left to the
-handler. See
+A misspelled key inside a parameter mapping is a type error at `defineGateway`. An operation with a
+custom handler builds its own request, so some of these are left to the handler. See
 [What codegen checks for a handler](/flex-platform/drivers/openapi-rest/handlers/#what-codegen-checks-for-a-handler).
+What else the executor checks as it starts is in
+[Startup](/flex-platform/drivers/openapi-rest/executor/#startup).
 
 ## The upstream must use https
 
-The target is an absolute base URL. It comes from `FLEX_UPSTREAM_TARGET`, or from the secret field
-that `target` names. The driver accepts an http target only for a loopback host. So a local stub,
-or a sidecar that terminates TLS, still works, but a remote address cannot be configured without
-TLS. The same rule applies to every request an authentication part makes.
+The target comes from `FLEX_UPSTREAM_TARGET`, or from the secret field that the driver's `target`
+names, which is used instead when both are set. Either way, it must be an absolute https base URL
+with no query, fragment or credentials. A path prefix is kept. The driver accepts an http target
+only for a loopback host. So a local stub, or a sidecar that terminates TLS, still works, but a
+remote address cannot be configured without TLS. The same rule applies to every request an
+authentication part makes.

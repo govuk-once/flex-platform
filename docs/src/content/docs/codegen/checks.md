@@ -74,7 +74,7 @@ The driver checks that an operation's fields and its schemas describe the same r
 through [`checkSchemas`](/flex-platform/drivers/contract/#checkschemas) on its definition. The
 generator itself names no method, path, query parameter or header. Each driver documents its own
 checks. For openapi-rest, see
-[What codegen checks](/flex-platform/drivers/openapi-rest/overview/#what-codegen-checks).
+[What is checked, and when](/flex-platform/drivers/openapi-rest/overview/#what-is-checked-and-when).
 
 ## What the driver derives
 
