@@ -55,8 +55,9 @@ Because the edge reads every five minutes, a [revocation](#revoking-a-key) norma
 copy within five minutes. The edge calls KMS only for a key it hasn't seen.
 
 A failed read keeps the old keys. So an edge that can't read goes on signing with a revoked key,
-and every gateway refuses what it signs. If no key has started, the 30-second wait means that every request doesn't
-hit DynamoDB while it can't be reached. Requests that arrive while a read is under way share it.
+and every gateway refuses what it signs. If no key has started, the 30-second wait keeps requests
+from reaching DynamoDB one after another while it can't be reached. Requests that arrive while a
+read is under way share it.
 
 ## The push ID
 
@@ -262,9 +263,9 @@ next run retries a run that fails.
 | A revoked key's ID is kept | A day |
 | The failure alarm goes off | When runs fail in two of the last three 15-minute periods |
 
-The function's code is the same for any kind of key. Three things are particular to the caller
-token's keys, as its policy: an Ed25519 key pair, the encryption context's purpose, and the timings
-on this page.
+The function's code is the same for any kind of key. What is particular to the caller token's
+keys is its key policy, `CALLER_TOKEN_POLICY` in `frontdoor/key-rotation`: an Ed25519 key pair, the
+encryption context's purpose, and the timings on this page.
 
 A switch from one key to the next happens at a moment set when the next key is made:
 

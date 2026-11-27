@@ -145,11 +145,27 @@ outside the workspace.
 | Memory | 1,024 MB. Lambda gives CPU in proportion to memory, which speeds the first request's key fetch and the signature check |
 | Timeout | 10 seconds. The key fetch's worst case is about 6 |
 | Body | Included, so the signature covers it |
-| Role | `frontdoor-<environment>-edge`, trusting `lambda.amazonaws.com` and `edgelambda.amazonaws.com`. It attaches the policy `frontdoor-<environment>-origin-request-logs-eu-west-2` by name, which the log group's stack provides. That policy lets it write to `/flex/frontdoor/<environment>/origin-request` in eu-west-2, and use that group's KMS key through CloudWatch Logs, for that group alone. The role may also call `execute-api:Invoke` on the APIs in the environment's domain accounts, in eu-west-2. API Gateway generates an API's ID, so the grant is by account, and each domain API's resource policy names the role. It may scan the caller token's private keys table in eu-west-2. It may decrypt with the signing key, found by its alias, only with the caller token's encryption context: see [the caller token](/flex-platform/frontdoor/caller-token/#signing). And it may read the [push ID's secret](/flex-platform/frontdoor/caller-token/#the-push-id) in eu-west-2 |
+| Role | `frontdoor-<environment>-edge`, trusting `lambda.amazonaws.com` and `edgelambda.amazonaws.com`. See [the role](#the-role) |
 
 The function and its versions are kept when they're removed from the stack. Lambda refuses to
 delete a version until CloudFront has removed its copies, which happens hours after the version is
 detached.
+
+### The role
+
+The function runs as `frontdoor-<environment>-edge`. Everything it may do is in eu-west-2:
+
+- **Write its logs.** It attaches the policy `frontdoor-<environment>-origin-request-logs-eu-west-2`
+  by name, which the log group's stack provides. That policy lets it write to
+  `/flex/frontdoor/<environment>/origin-request`, and use that group's KMS key through CloudWatch
+  Logs, for that group alone.
+- **Call the domains' APIs,** with `execute-api:Invoke` on the APIs in the environment's domain
+  accounts. API Gateway generates an API's ID, so the grant is by account, and each domain API's
+  resource policy names the role.
+- **Read its signing keys.** It may scan the caller token's private keys table, and decrypt with
+  the signing key, found by its alias, only with the caller token's encryption context. See
+  [the caller token](/flex-platform/frontdoor/caller-token/#signing).
+- **Read the [push ID's secret](/flex-platform/frontdoor/caller-token/#the-push-id).**
 
 ## Routing
 
