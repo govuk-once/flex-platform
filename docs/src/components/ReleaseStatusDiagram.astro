@@ -1,0 +1,115 @@
+---
+// A release's status in the release table, and what moves it from one to the next. Only the
+// transitions the release pages state are drawn. Drawn with Starlight's colour variables so it
+// follows the light and dark themes.
+import Diagram from "./Diagram.astro";
+---
+
+<Diagram title="A release's status" minWidth={580} maxWidth={880}>
+  <svg
+    viewBox="0 0 880 506"
+    role="img"
+    aria-labelledby="release-status-title release-status-desc"
+  >
+    <title id="release-status-title">A release's status</title>
+    <desc id="release-status-desc">
+      The API records a release queued. If the queue refuses its message, the API records it
+      refused, at the step queue. Otherwise the release worker claims it, and it becomes releasing.
+      An attempt that succeeds records it released. A release that can never succeed is recorded
+      refused. An attempt that fails records it failed, and the queue delivers it again after 20
+      minutes, when it becomes releasing again. An attempt that stops without recording leaves it
+      releasing, and the queue delivers it again. After three failed attempts, the dead-letter
+      worker records a failed or releasing release abandoned. Abandoned isn't final: an attempt
+      still running can record it released, and the worker claims it again if its queue gives it
+      the release, when it becomes releasing. Released and refused are final.
+    </desc>
+    <defs>
+      <marker
+        id="release-status-arrow"
+        viewBox="0 0 10 10"
+        refX="9"
+        refY="5"
+        markerWidth="7"
+        markerHeight="7"
+        orient="auto-start-reverse"
+      >
+        <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+      </marker>
+    </defs>
+
+    <!-- Statuses -->
+    <circle class="start-dot" cx="28" cy="222" r="7"></circle>
+
+    <rect class="box" x="160" y="200" width="130" height="44" rx="22"></rect>
+    <text class="label mono" x="225" y="227">queued</text>
+
+    <rect class="box" x="420" y="200" width="140" height="44" rx="22"></rect>
+    <text class="label mono" x="490" y="227">releasing</text>
+
+    <rect class="box accent" x="720" y="194" width="140" height="56" rx="22"></rect>
+    <text class="label mono" x="790" y="219">released</text>
+    <text class="sub" x="790" y="238">final</text>
+
+    <rect class="box accent" x="420" y="30" width="140" height="56" rx="22"></rect>
+    <text class="label mono" x="490" y="55">refused</text>
+    <text class="sub" x="490" y="74">final</text>
+
+    <rect class="box" x="420" y="370" width="140" height="44" rx="22"></rect>
+    <text class="label mono" x="490" y="397">failed</text>
+
+    <rect class="box" x="720" y="370" width="140" height="44" rx="22"></rect>
+    <text class="label mono" x="790" y="397">abandoned</text>
+
+    <!-- Transitions -->
+    <line class="flow" x1="35" y1="222" x2="158" y2="222"></line>
+    <text class="note" x="96" y="212" text-anchor="middle">the API records it</text>
+
+    <line class="flow" x1="290" y1="222" x2="418" y2="222"></line>
+    <text class="note" x="354" y="194" text-anchor="middle">the worker</text>
+    <text class="note" x="354" y="210" text-anchor="middle">claims it</text>
+
+    <path class="flow" d="M225,200 V58 H418"></path>
+    <text class="note" x="322" y="34" text-anchor="middle">the queue refuses its</text>
+    <text class="note" x="322" y="50" text-anchor="middle">message: step <tspan class="mono">queue</tspan></text>
+
+    <line class="flow" x1="460" y1="200" x2="460" y2="88"></line>
+    <text class="note end" x="452" y="136">it can never</text>
+    <text class="note end" x="452" y="152">succeed</text>
+
+    <path class="flow" d="M510,200 V168 H545 V198"></path>
+    <text class="note" x="556" y="166">an attempt stops without</text>
+    <text class="note" x="556" y="182">recording: delivered again</text>
+
+    <line class="flow" x1="560" y1="222" x2="718" y2="222"></line>
+    <text class="note" x="640" y="212" text-anchor="middle">an attempt succeeds</text>
+
+    <line class="flow" x1="470" y1="244" x2="470" y2="368"></line>
+    <text class="note end" x="462" y="300">an attempt</text>
+    <text class="note end" x="462" y="316">fails</text>
+
+    <line class="flow" x1="510" y1="370" x2="510" y2="246"></line>
+    <text class="note" x="518" y="300">delivered again</text>
+    <text class="note" x="518" y="316">after 20 minutes</text>
+
+    <path class="flow" d="M560,238 H660 V382 H718"></path>
+    <line class="flow" x1="560" y1="400" x2="718" y2="400"></line>
+    <text class="note" x="640" y="428" text-anchor="middle">after three failed attempts,</text>
+    <text class="note" x="640" y="444" text-anchor="middle">the dead-letter worker</text>
+
+    <line class="flow" x1="790" y1="370" x2="790" y2="252"></line>
+    <text class="note end" x="782" y="300">an attempt still</text>
+    <text class="note end" x="782" y="316">running succeeds</text>
+
+    <path class="flow" d="M790,414 V470 H390 V236 H418"></path>
+    <text class="note" x="590" y="490" text-anchor="middle">its queue still gives it to the worker</text>
+  </svg>
+</Diagram>
+
+<style>
+  .flow {
+    marker-end: url(#release-status-arrow);
+  }
+  .start-dot {
+    fill: var(--sl-color-gray-3);
+  }
+</style>

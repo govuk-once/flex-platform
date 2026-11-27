@@ -1,0 +1,185 @@
+---
+// A domain's upload and release, from its pipeline through the shared account's distribution in
+// us-east-1 and its pipeline API, tables, bucket, queues and workers in eu-west-2, to the domain's
+// function in its domain account. The numbers follow one upload and release in order.
+// Drawn with Starlight's colour variables so it follows the light and dark themes.
+import Diagram from "./Diagram.astro";
+---
+
+<Diagram title="A domain's upload and release" minWidth={600} maxWidth={900}>
+  <svg
+    viewBox="0 0 900 1000"
+    role="img"
+    aria-labelledby="release-flow-title release-flow-desc"
+  >
+    <title id="release-flow-title">A domain's upload and release</title>
+    <desc id="release-flow-desc">
+      A domain's pipeline, a GitHub Actions job, calls the pipeline API through the stage's shared
+      account. In us-east-1, the shared-management distribution's AWS WAF inspects each request,
+      then the CloudFront Function shared-management-viewer-request checks its structure. The
+      request reaches the API, the function shared-ci at its function URL in eu-west-2, which
+      verifies the GitHub token, decides whether the pipeline may act, and records. Step 1: asked
+      to upload, the API claims the version in the artefacts table, shared-release-artefacts, and
+      signs an upload. Step 2: the pipeline sends the bundle straight to the code bucket,
+      shared-domain-code-account, at the signed address. Step 3: asked for a release, the API
+      records it queued in the release table, shared-releases, and queues it on the FIFO queue
+      shared-release.fifo. Step 4: the release worker, shared-release-worker, takes the message.
+      Step 5: as the domain's deploy role in the domain account, it creates or updates the
+      domain's function, publishes a version and moves the live alias. Step 6: the worker claims
+      the release before each attempt and records how it went in the release table. After three
+      failed attempts, the queue moves the message to the dead-letter queue,
+      shared-release-dead-letter.fifo, where the dead-letter worker,
+      shared-release-dead-letter-worker, records the release abandoned.
+    </desc>
+    <defs>
+      <marker
+        id="release-flow-arrow"
+        viewBox="0 0 10 10"
+        refX="9"
+        refY="5"
+        markerWidth="7"
+        markerHeight="7"
+        orient="auto-start-reverse"
+      >
+        <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+      </marker>
+    </defs>
+
+    <!-- The pipeline -->
+    <rect class="external" x="32" y="78" width="250" height="56" rx="6"></rect>
+    <text class="label" x="157" y="101">A domain's pipeline</text>
+    <text class="sub" x="157" y="121">a GitHub Actions job</text>
+
+    <!-- Shared account, us-east-1 -->
+    <rect class="section" x="306" y="16" width="578" height="134" rx="10"></rect>
+    <text class="section-title" x="322" y="42">Shared account</text>
+    <text class="note" x="322" y="61">us-east-1 · the shared-management distribution</text>
+
+    <rect class="box" x="322" y="78" width="200" height="56" rx="6"></rect>
+    <text class="label" x="422" y="101">AWS WAF</text>
+    <text class="sub" x="422" y="121">rate limits · managed rules</text>
+
+    <rect class="box accent" x="562" y="78" width="306" height="56" rx="6"></rect>
+    <text class="label" x="715" y="101">CloudFront Function</text>
+    <text class="sub mono" x="715" y="121">shared-management-viewer-request</text>
+
+    <!-- Shared account, eu-west-2 -->
+    <rect class="section" x="16" y="170" width="868" height="534" rx="10"></rect>
+    <text class="section-title" x="32" y="196">Shared account</text>
+    <text class="note" x="32" y="215">eu-west-2 · shared-release</text>
+
+    <rect class="box" x="32" y="236" width="250" height="56" rx="6"></rect>
+    <text class="label" x="157" y="259">Code bucket</text>
+    <text class="sub mono" x="157" y="279">shared-domain-code-&lt;account&gt;</text>
+
+    <rect class="box accent" x="320" y="236" width="290" height="100" rx="6"></rect>
+    <text class="label" x="465" y="260">Pipeline API</text>
+    <text class="sub" x="465" y="280"><tspan class="mono">shared-ci</tspan>, at its function URL</text>
+    <text class="sub" x="465" y="298">verifies the GitHub token,</text>
+    <text class="sub" x="465" y="316">decides whether it may act, records</text>
+
+    <rect class="box" x="648" y="236" width="220" height="56" rx="6"></rect>
+    <text class="label" x="758" y="259">Artefacts table</text>
+    <text class="sub mono" x="758" y="279">shared-release-artefacts</text>
+
+    <rect class="box" x="32" y="386" width="250" height="56" rx="6"></rect>
+    <text class="label" x="157" y="409">Release queue</text>
+    <text class="sub mono" x="157" y="429">shared-release.fifo</text>
+
+    <rect class="box" x="320" y="376" width="290" height="76" rx="6"></rect>
+    <text class="label" x="465" y="399">Dead-letter queue</text>
+    <text class="sub mono" x="465" y="419">shared-release-dead-letter.fifo</text>
+    <text class="sub" x="465" y="437">after three failed attempts</text>
+
+    <rect class="box" x="648" y="392" width="220" height="156" rx="6"></rect>
+    <text class="label" x="758" y="452">Release table</text>
+    <text class="sub mono" x="758" y="472">shared-releases</text>
+    <text class="sub" x="758" y="490">each release's status</text>
+
+    <rect class="box" x="320" y="492" width="290" height="76" rx="6"></rect>
+    <text class="label" x="465" y="515">Dead-letter worker</text>
+    <text class="sub mono" x="465" y="535">shared-release-dead-letter-worker</text>
+    <text class="sub" x="465" y="553">records the release <tspan class="mono">abandoned</tspan></text>
+
+    <rect class="box accent" x="320" y="608" width="290" height="76" rx="6"></rect>
+    <text class="label" x="465" y="631">Release worker</text>
+    <text class="sub mono" x="465" y="651">shared-release-worker</text>
+    <text class="sub" x="465" y="669">reads and checks the bundle</text>
+
+    <text class="note start" x="624" y="604">claims it, then</text>
+    <text class="note start" x="624" y="622">records how it went</text>
+
+    <!-- Domain account -->
+    <rect class="section" x="16" y="728" width="868" height="174" rx="10"></rect>
+    <text class="section-title" x="32" y="754">Domain account</text>
+    <text class="note" x="32" y="773">eu-west-2</text>
+
+    <rect class="box" x="320" y="790" width="280" height="96" rx="6"></rect>
+    <text class="label" x="460" y="814">Deploy role</text>
+    <text class="sub mono" x="460" y="834">domain-&lt;environment&gt;-&lt;name&gt;-deploy</text>
+    <text class="sub" x="460" y="852">assumed by the release worker</text>
+
+    <rect class="box" x="632" y="790" width="236" height="96" rx="6"></rect>
+    <text class="label" x="750" y="814">The domain's function</text>
+    <text class="sub mono" x="750" y="834">domain-&lt;environment&gt;-&lt;name&gt;</text>
+    <text class="sub" x="750" y="852">created or updated,</text>
+    <text class="sub" x="750" y="870">a version published, <tspan class="mono">live</tspan> moved</text>
+
+    <!-- Flow -->
+    <line class="flow" x1="282" y1="106" x2="320" y2="106"></line>
+    <line class="flow" x1="522" y1="106" x2="560" y2="106"></line>
+    <path class="flow" d="M715,134 V160 H465 V234"></path>
+    <line class="flow" x1="262" y1="134" x2="262" y2="234"></line>
+    <line class="flow" x1="610" y1="264" x2="646" y2="264"></line>
+    <path class="flow" d="M320,322 H157 V384"></path>
+    <path class="flow" d="M610,322 H758 V390"></path>
+    <line class="flow" x1="282" y1="414" x2="318" y2="414"></line>
+    <line class="flow" x1="465" y1="452" x2="465" y2="490"></line>
+    <line class="flow" x1="610" y1="530" x2="646" y2="530"></line>
+    <path class="flow" d="M157,442 V646 H318"></path>
+    <path class="flow" d="M610,646 H758 V550"></path>
+    <line class="flow" x1="465" y1="684" x2="465" y2="788"></line>
+    <line class="flow" x1="600" y1="838" x2="630" y2="838"></line>
+
+    <text class="note end" x="250" y="158">signed PUT</text>
+
+    <!-- Steps -->
+    <g class="step"><circle cx="276" cy="158" r="10"></circle><text x="276" y="162">2</text></g>
+    <g class="step"><circle cx="628" cy="250" r="10"></circle><text x="628" y="254">1</text></g>
+    <g class="step"><circle cx="240" cy="322" r="10"></circle><text x="240" y="326">3</text></g>
+    <g class="step"><circle cx="690" cy="322" r="10"></circle><text x="690" y="326">3</text></g>
+    <g class="step"><circle cx="157" cy="560" r="10"></circle><text x="157" y="564">4</text></g>
+    <g class="step"><circle cx="758" cy="598" r="10"></circle><text x="758" y="602">6</text></g>
+    <g class="step"><circle cx="465" cy="716" r="10"></circle><text x="465" y="720">5</text></g>
+
+    <!-- Key -->
+    <g class="step"><circle cx="42" cy="930" r="10"></circle><text x="42" y="934">1</text></g>
+    <text class="note start" x="60" y="935">Asked to upload, the API claims the version and signs an upload.</text>
+    <g class="step"><circle cx="42" cy="954" r="10"></circle><text x="42" y="958">2</text></g>
+    <text class="note start" x="60" y="959">The pipeline sends the bundle straight to the bucket.</text>
+    <g class="step"><circle cx="42" cy="978" r="10"></circle><text x="42" y="982">3</text></g>
+    <text class="note start" x="60" y="983">Asked for a release, the API records it queued, then queues it.</text>
+    <g class="step"><circle cx="482" cy="930" r="10"></circle><text x="482" y="934">4</text></g>
+    <text class="note start" x="500" y="935">The release worker takes the message.</text>
+    <g class="step"><circle cx="482" cy="954" r="10"></circle><text x="482" y="958">5</text></g>
+    <text class="note start" x="500" y="959">As the domain's deploy role, it releases the bundle.</text>
+    <g class="step"><circle cx="482" cy="978" r="10"></circle><text x="482" y="982">6</text></g>
+    <text class="note start" x="500" y="983">It records how the release went.</text>
+  </svg>
+</Diagram>
+
+<style>
+  .flow {
+    marker-end: url(#release-flow-arrow);
+  }
+  .step circle {
+    fill: var(--sl-color-accent-low);
+    stroke: var(--sl-color-accent);
+  }
+  .step text {
+    font-size: 13px;
+    font-weight: 700;
+    text-anchor: middle;
+    fill: var(--sl-color-accent-high);
+  }
+</style>
