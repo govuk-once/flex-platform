@@ -46,9 +46,9 @@ Each folder is loaded at a different time:
 
 Copy openapi-rest's `eslint.config.ts` to keep the three apart. It stops:
 
-- the root and `config/` from reaching `runtime/` or `derive/`;
+- the root and `config/` from importing `runtime/`, other than its types, or `derive/`;
 - the runtime from reaching `derive/`;
-- `derive/` from reaching the runtime.
+- `derive/` from importing the runtime, other than its types.
 
 An import of `derive/`, even a dynamic one, would put what it uses into every deployed gateway.
 So the definition names it by URL instead.

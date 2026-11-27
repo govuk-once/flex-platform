@@ -154,7 +154,7 @@ Each stack depends on the stacks whose resources it reads:
   regions, so it never routes to a host before the host exists. It also depends on the caller
   token's stack, whose keys the edge signs with.
 
-So an environment deploys in this order:
+So an environment that hosts a domain deploys in this order:
 
 1. The networks, the domain accounts' stacks and the caller token's stack.
 2. The domains' and the gateways' stacks.
