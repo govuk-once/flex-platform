@@ -22,6 +22,12 @@ import {
 } from "./config/requesting.ts";
 import { TOPICS } from "./config/topics.ts";
 
+// The service and the user's ID at it, which every identity operation names in its path.
+const IDENTITY = {
+  serviceName: { in: "path" },
+  identifier: { in: "path" },
+} as const;
+
 export default defineGateway({
   id: "udp",
   description: "User Data Platform gateway",
@@ -76,20 +82,14 @@ export default defineGateway({
     getIdentity: {
       description: "Read Identity Record",
       upstream: "GET /v1/identity/{serviceName}/{identifier}",
-      parameters: {
-        serviceName: { in: "path" },
-        identifier: { in: "path" },
-      },
+      parameters: IDENTITY,
       secure: FOR_CALLER_BY_IDENTIFIER,
     },
     // `identifier` is the user's ID at the other service, which no claim vouches for.
     createIdentity: {
       description: "Create Identity Record",
       upstream: "POST /v1/identity/{serviceName}/{identifier}",
-      parameters: {
-        serviceName: { in: "path" },
-        identifier: { in: "path" },
-      },
+      parameters: IDENTITY,
       secure: FOR_CALLER_BY_APP_ID,
     },
     // Binds nothing yet: `identifier` is the user's ID at the other service, which no claim vouches
@@ -97,18 +97,12 @@ export default defineGateway({
     deleteIdentity: {
       description: "Delete Identity Record",
       upstream: "DELETE /v1/identity/{serviceName}/{identifier}",
-      parameters: {
-        serviceName: { in: "path" },
-        identifier: { in: "path" },
-      },
+      parameters: IDENTITY,
     },
     getLinkedServices: {
       description: "Get All Linked Services",
       upstream: "GET /v1/identity/{serviceName}/{identifier}/linked-services",
-      parameters: {
-        serviceName: { in: "path" },
-        identifier: { in: "path" },
-      },
+      parameters: IDENTITY,
       secure: FOR_CALLER_BY_IDENTIFIER,
     },
     getNotificationPreferences: {

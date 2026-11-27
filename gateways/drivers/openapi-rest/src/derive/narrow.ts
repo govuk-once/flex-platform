@@ -6,6 +6,7 @@ import {
   SUBSCHEMAS,
 } from "@repo/gateway-codegen";
 import { isRecord } from "@repo/utils/is-record";
+import { stringsIn } from "@repo/utils/strings-in";
 
 import { setKey } from "./convert.ts";
 
@@ -67,11 +68,6 @@ const isPlainArray = (schema: unknown): schema is Schema =>
   isRecord(schema) &&
   schema.type === "array" &&
   only(schema, ["type", "items"]);
-
-const strings = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
 
 // A name an object literal reads as its prototype rather than as a property, which is what a
 // version is refused for holding: read here as well, so what is wrong with a narrowing is said
@@ -255,7 +251,10 @@ function narrowObject(
 
   const properties = narrowedProperties(derived, narrowing, where, problems);
   const required = [
-    ...new Set([...strings(derived.required), ...strings(narrowing.required)]),
+    ...new Set([
+      ...stringsIn(derived.required),
+      ...stringsIn(narrowing.required),
+    ]),
   ];
   // In the order the document wrote them, with what changed written where it was.
   const result: Record<string, unknown> = {};
