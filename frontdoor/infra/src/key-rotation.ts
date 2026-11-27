@@ -2,6 +2,7 @@ import { KEY_POLICIES, type KeyKind } from "@repo/frontdoor-key-rotation";
 import { buildKeyRotationFunction } from "@repo/frontdoor-key-rotation/build";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 import {
+  accountOf,
   platformFunction,
   requireRegion,
   roleArn,
@@ -295,13 +296,4 @@ export class KeyRotation extends Construct {
       treatMissingData: TreatMissingData.NOT_BREACHING,
     });
   }
-}
-
-// A role's ARN, arn:aws:iam::<account>:role/<name>.
-function accountOf(roleArn: string): string {
-  const account = roleArn.split(":")[4] ?? "";
-  if (!/^\d{12}$/.test(account)) {
-    throw new Error(`The role ARN ${roleArn} names no account`);
-  }
-  return account;
 }

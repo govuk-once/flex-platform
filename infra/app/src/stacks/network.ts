@@ -1,5 +1,6 @@
 import { gatewayAliasPattern, gatewayRolePattern } from "@repo/gateway-infra";
 import {
+  accountOf,
   DnsFirewall,
   FlowLogs,
   InterfaceEndpoints,
@@ -89,15 +90,6 @@ function privateApiAccess(
       new Set(calling.flatMap((g) => g.roleArns.map(accountOf))),
     ),
   };
-}
-
-// A role's ARN, arn:aws:iam::<account>:role/<name>, which config has already checked.
-function accountOf(roleArn: string): string {
-  const account = roleArn.split(":")[4];
-  if (account === undefined || account === "") {
-    throw new Error(`The role ARN ${roleArn} names no account.`);
-  }
-  return account;
 }
 
 interface NetworkStackProps {

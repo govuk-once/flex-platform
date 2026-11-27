@@ -1,7 +1,13 @@
 import { Stack } from "aws-cdk-lib";
 import { describe, expect, it } from "vitest";
 
-import { functionArn, logGroupArn, roleArn, tableArn } from "./arns.ts";
+import {
+  accountOf,
+  functionArn,
+  logGroupArn,
+  roleArn,
+  tableArn,
+} from "./arns.ts";
 import { cdkApp } from "./cdk-app.ts";
 
 const stack = new Stack(cdkApp(), "Test", {
@@ -36,6 +42,15 @@ describe("the ARN helpers", () => {
     );
     expect(tableArn(stack, "a-table", "us-east-1")).toBe(
       "arn:aws:dynamodb:us-east-1:123456789012:table/a-table",
+    );
+  });
+
+  it("read the account a role's ARN names", () => {
+    expect(accountOf("arn:aws:iam::123456789012:role/a-role")).toBe(
+      "123456789012",
+    );
+    expect(() => accountOf("arn:aws:iam:::role/a-role")).toThrow(
+      "names no account",
     );
   });
 });

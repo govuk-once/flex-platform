@@ -57,3 +57,12 @@ export function tableArn(
     resourceName: name,
   });
 }
+
+/** The account a role's ARN names, `arn:aws:iam::<account>:role/<name>`. */
+export function accountOf(roleArn: string): string {
+  const account = roleArn.split(":")[4] ?? "";
+  if (!/^\d{12}$/.test(account)) {
+    throw new Error(`The role ARN ${roleArn} names no account`);
+  }
+  return account;
+}
