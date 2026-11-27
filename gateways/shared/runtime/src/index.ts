@@ -1,3 +1,4 @@
+export { AWS_REQUEST_HANDLER } from "./aws-request-handler.ts";
 export type {
   CallerTokenKey,
   CallerTokenKeys,

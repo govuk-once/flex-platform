@@ -24,6 +24,7 @@ import { SECURE_CLAIMS, type SecureClaims } from "@repo/gateway-core";
 import { ownValue } from "@repo/utils/own-value";
 import { type Env, requiredEnv } from "@repo/utils/required-env";
 
+import { AWS_REQUEST_HANDLER } from "./aws-request-handler.ts";
 import { GatewayError } from "./errors.ts";
 import { readGatewayRegion } from "./upstream-target.ts";
 
@@ -452,11 +453,7 @@ export function readCallerTokenVerifier(
   const dynamodb = new DynamoDBClient({
     region,
     endpoint,
-    requestHandler: {
-      connectionTimeout: 2_000,
-      requestTimeout: 5_000,
-      throwOnRequestTimeout: true,
-    },
+    requestHandler: AWS_REQUEST_HANDLER,
   });
   return createCallerTokenVerifier({
     audience,

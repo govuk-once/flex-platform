@@ -2,6 +2,7 @@ import { SecretsProvider } from "@aws-lambda-powertools/parameters/secrets";
 import type { SecretObject, SecretProvider } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
 
+import { AWS_REQUEST_HANDLER } from "./aws-request-handler.ts";
 import { GatewayError } from "./errors.ts";
 
 // arn:<partition>:secretsmanager:<region>:<account>:secret:<name>. The secret must be in the
@@ -13,12 +14,6 @@ const SECRET_ARN = /^arn:[^:\s]+:secretsmanager:([^:\s]+):[^:\s]*:secret:\S+$/;
 // Concurrent calls on a cold or expired cache may each retrieve; nothing coordinates them, and
 // a duplicate read costs a request and nothing else.
 const MAX_AGE_SECONDS = 300;
-
-// SDK-level bounds on one retrieval, so initialisation cannot hang on the store. A request's
-// attempt keeps its own deadline: a caller that runs out of budget stops waiting, and the
-// retrieval completes, or fails, on its own.
-const CONNECTION_TIMEOUT_MS = 2_000;
-const REQUEST_TIMEOUT_MS = 5_000;
 
 function describeJsonType(value: unknown): string {
   if (value === null) return "null";
@@ -66,12 +61,7 @@ export function createSecretProvider(
   const secrets = new SecretsProvider({
     clientConfig: {
       region,
-      // Without throwOnRequestTimeout the SDK only logs a breach of requestTimeout.
-      requestHandler: {
-        connectionTimeout: CONNECTION_TIMEOUT_MS,
-        requestTimeout: REQUEST_TIMEOUT_MS,
-        throwOnRequestTimeout: true,
-      },
+      requestHandler: AWS_REQUEST_HANDLER,
     },
   });
   return {
