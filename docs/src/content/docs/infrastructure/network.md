@@ -61,14 +61,13 @@ only on TCP port 443:
 | Workload | Tier | May reach |
 |---|---|---|
 | `domain` | `isolated` | The `lambda` endpoint |
-| `isolated-gateway` | `isolated` | The `secretsmanager`, `sts`, `s3`, `dynamodb` and `execute-api` endpoints |
-| `private-gateway` | `private` | The `secretsmanager`, `sts`, `s3` and `dynamodb` endpoints, and its zone's NAT gateway |
+| `isolated-gateway` | `isolated` | The `secretsmanager`, `sts`, `dynamodb` and `execute-api` endpoints |
+| `private-gateway` | `private` | The `secretsmanager`, `sts` and `dynamodb` endpoints, and its zone's NAT gateway |
 
 A domain uses the `lambda` endpoint to invoke gateways. A gateway uses `secretsmanager` to read its
 secret, `sts` to assume an upstream's role for
 [`sigV4`](/flex-platform/drivers/openapi-rest/authentication/), and `dynamodb` to read the
-[caller token's keys](#the-caller-tokens-keys). The `s3` endpoint reaches the bucket that holds
-the same keys. An isolated gateway uses `execute-api` to call an
+[caller token's keys](#the-caller-tokens-keys). An isolated gateway uses `execute-api` to call an
 upstream's [private API](#private-apis). Each endpoint's own security group
 lets in only the workloads that may reach it, and lets nothing out. What a workload may call is its
 role's to decide: an endpoint's policy applies to the requests sent through that endpoint.
@@ -92,7 +91,6 @@ everything:
 | `lambda` | `lambda:InvokeFunction` on `gateway-<environment>-*:live`, a gateway's alias and nothing else of it |
 | `secretsmanager` | `secretsmanager:GetSecretValue` on the account's gateways' secrets, by a gateway's role alone |
 | `sts` | `sts:AssumeRole` on each role the account's gateways sign as, by a gateway's role alone |
-| `s3` | `s3:GetObject` on the caller token's public keys alone, in a bucket the frontdoor account owns |
 | `dynamodb` | `dynamodb:Scan` on the caller token's public keys table alone, in the frontdoor account, by a gateway's role alone |
 | `execute-api` | `execute-api:Invoke` on each private API a gateway names, by a principal of the account of a role a gateway signs as |
 
@@ -260,9 +258,6 @@ gateway in the domain account declares:
   `sts.eu-west-2.amazonaws.com`, which private DNS answers with the endpoints' addresses. Another
   AWS name is added only when a workload is shown to need it. A suffix such as `*.amazonaws.com`
   never is.
-- `<bucket>.s3.eu-west-2.amazonaws.com` for each bucket the `s3` endpoint names: the SDK calls S3
-  at the bucket's own name, which private DNS answers too. `s3.eu-west-2.amazonaws.com` itself
-  isn't listed, since nothing calls it.
 - The `dynamodb` endpoint's own regional name, such as
   `vpce-0123456789abcdef0-abcd1234.dynamodb.eu-west-2.vpce.amazonaws.com`, exactly. AWS chooses it
   when the endpoint is made, so the stack takes it from the endpoint as it deploys, and it is the
@@ -386,13 +381,6 @@ changes only the zonal names, which nothing reads. An endpoint that is replaced 
 network's stack updates the parameter and the allowlist together, and every gateway's stack must
 then deploy with `--force`, as for [any ID](#ids-other-stacks-read). Until it does, the gateway
 calls the old name, which the allowlist refuses.
-
-The keys are also in [a bucket](/flex-platform/frontdoor/caller-token/#the-public-keys-bucket),
-which the `s3` endpoint reaches. Its policy names that one object, and the frontdoor account as
-its bucket's owner: bucket names are global, so a bucket of the same name in another account is
-refused. With no S3 gateway endpoint beside it, the interface endpoint's private DNS answers every
-resolver in the VPC, not only inbound ones, so it sets `PrivateDnsOnlyForInboundResolverEndpoint`
-to `AllResolvers`.
 
 ## IDs other stacks read
 

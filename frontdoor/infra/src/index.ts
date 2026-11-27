@@ -1,9 +1,6 @@
-export { CallerTokenKeysBucket } from "./caller-token-keys-bucket.ts";
 export { Edge } from "./edge.ts";
 export { KeyRotation } from "./key-rotation.ts";
 export {
-  CALLER_TOKEN_KEYS_OBJECT,
-  callerTokenKeysBucketName,
   edgeRoleName,
   ORIGIN_REQUEST_LOG_REGION,
   originRequestLogGroupName,

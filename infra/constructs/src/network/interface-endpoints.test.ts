@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   ACCOUNT,
   buildNetwork,
-  KEYS_OBJECT,
   KEYS_TABLE,
   UPSTREAM_ACCOUNT,
   UPSTREAM_API,
@@ -26,7 +25,6 @@ function endpoint(
   service: string,
   Action: string,
   Resource: unknown,
-  resourceAccount?: string,
   principals?: string,
   privateDns = true,
 ) {
@@ -46,12 +44,7 @@ function endpoint(
           Action,
           Resource,
           Condition: {
-            StringEquals: {
-              "aws:PrincipalAccount": ACCOUNT,
-              ...(resourceAccount !== undefined && {
-                "aws:ResourceAccount": [resourceAccount],
-              }),
-            },
+            StringEquals: { "aws:PrincipalAccount": ACCOUNT },
             ...(principals !== undefined && {
               ArnLike: { "aws:PrincipalArn": principals },
             }),
@@ -78,7 +71,6 @@ function endpointsStack(invokableApis: PrivateApiAccess) {
     vpc,
     subnets: subnets.isolated,
     invokableFunctions: "gateway-sandbox-*:live",
-    readableObjects: [],
     readableTables: [],
     readableSecrets: [],
     assumableRoles: [],
@@ -99,41 +91,19 @@ describe("InterfaceEndpoints", () => {
       "secretsmanager",
       "secretsmanager:GetSecretValue",
       UPSTREAM_SECRET,
-      undefined,
       // Only gateways read secrets, assume roles and read the caller token's public keys, so
       // nothing else in the account may.
       GATEWAY_ROLES,
     ],
-    ["sts", "sts:AssumeRole", UPSTREAM_ROLE, undefined, GATEWAY_ROLES],
-    [
-      "s3",
-      "s3:GetObject",
-      `arn:aws:s3:::${KEYS_OBJECT.bucket}/${KEYS_OBJECT.key}`,
-      // Bucket names are global, so the bucket's owner is named too.
-      KEYS_OBJECT.account,
-    ],
+    ["sts", "sts:AssumeRole", UPSTREAM_ROLE, GATEWAY_ROLES],
     // DynamoDB's endpoint has no private DNS.
-    ["dynamodb", "dynamodb:Scan", KEYS_TABLE, undefined, GATEWAY_ROLES, false],
+    ["dynamodb", "dynamodb:Scan", KEYS_TABLE, GATEWAY_ROLES, false],
   ])(
     "has a %s endpoint in the isolated subnets, for this account, one action and what it names",
-    (
-      service,
-      action,
-      resource,
-      resourceAccount?: string,
-      principals?: string,
-      privateDns?: boolean,
-    ) => {
+    (service, action, resource, principals?: string, privateDns?: boolean) => {
       buildNetwork().template.hasResourceProperties(
         "AWS::EC2::VPCEndpoint",
-        endpoint(
-          service,
-          action,
-          resource,
-          resourceAccount,
-          principals,
-          privateDns,
-        ),
+        endpoint(service, action, resource, principals, privateDns),
       );
     },
   );
@@ -200,7 +170,7 @@ describe("InterfaceEndpoints", () => {
   it("has no other endpoint", () => {
     Template.fromStack(buildNetwork().stack).resourceCountIs(
       "AWS::EC2::VPCEndpoint",
-      6,
+      5,
     );
   });
 
@@ -214,7 +184,7 @@ describe("InterfaceEndpoints", () => {
       }),
     ) as { Properties: Record<string, unknown> }[];
 
-    expect(groups).toHaveLength(6);
+    expect(groups).toHaveLength(5);
     for (const group of groups) {
       expect(group.Properties).not.toHaveProperty("SecurityGroupIngress");
       expect(group.Properties.SecurityGroupEgress).toEqual([
@@ -231,20 +201,7 @@ describe("InterfaceEndpoints", () => {
       "lambda.eu-west-2.amazonaws.com",
       "secretsmanager.eu-west-2.amazonaws.com",
       "sts.eu-west-2.amazonaws.com",
-      `${KEYS_OBJECT.bucket}.s3.eu-west-2.amazonaws.com`,
     ]);
-  });
-
-  it("answers the VPC's own lookups of S3's names, with no gateway endpoint beside it", () => {
-    Template.fromStack(buildNetwork().stack).hasResourceProperties(
-      "AWS::EC2::VPCEndpoint",
-      {
-        ServiceName: "com.amazonaws.eu-west-2.s3",
-        DnsOptions: {
-          PrivateDnsOnlyForInboundResolverEndpoint: "AllResolvers",
-        },
-      },
-    );
   });
 
   it("gives the dynamodb endpoint's own regional name, the first AWS lists, without its hosted zone", () => {
@@ -280,7 +237,6 @@ describe("InterfaceEndpoints", () => {
     for (const service of [
       "secretsmanager",
       "sts",
-      "s3",
       "dynamodb",
       "execute-api",
     ]) {

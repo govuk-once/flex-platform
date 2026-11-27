@@ -33,10 +33,4 @@ export function checkConfig(config: KeyRotationConfig): void {
   if (!Object.hasOwn(KEY_POLICIES, config.kind)) {
     throw new Error(`No key policy is named ${JSON.stringify(config.kind)}`);
   }
-  const policy = KEY_POLICIES[config.kind];
-  if ((config.publication === null) !== (policy.publication === null)) {
-    throw new Error(
-      `The ${config.kind} keys' policy and config disagree on whether they are published`,
-    );
-  }
 }

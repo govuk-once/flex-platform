@@ -35,7 +35,7 @@ const key = (
 });
 const NONE: KeyChanges = { put: [], remove: [], revoke: [], forget: [] };
 
-// Rotation over the tables in a fake DynamoDB, with KMS and S3 in memory.
+// Rotation over the tables in a fake DynamoDB, with KMS in memory.
 function rotation() {
   const dynamodb = new FakeDynamoDB();
   const memory = new MemoryPorts();
@@ -43,7 +43,6 @@ function rotation() {
     ...tablePorts(dynamodb.client, TABLES),
     generate: (keyId) => memory.generate(keyId),
     check: (held) => memory.check(held),
-    publish: (document) => memory.publish(document),
   };
   const run = (at: Date, revoke?: string) =>
     rotate(

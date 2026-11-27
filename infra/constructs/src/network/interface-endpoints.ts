@@ -5,17 +5,9 @@ import {
   type ISubnet,
   type IVpc,
   SecurityGroup,
-  VpcEndpointPrivateDnsOnlyForInboundResolverEndpoint,
 } from "aws-cdk-lib/aws-ec2";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
-
-/** An S3 object, by its bucket's name, its key, and the account that owns the bucket. */
-export interface S3Object {
-  readonly bucket: string;
-  readonly key: string;
-  readonly account: string;
-}
 
 /** Private API Gateway APIs, and the accounts a call to one may be signed in. */
 export interface PrivateApiAccess {
@@ -34,8 +26,6 @@ export interface InterfaceEndpointsProps {
    * invoked by, such as `gateway-dev-*:live`.
    */
   readonly invokableFunctions: string;
-  /** The objects the `s3` endpoint may read, which may be in another account's bucket. */
-  readonly readableObjects: readonly S3Object[];
   /**
    * The DynamoDB tables the `dynamodb` endpoint may scan, by ARN, which may be in another
    * account. Each is in this region: the endpoint reaches no other.
@@ -67,7 +57,6 @@ export interface InterfaceEndpointsProps {
  * - `lambda`: invoking the functions named.
  * - `secretsmanager`: reading the secrets named, as a gateway's role.
  * - `sts`: assuming the roles named, as a gateway's role.
- * - `s3`: reading the objects named.
  * - `dynamodb`: scanning the tables named, as a gateway's role.
  * - `execute-api`: invoking the private APIs named, as a principal of an account named with them.
  *
@@ -97,7 +86,6 @@ export class InterfaceEndpoints extends Construct {
   public readonly lambda: InterfaceVpcEndpoint;
   public readonly secretsManager: InterfaceVpcEndpoint;
   public readonly sts: InterfaceVpcEndpoint;
-  public readonly s3: InterfaceVpcEndpoint;
   public readonly dynamoDb: InterfaceVpcEndpoint;
   public readonly executeApi: InterfaceVpcEndpoint;
 
@@ -151,25 +139,6 @@ export class InterfaceEndpoints extends Construct {
         resources: [...props.assumableRoles],
         principals: gatewayRoles,
       }),
-    );
-    this.s3 = this.endpoint(
-      props,
-      "S3",
-      InterfaceVpcEndpointAwsService.S3,
-      this.inAccount({
-        actions: ["s3:GetObject"],
-        resources: props.readableObjects.map(
-          ({ bucket, key }) => `arn:${stack.partition}:s3:::${bucket}/${key}`,
-        ),
-        // Bucket names are global, so a bucket of the same name in another account is refused.
-        resourceAccounts: [
-          ...new Set(props.readableObjects.map(({ account }) => account)),
-        ],
-      }),
-      // The SDK calls S3 at the bucket's own name, which private DNS answers too.
-      props.readableObjects.map(
-        ({ bucket }) => `${bucket}.s3.${stack.region}.amazonaws.com`,
-      ),
     );
     this.dynamoDb = this.endpoint(
       props,
@@ -238,13 +207,10 @@ export class InterfaceEndpoints extends Construct {
   private inAccount({
     actions,
     resources,
-    resourceAccounts,
     principals,
   }: {
     actions: string[];
     resources: string[];
-    /** The accounts the resources must be in, where their names don't say. */
-    resourceAccounts?: string[];
     /** The roles that may call it, by ARN pattern, where not every one in the account may. */
     principals?: string;
   }): PolicyStatement[] {
@@ -255,12 +221,7 @@ export class InterfaceEndpoints extends Construct {
         actions,
         resources,
         conditions: {
-          StringEquals: {
-            "aws:PrincipalAccount": Stack.of(this).account,
-            ...(resourceAccounts !== undefined && {
-              "aws:ResourceAccount": resourceAccounts,
-            }),
-          },
+          StringEquals: { "aws:PrincipalAccount": Stack.of(this).account },
           ...(principals !== undefined && {
             ArnLike: { "aws:PrincipalArn": principals },
           }),
@@ -293,12 +254,6 @@ export class InterfaceEndpoints extends Construct {
       service,
       subnets: { subnets: [...subnets] },
       privateDnsEnabled,
-      // S3 alone offers both kinds of endpoint, and would otherwise answer the VPC's own lookups
-      // only through a gateway endpoint, which the network has none of.
-      ...(service.shortName === "s3" && {
-        privateDnsOnlyForInboundResolverEndpoint:
-          VpcEndpointPrivateDnsOnlyForInboundResolverEndpoint.ALL_RESOLVERS,
-      }),
       securityGroups: [securityGroup],
       open: false,
     });

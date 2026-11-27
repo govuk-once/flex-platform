@@ -1,7 +1,4 @@
 import {
-  CALLER_TOKEN_KEYS_OBJECT,
-  CallerTokenKeysBucket,
-  callerTokenKeysBucketName,
   edgeRoleName,
   KeyRotation,
   publicKeysTableName,
@@ -11,7 +8,6 @@ import {
 } from "@repo/frontdoor-infra";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 import { gatewayRolePattern } from "@repo/gateway-infra";
-import { NETWORK_REGION } from "@repo/infra-constructs";
 import { Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 
@@ -36,13 +32,12 @@ export function callerTokenPublicKeysTableArn(
 }
 
 /**
- * The caller token's keys: the KMS key that wraps the private keys the edge signs with, the bucket
- * every gateway reads the public keys from, and key rotation, which makes the keys under the
- * signing key, keeps them in its two tables, where the edge reads its private keys, and writes
- * every public key to the bucket. With them, the secret the edge derives each caller's push ID
- * with, which the token holds. One stack, because all four are in the frontdoor account in
- * eu-west-2. Protected from deletion, and the key, the bucket, the tables and the secret are
- * retained: without them, the edge can't sign and no gateway can verify a token.
+ * The caller token's keys: the KMS key that wraps the private keys the edge signs with, and key
+ * rotation, which makes the keys under the signing key and keeps them in its two tables, where the
+ * edge reads its private keys and every gateway the public keys. With them, the secret the edge
+ * derives each caller's push ID with, which the token holds. One stack, because all three are in
+ * the frontdoor account in eu-west-2. Protected from deletion, and the key, the tables and the
+ * secret are retained: without them, the edge can't sign and no gateway can verify a token.
  */
 export class FrontdoorCallerTokenKeysStack extends Stack {
   constructor(scope: Construct, environment: EnvironmentConfig) {
@@ -55,25 +50,9 @@ export class FrontdoorCallerTokenKeysStack extends Stack {
       terminationProtection: true,
     });
 
-    // Derived once, and given to both as a plain string: key rotation bakes it into its function.
     const { account } = environment.frontdoor;
-    const bucketName = callerTokenKeysBucketName(environment.name, account);
-    // Every gateway's role, by its name's pattern, in each domain account that runs a gateway. A
-    // pattern, so adding a gateway doesn't change this stack, nor grow a policy toward its size
-    // limit. An account is only ever one environment's, which config validation holds, so the
-    // pattern reaches no other environment's gateways.
-    const gatewayRoles = environment.domainAccounts
-      .filter(({ gateways }) => gateways.length > 0)
-      .map(
-        ({ account: domainAccount }) =>
-          `arn:aws:iam::${domainAccount}:role/${gatewayRolePattern(environment.name)}`,
-      );
 
     new SigningKey(this, "SigningKey", { environment: environment.name });
-    new CallerTokenKeysBucket(this, "CallerTokenKeys", {
-      bucketName,
-      readerRoles: gatewayRoles,
-    });
     new PushIdSecret(this, "PushIdSecret", { environment: environment.name });
     new KeyRotation(this, "KeyRotation", {
       environment: environment.name,
@@ -83,14 +62,16 @@ export class FrontdoorCallerTokenKeysStack extends Stack {
       privateKeyReaderRoleArns: [
         `arn:aws:iam::${account}:role/${edgeRoleName(environment.name)}`,
       ],
-      publicKeyReaderRoleArns: gatewayRoles,
-      // The gateways' own region, where they read the public keys.
-      publication: {
-        bucket: bucketName,
-        account,
-        object: CALLER_TOKEN_KEYS_OBJECT,
-        region: NETWORK_REGION,
-      },
+      // Every gateway's role, by its name's pattern, in each domain account that runs a gateway. A
+      // pattern, so adding a gateway doesn't change this stack, nor grow the policy toward its
+      // size limit. An account is only ever one environment's, which config validation holds, so
+      // the pattern reaches no other environment's gateways.
+      publicKeyReaderRoleArns: environment.domainAccounts
+        .filter(({ gateways }) => gateways.length > 0)
+        .map(
+          ({ account: domainAccount }) =>
+            `arn:aws:iam::${domainAccount}:role/${gatewayRolePattern(environment.name)}`,
+        ),
     });
   }
 }

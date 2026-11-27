@@ -1,6 +1,5 @@
 // What key rotation keeps between runs, in a kind's two tables: every key it has made and not yet
-// removed, and the keys revoked in the last day, so a revocation that failed part way can be run
-// again.
+// removed, and the keys revoked in the last day, so a revocation run again is answered as done.
 //
 // Each key is used from the time it was scheduled for until the time it stops, which is set when
 // the next key is scheduled. A time that has passed never changes, so a key that has stopped is

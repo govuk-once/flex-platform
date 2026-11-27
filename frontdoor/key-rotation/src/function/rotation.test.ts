@@ -38,7 +38,7 @@ async function rotated(): Promise<MemoryPorts> {
 }
 
 describe("rotate", () => {
-  it("makes a key that signs at once, published before the edge is given it", async () => {
+  it("makes a key that signs at once, in one transaction", async () => {
     const ports = new MemoryPorts();
     const report = await rotate(ports, START);
 
@@ -49,9 +49,7 @@ describe("rotate", () => {
     expect(ports.calls).toEqual([
       `generate ${FIRST}`,
       `check ${FIRST}`,
-      "publish",
       "commit",
-      "publish",
     ]);
   });
 
@@ -60,9 +58,13 @@ describe("rotate", () => {
 
     expect(ports.edgeKids(after(15 * MINUTE))).toEqual([FIRST, NEXT]);
     expect(ports.signingKid(after(15 * MINUTE))).toBe(FIRST);
-    expect(ports.publishedKeys()).toEqual([
-      { kid: FIRST, signsFrom: seconds(START), signsUntil: seconds(SWITCH) },
-      { kid: NEXT, signsFrom: seconds(SWITCH) },
+    expect(ports.publicKeys()).toEqual([
+      {
+        keyId: FIRST,
+        activeFrom: seconds(START),
+        activeUntil: seconds(SWITCH),
+      },
+      { keyId: NEXT, activeFrom: seconds(SWITCH) },
     ]);
   });
 
@@ -91,11 +93,11 @@ describe("rotate", () => {
       NEXT,
       "20261113T120100Z",
     ]);
-    expect(ports.publishedKids()).toContain(FIRST);
+    expect(ports.publicKids()).toContain(FIRST);
 
     const pruned = await rotate(ports, after(RETIRED_KEPT_MS, SWITCH));
     expect(pruned.events).toEqual([{ event: "key_pruned", keyId: FIRST }]);
-    expect(ports.publishedKids()).not.toContain(FIRST);
+    expect(ports.publicKids()).not.toContain(FIRST);
     expect(ports.state.keys.map(({ keyId }) => keyId)).not.toContain(FIRST);
   });
 
@@ -121,11 +123,7 @@ describe("rotate", () => {
     ports.calls.length = 0;
 
     await rotate(ports, after(2 * MINUTE, SWITCH));
-    expect(ports.calls).toEqual([
-      `check ${NEXT}`,
-      "check 20261113T120100Z",
-      "publish",
-    ]);
+    expect(ports.calls).toEqual([`check ${NEXT}`, "check 20261113T120100Z"]);
   });
 
   it("keeps no key it made that KMS can't decrypt, and makes another on the next run", async () => {
@@ -143,7 +141,7 @@ describe("rotate", () => {
       stored: false,
     });
     expect(ports.state.keys.map(({ keyId }) => keyId)).toEqual([FIRST]);
-    expect(ports.publishedKids()).toEqual([FIRST]);
+    expect(ports.publicKids()).toEqual([FIRST]);
 
     await rotate(ports, after(30 * MINUTE));
     expect(ports.edgeKids(after(30 * MINUTE))).toEqual([
@@ -190,32 +188,8 @@ describe("rotate", () => {
       FIRST,
       "20261106T123000Z",
     ]);
-    // The key the failed run published was never held, and the gateways no longer have it.
-    expect(ports.publishedKids()).toEqual([FIRST, "20261106T123000Z"]);
-  });
-
-  it("gives the edge no key it couldn't publish, writing nothing to the tables", async () => {
-    const ports = new MemoryPorts();
-    ports.failPublish = true;
-    await expect(rotate(ports, START)).rejects.toThrow("S3 refused the keys");
-    expect(ports.calls).not.toContain("commit");
-    expect(ports.state.keys).toHaveLength(0);
-
-    ports.failPublish = false;
-    await rotate(ports, after(15 * MINUTE));
-    expect(ports.signingKid(after(15 * MINUTE))).toBe("20261106T121500Z");
-  });
-
-  it("publishes a key before the edge can read it, and keeps a removed key published until the tables have lost it", async () => {
-    const ports = await rotated();
-    ports.failCommit = true;
-    await expect(
-      rotate(ports, after(30 * MINUTE), { revoke: FIRST }),
-    ).rejects.toThrow("DynamoDB refused the transaction");
-
-    // The tables still hold the key, so the gateways still have it, and the new key besides.
-    expect(ports.signingKid(after(30 * MINUTE))).toBe(FIRST);
-    expect(ports.publishedKids()).toEqual([FIRST, NEXT, "20261106T123000Z"]);
+    // The key the failed run made was never held.
+    expect(ports.publicKids()).toEqual([FIRST, "20261106T123000Z"]);
   });
 
   it("revokes a signing key at once, with a new key that signs straight away, keeping the one scheduled", async () => {
@@ -231,12 +205,12 @@ describe("rotate", () => {
         activeFrom: seconds(at),
       },
     ]);
-    expect(ports.publishedKeys()).toEqual([
-      { kid: NEXT, signsFrom: seconds(SWITCH) },
+    expect(ports.publicKeys()).toEqual([
+      { keyId: NEXT, activeFrom: seconds(SWITCH) },
       {
-        kid: "20261106T123000Z",
-        signsFrom: seconds(at),
-        signsUntil: seconds(SWITCH),
+        keyId: "20261106T123000Z",
+        activeFrom: seconds(at),
+        activeUntil: seconds(SWITCH),
       },
     ]);
     expect(ports.signingKid(at)).toBe("20261106T123000Z");
@@ -259,10 +233,10 @@ describe("rotate", () => {
     ]);
     expect(ports.signingKid(at)).toBe("20261113T120200Z");
     expect(ports.edgeKids(at)).not.toContain(FIRST);
-    expect(ports.publishedKeys()).toContainEqual({
-      kid: FIRST,
-      signsFrom: seconds(START),
-      signsUntil: seconds(SWITCH),
+    expect(ports.publicKeys()).toContainEqual({
+      keyId: FIRST,
+      activeFrom: seconds(START),
+      activeUntil: seconds(SWITCH),
     });
 
     const pruned = await rotate(ports, after(RETIRED_KEPT_MS, SWITCH));
@@ -281,9 +255,13 @@ describe("rotate", () => {
         activeFrom: seconds(SWITCH),
       },
     ]);
-    expect(ports.publishedKeys()).toEqual([
-      { kid: FIRST, signsFrom: seconds(START), signsUntil: seconds(SWITCH) },
-      { kid: "20261106T123000Z", signsFrom: seconds(SWITCH) },
+    expect(ports.publicKeys()).toEqual([
+      {
+        keyId: FIRST,
+        activeFrom: seconds(START),
+        activeUntil: seconds(SWITCH),
+      },
+      { keyId: "20261106T123000Z", activeFrom: seconds(SWITCH) },
     ]);
   });
 
@@ -293,9 +271,9 @@ describe("rotate", () => {
 
     await rotate(ports, at, { revoke: NEXT });
     const replacement = seconds(after(MINIMUM_LEAD_MS, at));
-    expect(ports.publishedKeys()).toEqual([
-      { kid: FIRST, signsFrom: seconds(START), signsUntil: replacement },
-      { kid: "20261113T115000Z", signsFrom: replacement },
+    expect(ports.publicKeys()).toEqual([
+      { keyId: FIRST, activeFrom: seconds(START), activeUntil: replacement },
+      { keyId: "20261113T115000Z", activeFrom: replacement },
     ]);
     expect(ports.signingKid(SWITCH)).toBe(FIRST);
   });
@@ -308,25 +286,22 @@ describe("rotate", () => {
       revoke: FIRST,
     });
     expect(report.events).toEqual([{ event: "key_revoked", keyId: FIRST }]);
-    expect(ports.publishedKids()).not.toContain(FIRST);
+    expect(ports.publicKids()).not.toContain(FIRST);
     expect(ports.signingKid(after(2 * MINUTE, SWITCH))).toBe(NEXT);
   });
 
-  it("finishes a revocation whose writes failed when it is run again", async () => {
+  it("answers a revocation run again as done, changing nothing", async () => {
     const ports = await rotated();
-    ports.failPublishAfterCommit = true;
-    await expect(
-      rotate(ports, after(30 * MINUTE), { revoke: FIRST }),
-    ).rejects.toThrow("S3 refused the keys");
-    expect(ports.publishedKids()).toContain(FIRST);
+    await rotate(ports, after(30 * MINUTE), { revoke: FIRST });
+    const before = ports.state;
 
-    ports.failPublishAfterCommit = false;
     const at = after(31 * MINUTE);
     const report = await rotate(ports, at, { revoke: FIRST });
     expect(report.events).toEqual([
       { event: "key_already_revoked", keyId: FIRST },
     ]);
-    expect(ports.publishedKids()).not.toContain(FIRST);
+    expect(ports.state).toBe(before);
+    expect(ports.publicKids()).not.toContain(FIRST);
     expect(ports.signingKid(at)).toBe("20261106T123000Z");
   });
 

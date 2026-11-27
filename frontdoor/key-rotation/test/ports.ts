@@ -8,10 +8,10 @@ import {
   type KeyState,
 } from "../src/function/state.ts";
 
-interface PublishedKey {
-  readonly kid: string;
-  readonly signsFrom: number;
-  readonly signsUntil?: number;
+interface PublicKey {
+  readonly keyId: string;
+  readonly activeFrom: number;
+  readonly activeUntil?: number;
 }
 
 /** An Ed25519 public key as KMS returns one: DER, as a SubjectPublicKeyInfo. */
@@ -48,12 +48,8 @@ export function applied(state: KeyState, changes: KeyChanges): KeyState {
 /** Rotation's ports, held in memory, recording what each run did and in what order. */
 export class MemoryPorts implements RotationPorts {
   state: KeyState = EMPTY_STATE;
-  published: string | null = null;
   readonly calls: string[] = [];
   failCommit = false;
-  failPublish = false;
-  /** Fails only the publication a run writes once the tables have changed. */
-  failPublishAfterCommit = false;
   /** The ID of a key KMS can't decrypt. */
   undecryptable: string | undefined;
 
@@ -91,29 +87,19 @@ export class MemoryPorts implements RotationPorts {
     return Promise.resolve();
   }
 
-  publish(document: string): Promise<void> {
-    const afterCommit = this.calls.at(-1) === "commit";
-    this.calls.push("publish");
-    if (this.failPublish || (this.failPublishAfterCommit && afterCommit)) {
-      return Promise.reject(new Error("S3 refused the keys"));
-    }
-    this.published = document;
-    return Promise.resolve();
+  /** The keys a gateway reads from the public keys table, with their times, by key ID. */
+  publicKeys(): PublicKey[] {
+    return [...this.state.keys]
+      .sort((a, b) => (a.keyId < b.keyId ? -1 : 1))
+      .map(({ keyId, activeFrom, activeUntil }) => ({
+        keyId,
+        activeFrom,
+        ...(activeUntil !== undefined && { activeUntil }),
+      }));
   }
 
-  publishedKeys(): PublishedKey[] {
-    const set = JSON.parse(this.published ?? '{"keys":[]}') as {
-      keys: PublishedKey[];
-    };
-    return set.keys.map(({ kid, signsFrom, signsUntil }) => ({
-      kid,
-      signsFrom,
-      ...(signsUntil !== undefined && { signsUntil }),
-    }));
-  }
-
-  publishedKids(): string[] {
-    return this.publishedKeys().map(({ kid }) => kid);
+  publicKids(): string[] {
+    return this.publicKeys().map(({ keyId }) => keyId);
   }
 
   /** The keys the edge would hold at a moment: every key in the table that hasn't stopped. */

@@ -7,7 +7,6 @@ import {
   HANDLER,
   KEY_POLICIES,
   type KeyKind,
-  type PublicationConfig,
 } from "@repo/frontdoor-key-rotation";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 import {
@@ -81,17 +80,15 @@ export interface KeyRotationProps {
    * wildcard: in each account, a pattern every reader's role matches.
    */
   readonly publicKeyReaderRoleArns: readonly string[];
-  /** Where the kind's public keys are published, for a kind whose policy publishes them. */
-  readonly publication: PublicationConfig | null;
 }
 
 /**
- * The function that makes, schedules, publishes and removes one kind of key, on a schedule, and the
- * two tables it keeps them in. Only one copy runs at a time.
+ * The function that makes, schedules and removes one kind of key, on a schedule, and the two tables
+ * it keeps them in. Only one copy runs at a time.
  *
  * Its role may make key pairs only under the kind's KMS key, found by alias, and bound to the
  * kind's purpose; have KMS encrypt one again under the same key, which proves it decrypts without
- * returning it; and read and change only its two tables and the published object.
+ * returning it; and read and change only its two tables.
  *
  * Each table's policy admits its readers to scan it, by their accounts, held to their roles by
  * condition, and is a `tablePolicy`: anything to a reader but a scan, and anything to rotation but
@@ -230,29 +227,11 @@ export class KeyRotation extends Construct {
           Bool: { "kms:ReEncryptOnSameKey": "true" },
         },
       }),
-      // A run reads both tables whole, and changes them in one transaction of puts and deletes.
       new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ROTATION_ACTIONS,
         resources: [tableArn(privateKeysTable), tableArn(publicKeysTable)],
       }),
-      ...(props.publication === null
-        ? []
-        : [
-            new PolicyStatement({
-              effect: Effect.ALLOW,
-              actions: ["s3:GetObject", "s3:PutObject"],
-              resources: [
-                `arn:${stack.partition}:s3:::${props.publication.bucket}/${props.publication.object}`,
-              ],
-              // Bucket names are global: one of the same name in another account is never ours.
-              conditions: {
-                StringEquals: {
-                  "aws:ResourceAccount": props.publication.account,
-                },
-              },
-            }),
-          ]),
     ];
 
     const role = new Role(this, "Role", {
@@ -272,7 +251,6 @@ export class KeyRotation extends Construct {
           keyAlias,
           privateKeysTable,
           publicKeysTable,
-          publication: props.publication,
         }),
       ),
       role,

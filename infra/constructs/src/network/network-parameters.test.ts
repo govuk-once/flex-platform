@@ -46,7 +46,6 @@ describe("NetworkParameters", () => {
       ["execute-api", "ExecuteApi"],
       ["dynamodb", "DynamoDb"],
       ["lambda", "Lambda"],
-      ["s3", "S3"],
       ["secretsmanager", "SecretsManager"],
       ["sts", "Sts"],
     ]) {
@@ -83,7 +82,7 @@ describe("NetworkParameters", () => {
         ],
       },
     });
-    template.resourceCountIs("AWS::SSM::Parameter", 12);
+    template.resourceCountIs("AWS::SSM::Parameter", 11);
   });
 });
 
