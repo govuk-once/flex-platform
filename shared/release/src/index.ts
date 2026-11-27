@@ -9,12 +9,12 @@ export {
   parseReleaseMessage,
   parseReleaseRequest,
   releaseGroup,
+  type ReleaseKey,
   type ReleaseRequest,
 } from "./request.ts";
 export {
   createReleaseTable,
   FIXED_ATTRIBUTES,
-  type ReleaseKey,
   type ReleaseRecord,
   type ReleaseTable,
 } from "./table.ts";

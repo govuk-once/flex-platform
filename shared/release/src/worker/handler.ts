@@ -1,8 +1,7 @@
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
-import { parseReleaseMessage } from "../request.ts";
+import { parseReleaseMessage, type ReleaseKey } from "../request.ts";
 import {
-  type ReleaseKey,
   type ReleaseOutcome,
   type ReleaseRecord,
   type ReleaseTable,

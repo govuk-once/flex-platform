@@ -81,14 +81,7 @@ export function releaseQueued(
     sha256: string;
   },
 ): FunctionUrlResult {
-  return {
-    statusCode: 202,
-    headers: {
-      "content-type": "application/json",
-      "x-correlation-id": traceId,
-    },
-    body: JSON.stringify(release),
-  };
+  return json(202, traceId, release);
 }
 
 // How a release went, as the table has it now, which changes until it is final.
@@ -96,14 +89,10 @@ export function releaseStatus(
   traceId: string,
   record: ReleaseRecord,
 ): FunctionUrlResult {
-  return {
-    statusCode: 200,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "no-store",
-      "x-correlation-id": traceId,
-    },
-    body: JSON.stringify({
+  return json(
+    200,
+    traceId,
+    {
       releaseId: record.id,
       environment: record.environment,
       domain: record.domain,
@@ -122,8 +111,9 @@ export function releaseStatus(
       ...(record.moved !== undefined && { moved: record.moved }),
       ...(record.runId !== undefined && { runId: record.runId }),
       ...(record.commit !== undefined && { commit: record.commit }),
-    }),
-  };
+    },
+    NO_STORE,
+  );
 }
 
 // The bundle is in the bucket already, so there is nothing to upload.
@@ -131,18 +121,11 @@ export function uploadPresent(
   traceId: string,
   upload: { version: string; sha256: string },
 ): FunctionUrlResult {
-  return {
-    statusCode: 200,
-    headers: {
-      "content-type": "application/json",
-      "x-correlation-id": traceId,
-    },
-    body: JSON.stringify({
-      version: upload.version,
-      sha256: upload.sha256,
-      uploaded: true,
-    }),
-  };
+  return json(200, traceId, {
+    version: upload.version,
+    sha256: upload.sha256,
+    uploaded: true,
+  });
 }
 
 // Never stored: the address is the pipeline's alone, and good for five minutes.
@@ -150,22 +133,22 @@ export function uploadSigned(
   traceId: string,
   upload: SignedUpload,
 ): FunctionUrlResult {
-  return {
-    statusCode: 200,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "no-store",
-      "x-correlation-id": traceId,
-    },
-    body: JSON.stringify({
+  return json(
+    200,
+    traceId,
+    {
       uploaded: false,
       method: "PUT",
       url: upload.url,
       headers: upload.headers,
       expiresInSeconds: upload.expiresInSeconds,
-    }),
-  };
+    },
+    NO_STORE,
+  );
 }
+
+// An answer that changes, so no cache along the way keeps it.
+const NO_STORE = { "cache-control": "no-store" };
 
 function answer(
   statusCode: number,
@@ -174,14 +157,27 @@ function answer(
   traceId: string,
   extra: Record<string, string> = {},
 ): FunctionUrlResult {
+  return json(
+    statusCode,
+    traceId,
+    { message, type },
+    { "x-rejected-by": "pipeline-api", ...extra },
+  );
+}
+
+function json(
+  statusCode: number,
+  traceId: string,
+  body: unknown,
+  extra: Record<string, string> = {},
+): FunctionUrlResult {
   return {
     statusCode,
     headers: {
       "content-type": "application/json",
       "x-correlation-id": traceId,
-      "x-rejected-by": "pipeline-api",
       ...extra,
     },
-    body: JSON.stringify({ message, type }),
+    body: JSON.stringify(body),
   };
 }

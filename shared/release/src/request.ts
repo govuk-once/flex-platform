@@ -28,8 +28,11 @@ export interface ReleaseRequest {
   readonly commit?: string | undefined;
 }
 
-/** A release as the queue carries it: the key of its record in the release table. */
-export interface ReleaseMessage {
+/**
+ * Which release: its domain in its environment, and its ID. The key of its record in the release
+ * table, and what the queue carries.
+ */
+export interface ReleaseKey {
   readonly environment: string;
   readonly domain: string;
   readonly id: string;
@@ -43,7 +46,8 @@ const RUN_ID = /^\d{1,20}$/;
 
 const COMMIT = /^[0-9a-f]{40}$|^[0-9a-f]{64}$/;
 
-const REQUEST_FIELDS = new Set([
+/** The request's fields, each a string, as the API writes them to the table. */
+export const REQUEST_FIELDS = [
   "environment",
   "domain",
   "version",
@@ -51,11 +55,11 @@ const REQUEST_FIELDS = new Set([
   "versionId",
   "runId",
   "commit",
-]);
+] as const;
 
 const MESSAGE_FIELDS = new Set(["environment", "domain", "id"]);
 
-export function encodeReleaseMessage(message: ReleaseMessage): string {
+export function encodeReleaseMessage(message: ReleaseKey): string {
   return JSON.stringify({
     environment: message.environment,
     domain: message.domain,
@@ -64,7 +68,7 @@ export function encodeReleaseMessage(message: ReleaseMessage): string {
 }
 
 /** The release a queue's body names, or `undefined` for one that names none. */
-export function parseReleaseMessage(body: string): ReleaseMessage | undefined {
+export function parseReleaseMessage(body: string): ReleaseKey | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -91,7 +95,7 @@ export function parseReleaseMessage(body: string): ReleaseMessage | undefined {
 export function parseReleaseRequest(
   value: unknown,
 ): ReleaseRequest | undefined {
-  const fields = ownFields(value, REQUEST_FIELDS);
+  const fields = ownFields(value, new Set(REQUEST_FIELDS));
   if (fields === undefined) return undefined;
 
   const environment = fields.get("environment");

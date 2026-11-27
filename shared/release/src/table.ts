@@ -16,7 +16,12 @@ import {
 } from "@aws-sdk/client-dynamodb";
 
 import { isReleaseId } from "./release-id.ts";
-import { parseReleaseRequest, type ReleaseRequest } from "./request.ts";
+import {
+  parseReleaseRequest,
+  type ReleaseKey,
+  type ReleaseRequest,
+  REQUEST_FIELDS,
+} from "./request.ts";
 
 /**
  * Where a release is. `failed` will be tried again by the queue. `refused` never will be: nothing
@@ -27,13 +32,6 @@ import { parseReleaseRequest, type ReleaseRequest } from "./request.ts";
  */
 export type ReleaseStatus =
   "queued" | "releasing" | "released" | "failed" | "refused" | "abandoned";
-
-/** Which release: its domain in its environment, and its ID. */
-export interface ReleaseKey {
-  readonly environment: string;
-  readonly domain: string;
-  readonly id: string;
-}
 
 export interface ReleaseRecord extends ReleaseRequest {
   readonly id: string;
@@ -110,23 +108,12 @@ const STATUSES: ReadonlySet<string> = new Set<ReleaseStatus>([
   "abandoned",
 ]);
 
-// The attributes that hold the request, each a string, as the API wrote it.
-const REQUEST_ATTRIBUTES = [
-  "environment",
-  "domain",
-  "version",
-  "sha256",
-  "versionId",
-  "runId",
-  "commit",
-] as const;
-
 /**
  * What the API records of a release that nothing changes after: the request, and when it was
  * asked for. The table's policy refuses any change to them, so a release runs as it was asked.
  */
 export const FIXED_ATTRIBUTES: readonly string[] = [
-  ...REQUEST_ATTRIBUTES,
+  ...REQUEST_FIELDS,
   "requestedAt",
 ];
 
@@ -301,7 +288,7 @@ export function recordOf(
   const flag = (name: string) => item[name]?.BOOL;
 
   const fields: Record<string, string> = {};
-  for (const name of REQUEST_ATTRIBUTES) {
+  for (const name of REQUEST_FIELDS) {
     const value = text(name);
     if (value !== undefined) fields[name] = value;
   }

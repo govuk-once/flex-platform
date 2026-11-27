@@ -1,8 +1,7 @@
 import { uuidV7 } from "@repo/utils/uuid-v7";
 
-import { encodeReleaseMessage } from "../src/request.ts";
+import { encodeReleaseMessage, type ReleaseKey } from "../src/request.ts";
 import type {
-  ReleaseKey,
   ReleaseOutcome,
   ReleaseRecord,
   ReleaseStatus,
