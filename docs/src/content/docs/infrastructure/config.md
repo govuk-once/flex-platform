@@ -60,7 +60,7 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns, privat
     `@repo/gateway-service-<id>`. `@repo/infra-app` depends on that package, so its tests wait on
     the gateway's codegen. Synth takes the bundle from `.gen/runtime/bundle.mjs` in that package.
   - `hostnames`, the names it connects to, which make up the network's DNS allowlist. See
-    [the allowlist](/flex-platform/infrastructure/network/#the-allowlist).
+    [the allowlist](/flex-platform/infrastructure/dns-filtering/#the-allowlist).
   - `placement`, `isolated` or `private`. See [placement](/flex-platform/gateways/overview/#placement).
   - `secret`, which becomes `FLEX_UPSTREAM_SECRET_ARN`. It is `"create"` for a secret the
     gateway's stack creates, or `{ arn, keyArn }` for a secret its upstream holds, with the KMS key
@@ -119,7 +119,7 @@ of these hold:
 - Every gateway's id is a name as above, used once in its account. It is short enough for its
   function's name to fit Lambda's 64 characters, and its role's name to fit IAM's 64.
 - Every gateway names at least one hostname, and each passes
-  [the allowlist's rules](/flex-platform/infrastructure/network/#the-allowlist).
+  [the allowlist's rules](/flex-platform/infrastructure/dns-filtering/#the-allowlist).
 - An upstream's secret is named by its full ARN in eu-west-2, with the six characters Secrets
   Manager adds. Its key is named by a key's ARN in eu-west-2, never an alias. A policy naming
   anything else would match nothing.

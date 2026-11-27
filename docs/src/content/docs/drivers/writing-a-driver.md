@@ -574,7 +574,7 @@ else. Each rule is stated in full, with its reasoning, in
   about a specific driver is a design error.
 - Verify an upstream's certificate against the hostname the driver connected to, never a name DNS
   redirected it to, such as a CNAME's target. Never turn verification off or set `servername`.
-  The network's [allowlist](/flex-platform/infrastructure/network/#the-allowlist) trusts
+  The network's [allowlist](/flex-platform/infrastructure/dns-filtering/#the-allowlist) trusts
   redirection, so the certificate is what proves the driver reached its upstream.
 
 **Upstream calls**

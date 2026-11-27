@@ -137,7 +137,7 @@ To deploy it:
 
 The config entry names every host the gateway connects to: its upstream's API, and any host it
 takes a token from. The network resolves only the names on its DNS allowlist, and a name left off
-doesn't resolve. See [the allowlist](/flex-platform/infrastructure/network/#the-allowlist). The
+doesn't resolve. See [the allowlist](/flex-platform/infrastructure/dns-filtering/#the-allowlist). The
 entry also gives the gateway's placement, its secret, its target and the roles it signs as.
 
 A secret that the gateway's stack creates starts empty. Put its value before anything calls the

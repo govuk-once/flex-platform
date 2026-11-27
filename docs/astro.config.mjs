@@ -119,6 +119,7 @@ export default defineConfig({
             "infrastructure/building-blocks",
             "infrastructure/checks-and-tests",
             "infrastructure/network",
+            "infrastructure/dns-filtering",
           ],
         },
         {
