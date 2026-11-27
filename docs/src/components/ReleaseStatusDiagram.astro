@@ -7,7 +7,7 @@ import Diagram from "./Diagram.astro";
 
 <Diagram title="A release's status" minWidth={580} maxWidth={880}>
   <svg
-    viewBox="0 0 880 506"
+    viewBox="0 0 880 550"
     role="img"
     aria-labelledby="release-status-title release-status-desc"
   >
@@ -19,9 +19,11 @@ import Diagram from "./Diagram.astro";
       refused. An attempt that fails records it failed, and the queue delivers it again after 20
       minutes, when it becomes releasing again. An attempt that stops without recording leaves it
       releasing, and the queue delivers it again. After three failed attempts, the dead-letter
-      worker records a failed or releasing release abandoned. Abandoned isn't final: an attempt
-      still running can record it released, and the worker claims it again if its queue gives it
-      the release, when it becomes releasing. Released and refused are final.
+      worker records a failed or releasing release abandoned. It also gives up a release still
+      queued, whose message reaches the dead-letter queue before the worker claims it. Abandoned
+      can change: an attempt still running can record it released, and the worker claims it again
+      if its queue gives it the release, when it becomes releasing. Released never changes. Refused is
+      never tried again, but an attempt already running can still record it released.
     </desc>
     <defs>
       <marker
@@ -48,11 +50,11 @@ import Diagram from "./Diagram.astro";
 
     <rect class="box accent" x="720" y="194" width="140" height="56" rx="22"></rect>
     <text class="label mono" x="790" y="219">released</text>
-    <text class="sub" x="790" y="238">final</text>
+    <text class="sub" x="790" y="238">never changes</text>
 
     <rect class="box accent" x="420" y="30" width="140" height="56" rx="22"></rect>
     <text class="label mono" x="490" y="55">refused</text>
-    <text class="sub" x="490" y="74">final</text>
+    <text class="sub" x="490" y="74">never tried again</text>
 
     <rect class="box" x="420" y="370" width="140" height="44" rx="22"></rect>
     <text class="label mono" x="490" y="397">failed</text>
@@ -102,6 +104,12 @@ import Diagram from "./Diagram.astro";
 
     <path class="flow" d="M790,414 V470 H390 V236 H418"></path>
     <text class="note" x="590" y="490" text-anchor="middle">its queue still gives it to the worker</text>
+
+    <path class="flow" d="M225,244 V516 H830 V416"></path>
+    <text class="note" x="528" y="538" text-anchor="middle">the dead-letter worker, before any claim</text>
+
+    <path class="flow" d="M560,58 H830 V192"></path>
+    <text class="note" x="580" y="48">an attempt still running succeeds</text>
   </svg>
 </Diagram>
 
