@@ -3,9 +3,13 @@ title: The release pipeline
 description: How the platform carries out a domain's release, from the pipeline API through the release worker to the function's live alias.
 ---
 
+import ReleaseFlowDiagram from "../../../components/ReleaseFlowDiagram.astro";
+
 [Releasing a domain](/flex-platform/domains/releasing/) is what a domain's pipeline does. This page
 is how the platform carries it out, in the stage's shared account: the pipeline API, the bucket and
 tables it records in, and the workers that release.
+
+<ReleaseFlowDiagram />
 
 ## The pipeline API
 

@@ -5,6 +5,8 @@ description: How config declares a domain, what each domain account and domain p
 
 import { Aside } from "@astrojs/starlight/components";
 
+import DomainTrustDiagram from "../../../components/DomainTrustDiagram.astro";
+
 A line of the platform's config hosts a domain. Domain teams write the domain's code and never
 write CDK. The platform provides everything the code runs with and sits behind.
 
@@ -173,6 +175,11 @@ a function from the same values. It holds the execution role to the third.
 If the network is ever replaced, deploy the stack with `--force` to read the new IDs.
 
 ### Permissions
+
+These roles, and the API's resource policy, decide who may act on a domain across the platform's
+accounts:
+
+<DomainTrustDiagram />
 
 Each domain's function runs as a role of its own, `domain-<environment>-<domain>-execution`. It
 may:

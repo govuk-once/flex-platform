@@ -5,8 +5,12 @@ sidebar:
   label: Overview
 ---
 
+import DomainOverviewDiagram from "../../../components/DomainOverviewDiagram.astro";
+
 A **domain** is the logic behind a personalised feature of the GOV.UK app. It sits between the app
 and the upstreams that hold the data it needs.
+
+<DomainOverviewDiagram />
 
 Each domain is an Amazon API Gateway at its own domain name, under its domain account's hosted
 zone. A Lambda proxy integration hands every request to the domain's code. The

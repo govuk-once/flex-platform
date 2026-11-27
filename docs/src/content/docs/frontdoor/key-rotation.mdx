@@ -3,6 +3,8 @@ title: Key rotation
 description: How the caller token's keys are made, scheduled, removed and revoked, and what to do when a run fails.
 ---
 
+import KeySwitchDiagram from "../../../components/KeySwitchDiagram.astro";
+
 Key rotation is a Lambda function, `frontdoor-<environment>-caller-token-key-rotation`, in
 eu-west-2. It makes, schedules and removes the keys. An EventBridge Scheduler schedule of the same
 name runs it. Only one copy runs at a time. Each run does what is due and nothing more, so the
@@ -36,6 +38,8 @@ A switch from one key to the next happens at a moment set when the next key is m
    verifying a little over a minute later, when its last token expires.
 3. **Removed.** Five minutes after a key is replaced, a run takes it out of both tables. The edge
    stopped signing with it at the switch.
+
+<KeySwitchDiagram />
 
 Rotation needs no downtime. No edge or gateway has to read anything at the moment of a switch.
 

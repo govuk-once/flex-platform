@@ -3,6 +3,8 @@ title: Infrastructure
 description: The CDK app that deploys the platform, its stages and config, and the rules for adding to it.
 ---
 
+import AccountsDiagram from "../../../components/AccountsDiagram.astro";
+
 The platform deploys with AWS CDK, from one app in `infra/app`. The app builds:
 
 - the [Frontdoor](/flex-platform/frontdoor/overview/)'s stacks;
@@ -61,6 +63,8 @@ Each stage has its own accounts, 13 in all:
 | Domain | Environment, `domain00` for now | The environment's [domains](/flex-platform/domains/hosting/), the [gateways](/flex-platform/gateways/overview/) they call, and the [network](/flex-platform/infrastructure/network/) both run in |
 
 platform-dev and platform-staging have three accounts each, and platform-prod has seven.
+
+<AccountsDiagram />
 
 The accounts are split by what each must keep from the others:
 

@@ -1,0 +1,160 @@
+---
+// A domain in two lanes: how a request reaches the domain's code, and how a release puts the code
+// there. Both end at the domain function's live alias. Planned parts are dashed. Drawn with
+// Starlight's colour variables so it follows the light and dark themes.
+import Diagram from "./Diagram.astro";
+---
+
+<Diagram title="A domain's requests and releases" minWidth={600} maxWidth={900}>
+  <svg
+    viewBox="0 0 900 1010"
+    role="img"
+    aria-labelledby="domain-overview-title domain-overview-desc"
+  >
+    <title id="domain-overview-title">A domain's requests and releases</title>
+    <desc id="domain-overview-desc">
+      Two lanes that meet at the domain's function. A request: the GOV.UK app reaches the
+      Frontdoor, in the frontdoor account. Its CloudFront Function checks the request's structure.
+      Lambda@Edge verifies the token, routes the request by the path segment after /app, and signs
+      it with SigV4. The domain's API Gateway, in the domain account, checks the signature with IAM
+      authorisation and invokes the domain's function at its live alias. Inside the function, the
+      domain SDK routes the request, reads the caller token, validates the input and calls the
+      handler; serving requests with the SDK is planned. The handler calls the gateway client,
+      which invokes a gateway's live alias through the lambda endpoint, and the gateway calls its
+      upstream. A release: the domain's pipeline proves its repository with GitHub's OIDC token.
+      It asks the pipeline API, under /ci in the stage's shared account, to upload and release, and
+      sends its bundle to the code bucket at an address the API signs. The API queues the release
+      on the release queue. The release worker takes it, checks the bundle from the code bucket,
+      and assumes the domain's deploy role in the domain account. As that role, it creates or
+      updates the function, publishes a version and moves the live alias to it. Promotion, from one
+      environment to the next, is planned.
+    </desc>
+    <defs>
+      <marker
+        id="domain-overview-arrow"
+        viewBox="0 0 10 10"
+        refX="9"
+        refY="5"
+        markerWidth="7"
+        markerHeight="7"
+        orient="auto-start-reverse"
+      >
+        <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+      </marker>
+    </defs>
+
+    <!-- Lanes -->
+    <text class="title" x="20" y="24">A request</text>
+    <text class="title" x="480" y="24">A release</text>
+
+    <!-- Callers -->
+    <rect class="external" x="120" y="40" width="200" height="56" rx="6"></rect>
+    <text class="label" x="220" y="73">GOV.UK app</text>
+
+    <rect class="external" x="560" y="40" width="240" height="56" rx="6"></rect>
+    <text class="label" x="680" y="63">The domain's pipeline</text>
+    <text class="sub" x="680" y="82">GitHub's OIDC token</text>
+
+    <!-- Frontdoor -->
+    <rect class="section" x="20" y="120" width="400" height="270" rx="10"></rect>
+    <text class="section-title" x="36" y="148">Frontdoor</text>
+    <text class="note" x="36" y="167">frontdoor account</text>
+
+    <rect class="box" x="70" y="190" width="300" height="56" rx="6"></rect>
+    <text class="label" x="220" y="214">CloudFront Function</text>
+    <text class="sub" x="220" y="234">checks the request's structure</text>
+
+    <rect class="box" x="70" y="290" width="300" height="74" rx="6"></rect>
+    <text class="label" x="220" y="314">Lambda@Edge</text>
+    <text class="sub" x="220" y="334">verifies the token · signs with SigV4</text>
+    <text class="sub" x="220" y="352">routes by <tspan class="mono">/app/&lt;domain&gt;</tspan></text>
+
+    <!-- Shared account -->
+    <rect class="section" x="480" y="120" width="400" height="350" rx="10"></rect>
+    <text class="section-title" x="496" y="148">Shared account</text>
+    <text class="note" x="496" y="167">one per stage</text>
+
+    <rect class="box" x="560" y="190" width="240" height="56" rx="6"></rect>
+    <text class="label" x="680" y="214">Pipeline API</text>
+    <text class="sub" x="680" y="234"><tspan class="mono">/ci</tspan> · checks the token</text>
+
+    <rect class="box" x="500" y="290" width="200" height="56" rx="6"></rect>
+    <text class="label" x="600" y="314">Release queue</text>
+    <text class="sub" x="600" y="334">one domain at a time</text>
+
+    <rect class="box" x="740" y="290" width="130" height="56" rx="6"></rect>
+    <text class="label" x="805" y="314">Code bucket</text>
+    <text class="sub" x="805" y="334">bundles</text>
+
+    <rect class="box" x="500" y="390" width="200" height="56" rx="6"></rect>
+    <text class="label" x="600" y="414">Release worker</text>
+    <text class="sub" x="600" y="434">checks the bundle</text>
+
+    <rect class="external" x="740" y="390" width="130" height="56" rx="6"></rect>
+    <text class="label" x="805" y="414">Promotion</text>
+    <text class="sub" x="805" y="434">planned</text>
+
+    <!-- Domain account -->
+    <rect class="section" x="20" y="500" width="860" height="426" rx="10"></rect>
+    <text class="section-title" x="36" y="528">Domain account</text>
+
+    <rect class="box" x="70" y="560" width="300" height="56" rx="6"></rect>
+    <text class="label" x="220" y="584">The domain's API Gateway</text>
+    <text class="sub" x="220" y="604">IAM authorisation</text>
+
+    <rect class="box" x="480" y="560" width="240" height="56" rx="6"></rect>
+    <text class="label" x="600" y="584">The domain's deploy role</text>
+    <text class="sub" x="600" y="604">creates the function · moves <tspan class="mono">live</tspan></text>
+
+    <rect class="box accent" x="50" y="670" width="680" height="150" rx="8"></rect>
+    <text class="label" x="390" y="696">The domain's function</text>
+    <text class="sub" x="390" y="715">at its <tspan class="mono">live</tspan> alias</text>
+
+    <rect class="external" x="80" y="735" width="300" height="70" rx="6"></rect>
+    <text class="label" x="230" y="757">Domain SDK · planned</text>
+    <text class="sub" x="230" y="776">routes · reads the caller token</text>
+    <text class="sub" x="230" y="793">validates input · calls the handler</text>
+
+    <rect class="box" x="440" y="735" width="260" height="70" rx="6"></rect>
+    <text class="label" x="570" y="757">Gateway client</text>
+    <text class="sub" x="570" y="776">called by the handler</text>
+    <text class="sub" x="570" y="793">through the <tspan class="mono">lambda</tspan> endpoint</text>
+
+    <rect class="box" x="440" y="850" width="260" height="56" rx="6"></rect>
+    <text class="label" x="570" y="874">A gateway</text>
+    <text class="sub" x="570" y="894">at its <tspan class="mono">live</tspan> alias</text>
+
+    <!-- Upstream -->
+    <rect class="external" x="470" y="950" width="200" height="44" rx="6"></rect>
+    <text class="label" x="570" y="977">Its upstream</text>
+
+    <!-- The request -->
+    <line class="flow" x1="220" y1="96" x2="220" y2="188"></line>
+    <line class="flow" x1="220" y1="246" x2="220" y2="288"></line>
+    <line class="flow" x1="220" y1="364" x2="220" y2="558"></line>
+    <text class="sub start" x="230" y="452">signed request</text>
+    <line class="flow" x1="220" y1="616" x2="220" y2="668"></line>
+    <text class="sub start" x="230" y="647">invokes <tspan class="mono">live</tspan></text>
+    <line class="flow dashed" x1="380" y1="770" x2="438" y2="770"></line>
+    <line class="flow" x1="570" y1="805" x2="570" y2="848"></line>
+    <line class="flow" x1="570" y1="906" x2="570" y2="948"></line>
+
+    <!-- The release -->
+    <line class="flow" x1="680" y1="96" x2="680" y2="188"></line>
+    <polyline class="flow" points="800,68 850,68 850,288"></polyline>
+    <text class="sub end" x="842" y="150">signed upload</text>
+    <line class="flow" x1="620" y1="246" x2="620" y2="288"></line>
+    <line class="flow" x1="600" y1="346" x2="600" y2="388"></line>
+    <polyline class="flow" points="740,330 720,330 720,418 702,418"></polyline>
+    <line class="flow" x1="600" y1="446" x2="600" y2="558"></line>
+    <text class="sub start" x="610" y="488">assumes</text>
+    <line class="flow" x1="600" y1="616" x2="600" y2="668"></line>
+    <text class="sub start" x="610" y="647">releases</text>
+  </svg>
+</Diagram>
+
+<style>
+  .flow {
+    marker-end: url(#domain-overview-arrow);
+  }
+</style>

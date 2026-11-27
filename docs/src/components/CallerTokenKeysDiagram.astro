@@ -1,0 +1,131 @@
+---
+// Where the caller token's keys are kept, in the frontdoor account in eu-west-2, and who touches
+// them: key rotation writes them, the edge reads the private keys and the gateways the public keys.
+// Along the right and bottom, the token's own path from the edge to a gateway.
+import Diagram from "./Diagram.astro";
+---
+
+<Diagram title="The caller token's keys" minWidth={610} maxWidth={920}>
+  <svg
+    viewBox="0 0 920 730"
+    role="img"
+    aria-labelledby="caller-token-keys-title caller-token-keys-desc"
+  >
+    <title id="caller-token-keys-title">The caller token's keys</title>
+    <desc id="caller-token-keys-desc">
+      In the frontdoor account, in eu-west-2, a schedule runs key rotation every 15 minutes. Key
+      rotation makes key pairs with KMS's GenerateDataKeyPairWithoutPlaintext, under
+      alias/frontdoor-&lt;environment&gt;-caller-token, and writes the two tables in one
+      transaction: frontdoor-&lt;environment&gt;-caller-token-private-keys and
+      frontdoor-&lt;environment&gt;-caller-token-public-keys. Lambda@Edge, in whatever region it
+      runs, reads the push ID secret, frontdoor-&lt;environment&gt;-push-id-secret, scans the
+      private keys table and decrypts with the KMS key. It signs the caller token and sends it to a
+      domain's function as x-flex-secure. In each domain account, the domain function passes the
+      token to a gateway as secure.token. The gateway verifies it with the public keys, which it
+      scans through its network's dynamodb endpoint.
+    </desc>
+    <defs>
+      <marker
+        id="caller-token-keys-arrow"
+        viewBox="0 0 10 10"
+        refX="9"
+        refY="5"
+        markerWidth="7"
+        markerHeight="7"
+        orient="auto-start-reverse"
+      >
+        <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+      </marker>
+    </defs>
+
+    <!-- Frontdoor account -->
+    <rect class="section" x="20" y="20" width="880" height="456" rx="10"></rect>
+    <text class="section-title" x="36" y="48">Frontdoor account</text>
+
+    <rect class="subnet" x="36" y="64" width="640" height="392" rx="8"></rect>
+    <text class="note" x="48" y="84">eu-west-2</text>
+
+    <!-- Rotation -->
+    <rect class="box" x="56" y="100" width="150" height="56" rx="6"></rect>
+    <text class="label" x="131" y="124">Schedule</text>
+    <text class="sub" x="131" y="144">every 15 minutes</text>
+
+    <rect class="box accent" x="56" y="180" width="150" height="242" rx="6"></rect>
+    <text class="label" x="131" y="282">Key rotation</text>
+    <text class="sub" x="131" y="304">makes key pairs</text>
+    <text class="sub" x="131" y="322">writes both tables</text>
+
+    <!-- Stores -->
+    <rect class="box" x="256" y="100" width="400" height="56" rx="6"></rect>
+    <text class="label" x="456" y="124">Push ID secret</text>
+    <text class="sub mono" x="456" y="144">frontdoor-&lt;environment&gt;-push-id-secret</text>
+
+    <rect class="box" x="256" y="180" width="400" height="56" rx="6"></rect>
+    <text class="label" x="456" y="204">KMS key</text>
+    <text class="sub mono" x="456" y="224">alias/frontdoor-&lt;environment&gt;-caller-token</text>
+
+    <rect class="external" x="244" y="256" width="424" height="180" rx="8"></rect>
+    <text class="note" x="256" y="276">written in one transaction</text>
+
+    <rect class="box" x="256" y="290" width="400" height="56" rx="6"></rect>
+    <text class="label" x="456" y="314">Private keys table</text>
+    <text class="sub mono" x="456" y="334">frontdoor-&lt;environment&gt;-caller-token-private-keys</text>
+
+    <rect class="box" x="256" y="366" width="400" height="56" rx="6"></rect>
+    <text class="label" x="456" y="390">Public keys table</text>
+    <text class="sub mono" x="456" y="410">frontdoor-&lt;environment&gt;-caller-token-public-keys</text>
+
+    <!-- Lambda@Edge -->
+    <rect class="box accent" x="744" y="100" width="140" height="246" rx="6"></rect>
+    <text class="label" x="814" y="214">Lambda@Edge</text>
+    <text class="sub" x="814" y="234">any region</text>
+    <text class="sub" x="814" y="252">signs the token</text>
+
+    <!-- Domain account -->
+    <rect class="section" x="20" y="500" width="880" height="210" rx="10"></rect>
+    <text class="section-title" x="36" y="528">Each domain account</text>
+
+    <rect class="box" x="356" y="540" width="200" height="56" rx="6"></rect>
+    <text class="label" x="456" y="564">Interface endpoint</text>
+    <text class="sub mono" x="456" y="584">dynamodb</text>
+
+    <rect class="box accent" x="356" y="630" width="200" height="56" rx="6"></rect>
+    <text class="label" x="456" y="654">Gateway</text>
+    <text class="sub" x="456" y="674">verifies the token</text>
+
+    <rect class="box" x="744" y="630" width="140" height="56" rx="6"></rect>
+    <text class="label small" x="814" y="654">Domain function</text>
+    <text class="sub" x="814" y="674">passes it on</text>
+
+    <!-- Rotation's calls -->
+    <line class="flow" x1="131" y1="156" x2="131" y2="178"></line>
+    <line class="flow" x1="206" y1="208" x2="254" y2="208"></line>
+    <line class="flow" x1="206" y1="318" x2="254" y2="318"></line>
+    <line class="flow" x1="206" y1="394" x2="254" y2="394"></line>
+
+    <!-- The edge's reads -->
+    <line class="flow" x1="744" y1="128" x2="658" y2="128"></line>
+    <text class="sub" x="710" y="121">read</text>
+    <line class="flow" x1="744" y1="208" x2="658" y2="208"></line>
+    <text class="sub" x="710" y="201">decrypt</text>
+    <line class="flow" x1="744" y1="318" x2="658" y2="318"></line>
+    <text class="sub" x="710" y="311">scan</text>
+
+    <!-- The gateway's read -->
+    <line class="flow" x1="456" y1="630" x2="456" y2="598"></line>
+    <line class="flow" x1="456" y1="540" x2="456" y2="424"></line>
+    <text class="sub start" x="466" y="492">scan</text>
+
+    <!-- The token's path -->
+    <line class="flow" x1="814" y1="346" x2="814" y2="628"></line>
+    <text class="sub mono end" x="806" y="492">x-flex-secure</text>
+    <line class="flow" x1="744" y1="658" x2="558" y2="658"></line>
+    <text class="sub mono" x="650" y="650">secure.token</text>
+  </svg>
+</Diagram>
+
+<style>
+  .flow {
+    marker-end: url(#caller-token-keys-arrow);
+  }
+</style>

@@ -3,6 +3,8 @@ title: Releasing a domain
 description: How a domain's pipeline uploads its code under a version, asks for its release, and follows the release to the end.
 ---
 
+import ReleaseStatusDiagram from "../../../components/ReleaseStatusDiagram.astro";
+
 A domain's code is uploaded once, as a bundle, and released from the bucket that keeps it. Each
 environment's `release` in config says how code reaches that environment:
 
@@ -203,6 +205,8 @@ table holds for that domain there. It also answers 404 for a release recorded be
 versions, which the API can't read.
 
 ### What each status means
+
+<ReleaseStatusDiagram />
 
 - `queued`: the API recorded the release and queued it.
 - `releasing`: the release worker has claimed it. An attempt is running, or stopped without

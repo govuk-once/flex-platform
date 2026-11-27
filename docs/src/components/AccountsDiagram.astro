@@ -1,0 +1,110 @@
+---
+// The platform's accounts: each stage's shared account, and each of its environments' frontdoor
+// and domain accounts. Drawn with Starlight's colour variables so it follows the light and dark
+// themes.
+import Diagram from "./Diagram.astro";
+---
+
+<Diagram title="Stages, environments and accounts" minWidth={600} maxWidth={900}>
+  <svg
+    viewBox="0 0 900 580"
+    role="img"
+    aria-labelledby="accounts-title accounts-desc"
+  >
+    <title id="accounts-title">Stages, environments and accounts</title>
+    <desc id="accounts-desc">
+      The platform has three stages, each with its own accounts, 13 in all. platform-dev has a
+      shared account and one environment, development. platform-staging has a shared account and
+      one environment, staging. platform-prod has a shared account and three environments,
+      development, staging and production, which are the environments domain teams use. Every
+      environment has a frontdoor account and a domain account, domain00. A shared account holds
+      the test user pool, and the pipeline API with its bucket and tables. A frontdoor account
+      holds the Frontdoor, and the caller token's keys and push ID secret. A domain account holds
+      the environment's domains, the gateways they call, and their network.
+    </desc>
+
+    <!-- platform-dev -->
+    <rect class="section" x="20" y="20" width="420" height="210" rx="10"></rect>
+    <text class="section-title" x="36" y="48">platform-dev</text>
+    <text class="note end" x="424" y="48">3 accounts</text>
+
+    <rect class="box" x="36" y="116" width="164" height="46" rx="6"></rect>
+    <text class="label" x="118" y="145">Shared account</text>
+
+    <rect class="environment" x="216" y="64" width="208" height="150" rx="8"></rect>
+    <text class="note mono" x="228" y="84">development</text>
+    <rect class="box" x="230" y="96" width="180" height="46" rx="6"></rect>
+    <text class="label" x="320" y="125">Frontdoor account</text>
+    <rect class="box" x="230" y="154" width="180" height="46" rx="6"></rect>
+    <text class="label" x="320" y="174">Domain account</text>
+    <text class="sub mono" x="320" y="192">domain00</text>
+
+    <!-- platform-staging -->
+    <rect class="section" x="460" y="20" width="420" height="210" rx="10"></rect>
+    <text class="section-title" x="476" y="48">platform-staging</text>
+    <text class="note end" x="864" y="48">3 accounts</text>
+
+    <rect class="box" x="476" y="116" width="164" height="46" rx="6"></rect>
+    <text class="label" x="558" y="145">Shared account</text>
+
+    <rect class="environment" x="656" y="64" width="208" height="150" rx="8"></rect>
+    <text class="note mono" x="668" y="84">staging</text>
+    <rect class="box" x="670" y="96" width="180" height="46" rx="6"></rect>
+    <text class="label" x="760" y="125">Frontdoor account</text>
+    <rect class="box" x="670" y="154" width="180" height="46" rx="6"></rect>
+    <text class="label" x="760" y="174">Domain account</text>
+    <text class="sub mono" x="760" y="192">domain00</text>
+
+    <!-- platform-prod -->
+    <rect class="section" x="20" y="250" width="860" height="210" rx="10"></rect>
+    <text class="section-title" x="36" y="278">platform-prod</text>
+    <text class="note end" x="864" y="278">the environments domain teams use · 7 accounts</text>
+
+    <rect class="box" x="36" y="346" width="164" height="46" rx="6"></rect>
+    <text class="label" x="118" y="375">Shared account</text>
+
+    <rect class="environment" x="216" y="294" width="208" height="150" rx="8"></rect>
+    <text class="note mono" x="228" y="314">development</text>
+    <rect class="box" x="230" y="326" width="180" height="46" rx="6"></rect>
+    <text class="label" x="320" y="355">Frontdoor account</text>
+    <rect class="box" x="230" y="384" width="180" height="46" rx="6"></rect>
+    <text class="label" x="320" y="404">Domain account</text>
+    <text class="sub mono" x="320" y="422">domain00</text>
+
+    <rect class="environment" x="436" y="294" width="208" height="150" rx="8"></rect>
+    <text class="note mono" x="448" y="314">staging</text>
+    <rect class="box" x="450" y="326" width="180" height="46" rx="6"></rect>
+    <text class="label" x="540" y="355">Frontdoor account</text>
+    <rect class="box" x="450" y="384" width="180" height="46" rx="6"></rect>
+    <text class="label" x="540" y="404">Domain account</text>
+    <text class="sub mono" x="540" y="422">domain00</text>
+
+    <rect class="environment" x="656" y="294" width="208" height="150" rx="8"></rect>
+    <text class="note mono" x="668" y="314">production</text>
+    <rect class="box" x="670" y="326" width="180" height="46" rx="6"></rect>
+    <text class="label" x="760" y="355">Frontdoor account</text>
+    <rect class="box" x="670" y="384" width="180" height="46" rx="6"></rect>
+    <text class="label" x="760" y="404">Domain account</text>
+    <text class="sub mono" x="760" y="422">domain00</text>
+
+    <!-- What each kind of account holds -->
+    <text class="key" x="36" y="500">Shared account</text>
+    <text class="note" x="196" y="500">One per stage: the test user pool, and the pipeline API with its bucket and tables</text>
+    <text class="key" x="36" y="528">Frontdoor account</text>
+    <text class="note" x="196" y="528">One per environment: the Frontdoor, and the caller token's keys and push ID secret</text>
+    <text class="key" x="36" y="556">Domain account</text>
+    <text class="note" x="196" y="556">One per environment, domain00 for now: its domains, the gateways they call, and their network</text>
+  </svg>
+</Diagram>
+
+<style>
+  .environment {
+    fill: none;
+    stroke: var(--sl-color-gray-4);
+    stroke-dasharray: 6 4;
+  }
+  .key {
+    font-size: 14px;
+    font-weight: 600;
+  }
+</style>

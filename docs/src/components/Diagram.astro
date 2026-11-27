@@ -1,0 +1,308 @@
+---
+// The frame every diagram on the site is drawn in. It holds the styles diagrams share, drawn with
+// Starlight's colour variables so a diagram follows the light and dark themes. It also lets a
+// reader open the diagram in a dialog, full size, to zoom and pan around it.
+//
+// A diagram's own styles must not depend on an ancestor's class: the dialog shows a copy of the
+// SVG outside the figure, and only the shared classes below and each element's own scope reach it.
+interface Props {
+  /** What the diagram shows. It names the dialog and the expand button. */
+  title: string;
+  /** The narrowest the diagram is drawn in the page, in pixels, before the page scrolls it. */
+  minWidth: number;
+  /** The widest it is drawn in the page, in pixels. Left out, it fills the column. */
+  maxWidth?: number;
+}
+
+const { title, minWidth, maxWidth } = Astro.props;
+const size = [
+  `--diagram-min: ${minWidth.toString()}px`,
+  ...(maxWidth === undefined ? [] : [`--diagram-max: ${maxWidth.toString()}px`]),
+].join("; ");
+---
+
+<figure class="flex-diagram" style={size} data-title={title}>
+  <div class="frame">
+    <slot />
+  </div>
+  <div class="below">
+    {
+      Astro.slots.has("caption") && (
+        <figcaption>
+          <slot name="caption" />
+        </figcaption>
+      )
+    }
+    <button type="button" class="expand" aria-label={`Expand the diagram: ${title}`}>
+      Expand
+    </button>
+  </div>
+  <dialog class="viewer" aria-label={title}>
+    <div class="toolbar">
+      <span class="name">{title}</span>
+      <button type="button" data-zoom="out" aria-label="Zoom out">−</button>
+      <button type="button" data-zoom="reset" aria-label="Actual size">100%</button>
+      <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
+      <button type="button" data-close>Close</button>
+    </div>
+    <div class="viewport flex-diagram"></div>
+  </dialog>
+</figure>
+
+<script>
+  const STEP = 1.25;
+  const MIN_ZOOM = 0.25;
+  const MAX_ZOOM = 4;
+
+  for (const figure of document.querySelectorAll<HTMLElement>("figure.flex-diagram")) {
+    const svg = figure.querySelector<SVGSVGElement>(".frame svg");
+    const dialog = figure.querySelector<HTMLDialogElement>("dialog.viewer");
+    const viewport = dialog?.querySelector<HTMLElement>(".viewport");
+    const expand = figure.querySelector<HTMLButtonElement>("button.expand");
+    const reset = dialog?.querySelector<HTMLButtonElement>('[data-zoom="reset"]');
+    if (!svg || !dialog || !viewport || !expand || !reset) continue;
+
+    const naturalWidth = svg.viewBox.baseVal.width;
+    let zoom = 1;
+    let copy: SVGSVGElement | undefined;
+
+    const show = (next: number) => {
+      zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+      if (copy) copy.style.width = `${(naturalWidth * zoom).toFixed(0)}px`;
+      reset.textContent = `${Math.round(zoom * 100).toString()}%`;
+    };
+
+    expand.addEventListener("click", () => {
+      // A copy, so the page's own diagram keeps its place and size. Its title and description
+      // keep no id, so the page holds each id once; the dialog names the copy instead.
+      copy = svg.cloneNode(true) as SVGSVGElement;
+      copy.removeAttribute("aria-labelledby");
+      copy.setAttribute("aria-label", figure.dataset.title ?? "");
+      for (const node of copy.querySelectorAll("title, desc")) node.removeAttribute("id");
+      viewport.replaceChildren(copy);
+      dialog.showModal();
+      // Start at the size that fits the dialog's width, but never smaller than the diagram is
+      // drawn, nor more than half as large again.
+      const fit = (viewport.clientWidth - 32) / naturalWidth;
+      show(Math.min(1.5, Math.max(1, fit)));
+    });
+
+    dialog.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement;
+      if (target === dialog || target.closest("[data-close]")) {
+        dialog.close();
+        return;
+      }
+      const action = target.closest<HTMLElement>("[data-zoom]")?.dataset.zoom;
+      if (action === "in") show(zoom * STEP);
+      if (action === "out") show(zoom / STEP);
+      if (action === "reset") show(1);
+    });
+
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key === "+" || event.key === "=") show(zoom * STEP);
+      if (event.key === "-") show(zoom / STEP);
+      if (event.key === "0") show(1);
+    });
+
+    viewport.addEventListener(
+      "wheel",
+      (event) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        show(event.deltaY < 0 ? zoom * STEP : zoom / STEP);
+      },
+      { passive: false },
+    );
+
+    // Drag to pan.
+    let drag: { x: number; y: number; left: number; top: number } | undefined;
+    viewport.addEventListener("pointerdown", (event) => {
+      drag = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+      viewport.setPointerCapture(event.pointerId);
+      viewport.classList.add("dragging");
+    });
+    viewport.addEventListener("pointermove", (event) => {
+      if (!drag) return;
+      viewport.scrollLeft = drag.left - (event.clientX - drag.x);
+      viewport.scrollTop = drag.top - (event.clientY - drag.y);
+    });
+    const stop = () => {
+      drag = undefined;
+      viewport.classList.remove("dragging");
+    };
+    viewport.addEventListener("pointerup", stop);
+    viewport.addEventListener("pointercancel", stop);
+  }
+</script>
+
+<style is:global>
+  figure.flex-diagram {
+    margin-block: 1.5rem;
+  }
+  .flex-diagram .frame {
+    overflow-x: auto;
+  }
+  .flex-diagram svg {
+    display: block;
+    height: auto;
+    margin-inline: auto;
+    font-family: var(--sl-font);
+  }
+  .flex-diagram .frame > svg {
+    width: 100%;
+    min-width: var(--diagram-min);
+    max-width: var(--diagram-max, none);
+  }
+  /* Starlight spaces each element in the content from the one before it; not these. */
+  figure.flex-diagram .below > *,
+  figure.flex-diagram .toolbar > *,
+  figure.flex-diagram dialog {
+    margin: 0;
+  }
+  .flex-diagram .below {
+    display: flex;
+    gap: 1rem;
+    align-items: start;
+    justify-content: end;
+    margin-top: 0.5rem;
+  }
+  .flex-diagram figcaption {
+    flex: 1;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+    text-align: center;
+  }
+  .flex-diagram button {
+    font: inherit;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-white);
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.625rem;
+    cursor: pointer;
+  }
+  .flex-diagram button:hover {
+    border-color: var(--sl-color-accent);
+  }
+
+  /* The dialog fills the window, with the diagram in a viewport that scrolls both ways. */
+  .flex-diagram dialog.viewer {
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: none;
+    color: var(--sl-color-white);
+    background: var(--sl-color-bg);
+  }
+  .flex-diagram dialog.viewer[open] {
+    display: flex;
+    flex-direction: column;
+  }
+  .flex-diagram dialog.viewer::backdrop {
+    background: rgb(0 0 0 / 0.6);
+  }
+  .flex-diagram .toolbar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--sl-color-gray-5);
+  }
+  .flex-diagram .toolbar .name {
+    flex: 1;
+    font-weight: 600;
+  }
+  .flex-diagram .viewport {
+    flex: 1;
+    overflow: auto;
+    padding: 1rem;
+    cursor: grab;
+    touch-action: none;
+  }
+  .flex-diagram .viewport.dragging {
+    cursor: grabbing;
+  }
+  .flex-diagram .viewport svg {
+    max-width: none;
+    user-select: none;
+  }
+
+  /* What diagrams draw with. */
+  .flex-diagram .section {
+    fill: var(--sl-color-gray-6);
+    stroke: var(--sl-color-gray-5);
+  }
+  .flex-diagram .box {
+    fill: var(--sl-color-bg);
+    stroke: var(--sl-color-gray-4);
+  }
+  .flex-diagram .box.accent {
+    stroke: var(--sl-color-accent);
+    stroke-width: 2;
+  }
+  .flex-diagram .external {
+    fill: none;
+    stroke: var(--sl-color-gray-4);
+    stroke-dasharray: 4 3;
+  }
+  .flex-diagram .subnet {
+    fill: none;
+    stroke: var(--sl-color-gray-4);
+    stroke-dasharray: 6 4;
+  }
+  .flex-diagram .flow,
+  .flex-diagram .bus {
+    fill: none;
+    stroke: var(--sl-color-gray-3);
+    stroke-width: 1.5;
+  }
+  .flex-diagram .flow.dashed {
+    stroke-dasharray: 4 3;
+  }
+  .flex-diagram .head {
+    fill: var(--sl-color-gray-3);
+  }
+  .flex-diagram text {
+    fill: var(--sl-color-white);
+  }
+  .flex-diagram .title {
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .flex-diagram .section-title {
+    font-size: 19px;
+    font-weight: 700;
+  }
+  .flex-diagram .label {
+    font-size: 16px;
+    font-weight: 600;
+    text-anchor: middle;
+  }
+  .flex-diagram .label.small {
+    font-size: 14px;
+  }
+  .flex-diagram .sub {
+    font-size: 13px;
+    fill: var(--sl-color-gray-3);
+    text-anchor: middle;
+  }
+  .flex-diagram .start {
+    text-anchor: start;
+  }
+  .flex-diagram .end {
+    text-anchor: end;
+  }
+  .flex-diagram .note {
+    font-size: 13px;
+    fill: var(--sl-color-gray-3);
+  }
+  /* As Starlight resolves its own: --sl-font-mono is only set to override the system font. */
+  .flex-diagram .mono {
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+  }
+</style>
