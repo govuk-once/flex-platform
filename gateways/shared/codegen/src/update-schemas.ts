@@ -2,6 +2,7 @@ import path from "node:path";
 
 import type { SchemaSources } from "@repo/gateway-config";
 import type { GatewaySchemas } from "@repo/gateway-core";
+import { printable } from "@repo/utils/printable";
 
 import { checkGateway } from "./check-gateway.ts";
 import { checkVersions, compareCandidate } from "./compare-schemas.ts";
@@ -9,7 +10,6 @@ import { loadDerive } from "./derive-module.ts";
 import { compileValidators } from "./emit-validators.ts";
 import { SCHEMAS_DIR } from "./layout.ts";
 import { type AnyGatewayConfig, loadConfig } from "./load-config.ts";
-import { printable } from "./printable.ts";
 import { schemaSources } from "./schema-sources.ts";
 import {
   loadVersions,

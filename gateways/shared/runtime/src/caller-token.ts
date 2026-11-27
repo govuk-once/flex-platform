@@ -20,6 +20,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { SECURE_CLAIMS, type SecureClaims } from "@repo/gateway-core";
 import { isRecord } from "@repo/utils/is-record";
+import { type Env, requiredEnv } from "@repo/utils/required-env";
 
 import { GatewayError } from "./errors.ts";
 import { readGatewayRegion } from "./upstream-target.ts";
@@ -415,22 +416,12 @@ export function createCallerTokenKeys(
   };
 }
 
-type Env = Readonly<Record<string, string | undefined>>;
-
-function required(env: Env, name: string): string {
-  const value = env[name]?.trim();
-  if (value === undefined || value.length === 0) {
-    throw new Error(`Environment variable ${name} must be set`);
-  }
-  return value;
-}
-
 // A DynamoDB table's ARN, which names its region and account: the table is in the frontdoor's.
 const TABLE_ARN =
   /^arn:aws[a-z-]*:dynamodb:([a-z0-9-]+):\d{12}:table\/[A-Za-z0-9_.-]{3,255}$/;
 
 function tableArn(env: Env, region: string): string {
-  const arn = required(env, CALLER_TOKEN_KEYS_TABLE_ENV);
+  const arn = requiredEnv(CALLER_TOKEN_KEYS_TABLE_ENV, env);
   const match = TABLE_ARN.exec(arn);
   if (match === null) {
     throw new Error(
@@ -450,7 +441,7 @@ function tableArn(env: Env, region: string): string {
 const HOSTNAME = /^(?:(?!-)[a-z0-9-]{1,63}(?<!-)\.)+[a-z][a-z0-9-]{0,62}$/;
 
 function endpointUrl(env: Env): string {
-  const name = required(env, CALLER_TOKEN_KEYS_ENDPOINT_ENV);
+  const name = requiredEnv(CALLER_TOKEN_KEYS_ENDPOINT_ENV, env);
   if (!HOSTNAME.test(name)) {
     throw new Error(
       `Environment variable ${CALLER_TOKEN_KEYS_ENDPOINT_ENV} must be an endpoint's name`,
@@ -472,7 +463,7 @@ export function readCallerTokenVerifier(
   const region = readGatewayRegion(env);
   const table = tableArn(env, region);
   const endpoint = endpointUrl(env);
-  const audience = required(env, CALLER_TOKEN_AUDIENCE_ENV);
+  const audience = requiredEnv(CALLER_TOKEN_AUDIENCE_ENV, env);
   const dynamodb = new DynamoDBClient({
     region,
     endpoint,

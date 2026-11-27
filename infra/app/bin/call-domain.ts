@@ -6,30 +6,15 @@
 // and never the token or the password. Exits non-zero unless the answer is a 2xx.
 
 import { isRecord } from "@repo/utils/is-record";
+import { printable } from "@repo/utils/printable";
+import { printableText } from "@repo/utils/printable-text";
+import { requiredEnv } from "@repo/utils/required-env";
 
 import { STAGES } from "../src/config/stages.ts";
 import { selectStage } from "../src/config/utils/select-stage.ts";
 
 const USAGE =
   "Usage: call-domain.ts <stage> <environment> <path>, where <path> is /app/<domain>/...";
-
-function required(name: string): string {
-  const value = process.env[name];
-  if (value === undefined || value === "")
-    throw new Error(`${name} is not set`);
-  return value;
-}
-
-// Text on its way to the terminal: the path came from the command line and the rest from the
-// domain, so either could carry a line break that fakes a line of output, or an escape sequence
-// the terminal acts on. Each such character is written as its code point instead.
-const HIDDEN = /[\p{Cc}\p{Cf}\u2028\u2029]/gu;
-const printable = (line: string): string =>
-  line.replaceAll(
-    HIDDEN,
-    (found) =>
-      `U+${(found.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`,
-  );
 
 function stringField(value: unknown, name: string): string | undefined {
   const field = isRecord(value) ? value[name] : undefined;
@@ -101,8 +86,8 @@ async function signIn(username: string, password: string): Promise<string> {
 }
 
 const token = await signIn(
-  required("FLEX_TEST_USERNAME"),
-  required("FLEX_TEST_PASSWORD"),
+  requiredEnv("FLEX_TEST_USERNAME"),
+  requiredEnv("FLEX_TEST_PASSWORD"),
 );
 
 const url = `https://${environment.frontdoor.zone.name}${path}`;
@@ -119,7 +104,8 @@ for (const name of ["x-correlation-id", "x-rejected-by", "content-type"]) {
   if (value !== null) console.log(printable(`${name}: ${value}`));
 }
 console.log();
-// The body keeps its own lines, so a JSON answer stays readable.
-console.log((await response.text()).split("\n").map(printable).join("\n"));
+// The path came from the command line and the rest from the domain, so each is printable. The body
+// keeps its own lines, so a JSON answer stays readable.
+console.log(printableText(await response.text()));
 
 if (!response.ok) process.exitCode = 1;

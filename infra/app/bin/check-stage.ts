@@ -5,24 +5,21 @@
 
 import { spawnSync } from "node:child_process";
 
+import { isRecord } from "@repo/utils/is-record";
+import { ownValue } from "@repo/utils/own-value";
+import { requiredEnv } from "@repo/utils/required-env";
+
 import {
   checkStage,
   DEPLOYMENTS_READ,
   type EnvironmentDeployment,
 } from "../src/stage-check.ts";
 
-function required(name: string): string {
-  const value = process.env[name];
-  if (value === undefined || value === "")
-    throw new Error(`${name} is not set`);
-  return value;
-}
-
 const [stage] = process.argv.slice(2);
 if (stage === undefined) throw new Error("Usage: check-stage.ts <stage>");
-const token = required("GH_TOKEN");
-const repository = required("GITHUB_REPOSITORY");
-const commit = required("GITHUB_SHA");
+const token = requiredEnv("GH_TOKEN");
+const repository = requiredEnv("GITHUB_REPOSITORY");
+const commit = requiredEnv("GITHUB_SHA");
 
 async function github(path: string): Promise<unknown[]> {
   const response = await fetch(
@@ -44,9 +41,7 @@ async function github(path: string): Promise<unknown[]> {
 }
 
 function field(value: unknown, name: string): unknown {
-  return typeof value === "object" && value !== null && name in value
-    ? (value as Record<string, unknown>)[name]
-    : undefined;
+  return isRecord(value) ? ownValue(value, name) : undefined;
 }
 
 // Newest first, and each one's statuses only until the newest that succeeded.

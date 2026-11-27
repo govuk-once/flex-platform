@@ -1,4 +1,5 @@
 import type { SecretProvider } from "@repo/gateway-core";
+import { type Env, requiredEnv } from "@repo/utils/required-env";
 
 import { createSecretProvider } from "./secret-provider.ts";
 
@@ -15,8 +16,6 @@ export const UPSTREAM_SECRET_ARN_ENV = "FLEX_UPSTREAM_SECRET_ARN";
 // Lambda's own, set on every function: the region the gateway runs in.
 export const GATEWAY_REGION_ENV = "AWS_REGION";
 
-type Env = Readonly<Record<string, string | undefined>>;
-
 // Unset, or set to nothing but space, is no target: the two read alike to a deployment tool.
 export function readUpstreamTarget(env: Env = process.env): string | undefined {
   const value = env[UPSTREAM_TARGET_ENV]?.trim();
@@ -26,21 +25,11 @@ export function readUpstreamTarget(env: Env = process.env): string | undefined {
 // The full ARN of the secret. Its shape is checked where it is used, when the provider is
 // built, so a misconfigured deployment still fails as it starts.
 export function readUpstreamSecretArn(env: Env = process.env): string {
-  const value = env[UPSTREAM_SECRET_ARN_ENV]?.trim();
-  if (value === undefined || value.length === 0) {
-    throw new Error(
-      `Environment variable ${UPSTREAM_SECRET_ARN_ENV} must be set`,
-    );
-  }
-  return value;
+  return requiredEnv(UPSTREAM_SECRET_ARN_ENV, env);
 }
 
 export function readGatewayRegion(env: Env = process.env): string {
-  const value = env[GATEWAY_REGION_ENV]?.trim();
-  if (value === undefined || value.length === 0) {
-    throw new Error(`Environment variable ${GATEWAY_REGION_ENV} must be set`);
-  }
-  return value;
+  return requiredEnv(GATEWAY_REGION_ENV, env);
 }
 
 export interface UpstreamOptions {
