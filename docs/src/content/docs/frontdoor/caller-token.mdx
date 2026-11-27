@@ -3,6 +3,8 @@ title: The caller token
 description: The token that says who a request is for. How the edge signs it and derives its push ID, how gateways verify it, and where its keys are kept.
 ---
 
+import CallerTokenKeysDiagram from "../../../components/CallerTokenKeysDiagram.astro";
+
 The caller token is the platform's statement of who a request is for. Lambda@Edge signs it and
 sends it as `x-flex-secure`. A domain passes it on to the gateways it calls, and each gateway
 verifies it before it acts. Any domain may call any gateway, so the token is what keeps a domain
@@ -177,6 +179,8 @@ plaintext private key leaves KMS, except to the edge that decrypts it to sign.
 The keys are made and kept in eu-west-2, nearest to most requests. So a cold start in London never
 waits on a call across the Atlantic to [sign](#signing). Every copy of the edge reads them there,
 wherever it runs.
+
+<CallerTokenKeysDiagram />
 
 A key ID names the time the key was made, such as `20261106T120000Z`, so key IDs sort by age.
 

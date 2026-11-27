@@ -1,0 +1,150 @@
+---
+// One switch of the caller token's keys, from key A to key B, as a timeline with a lane for
+// rotation, the tables, the edge and the gateways. The axis is not to scale: seven days are cut
+// short, and the minutes around the switch drawn wide.
+import Diagram from "./Diagram.astro";
+---
+
+<Diagram title="A switch from one key to the next" minWidth={600} maxWidth={900}>
+  <svg
+    viewBox="0 0 900 470"
+    role="img"
+    aria-labelledby="key-switch-title key-switch-desc"
+  >
+    <title id="key-switch-title">A switch from one key to the next</title>
+    <desc id="key-switch-desc">
+      A timeline of one switch from key A to key B, not to scale. After A starts, a run of key
+      rotation makes B, to start seven days after A started and never less than an hour ahead. It
+      writes B to both tables, which then hold A and B. Each gateway reads the public keys every
+      minute, so it holds B's public key soon after. Each edge reads every five minutes, and fetches
+      B in its last hour before B starts. At the switch, every edge stops signing with A and signs
+      with B, and every gateway verifies B's tokens. A token lives a minute, so A's last tokens
+      verify for up to a minute after the switch. Five minutes after the switch, a run removes A
+      from both tables.
+    </desc>
+
+    <!-- Lane names -->
+    <text class="title" x="20" y="64">Rotation</text>
+    <text class="note" x="20" y="84">runs every 15 minutes</text>
+    <text class="title" x="20" y="154">Tables</text>
+    <text class="note" x="20" y="174">private and public keys</text>
+    <text class="title" x="20" y="244">Lambda@Edge</text>
+    <text class="note" x="20" y="264">reads every 5 minutes</text>
+    <text class="title" x="20" y="334">Gateway</text>
+    <text class="note" x="20" y="354">reads every minute</text>
+
+    <line class="lane" x1="20" y1="110" x2="880" y2="110"></line>
+    <line class="lane" x1="20" y1="200" x2="880" y2="200"></line>
+    <line class="lane" x1="20" y1="290" x2="880" y2="290"></line>
+    <line class="lane" x1="20" y1="380" x2="880" y2="380"></line>
+
+    <!-- Moments -->
+    <line class="moment" x1="290" y1="40" x2="290" y2="380"></line>
+    <line class="moment" x1="640" y1="20" x2="640" y2="380"></line>
+    <line class="moment" x1="830" y1="40" x2="830" y2="380"></line>
+    <text class="switch" x="640" y="16">the switch</text>
+
+    <!-- Rotation -->
+    <circle class="run" cx="290" cy="60" r="6"></circle>
+    <text class="note" x="302" y="58">makes B, to start 7 days after A started,</text>
+    <text class="note" x="302" y="76">never less than an hour ahead</text>
+    <circle class="run" cx="830" cy="60" r="6"></circle>
+    <text class="note end" x="818" y="58">removes A from</text>
+    <text class="note end" x="818" y="76">both tables</text>
+
+    <!-- Tables -->
+    <rect class="bar a" x="190" y="126" width="640" height="26"></rect>
+    <text class="in" x="200" y="144">A</text>
+    <rect class="bar b" x="290" y="160" width="590" height="26"></rect>
+    <text class="in" x="300" y="178">B</text>
+
+    <!-- Lambda@Edge -->
+    <rect class="bar a" x="210" y="216" width="430" height="26"></rect>
+    <text class="in" x="220" y="234">signs with A</text>
+    <rect class="bar held" x="450" y="250" width="190" height="26"></rect>
+    <text class="in" x="460" y="268">holds B</text>
+    <rect class="bar b" x="640" y="250" width="240" height="26"></rect>
+    <text class="in" x="650" y="268">signs with B</text>
+
+    <!-- Gateway -->
+    <rect class="bar a" x="210" y="306" width="490" height="26"></rect>
+    <text class="in" x="220" y="324">verifies A's tokens</text>
+    <text class="note" x="710" y="324">A's last tokens expire</text>
+    <rect class="bar held" x="300" y="340" width="340" height="26"></rect>
+    <text class="in" x="390" y="358">holds B's public key</text>
+    <rect class="bar b" x="640" y="340" width="240" height="26"></rect>
+    <text class="in" x="650" y="358">verifies B's tokens</text>
+
+    <!-- The seven days, cut short -->
+    <rect class="cut" x="352" y="111" width="20" height="299"></rect>
+    <line class="cut-edge" x1="352" y1="110" x2="352" y2="410"></line>
+    <line class="cut-edge" x1="372" y1="110" x2="372" y2="410"></line>
+
+    <!-- Axis -->
+    <line class="axis" x1="190" y1="404" x2="352" y2="404"></line>
+    <line class="axis" x1="372" y1="404" x2="880" y2="404"></line>
+    <line class="axis" x1="210" y1="398" x2="210" y2="410"></line>
+    <line class="axis" x1="290" y1="398" x2="290" y2="410"></line>
+    <line class="axis" x1="450" y1="398" x2="450" y2="410"></line>
+    <line class="axis" x1="640" y1="398" x2="640" y2="410"></line>
+    <line class="axis" x1="700" y1="398" x2="700" y2="410"></line>
+    <line class="axis" x1="830" y1="398" x2="830" y2="410"></line>
+
+    <text class="sub" x="210" y="430">A starts</text>
+    <text class="sub" x="290" y="430">a run</text>
+    <text class="sub" x="450" y="430">1 hour before</text>
+    <text class="sub" x="640" y="430">B starts</text>
+    <text class="sub" x="700" y="430">+1 min</text>
+    <text class="sub" x="830" y="430">+5 min</text>
+    <text class="sub" x="640" y="448">7 days after A</text>
+  </svg>
+  <Fragment slot="caption">Not to scale: the seven days are cut short.</Fragment>
+</Diagram>
+
+<style>
+  .lane {
+    stroke: var(--sl-color-gray-5);
+    stroke-width: 1;
+  }
+  .moment {
+    stroke: var(--sl-color-gray-4);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+  }
+  .switch {
+    font-size: 13px;
+    font-weight: 600;
+    text-anchor: middle;
+  }
+  .run {
+    fill: var(--sl-color-accent);
+  }
+  .bar {
+    stroke-width: 1;
+  }
+  .bar.a {
+    fill: var(--sl-color-gray-5);
+    stroke: var(--sl-color-gray-4);
+  }
+  .bar.b {
+    fill: var(--sl-color-accent-low);
+    stroke: var(--sl-color-accent);
+  }
+  .bar.held {
+    fill: none;
+    stroke: var(--sl-color-accent);
+    stroke-dasharray: 4 3;
+  }
+  .in {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .cut {
+    fill: var(--sl-color-bg);
+  }
+  .cut-edge,
+  .axis {
+    stroke: var(--sl-color-gray-3);
+    stroke-width: 1.5;
+  }
+</style>
