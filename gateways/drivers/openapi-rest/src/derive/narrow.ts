@@ -1,13 +1,13 @@
 import { isDeepStrictEqual } from "node:util";
 
-import { isRecord } from "@repo/utils/is-record";
-
 import {
-  setKey,
   SUBSCHEMA_LISTS,
   SUBSCHEMA_MAPS,
   SUBSCHEMAS,
-} from "./convert.ts";
+} from "@repo/gateway-codegen";
+import { isRecord } from "@repo/utils/is-record";
+
+import { setKey } from "./convert.ts";
 
 // What an operation states of a schema, set into what the upstream's document says of it. It can
 // make a schema admit less and nothing else: every step here either replaces "an object of any
