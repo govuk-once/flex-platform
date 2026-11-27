@@ -98,7 +98,7 @@ describe("createRouter", () => {
     });
   });
 
-  // Nothing is decoded, so an encoded slash is part of a name no config holds.
+  // A parameter is never decoded, so an encoded slash is part of a name no config holds.
   it("takes each parameter as it is written", () => {
     const found = router(
       "POST",
@@ -120,7 +120,7 @@ describe("createRouter", () => {
         route("POST", "/ci/{environment}/{domain}"),
         route("POST", "/ci/{domain}/{environment}"),
       ],
-      "Two routes",
+      "duplicate route",
     ],
     [
       "a path that names no domain",
@@ -130,7 +130,7 @@ describe("createRouter", () => {
     [
       "a parameter named twice",
       [route("POST", "/ci/{environment}/{domain}/{domain}")],
-      "twice",
+      "duplicate parameter",
     ],
     [
       "a path that isn't absolute",
