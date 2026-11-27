@@ -59,6 +59,20 @@ A gateway goes through two commands and then a deployment.
    If the first secret read fails, or the value is invalid, initialisation fails. The handler
    never processes an event. Later secret reads can still fail during a request.
 
+## Placement
+
+A gateway runs in one of two placements. The placement depends on how its upstream is reached:
+
+| Placement  | Upstream                                             | Route out                              |
+| ---------- | ---------------------------------------------------- | -------------------------------------- |
+| `isolated` | Reached privately, such as another AWS account's API | A VPC endpoint                         |
+| `private`  | Reached over the internet                            | A NAT gateway. Filtering its traffic beyond DNS is planned |
+
+The gateway's code is the same in both placements. Placement belongs to its deployment, in the
+[CDK app's config](/flex-platform/infrastructure/overview/#config), not to the gateway's
+configuration. The upstream's address and the secret the gateway uses to authenticate to it are
+deployment values too. See [Environment](/flex-platform/reference/environment/).
+
 ## A request
 
 The deployed handler receives an envelope:

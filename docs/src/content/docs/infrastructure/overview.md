@@ -266,7 +266,7 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns, privat
     the gateway's codegen. Synth takes the bundle from `.gen/runtime/bundle.mjs` in that package.
   - `hostnames`, the names it connects to, which make up the network's DNS allowlist. See
     [the allowlist](/flex-platform/infrastructure/network/#the-allowlist).
-  - `placement`, `isolated` or `private`. See [Egress](/flex-platform/start/platform/#egress).
+  - `placement`, `isolated` or `private`. See [placement](/flex-platform/gateways/overview/#placement).
   - `secret`, which becomes `FLEX_UPSTREAM_SECRET_ARN`. It is `"create"` for a secret the
     gateway's stack creates, or `{ arn, keyArn }` for a secret its upstream holds, with the KMS key
     that encrypts it.

@@ -18,6 +18,11 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 - **[Egress](/flex-platform/gateways/overview/).** The gateways, one Lambda function per upstream,
   generated from config in this repository. A domain uses them to reach other services.
 
+Each stage also has a shared account, for what spans its environments: the
+[test users](/flex-platform/infrastructure/overview/#test-users), and the
+[pipeline API](/flex-platform/domains/hosting/#the-pipeline-api) that domains release their code
+through.
+
 <PlatformDiagram />
 
 <StatusTables>
@@ -36,6 +41,8 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 | SDK requests | Routing a request, holding it and the handler's result to the route's schemas, the handler's context, and logging | <Badge text="Built" variant="success" /> |
 | SDK OpenAPI document | Building a domain's OpenAPI document from its configuration | <Badge text="Built" variant="success" /> |
 | SDK serving | Serving a domain's requests from its function, and examples | <Badge text="Planned" variant="caution" /> |
+| Release | Uploading a domain's code through the pipeline API, and releasing it to an environment that publishes | <Badge text="Built" variant="success" /> |
+| Promotion | Taking released code on to the next environment | <Badge text="Planned" variant="caution" /> |
 | Metadata | An endpoint for a domain's metadata uploads, such as its OpenAPI document, to which the platform adds what it applies to every domain, and an endpoint in the Frontdoor to read the published documents | <Badge text="Planned" variant="caution" /> |
 
 | Egress           | What it is                                                    | Status                                     |
@@ -49,32 +56,7 @@ Flex is the platform behind the GOV.UK app. It has three sections:
 
 </StatusTables>
 
-## Egress
-
-The gateway libraries are implemented. So are the [network](/flex-platform/infrastructure/network/)
-that gateways run in and the [stack](/flex-platform/infrastructure/overview/#stacks) that deploys
-each one. Egress filtering is planned.
-
-A gateway is a Lambda function that sits in front of one upstream. It exposes that upstream's
-operations to domains. Each gateway is generated from a configuration and versioned schemas in
-this repository. It validates every input before it reaches the upstream, and every outcome before
-it reaches the caller. See [How a gateway works](/flex-platform/gateways/overview/).
-
-A gateway runs in one of two placements. The placement depends on how its upstream is reached:
-
-| Placement  | Upstream                                             | Route out                              |
-| ---------- | ---------------------------------------------------- | -------------------------------------- |
-| `isolated` | Reached privately, such as another AWS account's API | A VPC endpoint                         |
-| `private`  | Reached over the internet                            | A NAT gateway, and egress filtering once it is built |
-
-The gateway's code is the same in both placements. Placement belongs to its deployment, in the
-[CDK app's config](/flex-platform/infrastructure/overview/#config), not to the gateway's
-configuration. The upstream's address and the secret the gateway uses to authenticate to it are
-deployment values too. See [Environment](/flex-platform/reference/environment/).
-
 ## One request, end to end
-
-This is the intended flow once the planned sections are in place.
 
 1. The GOV.UK app sends a request to the platform's domain name. CloudFront receives it.
 2. The CloudFront Function checks the request's structure.
@@ -84,11 +66,5 @@ This is the intended flow once the planned sections are in place.
 5. The domain's code calls each upstream it needs through the gateway client. The client invokes
    that upstream's gateway Lambda with an envelope.
 6. The gateway validates the input. It calls the upstream through a VPC endpoint, or through a NAT
-   gateway and egress filtering. It then validates the outcome and returns it.
+   gateway, where egress filtering is planned. It then validates the outcome and returns it.
 7. The domain's code responds. The response goes back through API Gateway and CloudFront.
-
-## Two meanings of "gateway"
-
-In these docs, a **gateway** always means the egress Lambda that this repository generates. Amazon
-API Gateway is always named in full. It sits in front of each domain, and many upstreams also run
-on it. See the [glossary](/flex-platform/reference/glossary/).
