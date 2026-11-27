@@ -271,11 +271,12 @@ worker releases what the table records under that key. Three rules hold this tog
   So no writer can point a release at another domain or another bundle. If an update creates an
   item, the item has none of those attributes, so it isn't a release. The worker logs and drops a
   message that names no release in the table.
-- **A final release isn't run again.** Before each attempt, the worker claims the release. It marks
-  it `releasing` and counts the attempt, unless the release is final. So a repeated message, however
-  it was sent, runs nothing that is released or refused. Any other release may be tried again, even
-  while an attempt runs. Every step reads Lambda before it acts, so an attempt at something already
-  done changes nothing. Lambda also refuses a change to a function it is still changing.
+- **A released or refused release isn't run again.** Before each attempt, the worker claims the
+  release. It marks it `releasing` and counts the attempt, unless the release is `released` or
+  `refused`. So a repeated message, however it was sent, runs nothing that is released or refused.
+  Any other release may be tried again, even while an attempt runs. Every step reads Lambda before
+  it acts, so an attempt at something already done changes nothing. Lambda also refuses a change to
+  a function it is still changing.
 - **The queue takes messages only from the API, and gives them only to the worker.** Its policy
   denies, to every principal:
   - sending a message, unless the principal is `shared-ci`'s role;
@@ -324,9 +325,9 @@ is given up, and only then `1.2.1`. So the rules are for a release that comes ba
 is live. One example is a release that was [given up](#the-dead-letter-worker) and then named again
 by an event the queue didn't send.
 
-A superseded release is final. Its version stays in the [artefacts table](#the-artefacts-table) and
-its bundle stays in the bucket. So a rollback, which is planned, could put the version on `live`
-again.
+A superseded release is never tried again. Its version stays in the
+[artefacts table](#the-artefacts-table) and its bundle stays in the bucket. So a rollback, which is
+planned, could put the version on `live` again.
 
 A description in any other form refuses nothing. This covers every `live` alias set before releases
 had versions, and any description written by hand. Anyone who could rewrite the description, with
@@ -432,14 +433,14 @@ A function of its own, `shared-release-dead-letter-worker`, reads the dead-lette
 the release table says when no more attempts are coming. The release worker can't say so itself,
 because an attempt that stopped with its function recorded nothing.
 
-For each message, the dead-letter worker reads the release. Unless the release is final or given up
-already, it records it `abandoned`, and keeps the step and reason its last attempt stopped at. It
-logs `release_abandoned` with how many attempts there were. It leaves a release that is final or
-given up already as it is. An attempt that is still running may yet release it. Lambda says what is
-live, so the release worker records `released` over `abandoned`.
+For each message, the dead-letter worker reads the release. Unless the release is `released`,
+`refused` or `abandoned` already, it records it `abandoned`, and keeps the step and reason its last
+attempt stopped at. It logs `release_abandoned` with how many attempts there were. An attempt that
+is still running may yet release it. Lambda says what is live, so the release worker records
+`released` over `abandoned`.
 
 Anything that IAM lets invoke the function can write its event, and nothing in an event shows that
-the queue gave the release up. So `abandoned` isn't final: the release worker still claims and runs
+the queue gave the release up. So `abandoned` can change: the release worker still claims and runs
 a release its queue gives it. If an event the queue didn't send gives a release up, the release is
 still run, and the alarm is all that shows it was given up. A message that the queue really moves
 to the dead-letter queue never returns to the release queue, because no principal may move one

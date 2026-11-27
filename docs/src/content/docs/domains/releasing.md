@@ -170,8 +170,7 @@ x-flex-ci-token: <the job's token>
 
 The API reads the release from the [release table](/flex-platform/domains/release-pipeline/#the-release-table), under the environment and
 domain the pipeline was allowed for. So a pipeline sees only its own domain's releases. The API
-answers 200, with `cache-control: no-store`, because the record changes until the release is
-final:
+answers 200, with `cache-control: no-store`, because the record changes as the release goes:
 
 ```json
 {
@@ -214,8 +213,10 @@ versions, which the API can't read.
 - `abandoned` was tried as often as the queue tries, and won't be tried again. The pipeline asks
   again instead.
 
-`released` and `refused` are final. `abandoned` isn't, because the worker still runs a release its
-queue gives it. See [the dead-letter worker](/flex-platform/domains/release-pipeline/#the-dead-letter-worker).
+`released` never changes. `refused` is never tried again, but an attempt already running can
+still record `released` over it, because Lambda says what is live. `abandoned` can change too,
+because the worker still runs a release its queue gives it. See
+[the dead-letter worker](/flex-platform/domains/release-pipeline/#the-dead-letter-worker).
 
 ## Releasing one at a time
 
