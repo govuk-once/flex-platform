@@ -351,17 +351,11 @@ function checkGateways(
     try {
       gatewayFunctionName(environment.name, id);
       gatewayRoleName(environment.name, id);
-    } catch (error) {
-      throw new Error(`${at} ${id} gateway: ${(error as Error).message}`, {
-        cause: error,
-      });
-    }
-    if (hostnames.length === 0) {
-      throw new Error(
-        `${at} ${id} gateway: it names no hostname, so it couldn't reach its upstream`,
-      );
-    }
-    try {
+      if (hostnames.length === 0) {
+        throw new Error(
+          "it names no hostname, so it couldn't reach its upstream",
+        );
+      }
       dnsAllowlist(hostnames);
     } catch (error) {
       throw new Error(`${at} ${id} gateway: ${(error as Error).message}`, {

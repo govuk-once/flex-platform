@@ -23,6 +23,14 @@ import {
 } from "./names.ts";
 import { RELEASE_WORKER_ACTIONS } from "./release-table.ts";
 
+/** What Lambda needs to give a function a queue's messages, and take them back. */
+export const QUEUE_READER_ACTIONS = [
+  "sqs:ChangeMessageVisibility",
+  "sqs:DeleteMessage",
+  "sqs:GetQueueAttributes",
+  "sqs:ReceiveMessage",
+];
+
 /**
  * The longest one attempt at a release may take. A first release creates a function in a VPC,
  * which Lambda can take minutes to make ready.
@@ -156,14 +164,8 @@ export class ReleaseWorker extends Construct {
       logGroupName: RELEASE_WORKER_LOG_GROUP_NAME,
       policyName: "Release",
       statements: [
-        // What Lambda needs to give the function the queue's messages, and take them back.
         new PolicyStatement({
-          actions: [
-            "sqs:ChangeMessageVisibility",
-            "sqs:DeleteMessage",
-            "sqs:GetQueueAttributes",
-            "sqs:ReceiveMessage",
-          ],
+          actions: QUEUE_READER_ACTIONS,
           resources: [this.queue.queueArn],
         }),
         // To read each release, claim it, and record how it went.

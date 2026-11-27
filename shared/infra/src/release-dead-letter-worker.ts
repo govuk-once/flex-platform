@@ -25,6 +25,7 @@ import {
   RELEASE_METRIC_NAMESPACE,
 } from "./names.ts";
 import { RELEASE_WORKER_ACTIONS } from "./release-table.ts";
+import { QUEUE_READER_ACTIONS } from "./release-worker.ts";
 
 /** How long the dead-letter worker may take over one message: one read and one write. */
 export const DEAD_LETTER_WORKER_TIMEOUT = Duration.seconds(30);
@@ -76,14 +77,8 @@ export class ReleaseDeadLetterWorker extends Construct {
       logGroupName: RELEASE_DEAD_LETTER_WORKER_LOG_GROUP_NAME,
       policyName: "DeadLetters",
       statements: [
-        // What Lambda needs to give the function the queue's messages, and take them back.
         new PolicyStatement({
-          actions: [
-            "sqs:ChangeMessageVisibility",
-            "sqs:DeleteMessage",
-            "sqs:GetQueueAttributes",
-            "sqs:ReceiveMessage",
-          ],
+          actions: QUEUE_READER_ACTIONS,
           resources: [deadLetters.queueArn],
         }),
         // To read a release, and give it up.
