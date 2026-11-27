@@ -1,6 +1,7 @@
 import {
   edgeRoleName,
   KeyRotation,
+  keyRotationRoleName,
   publicKeysTableName,
   PushIdSecret,
   SigningKey,
@@ -12,6 +13,9 @@ import { Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
 
 import type { EnvironmentConfig } from "../config/types.ts";
+
+/** The kind of key this stack holds, which names its tables and key rotation's role. */
+const CALLER_TOKEN_KIND = "caller-token";
 
 export function frontdoorCallerTokenKeysStackName(
   environment: EnvironmentConfig,
@@ -27,7 +31,7 @@ export function frontdoorCallerTokenKeysStackName(
 export function callerTokenPublicKeysTableArn(
   environment: EnvironmentConfig,
 ): string {
-  const table = publicKeysTableName(environment.name, "caller-token");
+  const table = publicKeysTableName(environment.name, CALLER_TOKEN_KIND);
   return `arn:aws:dynamodb:${SIGNING_KEY_REGION}:${environment.frontdoor.account}:table/${table}`;
 }
 
@@ -51,17 +55,25 @@ export class FrontdoorCallerTokenKeysStack extends Stack {
     });
 
     const { account } = environment.frontdoor;
+    // By the names the roles are created with: the edge's stack deploys after this one, and key
+    // rotation's role is made below.
+    const roleArn = (name: string) => `arn:aws:iam::${account}:role/${name}`;
+    // The edge's role, which reads the private keys and decrypts them to sign.
+    const edgeRoleArn = roleArn(edgeRoleName(environment.name));
 
-    new SigningKey(this, "SigningKey", { environment: environment.name });
+    new SigningKey(this, "SigningKey", {
+      environment: environment.name,
+      decryptRoleArns: [edgeRoleArn],
+      rotationRoleArn: roleArn(
+        keyRotationRoleName(environment.name, CALLER_TOKEN_KIND),
+      ),
+    });
     new PushIdSecret(this, "PushIdSecret", { environment: environment.name });
     new KeyRotation(this, "KeyRotation", {
       environment: environment.name,
-      kind: "caller-token",
+      kind: CALLER_TOKEN_KIND,
       keyAlias: signingKeyAliasName(environment.name),
-      // The edge's role, which signs with the private keys. Its stack deploys after this one.
-      privateKeyReaderRoleArns: [
-        `arn:aws:iam::${account}:role/${edgeRoleName(environment.name)}`,
-      ],
+      privateKeyReaderRoleArns: [edgeRoleArn],
       // Every gateway's role, by its name's pattern, in each domain account that runs a gateway. A
       // pattern, so adding a gateway doesn't change this stack, nor grow the policy toward its
       // size limit. An account is only ever one environment's, which config validation holds, so

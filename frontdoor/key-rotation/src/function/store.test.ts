@@ -3,6 +3,7 @@ import { assert, describe, expect, it } from "vitest";
 import { FakeDynamoDB } from "../../test/dynamodb.ts";
 import { MemoryPorts, publicKeyDer } from "../../test/ports.ts";
 import { CALLER_TOKEN_POLICY } from "./policy.ts";
+import { revoke } from "./revoke.ts";
 import { rotate, type RotationPorts } from "./rotation.ts";
 import type { HeldKey, KeyChanges } from "./state.ts";
 import { stateOf, tablePorts } from "./store.ts";
@@ -44,13 +45,11 @@ function rotation() {
     generate: (keyId) => memory.generate(keyId),
     check: (held) => memory.check(held),
   };
-  const run = (at: Date, revoke?: string) =>
-    rotate(
-      ports,
-      CALLER_TOKEN_POLICY,
-      at,
-      revoke === undefined ? {} : { revoke },
-    );
+  // As the handler runs them: a revocation first, then the run.
+  const run = async (at: Date, keyId?: string) => {
+    if (keyId !== undefined) await revoke(ports, at, keyId);
+    return rotate(ports, CALLER_TOKEN_POLICY, at);
+  };
   const ids = (table: string) =>
     dynamodb
       .items(table)
@@ -149,6 +148,39 @@ describe("tablePorts", () => {
     await run(after(31 * MINUTE), NEXT);
     await run(after(30 * MINUTE + DAY));
     expect(ids(TABLES.publicKeys)).not.toContain(NEXT);
+  });
+
+  it("revokes in one transaction that deletes the private key, writes the record in the public key's place and clears the end before it, asking nothing of KMS", async () => {
+    const { dynamodb, memory, ports, run } = rotation();
+    await run(START);
+    await run(after(15 * MINUTE));
+    dynamodb.commands.length = 0;
+    memory.calls.length = 0;
+    memory.kmsDisabled = true;
+
+    await revoke(ports, after(30 * MINUTE), NEXT);
+    expect(dynamodb.commands).toEqual([
+      `Scan ${TABLES.publicKeys} consistently`,
+      `Scan ${TABLES.privateKeys} consistently`,
+      "TransactWriteItems",
+    ]);
+    expect(memory.calls).toEqual([]);
+    expect(dynamodb.items(TABLES.privateKeys)).toEqual([
+      {
+        keyId: { S: FIRST },
+        privateKey: { B: new Uint8Array(Buffer.from(`private ${FIRST}`)) },
+        activeFrom: { N: seconds(START) },
+      },
+    ]);
+    expect(dynamodb.items(TABLES.publicKeys)).toEqual([
+      { keyId: { S: "#version" }, version: { N: "3" } },
+      {
+        keyId: { S: FIRST },
+        publicKey: { B: expect.any(Uint8Array) as unknown },
+        activeFrom: { N: seconds(START) },
+      },
+      { keyId: { S: NEXT }, revokedAt: { N: seconds(after(30 * MINUTE)) } },
+    ]);
   });
 
   it("removes a key from both tables once it has stopped long enough", async () => {

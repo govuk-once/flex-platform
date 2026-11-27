@@ -13,6 +13,7 @@ import {
 const PROD = FIXTURE_STAGES[2];
 const [DEV] = PROD.environments;
 const ROTATION_ROLE = `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-caller-token-key-rotation`;
+const EDGE_ROLE = `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-edge`;
 
 describe("FrontdoorCallerTokenKeysStack", () => {
   it("is one per environment, in the frontdoor account in eu-west-2, protected from deletion", () => {
@@ -72,6 +73,51 @@ describe("FrontdoorCallerTokenKeysStack", () => {
     });
   });
 
+  it("lets the environment's edge alone decrypt with the signing key, and key rotation alone encrypt with it, by the names their roles are created with", () => {
+    const template = Template.fromStack(
+      new FrontdoorCallerTokenKeysStack(cdkApp(), DEV),
+    );
+    template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: `frontdoor-${DEV.name}-caller-token-key-rotation`,
+    });
+    template.hasResourceProperties("AWS::KMS::Key", {
+      Description:
+        "Wraps the private keys the edge signs the caller token with",
+      KeyPolicy: {
+        Statement: [
+          // CDK's default, which leaves managing the key to IAM. Every other statement denies.
+          {
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${DEV.frontdoor.account}:root` },
+            Action: "kms:*",
+            Resource: "*",
+          },
+          Match.objectLike({
+            Sid: "DenyDecryptToAllButItsReaders",
+            Effect: "Deny",
+            Action: "kms:Decrypt",
+            Condition: { ArnNotLike: { "aws:PrincipalArn": [EDGE_ROLE] } },
+          }),
+          Match.objectLike({
+            Sid: "DenyEncryptingToAllButKeyRotation",
+            Effect: "Deny",
+            Condition: { ArnNotLike: { "aws:PrincipalArn": [ROTATION_ROLE] } },
+          }),
+          Match.objectLike({
+            Sid: "DenyKeyRotationAllButItsWork",
+            Effect: "Deny",
+            Condition: { ArnLike: { "aws:PrincipalArn": [ROTATION_ROLE] } },
+          }),
+          Match.objectLike({
+            Sid: "DenyReEncryptOntoAnotherKey",
+            Effect: "Deny",
+            Action: "kms:ReEncrypt*",
+          }),
+        ],
+      },
+    });
+  });
+
   it("names the public keys table by ARN, in the region every gateway's network is in", () => {
     expect(SIGNING_KEY_REGION).toBe(NETWORK_REGION);
     expect(callerTokenPublicKeysTableArn(DEV)).toBe(
@@ -104,9 +150,7 @@ describe("FrontdoorCallerTokenKeysStack", () => {
           Match.objectLike({
             Effect: "Deny",
             Condition: {
-              StringNotEquals: {
-                "aws:PrincipalArn": `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-edge`,
-              },
+              StringNotEquals: { "aws:PrincipalArn": EDGE_ROLE },
             },
           }),
         ],
@@ -135,10 +179,7 @@ describe("FrontdoorCallerTokenKeysStack", () => {
               Sid: "DenyOthersAllButManagingTheTable",
               Condition: {
                 ArnNotLike: {
-                  "aws:PrincipalArn": [
-                    ROTATION_ROLE,
-                    `arn:aws:iam::${DEV.frontdoor.account}:role/frontdoor-${DEV.name}-edge`,
-                  ],
+                  "aws:PrincipalArn": [ROTATION_ROLE, EDGE_ROLE],
                 },
               },
             }),

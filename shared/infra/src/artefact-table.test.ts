@@ -49,7 +49,7 @@ describe("ArtefactTable", () => {
               Effect: "Deny",
               Principal: { AWS: "*" },
               NotAction: [...TABLE_MANAGEMENT_ACTIONS],
-              Resource: TABLE_ARN,
+              Resource: [TABLE_ARN, `${TABLE_ARN}/index/*`],
               Condition: { ArnNotLike: { "aws:PrincipalArn": [RECORDER] } },
             },
             {
@@ -57,7 +57,7 @@ describe("ArtefactTable", () => {
               Effect: "Deny",
               Principal: { AWS: "*" },
               NotAction: ["dynamodb:GetItem", "dynamodb:PutItem"],
-              Resource: TABLE_ARN,
+              Resource: [TABLE_ARN, `${TABLE_ARN}/index/*`],
               Condition: { ArnLike: { "aws:PrincipalArn": [RECORDER] } },
             },
           ],

@@ -2,6 +2,7 @@ export { Edge } from "./edge.ts";
 export { KeyRotation } from "./key-rotation.ts";
 export {
   edgeRoleName,
+  keyRotationRoleName,
   ORIGIN_REQUEST_LOG_REGION,
   originRequestLogGroupName,
   publicKeysTableName,

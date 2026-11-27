@@ -438,6 +438,16 @@ describe("createCallerTokenKeys", () => {
       () => Promise.resolve(item({ keyId: { S: KID } })),
     ],
     [
+      "hold a revoked key's record that holds a key too",
+      () =>
+        Promise.resolve([
+          {
+            ...keyItem(KID, SIGNING.publicKey),
+            revokedAt: { N: String(FROM) },
+          },
+        ]),
+    ],
+    [
       "hold a key that isn't Ed25519",
       () =>
         Promise.resolve(
@@ -530,6 +540,156 @@ describe("createCallerTokenKeys", () => {
     expect(await keys.get(OTHER_KID)).toBeUndefined();
   });
 
+  // As key rotation's own read of the item does: it is a key or a revoked key's record.
+  it("refuses the whole read for a revoked key's record that holds a key, whatever else the table holds", async () => {
+    const keys = createCallerTokenKeys({
+      read: () =>
+        Promise.resolve([
+          ...keyItems({ [KID]: SIGNING.publicKey }),
+          {
+            ...keyItem(OTHER_KID, OTHER.publicKey),
+            revokedAt: { N: String(FROM) },
+          },
+        ]),
+    });
+    expect((await refusal(keys.get(KID))).code).toBe("INTERNAL");
+    expect((await refusal(keys.get(OTHER_KID))).code).toBe("INTERNAL");
+  });
+
+  describe("logging a read that fails", () => {
+    const MESSAGE = "The caller token's keys could not be read";
+
+    function awsError(name: string): Error {
+      const error = new Error("SYNTHETIC store error");
+      error.name = name;
+      return error;
+    }
+
+    // What one failed read logs.
+    async function logged(read: () => Promise<readonly KeyItem[]>) {
+      const warn = vi.fn();
+      await refusal(createCallerTokenKeys({ read }).get(KID, { warn }));
+      return warn.mock.calls;
+    }
+
+    it.each(["AccessDeniedException", "ResourceNotFoundException", "Error"])(
+      "says AWS's name for the error, %s, and nothing else of it",
+      async (name) => {
+        const error = Object.assign(awsError(name), {
+          $metadata: { requestId: "SYNTHETIC_REQUEST_ID" },
+          Item: keyItem(KID, SIGNING.publicKey),
+        });
+        const lines = await logged(() => Promise.reject(error));
+
+        expect(lines).toEqual([[{ reason: name }, MESSAGE]]);
+        expect(JSON.stringify(lines)).not.toContain("SYNTHETIC");
+      },
+    );
+
+    it.each([
+      ["a name that isn't a name", awsError("SYNTHETIC text\nfrom the store")],
+      ["a name longer than a name", awsError("A".repeat(65))],
+      ["no name", awsError("")],
+    ])("says only that the error has no name for %s", async (_, error) => {
+      const lines = await logged(() => Promise.reject(error));
+      expect(lines).toEqual([[{ reason: "unnamed_error" }, MESSAGE]]);
+    });
+
+    it("says only that the error has no name for something thrown that isn't an error", async () => {
+      const lines = await logged(() =>
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a library may reject with anything
+        Promise.reject("SYNTHETIC text"),
+      );
+      expect(lines).toEqual([[{ reason: "unnamed_error" }, MESSAGE]]);
+    });
+
+    it.each([
+      ["item_without_key_id", [{ publicKey: { B: der(SIGNING.publicKey) } }]],
+      [
+        "item_not_a_key",
+        [{ keyId: { S: KID }, publicKey: { B: new Uint8Array(32) } }],
+      ],
+      [
+        "revoked_item_with_key",
+        [{ ...keyItem(KID, SIGNING.publicKey), revokedAt: { N: "1" } }],
+      ],
+    ] as const)(
+      "says a fixed reason, %s, for a table the gateway refuses, and nothing of the item",
+      async (reason, items) => {
+        const lines = await logged(() => Promise.resolve(items));
+
+        expect(lines).toEqual([[{ reason }, MESSAGE]]);
+        expect(JSON.stringify(lines)).not.toContain(KID);
+        expect(JSON.stringify(lines)).not.toContain(
+          Buffer.from(der(SIGNING.publicKey)).toString("base64"),
+        );
+      },
+    );
+
+    it("says a fixed reason for a table that needs a second page", async () => {
+      const dynamodb = {
+        send: () =>
+          Promise.resolve({
+            Items: keyItems({ [KID]: SIGNING.publicKey }),
+            LastEvaluatedKey: { keyId: { S: KID } },
+          }),
+      };
+      expect(await logged(scanKeyTable(dynamodb, "keys"))).toEqual([
+        [{ reason: "more_than_one_page" }, MESSAGE],
+      ]);
+    });
+
+    it("logs each read that fails, while the call goes on with the keys it has, and none that works", async () => {
+      const store = failingAfterFirstRead();
+      const warn = vi.fn();
+      await store.keys.get(KID, { warn });
+      await store.start();
+      expect(warn).not.toHaveBeenCalled();
+
+      store.clock.now = KEYS_MAX_AGE_MS;
+      expect(await store.keys.get(KID, { warn })).toBeDefined();
+      expect(warn).toHaveBeenCalledTimes(1);
+      // No read, so no line.
+      store.clock.now += KEYS_MIN_INTERVAL_MS - 1;
+      await store.keys.get(KID, { warn });
+      expect(warn).toHaveBeenCalledTimes(1);
+      store.clock.now += 1;
+      await store.keys.get(KID, { warn });
+      expect(warn).toHaveBeenCalledTimes(2);
+
+      store.recover();
+      store.clock.now += KEYS_MIN_INTERVAL_MS;
+      await store.keys.get(KID, { warn });
+      expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it("answers the call whatever becomes of the log line", async () => {
+      const store = failingAfterFirstRead();
+      await store.start();
+      store.clock.now = KEYS_MAX_AGE_MS;
+
+      const warn = vi.fn(() => {
+        throw new Error("stdout is closed");
+      });
+      expect(await store.keys.get(KID, { warn })).toBeDefined();
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("is reached through the verifier, which is given the call's log", async () => {
+      const warn = vi.fn();
+      const verify = createCallerTokenVerifier({
+        audience: AUDIENCE,
+        keys: createCallerTokenKeys({
+          read: () => Promise.reject(awsError("AccessDeniedException")),
+        }),
+      });
+      expect((await refusal(verify(token(), { warn }))).code).toBe("INTERNAL");
+      expect(warn.mock.calls).toEqual([
+        [{ reason: "AccessDeniedException" }, MESSAGE],
+      ]);
+    });
+  });
+
   it("reads once for calls that arrive together", async () => {
     const read = vi.fn(() =>
       Promise.resolve(keyItems({ [KID]: SIGNING.publicKey })),
@@ -569,16 +729,16 @@ describe("scanKeyTable", () => {
       Items: keyItems({ [KID]: SIGNING.publicKey }),
       LastEvaluatedKey: { keyId: { S: KID } },
     });
-    await expect(scanKeyTable(dynamodb, TABLE)()).rejects.toThrow(
-      "the table answered with more than one page",
-    );
+    await expect(scanKeyTable(dynamodb, TABLE)()).rejects.toMatchObject({
+      reason: "more_than_one_page",
+    });
     expect(dynamodb.send).toHaveBeenCalledTimes(1);
   });
 
   it("refuses an answer with no items", async () => {
-    await expect(scanKeyTable(client({}), TABLE)()).rejects.toThrow(
-      "the table answered with more than one page",
-    );
+    await expect(scanKeyTable(client({}), TABLE)()).rejects.toMatchObject({
+      reason: "more_than_one_page",
+    });
   });
 });
 

@@ -1,5 +1,7 @@
 // One run of key rotation, for one kind of key. It is safe to run at any time, as often as the
-// schedule likes: each run does what is due and nothing else.
+// schedule likes: each run does what is due and nothing else. Removing a key at once is a
+// revocation, in revoke.ts, which leaves the tables for a run to put right: a run makes a key at
+// once when none is in use, and schedules one when none is scheduled.
 //
 // A switch from one key to the next is a time, set when the next key is made, a period ahead, and
 // kept as the time the current key stops. Readers hold both keys before then, so every reader
@@ -35,14 +37,6 @@ export interface RotationPorts {
   check(key: Pick<HeldKey, "keyId" | "privateKey">): Promise<void>;
 }
 
-export interface RotationRequest {
-  /**
-   * A key to remove at once, whatever it is doing. If it was in use, a new one is used straight
-   * away. If it was scheduled, another is scheduled, at least the least lead ahead.
-   */
-  readonly revoke?: string;
-}
-
 export type RotationEventName =
   "key_generated" | "key_pruned" | "key_revoked" | "key_already_revoked";
 
@@ -73,48 +67,16 @@ export interface RotationReport {
 
 const seconds = (ms: number) => Math.floor(ms / 1000);
 
-const withoutEnd = ({
-  keyId,
-  publicKey,
-  privateKey,
-  activeFrom,
-}: HeldKey): HeldKey => ({ keyId, publicKey, privateKey, activeFrom });
-
 export async function rotate(
   ports: RotationPorts,
   policy: KeyPolicy,
   now: Date,
-  request: RotationRequest = {},
 ): Promise<RotationReport> {
   const events: RotationEvent[] = [];
   const nowSeconds = seconds(now.getTime());
   const state = await ports.read();
   let keys = [...state.keys];
   let revokedKeys = [...state.revoked];
-
-  const revoked = keys.find(({ keyId }) => keyId === request.revoke);
-  if (request.revoke !== undefined && revoked === undefined) {
-    if (!revokedKeys.some(({ keyId }) => keyId === request.revoke)) {
-      throw new Error("The key to revoke is not one rotation holds");
-    }
-    // Run again, such as by a person who didn't hear that the first succeeded: the rest of the run
-    // does whatever else is due.
-    events.push({ event: "key_already_revoked", keyId: request.revoke });
-  }
-  if (revoked !== undefined) {
-    // The key that was to hand over to a scheduled key no longer stops then, and is given a new
-    // end below. An end that has passed stays, so the key before a revoked key in use is never
-    // used again.
-    keys = keys
-      .filter((key) => key !== revoked)
-      .map((key) =>
-        key.activeUntil === revoked.activeFrom && key.activeUntil > nowSeconds
-          ? withoutEnd(key)
-          : key,
-      );
-    revokedKeys.push({ keyId: revoked.keyId, revokedAt: nowSeconds });
-    events.push({ event: "key_revoked", keyId: revoked.keyId });
-  }
 
   const current = keys.find(
     ({ activeFrom, activeUntil }) =>
@@ -133,6 +95,8 @@ export async function rotate(
       ...(scheduled !== undefined && { activeUntil: scheduled.activeFrom }),
     };
   } else if (scheduled === undefined) {
+    // A period after the key in use started, which is also when a revoked scheduled key was to
+    // start, unless that is too soon.
     const activeFrom = Math.max(
       current.activeFrom + seconds(policy.periodMs),
       nowSeconds + seconds(policy.minimumLeadMs),
@@ -144,7 +108,7 @@ export async function rotate(
   }
   if (made !== undefined) {
     const keyId = keyIdFor(now);
-    // Only a revocation in the second its key was made could meet this.
+    // Only a run in the second a key was made, then revoked, could meet this.
     if ([...keys, ...revokedKeys].some((key) => key.keyId === keyId)) {
       throw new Error(`A key was made as ${keyId} already; run again`);
     }

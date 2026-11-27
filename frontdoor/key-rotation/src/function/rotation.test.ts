@@ -2,23 +2,22 @@ import { assert, describe, expect, it } from "vitest";
 
 import { MemoryPorts } from "../../test/ports.ts";
 import { CALLER_TOKEN_POLICY } from "./policy.ts";
+import { revoke } from "./revoke.ts";
 import {
   KeyCheckFailed,
   rotate as rotateKeys,
   type RotationPorts,
-  type RotationRequest,
 } from "./rotation.ts";
 
 const {
   periodMs: ROTATION_PERIOD_MS,
   minimumLeadMs: MINIMUM_LEAD_MS,
   retiredKeptMs: RETIRED_KEPT_MS,
-  revokedKeptMs: REVOKED_KEPT_MS,
 } = CALLER_TOKEN_POLICY;
 
 // The caller token's keys, whose behaviour these tests hold to what its page documents.
-const rotate = (ports: RotationPorts, now: Date, request?: RotationRequest) =>
-  rotateKeys(ports, CALLER_TOKEN_POLICY, now, request);
+const rotate = (ports: RotationPorts, now: Date) =>
+  rotateKeys(ports, CALLER_TOKEN_POLICY, now);
 
 const START = new Date("2026-11-06T12:00:00Z");
 const after = (ms: number, from: Date = START) => new Date(from.getTime() + ms);
@@ -162,7 +161,8 @@ describe("rotate", () => {
     expect(error).toMatchObject({ keyId: NEXT, stored: true });
     expect(ports.calls).toEqual([`check ${FIRST}`, `check ${NEXT}`]);
 
-    await rotate(ports, after(45 * MINUTE), { revoke: NEXT });
+    await revoke(ports, after(45 * MINUTE), NEXT);
+    await rotate(ports, after(45 * MINUTE));
     expect(ports.edgeKids(after(45 * MINUTE))).toEqual([
       FIRST,
       "20261106T124500Z",
@@ -190,149 +190,5 @@ describe("rotate", () => {
     ]);
     // The key the failed run made was never held.
     expect(ports.publicKids()).toEqual([FIRST, "20261106T123000Z"]);
-  });
-
-  it("revokes a signing key at once, with a new key that signs straight away, keeping the one scheduled", async () => {
-    const ports = await rotated();
-    const at = after(30 * MINUTE);
-
-    const report = await rotate(ports, at, { revoke: FIRST });
-    expect(report.events).toEqual([
-      { event: "key_revoked", keyId: FIRST },
-      {
-        event: "key_generated",
-        keyId: "20261106T123000Z",
-        activeFrom: seconds(at),
-      },
-    ]);
-    expect(ports.publicKeys()).toEqual([
-      { keyId: NEXT, activeFrom: seconds(SWITCH) },
-      {
-        keyId: "20261106T123000Z",
-        activeFrom: seconds(at),
-        activeUntil: seconds(SWITCH),
-      },
-    ]);
-    expect(ports.signingKid(at)).toBe("20261106T123000Z");
-    expect(ports.signingKid(SWITCH)).toBe(NEXT);
-  });
-
-  it("never brings back the key a revoked signing key replaced", async () => {
-    const ports = await rotated();
-    await rotate(ports, after(MINUTE, SWITCH));
-    const at = after(2 * MINUTE, SWITCH);
-
-    const report = await rotate(ports, at, { revoke: NEXT });
-    expect(report.events).toEqual([
-      { event: "key_revoked", keyId: NEXT },
-      {
-        event: "key_generated",
-        keyId: "20261113T120200Z",
-        activeFrom: seconds(at),
-      },
-    ]);
-    expect(ports.signingKid(at)).toBe("20261113T120200Z");
-    expect(ports.edgeKids(at)).not.toContain(FIRST);
-    expect(ports.publicKeys()).toContainEqual({
-      keyId: FIRST,
-      activeFrom: seconds(START),
-      activeUntil: seconds(SWITCH),
-    });
-
-    const pruned = await rotate(ports, after(RETIRED_KEPT_MS, SWITCH));
-    expect(pruned.events).toEqual([{ event: "key_pruned", keyId: FIRST }]);
-  });
-
-  it("revokes a scheduled key, scheduling another for the same moment, which the signing key stops at", async () => {
-    const ports = await rotated();
-
-    const report = await rotate(ports, after(30 * MINUTE), { revoke: NEXT });
-    expect(report.events).toEqual([
-      { event: "key_revoked", keyId: NEXT },
-      {
-        event: "key_generated",
-        keyId: "20261106T123000Z",
-        activeFrom: seconds(SWITCH),
-      },
-    ]);
-    expect(ports.publicKeys()).toEqual([
-      {
-        keyId: FIRST,
-        activeFrom: seconds(START),
-        activeUntil: seconds(SWITCH),
-      },
-      { keyId: "20261106T123000Z", activeFrom: seconds(SWITCH) },
-    ]);
-  });
-
-  it("schedules a revoked scheduled key's replacement the least lead ahead, moving the signing key's end with it", async () => {
-    const ports = await rotated();
-    const at = after(-10 * MINUTE, SWITCH);
-
-    await rotate(ports, at, { revoke: NEXT });
-    const replacement = seconds(after(MINIMUM_LEAD_MS, at));
-    expect(ports.publicKeys()).toEqual([
-      { keyId: FIRST, activeFrom: seconds(START), activeUntil: replacement },
-      { keyId: "20261113T115000Z", activeFrom: replacement },
-    ]);
-    expect(ports.signingKid(SWITCH)).toBe(FIRST);
-  });
-
-  it("only removes a revoked key that has stopped signing", async () => {
-    const ports = await rotated();
-    await rotate(ports, after(MINUTE, SWITCH));
-
-    const report = await rotate(ports, after(2 * MINUTE, SWITCH), {
-      revoke: FIRST,
-    });
-    expect(report.events).toEqual([{ event: "key_revoked", keyId: FIRST }]);
-    expect(ports.publicKids()).not.toContain(FIRST);
-    expect(ports.signingKid(after(2 * MINUTE, SWITCH))).toBe(NEXT);
-  });
-
-  it("answers a revocation run again as done, changing nothing", async () => {
-    const ports = await rotated();
-    await rotate(ports, after(30 * MINUTE), { revoke: FIRST });
-    const before = ports.state;
-
-    const at = after(31 * MINUTE);
-    const report = await rotate(ports, at, { revoke: FIRST });
-    expect(report.events).toEqual([
-      { event: "key_already_revoked", keyId: FIRST },
-    ]);
-    expect(ports.state).toBe(before);
-    expect(ports.publicKids()).not.toContain(FIRST);
-    expect(ports.signingKid(at)).toBe("20261106T123000Z");
-  });
-
-  it("forgets a revoked key a day after it was revoked", async () => {
-    const ports = await rotated();
-    const at = after(30 * MINUTE);
-    await rotate(ports, at, { revoke: FIRST });
-
-    await rotate(ports, after(REVOKED_KEPT_MS - 1000, at));
-    expect(ports.state.revoked).toEqual([
-      { keyId: FIRST, revokedAt: seconds(at) },
-    ]);
-    await rotate(ports, after(REVOKED_KEPT_MS, at));
-    expect(ports.state.revoked).toEqual([]);
-  });
-
-  it("refuses to revoke a key it doesn't hold, changing nothing", async () => {
-    const ports = new MemoryPorts();
-    await rotate(ports, START);
-    const before = ports.state;
-    await expect(
-      rotate(ports, after(MINUTE), { revoke: "20991231T000000Z" }),
-    ).rejects.toThrow("The key to revoke is not one rotation holds");
-    expect(ports.state).toBe(before);
-  });
-
-  it("never makes a key under an ID it has used, which a revocation in the same second could", async () => {
-    const ports = new MemoryPorts();
-    await rotate(ports, START);
-    await expect(rotate(ports, START, { revoke: FIRST })).rejects.toThrow(
-      `A key was made as ${FIRST} already`,
-    );
   });
 });

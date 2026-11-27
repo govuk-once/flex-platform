@@ -10,8 +10,9 @@ import {
  * What anyone may do to a table, whatever its policy: see its settings and its policy, and manage
  * it as CloudFormation's `AWS::DynamoDB::Table` handler does on an update. So a deploy works under
  * whichever role it runs as, and the policy can always be rewritten. The handler's other actions
- * are left out: those that read or write an item, and those that copy items elsewhere, to a Kinesis
- * stream or a replica, which no table here uses.
+ * are left out: those that read or write an item, those that copy items elsewhere, to a Kinesis
+ * stream or a replica, which no table here uses, and setting a time to live, which no table here
+ * uses either: one set on an attribute that holds a time would delete every item that has it.
  */
 export const TABLE_MANAGEMENT_ACTIONS = [
   "dynamodb:DeleteResourcePolicy",
@@ -24,7 +25,6 @@ export const TABLE_MANAGEMENT_ACTIONS = [
   "dynamodb:UpdateContinuousBackups",
   "dynamodb:UpdateContributorInsights",
   "dynamodb:UpdateTable",
-  "dynamodb:UpdateTimeToLive",
 ] as const;
 
 export interface TableRoles {
@@ -49,13 +49,15 @@ export interface TablePolicyProps {
  * A table's policy, which denies everything but what is named: to anyone but the roles given, all
  * but managing the table, and to each set of roles, all but its work. Naming what is allowed
  * covers every way to an item, PartiQL, exports, backups and restores among them, and any action
- * DynamoDB adds. A deny there holds whatever any principal's own policy allows.
+ * DynamoDB adds. A deny there holds whatever any principal's own policy allows. Each deny names
+ * the table and every index of it, which is a resource of its own, so one added later is no way
+ * around the table's policy.
  *
  * Managing the table is left to IAM, so no deploy is ever locked out. Whoever may rewrite the
  * policy may undo the rest, so who that is matters as much as the policy.
  */
 export function tablePolicy(props: TablePolicyProps): PolicyDocument {
-  const resources = [props.tableArn];
+  const resources = [props.tableArn, `${props.tableArn}/index/*`];
   const all = props.roles.flatMap(({ roleArns }) => [...new Set(roleArns)]);
   const twice = all.filter((arn, index) => all.indexOf(arn) !== index);
   if (twice.length > 0) {

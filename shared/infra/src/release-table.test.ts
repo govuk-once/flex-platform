@@ -50,7 +50,7 @@ describe("ReleaseTable", () => {
       Effect: "Deny",
       Principal: { AWS: "*" },
       NotAction,
-      Resource: TABLE_ARN,
+      Resource: [TABLE_ARN, `${TABLE_ARN}/index/*`],
       Condition,
     });
     Template.fromStack(build()).hasResourceProperties("AWS::DynamoDB::Table", {
