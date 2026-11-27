@@ -1,22 +1,22 @@
 ---
 title: Hosting a domain
-description: How a domain is declared in config, what each domain account and domain provides, and what the platform provides around a domain's function.
+description: How config declares a domain, what each domain account and domain provides, and what the platform provides around a domain's function.
 ---
 
 import { Aside, Badge } from "@astrojs/starlight/components";
 
-A domain is hosted from a line of the platform's config. Domain teams write the domain's code and
-never write CDK. The platform provides everything the code runs with and behind.
+A line of the platform's config hosts a domain. Domain teams write the domain's code and never
+write CDK. The platform provides everything the code runs with and sits behind.
 
-The config, its checks and the stacks are in `infra/app`, with a
+The config, its checks and the stacks are in `infra/app`. There is a
 [stack](/flex-platform/infrastructure/overview/#stacks) for every domain account and every domain.
-The constructs and the names they use are in `domains/infra` (`@repo/domain-infra`).
+The constructs, and the names they use, are in `domains/infra` (`@repo/domain-infra`).
 
 ## Declaring a domain
 
-A domain is defined once, in `infra/app/src/config/domains.ts`. The definition
-names the GitHub repository that may [release](#releasing-a-domains-function) the domain, by
-GitHub's IDs for the repository and its owner, or `null` until the repository exists:
+Define each domain once, in `infra/app/src/config/domains.ts`. The definition names the GitHub
+repository that may [release](#releasing-a-domains-function) the domain. It names it by GitHub's
+IDs for the repository and its owner, or by `null` until the repository exists:
 
 ```ts title="config/domains.ts"
 export const domainA: DomainConfig = {
@@ -27,8 +27,8 @@ export const domainA: DomainConfig = {
 
 `gh api repos/<owner>/<repository> --jq '.id, .owner.id'` prints the two IDs.
 
-Each domain account in an environment then lists the domains it hosts in that environment, each
-as defined, or with `disabled: true` added when it is [disabled](#disabling-a-domain):
+Each domain account in an environment then lists the domains it hosts in that environment. List
+each one as defined, or add `disabled: true` to [disable](#disabling-a-domain) it:
 
 ```ts
 domainAccounts: [
@@ -46,12 +46,12 @@ domainAccounts: [
 ],
 ```
 
-The Frontdoor routes `/app/<name>/...` to a domain, and its resources are named from its name.
-Config holds no routes, and nothing else about what the domain does. See
+The Frontdoor routes `/app/<name>/...` to a domain, and the domain's resources are named from its
+name. Config holds no routes, and nothing else about what the domain does. See
 [routing a request](#routing-a-request).
 
-A domain is hosted only in the environments that list it. Moving it to another domain account is
-moving it to that account's list.
+A domain is hosted only in the environments that list it. To move it to another domain account,
+move it to that account's list.
 
 <Aside type="caution" title="Moving a domain between accounts">
 Moving a domain does not move its function or code. The destination account gets a new
@@ -61,43 +61,47 @@ The previous account's domain stack and its resources must be removed separately
 
 ### Disabling a domain
 
-List a domain with `disabled: true` added to stop routing to it. Its stack stays as it is, with
-its API, its host, its log groups and its name, which no other account in the environment may
-take. The Frontdoor's routes leave it out, so a request for it, once its token is verified, gets
-the 404 an unknown domain gets, and never reaches its API. Listing it as defined again restores
-the route and recreates nothing. Release the function the route will reach before enabling it.
+Add `disabled: true` to a domain's entry to stop routing to it. Its stack stays as it is, with its
+API, its host, its log groups and its name. No other account in the environment may take the name.
+The Frontdoor's routes leave the domain out. Once a request's token is verified, the Frontdoor
+answers it with the same 404 as an unknown domain, and the request never reaches the API. List the
+domain as defined again to restore the route. Nothing is recreated. Release the function the route
+will reach before you enable it.
 
-Disabling withdraws the route and nothing else: it doesn't stop an invocation already running, or
-change what the function's role may do. The routes change when the Frontdoor's stack deploys, and
-copies of Lambda@Edge can route to the domain until the new version has replaced them.
+Disabling withdraws the route and nothing else. It doesn't stop an invocation that is already
+running, or change what the function's role may do. The routes change when the Frontdoor's stack
+deploys. Until the new version of Lambda@Edge has replaced every copy, old copies can still route
+to the domain.
 
 Removing a domain from config is different. Its stack leaves the app, and CDK doesn't delete a
-stack the app no longer builds, so it is deleted by hand, once its
-[termination protection](/flex-platform/infrastructure/overview/#stacks) is turned off. Its log
-groups are retained, so adding the domain back later fails until they are imported into its new
-stack or deleted.
+stack the app no longer builds. So delete the stack by hand, after you turn off its
+[termination protection](/flex-platform/infrastructure/overview/#stacks). Its log groups are
+retained. If you add the domain back later, the deploy fails until the log groups are imported into
+its new stack or deleted.
 
 ### Checks
 
-Before building any stage, the app checks every domain, disabled ones included:
+Before it builds any stage, the app checks every domain, including disabled ones:
 
-- its name is 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not
-  ending with a hyphen;
-- its name is used once in its environment, across all of the environment's domain accounts,
-  since the Frontdoor routes by name alone;
-- it has the same repository, or none, wherever its stage hosts it;
-- it is hosted in the environment its own environment's `release` promotes from, if it promotes;
-- its execution role's name, `domain-<environment>-<name>-execution`, is within IAM's 64
-  characters. It is the longest of the names Lambda and IAM limit, so the others fit too. Each name
-  is within 32 alone, but the two together can pass it: together they may be 46 at most.
+- Its name is 1 to 32 lowercase letters, digits and hyphens. It starts with a letter and doesn't
+  end with a hyphen.
+- Its name is used once in its environment, across all of the environment's domain accounts. This
+  is because the Frontdoor routes by name alone.
+- It has the same repository, or none, wherever its stage hosts it.
+- If its environment's `release` promotes from another environment, the domain is hosted in that
+  environment too.
+- Its execution role's name, `domain-<environment>-<name>-execution`, is within IAM's 64
+  characters. This is the longest of the names that Lambda and IAM limit, so the others fit too.
+  The environment's name and the domain's name are each within 32 alone, but together they can
+  pass the limit. Together they may be 46 at most.
 
 ## What a domain account provides
 
 `DomainAccountStack`, `domainaccount-<environment>-<account>`, holds what every domain in a domain
-account shares in one environment. Nothing in it names a domain, so adding or removing one never
-changes it. It is in eu-west-2, the region the edge signs requests for, and has termination
-protection: deleting it would take the domains' certificate with it, and leave the account's API
-Gateway logging setting naming a deleted role.
+account shares in one environment. Nothing in it names a domain, so adding or removing a domain
+never changes it. It is in eu-west-2, the region the edge signs requests for. It has termination
+protection, because deleting it would take the domains' certificate with it. It would also leave
+the account's API Gateway logging setting naming a deleted role.
 
 | Construct | Builds |
 |---|---|
@@ -107,23 +111,25 @@ Gateway logging setting naming a deleted role.
 One wildcard certificate serves every domain because ACM limits a certificate's first name to 64
 characters. A certificate for `<domain>.<zone>` would leave a domain's name as few as 18.
 
-ACM generates the certificate's ARN, so the stack writes it to SSM, at
-`/flex/domain/<environment>/certificate-arn`, where each domain's stack reads it when it deploys. If
-the certificate is ever replaced, each domain's stack deploys with `--force` to read the new ARN,
-and CloudFormation can't delete the old certificate while a domain's custom domain still uses it.
+ACM generates the certificate's ARN, so the stack writes it to SSM at
+`/flex/domain/<environment>/certificate-arn`. Each domain's stack reads it from there when it
+deploys. If the certificate is ever replaced, deploy each domain's stack with `--force` to read the
+new ARN. CloudFormation can't delete the old certificate while a domain's custom domain still uses
+it.
 
-API Gateway's logging role has AWS's managed policy, `AmazonAPIGatewayPushToCloudWatchLogs`, so it
+API Gateway's logging role has AWS's managed policy, `AmazonAPIGatewayPushToCloudWatchLogs`. So it
 may create, write to and read any log group in the account and region. API Gateway refuses a
-logging role with less: it checks the role's effective permissions, so it refuses one scoped to the
-domains' log groups, or one denied `logs:CreateLogGroup`. Every API's log groups are created by its
-own stack instead, before its stage, so API Gateway never creates one.
+logging role with less, because it checks the role's effective permissions. It refuses a role
+scoped to the domains' log groups, and one denied `logs:CreateLogGroup`. Instead, each API's own
+stack creates its log groups before its stage, so API Gateway never creates one.
 
 ## What a domain provides
 
-`DomainStack`, `domain-<environment>-<domain>`, holds one domain's API and the host it answers at,
-and the log group and roles its function runs and is released with, in the domain account that
-hosts it, in eu-west-2. It holds no function: the API reaches the domain's function by name. A
-domain [removed from config](#disabling-a-domain) keeps its stack until someone deletes it.
+`DomainStack`, `domain-<environment>-<domain>`, holds one domain's API and the host the API answers
+at. It also holds the log group the domain's function runs with, and the roles it runs and is
+released with. The stack is in the domain account that hosts the domain, in eu-west-2. It holds no
+function: the API reaches the domain's function by name. A domain
+[removed from config](#disabling-a-domain) keeps its stack until someone deletes it.
 
 | Construct | Builds |
 |---|---|
@@ -133,25 +139,30 @@ domain [removed from config](#disabling-a-domain) keeps its stack until someone 
 | `ExecutionRole` | `domain-<environment>-<domain>-execution`, the role the domain's function runs as, and its permission boundary. See [permissions](#permissions). |
 | `DeployRole` | `domain-<environment>-<domain>-deploy`, the role a release assumes to create and update the domain's function. See [permissions](#permissions). |
 
-The stage is traced with X-Ray, logs errors, and never logs request or response bodies. Its access
-logs go to `/flex/domain/<environment>/<domain>/api-access`, one JSON line per request. Its
-execution logs go to `API-Gateway-Execution-Logs_<api id>/default`, which the stack creates before
-the stage, so it is encrypted and kept for a year, and API Gateway never creates it first. The stage has no
-throttling of its own, so it shares the account's limits.
+The stage is traced with X-Ray and logs errors. It never logs request or response bodies:
+
+- Its access logs go to `/flex/domain/<environment>/<domain>/api-access`, one JSON line per
+  request.
+- Its execution logs go to `API-Gateway-Execution-Logs_<api id>/default`. The stack creates this
+  log group before the stage, so it is encrypted and kept for a year, and API Gateway never creates
+  it first.
+
+The stage has no throttling of its own, so it shares the account's limits.
 
 ### Network
 
-Every domain runs in its domain account's [network](/flex-platform/infrastructure/network/), in
-the isolated subnets, with no route to the internet. There is no setting to change this: a domain
-reaches an upstream through a gateway, and a gateway that needs the internet has its own
-[placement](/flex-platform/reference/glossary/#placement). The network creates the `domain`
-security group a domain's function runs in, which may reach only the `lambda` endpoint: see
+Every domain runs in the isolated subnets of its domain account's
+[network](/flex-platform/infrastructure/network/), with no route to the internet. No setting
+changes this. A domain reaches an upstream through a gateway, and a gateway that needs the internet
+has its own [placement](/flex-platform/reference/glossary/#placement). The network creates the
+`domain` security group that a domain's function runs in. That group may reach only the `lambda`
+endpoint. See
 [what a workload may reach](/flex-platform/infrastructure/network/#what-a-workload-may-reach).
 
 The stack reads three of the network's
 [parameters](/flex-platform/infrastructure/network/#ids-other-stacks-read) when it deploys. It
-holds the deploy role to the first two, which the deploy role may read too, so a release places a
-function from the same values. It holds the execution role to the third:
+holds the deploy role to the first two, and the deploy role may read them too, so a release places
+a function from the same values. It holds the execution role to the third.
 
 | Parameter | Holds |
 |---|---|
@@ -159,7 +170,7 @@ function from the same values. It holds the execution role to the third:
 | `/flex/network/<environment>/security-group/domain` | The `domain` security group's ID |
 | `/flex/network/<environment>/endpoint/lambda` | The `lambda` endpoint's ID |
 
-If the network is ever replaced, the stack deploys with `--force` to read the new IDs.
+If the network is ever replaced, deploy the stack with `--force` to read the new IDs.
 
 ### Permissions
 
@@ -170,41 +181,47 @@ may:
   Any domain may call any gateway in its environment, and only gateways have that name. The stack
   takes the pattern from `gatewayAliasPattern` in `gateways/infra`, as the network's
   [`lambda` endpoint](/flex-platform/infrastructure/network/#endpoints) does;
-- write to its own domain's log group, `/flex/domain/<environment>/<domain>/function`, and use
-  its stack's key for that through CloudWatch Logs;
+- write to its own domain's log group, `/flex/domain/<environment>/<domain>/function`, and use its
+  stack's key for that through CloudWatch Logs;
 - send its traces to X-Ray;
 - create and remove the network interfaces Lambda needs to run it in the VPC.
 
 It may invoke a gateway only through the network's `lambda` endpoint. A domain's code holds the
 role's credentials, and could give them away in a response or a log line. So the role denies
-invoking any function by any other way, and the credentials invoke nothing from outside the
-network.
+invoking any function any other way, and the credentials invoke nothing from outside the network.
 
-Lambda manages those network interfaces with the role's credentials, which the function's code
-holds too. So the role denies the network interface actions to any call made from a domain's code,
-which Lambda marks with the function's ARN. Lambda's own calls carry no function's ARN, so they
-are still allowed.
+Lambda manages the network interfaces with the role's credentials, which the function's code holds
+too. So the role denies the network interface actions to any call made from a domain's code. Lambda
+marks such a call with the function's ARN. Lambda's own calls carry no function's ARN, so they are
+still allowed.
 
-No domain's role may write to another's log group, so the log group a line is in shows which
-domain wrote it. A stream's name doesn't: Lambda names each stream, but a domain's code can write
-a stream under any name.
+No domain's role may write to another domain's log group, so the log group a line is in shows which
+domain wrote it. A stream's name doesn't show this. Lambda names each stream, but a domain's code
+can write a stream under any name.
 
-The role runs code that teams outside the platform write, with that code holding its credentials.
-So it has a permission boundary that holds the same statements. Whatever policy is ever attached to
-the role, by mistake or by hand, a domain's code can do no more than the boundary allows. The deploy
-role has none: it runs no one's code, and its denies already hold whatever else it is ever allowed.
+The role runs code that teams outside the platform write, and that code holds the role's
+credentials. So the role has a permission boundary that holds the same statements. Whatever policy
+is ever attached to the role, by mistake or by hand, a domain's code can do no more than the
+boundary allows. The deploy role has no boundary. It runs no one's code, and its denies already
+hold whatever else it is ever allowed.
 
-Each domain has a deploy role too, `domain-<environment>-<domain>-deploy`. Only the stage's
-release worker may assume it. The role trusts the stage's shared account, on the condition that
-the caller is the worker's role, `shared-release-worker`: IAM refuses a principal that doesn't
-exist yet, so the trust names the role by a condition. It may create,
-configure, release and read only its domain's function, with the function's versions and aliases,
-read the two network parameters above, describe the network Lambda checks a function's placement
-against, read its own domain's bundles in the [code bucket](#uploading-a-bundle), and pass only its
-domain's execution role, only to Lambda. Lambda reads the bundle a function is created or updated
-from as the caller, so the role must be able to read it. The bucket lets every deploy role read any
-bundle, so the role's own policy is what holds a release to its domain's code. So no release can
-give a function another domain's role, and with it another domain's log group. It denies:
+Each domain has a deploy role too, `domain-<environment>-<domain>-deploy`. Only the stage's release
+worker may assume it. The role trusts the stage's shared account, on the condition that the caller
+is the worker's role, `shared-release-worker`. The trust names the role by a condition because IAM
+refuses a principal that doesn't exist yet. The deploy role may:
+
+- create, configure, release and read only its domain's function, with the function's versions and
+  aliases;
+- read the two network parameters above;
+- describe the network that Lambda checks a function's placement against;
+- read its own domain's bundles in the [code bucket](#uploading-a-bundle);
+- pass only its domain's execution role, and only to Lambda.
+
+Lambda reads the bundle a function is created or updated from as the caller, so the role must be
+able to read it. The bucket lets every deploy role read any bundle, so the role's own policy is
+what holds a release to its domain's code. Because the role may pass only its domain's execution
+role, no release can give a function another domain's role, and with it another domain's log
+group. The role denies:
 
 - every Lambda action on any function named `gateway-<environment>-*`;
 - creating or configuring a domain's function with no VPC, in any subnet but the isolated ones, or
@@ -215,55 +232,57 @@ the platform places it.
 
 ### Who can call it
 
-Every method uses IAM authorisation, and synth fails for any API Gateway method in the app without
-it: see [checks](/flex-platform/infrastructure/overview/#checks). The Frontdoor signs each request
-with SigV4 as its edge role. The resource policy allows the Frontdoor's account only when the
-caller is that role, and denies everyone else, so a principal in the domain account with
-permission to invoke APIs is refused too.
+Every method uses IAM authorisation. Synth fails for any API Gateway method in the app without it.
+See [checks](/flex-platform/infrastructure/overview/#checks). The Frontdoor signs each request with
+SigV4 as its edge role. The resource policy allows the Frontdoor's account only if the caller is
+that role, and denies everyone else. So it refuses even a principal in the domain account that has
+permission to invoke APIs.
 
 The policy names the role in a condition, never as a principal, because API Gateway refuses a
 policy that names a role that doesn't exist yet.
 
 ### Watching refusals
 
-Each API counts IAM authorisation's refusals from its access log's `errorResponseType`, in the
-namespace `flex/domain/<environment>/<domain>/api`, and alarms when they are sustained:
+Each API counts the refusals IAM authorisation makes, and alarms when they are sustained. It counts
+them from its access log's `errorResponseType`, in the namespace
+`flex/domain/<environment>/<domain>/api`:
 
 | Metric | Counts | Alarm | Goes off at |
 |---|---|---|---|
 | `bypass-attempts` | `MISSING_AUTHENTICATION_TOKEN` and `ACCESS_DENIED`: a request sent unsigned, or signed by anyone but the edge role | `domain-<environment>-<domain>-api-bypass-attempts` | 10 or more in each of three five-minute periods in a row |
 | `signing-faults` | `INVALID_SIGNATURE` and `EXPIRED_TOKEN`: a signature that doesn't verify | `domain-<environment>-<domain>-api-signing-faults` | 1 or more in each of three five-minute periods in a row |
 
-The host is in a public zone, so scanners find it, and the bypass alarm is set above that
-background. A fault in the edge's signing refuses every request the edge sends, so any sustained
-count of signing faults is one.
+The host is in a public zone, so scanners find it. The bypass alarm is set above that background.
+A fault in the edge's signing refuses every request the edge sends, so any sustained count of
+signing faults is a fault.
 
 The metrics divide refusals by type, not by who sent them. A direct caller can send a signature
-that doesn't verify, which counts as a signing fault, and the edge role refused by a mistake in
-the resource policy counts as a bypass attempt. The alarms have no action until the platform has
-alerting, so they notify no one: someone has to look at them.
+that doesn't verify, which counts as a signing fault. If a mistake in the resource policy refuses
+the edge role, that counts as a bypass attempt. The alarms have no action until the platform has
+alerting, so they notify no one. Someone has to look at them.
 
 ### Investigating an origin refusal alarm
 
 1. In Logs Insights, query `/flex/domain/<environment>/<domain>/api-access` for the alarm's
    `errorResponseType` values in its period. Note when they started and how many there were.
-2. For signing faults, check whether requests through the Frontdoor are failing too: the
-   Frontdoor answers them with `x-rejected-by: api-gateway`, and
+2. For signing faults, check whether requests through the Frontdoor are failing too. The Frontdoor
+   answers them with `x-rejected-by: api-gateway`. At the same time,
    `/flex/frontdoor/<environment>/origin-request`, in the frontdoor account in eu-west-2, logs
-   `origin_request_forwarded` for them at the same time. If so, the edge's signing is broken. Look
-   for a recent change to the edge function, its role or this API, and roll it back. If Frontdoor
-   traffic is being served, the signatures are someone else's: treat them as bypass attempts.
-3. For bypass attempts, check first whether requests through the Frontdoor are refused too: a 403
-   `auth_error` with `x-rejected-by: api-gateway`, while the edge logs `origin_request_forwarded`.
-   If so, the API's resource policy no longer allows the edge role: check the domain's stack for
-   drift, and deploy it again. Otherwise, judge the volume and pattern. A scanner's requests are
-   few and spread out. A sustained stream of requests, signed especially, is a security incident.
-   Escalate it with the log lines as evidence.
+   `origin_request_forwarded` for them. If so, the edge's signing is broken. Look for a recent
+   change to the edge function, its role or this API, and roll it back. If the Frontdoor's traffic
+   is being served, the signatures are someone else's. Treat them as bypass attempts.
+3. For bypass attempts, first check whether requests through the Frontdoor are refused too. They
+   get a 403 `auth_error` with `x-rejected-by: api-gateway`, while the edge logs
+   `origin_request_forwarded`. If so, the API's resource policy no longer allows the edge role.
+   Check the domain's stack for drift, and deploy it again. Otherwise, judge the volume and
+   pattern. A scanner's requests are few and spread out. A sustained stream of requests,
+   especially signed ones, is a security incident. Escalate it with the log lines as evidence.
 
 ### Errors
 
-When API Gateway refuses a request itself, it answers in the same shape as the Frontdoor, with
-`x-rejected-by: api-gateway`, as the Frontdoor's own refusals name the part that refused:
+When API Gateway refuses a request itself, it answers in the same shape as the Frontdoor. It adds
+`x-rejected-by: api-gateway`, in the same way that the Frontdoor's own refusals name the part that
+refused:
 
 | Response | Status | Body |
 |---|---|---|
@@ -277,32 +296,39 @@ A response from the domain's own code passes through unchanged.
 ### TLS
 
 The custom domain uses `SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09` in `STRICT` mode. It offers
-TLS 1.3 and still accepts TLS 1.2 with forward secrecy. Only CloudFront reaches the host, over
-IPv4, so it has one A record.
+TLS 1.3, and still accepts TLS 1.2 with forward secrecy. Only CloudFront reaches the host, over
+IPv4, so the host has one A record.
 
 ## Routing a request
 
-The domain's API answers every path and method under the domain's root, with `ANY` on `/` and on
-`/{proxy+}`, and passes each request to the domain's function unchanged. The API checks that the
-Frontdoor signed the request, and nothing about the path, method or body. The domain's code decides
-which routes exist and how each is handled, and answers anything else itself, such as with a 404.
+The domain's API answers every path and method under the domain's root, and passes each request to
+the domain's function unchanged. It has `ANY` methods on `/` and on `/{proxy+}`. The API checks that
+the Frontdoor signed the request, and nothing about the path, method or body. The domain's code
+decides which routes exist and how it handles each. It answers anything else itself, such as with a
+404. So a domain adds or changes a route by releasing its code. No change to the platform's config
+or stacks is needed.
 
-Two paths never reach a domain: `/ping` and `/sping`, at its root. API Gateway keeps both for its
-own health check at the root of a custom domain name, and answers them itself, without checking a
+Two paths at a domain's root never reach it: `/ping` and `/sping`. API Gateway keeps both for its
+own health check at the root of a custom domain name. It answers them itself, without checking a
 signature or running the domain's code. So the Frontdoor answers `/app/<domain>/ping` and
-`/app/<domain>/sping` with its own 404, and a domain names such a route something else, or puts it
-under another segment, such as `/v1/ping`.
+`/app/<domain>/sping` with its own 404. Give such a route another name, or put it under another
+segment, such as `/v1/ping`.
 
-So a domain adds or changes a route by releasing its code. No change to the platform's config or
-stacks is needed.
+The API invokes the function's `live` alias through a role of its own, by an ARN built from the
+function's name. The role has these limits:
 
-The API invokes the function's `live` alias, by an ARN built from the function's name, through a
-role of its own. Only API Gateway may assume the role, only a principal in the domain account can
-set it on an API, and it may invoke only that domain's `live` alias. The role's trust carries no
-`aws:SourceAccount` condition: API Gateway sends none when it assumes an integration's role, so the
-condition would refuse every request. So the function needs no resource policy, and a function
-created again under the same name needs nothing added. Each release publishes a function version
-and moves `live` to it, so the API reaches only code that was deliberately released. Until the first release there is no `live`, and the API answers 500.
+- Only API Gateway may assume it.
+- Only a principal in the domain account can set it on an API.
+- It may invoke only that domain's `live` alias.
+
+The role's trust carries no `aws:SourceAccount` condition. API Gateway sends none when it assumes
+an integration's role, so the condition would refuse every request. Because the API invokes through
+this role, the function needs no resource policy. A function created again under the same name
+needs nothing added.
+
+Each release publishes a function version and moves `live` to it, so the API reaches only code
+that was deliberately released. Until the first release there is no `live`, and the API answers
+with a 500.
 
 ## The domain's function
 
@@ -311,92 +337,112 @@ The function is named `domain-<environment>-<name>`, built by `domainFunctionNam
 
 ## Releasing a domain's function
 
-A domain's code is uploaded once, as a bundle, and released from the bucket it is kept in. Config
-says which way code reaches each environment, in its `release`: `"publish"` where new code enters
-the stage, or `{ promoteFrom }`, naming the environment whose released code it takes. In
-platform-prod, `development` publishes, `staging` promotes from `development`, and `production`
-from `staging`. The repository a domain's definition names is the only one that can
-release it.
+A domain's code is uploaded once, as a bundle, and released from the bucket that keeps it. Each
+environment's `release` in config says how code reaches that environment:
 
-Where an environment publishes, the domain's pipeline [uploads a bundle](#uploading-a-bundle)
-and then [asks for its release](#releasing-a-bundle), both through the
-[pipeline API](#the-pipeline-api). Promotion, which takes released code from one environment to
-the next, is planned.
+- `"publish"`, if new code enters the stage there;
+- `{ promoteFrom }`, naming the environment whose released code it takes.
+
+In platform-prod, `development` publishes, `staging` promotes from `development`, and `production`
+promotes from `staging`. Only the repository that a domain's definition names can release it.
+
+In an environment that publishes, the domain's pipeline [uploads a bundle](#uploading-a-bundle) and
+then [asks for its release](#releasing-a-bundle). It does both through the
+[pipeline API](#the-pipeline-api). Promotion, which takes released code from one environment to the
+next, is planned.
 
 ### The release worker
 
-A function in the shared account, `shared-release-worker`, does each release, so the pipeline API
-can answer one at once. A first release creates a function in a VPC, which Lambda can take
-minutes to make ready. The API puts each release on a FIFO queue, `shared-release.fifo`, grouped
-by environment and domain, so one domain's releases there run one at a time, in the order they
-were asked for, and other domains' run alongside. The worker and the queue are built by
-`ReleaseWorker` in `shared/infra`, and its code is in `shared/release`.
+A function in the shared account, `shared-release-worker`, does each release, so that the pipeline
+API can answer at once. A first release creates a function in a VPC, which Lambda can take minutes
+to make ready.
+
+The API puts each release on a FIFO queue, `shared-release.fifo`, grouped by environment and
+domain. So one domain's releases in an environment run one at a time, in the order they were asked
+for, while other domains' releases run alongside. `ReleaseWorker` in `shared/infra` builds the
+worker and the queue, and the worker's code is in `shared/release`.
 
 #### The release table
 
-The API records each release in a DynamoDB table, `shared-releases`, before it queues it, and the
-worker records how it went. A release is kept under its domain in its environment, partition key
-`target` (`<environment>/<domain>`), by its ID, sort key `id`. The ID is a UUID of version 7,
-whose first 48 bits are the time the API made it, so the IDs sort in the order releases were
-asked for, and a domain's releases list newest first. Each holds:
+The release table is the record of each release request and how it went. The API records each
+release in a DynamoDB table, `shared-releases`, before it queues it. The worker then records how
+the release went.
+
+Each release is kept under its domain in its environment, with partition key `target`
+(`<environment>/<domain>`), and by its ID, with sort key `id`. The ID is a version 7 UUID. Its first
+48 bits are the time the API made it. So the IDs sort in the order the releases were asked for, and
+a domain's releases list newest first. Each release holds:
 
 | Attribute | Holds |
 |---|---|
 | `environment`, `domain`, `version`, `sha256`, `versionId` | What was asked for: the [version](#versions), the bundle it names by its hash, and the S3 version of its object |
-| `runId`, `commit` | The run that asked, and its commit, when its token said |
+| `runId`, `commit` | The run that asked, and its commit, if its token held them |
 | `status` | `queued`, `releasing`, `released`, `failed`, `refused` or `abandoned` |
 | `requestedAt`, `updatedAt` | When the API recorded it, and when it last changed, in milliseconds |
 | `attempts` | How many times the worker has claimed it |
 | `step`, `reason` | For a release that stopped: the step, and a fixed code for why |
 | `functionVersion`, `created`, `moved` | For a release that succeeded: the function version `live` points at, and whether the release created the function and moved `live` |
 
-`failed` will be tried again. `refused` never will be: nothing about the release would change.
-`abandoned` was tried as often as the queue tries, and won't be again: the pipeline asks again.
-`released` and `refused` are final. `abandoned` isn't, because the worker still runs a release
-its queue gives it (see [the dead-letter worker](#the-dead-letter-worker)). The table is the
-record of each request and how it went.
-What is deployed is Lambda's to say: the worker reads it at each step, and the table follows it.
-The table is retained, with point-in-time recovery, and deletion protection is on.
+What the statuses mean for another attempt:
+
+- `failed` will be tried again.
+- `refused` never will be, because nothing about the release would change.
+- `abandoned` was tried as often as the queue tries, and won't be tried again. The pipeline asks
+  again instead.
+
+`released` and `refused` are final. `abandoned` isn't, because the worker still runs a release its
+queue gives it. See [the dead-letter worker](#the-dead-letter-worker).
+
+Lambda, not the table, says what is deployed. The worker reads Lambda at each step, and the table
+follows it. The table is retained, with point-in-time recovery, and has deletion protection on.
 
 #### Who can ask for a release
 
-Only the pipeline API, for a pipeline it has [allowed](#what-the-api-checks). Anything that IAM
-lets invoke the worker can write its event, and a function's own policy holds no deny that could
-refuse it. So a message holds only a release's key, its environment, domain and ID, and the
-worker releases what the table records under it:
+Only the pipeline API can ask, for a pipeline it has [allowed](#what-the-api-checks). But anything
+that IAM lets invoke the worker can write its event, and a function's own policy holds no deny that
+could refuse it. So a message holds only a release's key: its environment, domain and ID. The
+worker releases what the table records under that key. Three rules hold this together:
 
 - **Only the API records a release, and nothing changes what it asked for.** The table's
-  [policy](/flex-platform/infrastructure/overview/#a-tables-policy) denies the API's role,
-  `shared-ci`, everything but getting, putting and updating an item, the workers' roles,
-  `shared-release-worker` and `shared-release-dead-letter-worker`, everything but getting and
-  updating one, and anyone else everything but managing the table. So nothing deletes a release.
-  It also denies, to every principal, an update that names `environment`, `domain`, `version`,
-  `sha256`, `versionId`, `runId`, `commit` or `requestedAt`. So no writer can point a release at
-  another domain or another bundle, and an update that makes an item makes one with none of them,
-  which isn't a release. A message that names no release in the table is logged and dropped.
-- **A final release isn't run again.** Before each attempt, the worker claims the release: it
-  marks it `releasing` and counts the attempt, unless it is final. So a message sent again,
-  however it was got, runs nothing that is released or refused. Any other release may be tried
-  again, even while an attempt runs: every step reads Lambda before it acts, so an attempt at what
-  is done changes nothing, and Lambda refuses a change to a function it is still changing.
+  [policy](/flex-platform/infrastructure/overview/#a-tables-policy) denies:
+  - the API's role, `shared-ci`, everything but getting, putting and updating an item;
+  - the workers' roles, `shared-release-worker` and `shared-release-dead-letter-worker`, everything
+    but getting and updating an item;
+  - anyone else everything but managing the table.
+
+  So nothing deletes a release. The policy also denies, to every principal, an update that names
+  `environment`, `domain`, `version`, `sha256`, `versionId`, `runId`, `commit` or `requestedAt`.
+  So no writer can point a release at another domain or another bundle. If an update creates an
+  item, the item has none of those attributes, so it isn't a release. The worker logs and drops a
+  message that names no release in the table.
+- **A final release isn't run again.** Before each attempt, the worker claims the release. It marks
+  it `releasing` and counts the attempt, unless the release is final. So a repeated message, however
+  it was sent, runs nothing that is released or refused. Any other release may be tried again, even
+  while an attempt runs. Every step reads Lambda before it acts, so an attempt at something already
+  done changes nothing. Lambda also refuses a change to a function it is still changing.
 - **The queue takes messages only from the API, and gives them only to the worker.** Its policy
-  denies, to every principal, sending a message unless it is `shared-ci`'s role, taking one
-  unless it is `shared-release-worker`'s, purging the queue, and moving messages out of either
-  queue. Only the release queue may use the dead-letter queue, and no principal may send to it:
-  SQS moves a message there itself.
+  denies, to every principal:
+  - sending a message, unless the principal is `shared-ci`'s role;
+  - taking a message, unless the principal is `shared-release-worker`'s role;
+  - purging the queue;
+  - moving messages out of either queue.
+
+  Only the release queue may use the dead-letter queue, and no principal may send to it. SQS moves
+  a message there itself.
 
 No release from a pipeline can roll a domain back. See [the order of releases](#the-order-of-releases).
 
 #### The order of releases
 
-`live`'s description names the release that set it and its version:
+The worker refuses a release that would put `live` behind where it already is. To know where `live`
+is, it reads the alias's description, which names the release that set it and its version:
 
 ```
 Set by release <release ID> at version <version>
 ```
 
-The worker reads it before anything changes, and again just before it moves `live`, in case
-another release moved it meanwhile. The first rule that applies decides:
+The worker reads the description before anything changes. It reads it again just before it moves
+`live`, in case another release moved it in the meantime. The first rule that applies decides:
 
 | `live` | The release |
 |---|---|
@@ -406,68 +452,69 @@ another release moved it meanwhile. The first rule that applies decides:
 | Holds the same version | Runs. The bundle is the same, so Lambda publishes nothing new unless the configuration the platform sets has changed, and `live` moves only if the function version did. This is how a change to what the platform sets reaches the code already on `live`. |
 | Holds an earlier version, or none | Runs. |
 
-"Asked for later" compares the time in each release's ID, to the millisecond, and no further. Two
-releases asked for in the same millisecond are in no order, since the rest of each ID is random,
-so neither refuses the other, and the queue's order decides.
+"Asked for later" compares the time in each release's ID, to the millisecond and no further. The
+rest of each ID is random. So two releases asked for in the same millisecond are in no order,
+neither refuses the other, and the queue's order decides.
 
 The two rules guard different things. The version holds a pipeline to the domain's order, so a
-release of `1.2.0` that runs after `1.2.1` landed changes nothing. The time stops a release
-asked for before another landed from running after it, which matters once something other than a
-pipeline release, such as a rollback, can put an earlier version on `live`.
+release of `1.2.0` that runs after `1.2.1` landed changes nothing. The time stops a release that
+was asked for before another landed from running after it. This matters once something other than
+a pipeline release, such as a rollback, can put an earlier version on `live`.
 
-A domain's releases in an environment run one at a time, in the order they were asked for, and a
-release that fails holds the ones after it until it succeeds or is given up. So `1.2.0` then
-`1.2.1`, with `1.2.0` failing, runs `1.2.0` until it succeeds or is given up, then `1.2.1`. The
-rules are for a release that comes back once a later one is live, such as one
-[given up](#the-dead-letter-worker) and then named again by an event the queue didn't send.
+A domain's releases in an environment run one at a time, in the order they were asked for. A
+release that fails holds back the ones after it until it succeeds or is given up. For example, if
+`1.2.0` then `1.2.1` are asked for and `1.2.0` fails, the worker runs `1.2.0` until it succeeds or
+is given up, and only then `1.2.1`. So the rules are for a release that comes back once a later one
+is live. One example is a release that was [given up](#the-dead-letter-worker) and then named again
+by an event the queue didn't send.
 
-A superseded release is final. Its version stays in the [artefacts table](#the-artefacts-table)
-and its bundle in the bucket, so the version could be put on `live` again by a rollback, which is
-planned.
+A superseded release is final. Its version stays in the [artefacts table](#the-artefacts-table) and
+its bundle stays in the bucket. So a rollback, which is planned, could put the version on `live`
+again.
 
-A description in any other form refuses nothing: every `live` alias set before releases had
-versions, and any written by hand. Anything that could rewrite the description, with
-`lambda:UpdateAlias` in the domain's account, could point `live` at any function version anyway,
-so refusing such an alias would protect against nobody and stop the domain releasing.
+A description in any other form refuses nothing. This covers every `live` alias set before releases
+had versions, and any description written by hand. Anyone who could rewrite the description, with
+`lambda:UpdateAlias` in the domain's account, could point `live` at any function version anyway. So
+refusing such an alias would protect against nobody, and would stop the domain releasing.
 
 A domain's pipeline should still release one at a time in each environment, with a GitHub
-`concurrency` group: a late release of an earlier version is refused, but it was still a wasted
-release. A version released by mistake, such as `99.0.0`, refuses every earlier version from the
-pipeline until a later one is released.
+`concurrency` group. A late release of an earlier version is refused, but it is still a wasted
+release. A version released by mistake, such as `99.0.0`, makes the worker refuse every earlier
+version from the pipeline until a later one is released.
 
 #### What a release does
 
 For each release it claims, the worker:
 
-1. **Assumes the domain's deploy role** in the domain account, and reads `live`. A release `live`
-   already names is done: the worker records it `released`, with `live`'s function version, and
-   changes nothing. A release `live` is ahead of is refused, by
+1. **Assumes the domain's deploy role** in the domain account, and reads `live`. If `live` already
+   names the release, the release is done. The worker records it `released`, with `live`'s function
+   version, and changes nothing. If `live` is ahead of the release, the worker refuses it, by
    [the order of releases](#the-order-of-releases).
-2. **Checks the bundle.** It reads the S3 version of the bundle's object the API found, in full,
-   and hashes it. The key names the bundle's hash, so an object with any other is refused before
-   anything is made of it. It reads the isolated subnets and the `domain` security group from the
-   network's parameters, as the role.
-3. **Creates the function,** the first time, and waits until it is active. Otherwise it waits
-   while Lambda is making or changing the function, then updates its configuration, waits,
-   updates its code and waits again. Lambda refuses a change to a function it is still changing.
-   It updates the function whatever state it settles in: an update reactivates one idle long
-   enough to be `Inactive`, and may mend one that `Failed`.
-4. **Checks the code Lambda loaded.** Lambda's hash of the code, in base64, must be the bundle's,
-   in hex, compared as bytes.
-5. **Publishes a function version,** if the code still has that hash, and waits until it is
-   active. A function version's description names the bundle and the commit it was built from. A
-   function whose code and configuration haven't changed since its last function version gets
-   that function version back, so its description names the bundle and commit it was first
+2. **Checks the bundle.** It reads the S3 version of the bundle's object that the API found, in
+   full, and hashes it. The key names the bundle's hash. So the worker refuses an object with any
+   other hash before it makes anything from it. As the deploy role, it also reads the isolated
+   subnets and the `domain` security group from the network's parameters.
+3. **Creates the function** the first time, and waits until it is active. Otherwise, it waits
+   while Lambda is making or changing the function. Then it updates the function's configuration,
+   waits, updates its code and waits again. Lambda refuses a change to a function it is still
+   changing. The worker updates the function whatever state it settles in. An update reactivates
+   a function that was idle long enough to become `Inactive`, and may mend one that `Failed`.
+4. **Checks the code Lambda loaded.** Lambda's hash of the code, in base64, must match the
+   bundle's, in hex, compared as bytes.
+5. **Publishes a function version,** if the code still has that hash, and waits until it is active.
+   A function version's description names the bundle and the commit it was built from. If the
+   function's code and configuration haven't changed since its last function version, Lambda
+   returns that function version. Its description then names the bundle and commit it was first
    published for.
-6. **Points `live` at the function version,** creating the alias the first time, and names the
-   release and its version in its description. Otherwise it checks the order again, and moves the
-   alias only from the revision it read, so a change made since is never overwritten.
+6. **Points `live` at the function version.** It creates the alias the first time, and names the
+   release and its version in the alias's description. Otherwise, it checks the order again, and
+   moves the alias only from the revision it read. So it never overwrites a change made since.
 
 Nothing reaches the new code until the last step.
 
-An attempt has 15 minutes, the worker's timeout. Its waits share them, less 30 seconds kept back to
-move `live` and record how the attempt went, so a first create in a VPC, which Lambda can take
-minutes to make ready, can use most of them. A wait that runs out fails the attempt.
+An attempt has 15 minutes, the worker's timeout. Its waits share that time, less 30 seconds kept
+back to move `live` and record how the attempt went. So a first create in a VPC, which Lambda can
+take minutes to make ready, can use most of it. A wait that runs out fails the attempt.
 
 A release sets the function's:
 
@@ -476,230 +523,273 @@ A release sets the function's:
 - isolated subnets and `domain` security group. The deploy role refuses a configuration with no
   VPC, so a release sends them with every configuration update;
 - logging, to `/flex/domain/<environment>/<name>/function`;
-- `FLEX_ENVIRONMENT`, the environment's name, which the code uses only to build names, such as a
+- `FLEX_ENVIRONMENT`, the environment's name. The code uses it only to build names, such as a
   gateway's function name, and never to choose what it does;
 - tracing, active, so Lambda sends its traces to X-Ray;
 - runtime, `nodejs26.x`, on arm64, with the handler `index.handler`, 1,024 MB of memory and a
-  29-second timeout. A domain doesn't choose these. The timeout is how long the domain's API
-  waits for the function, so a function never runs on after no one is waiting;
+  29-second timeout. A domain doesn't choose these. The timeout is how long the domain's API waits
+  for the function, so a function never runs on after no one is waiting;
 - code, the bundle's object by its S3 version. Lambda reads the code from the bucket in place and
-  keeps no copy, so the bucket [lets Lambda read it](#uploading-a-bundle) for as long as the
-  function has it.
+  keeps no copy. So the bucket [lets Lambda read it](#uploading-a-bundle) for as long as the
+  function uses it.
 
-The deploy role enforces the function's name, role and network, but not its logging,
+The deploy role enforces the function's name, role and network. It doesn't enforce its logging,
 environment or tracing, which only the release sets. A release that set another log group would
-lose the function's logs, since its role may write to no other.
+lose the function's logs, because the function's role may write to no other.
 
-The worker records how each release went in the table. A release that fails with something that
-might go differently next time, such as an AWS error, is recorded `failed` and given back to the
-queue, which delivers it again after 20 minutes. After three attempts it is moved to the
-dead-letter queue, `shared-release-dead-letter.fifo`, where the
-[dead-letter worker](#the-dead-letter-worker) gives it up. A release that can never succeed, such
-as a bundle whose bytes aren't what its key says, or a release `live` is ahead of, is recorded
-`refused` and dropped.
+The worker records how each release went in the table:
 
-The worker records each outcome before it lets the message go, and only over the claim it made,
-so it never overwrites what another writer recorded since. `released` is the exception: Lambda
-says what is live, so it is recorded over anything but `released`. A worker that stops before it
-finishes, by running out of time or memory, records nothing: the release stays `releasing`, and
-the queue delivers the message again after 20 minutes, to an attempt that picks up where Lambda
-shows the last one stopped.
+| Outcome | Recorded | What happens next |
+|---|---|---|
+| A failure that might go differently next time, such as an AWS error | `failed` | The worker gives the message back to the queue, which delivers it again after 20 minutes. |
+| Three failed attempts | | The queue moves the message to the dead-letter queue, `shared-release-dead-letter.fifo`, where the [dead-letter worker](#the-dead-letter-worker) gives it up. |
+| A release that can never succeed, such as a bundle whose bytes aren't what its key says, or a release `live` is ahead of | `refused` | The worker drops the message. |
 
-The worker writes one log line for each attempt at a release, to `/flex/shared/release-worker`:
-what happened as a fixed code, the queue's ID for the message, how long it took, and, once the
-table holds the release, its ID, the environment, the domain, the version, the bundle's hash,
-GitHub's ID for the run and the commit. A release that stopped adds the step and a reason: AWS's code for the
-error, such as `AccessDeniedException`, or Lambda's for a function that won't become ready, such
-as `SubnetOutOfIPAddresses`, never a message. A release that succeeded adds the function
-version, and whether it created the function and moved `live`. A superseded release is logged as
-`release_superseded`, at `INFO`, since a domain that releases quickly will see it, and every
-other refusal as `release_refused`, at `ERROR`.
+The worker records each outcome before it lets the message go. It records only over the claim it
+made, so it never overwrites what another writer recorded since. `released` is the exception.
+Lambda says what is live, so the worker records `released` over anything but `released`.
 
-The worker is built with each domain it may release, and everything a release of it names, by
-`buildReleaseWorker` when the stage is synthesized: every domain with a repository, in each
-environment that publishes. Its role may take the queue's messages, read and change a release in
-the table, read bundles, and assume those domains' deploy roles, and nothing else.
+A worker that stops before it finishes, by running out of time or memory, records nothing. The
+release stays `releasing`. The queue delivers the message again after 20 minutes, and the next
+attempt picks up where Lambda shows the last one stopped.
+
+The worker writes one log line for each attempt at a release, to `/flex/shared/release-worker`. The
+line holds:
+
+- what happened, as a fixed code;
+- the queue's ID for the message;
+- how long the attempt took;
+- once the table holds the release: its ID, the environment, the domain, the version, the bundle's
+  hash, GitHub's ID for the run and the commit.
+
+A release that stopped adds the step and a reason. The reason is AWS's code for the error, such as
+`AccessDeniedException`, or Lambda's code for a function that won't become ready, such as
+`SubnetOutOfIPAddresses`. It is never a message. A release that succeeded adds the function
+version, and whether the release created the function and moved `live`. The worker logs a
+superseded release as `release_superseded`, at `INFO`, because a domain that releases quickly will
+see it. It logs every other refusal as `release_refused`, at `ERROR`.
+
+`buildReleaseWorker` builds the worker when the stage is synthesized. It builds it with each domain
+the worker may release, and everything a release of that domain names. These are every domain with
+a repository, in each environment that publishes. The worker's role may take the queue's messages,
+read and change a release in the table, read bundles, and assume those domains' deploy roles. It
+may do nothing else.
 
 ### The dead-letter worker
 
-A function of its own, `shared-release-dead-letter-worker`, reads the dead-letter queue, so the
-release table says when no more attempts are coming. The release worker can't say so itself: an
-attempt that stopped with its function recorded nothing. For each message, it reads the release
-and, unless it is final or given up already, records it `abandoned`, keeping the step and reason
-its last attempt stopped at. It logs `release_abandoned` with how many attempts there were. A
-release final or given up already is left as it is. An attempt still running may yet release it:
-Lambda says what is live, so the worker records `released` over `abandoned`.
+A function of its own, `shared-release-dead-letter-worker`, reads the dead-letter queue, so that
+the release table says when no more attempts are coming. The release worker can't say so itself,
+because an attempt that stopped with its function recorded nothing.
+
+For each message, the dead-letter worker reads the release. Unless the release is final or given up
+already, it records it `abandoned`, and keeps the step and reason its last attempt stopped at. It
+logs `release_abandoned` with how many attempts there were. It leaves a release that is final or
+given up already as it is. An attempt that is still running may yet release it. Lambda says what is
+live, so the release worker records `released` over `abandoned`.
 
 Anything that IAM lets invoke the function can write its event, and nothing in an event shows that
 the queue gave the release up. So `abandoned` isn't final: the release worker still claims and runs
-a release its queue gives it. A release given up by an event the queue didn't send is still run, and
-the alarm is all that shows it was given up. A message the queue really moves to the dead-letter
-queue never returns to the release queue, since no principal may move one back.
+a release its queue gives it. If an event the queue didn't send gives a release up, the release is
+still run, and the alarm is all that shows it was given up. A message that the queue really moves
+to the dead-letter queue never returns to the release queue, because no principal may move one
+back.
 
-It records first and lets the message go after. Lambda deletes a message only once the function
-returns without giving it back, so a function that stops between the two leaves the message to
-come again, and the second time finds the release already `abandoned`. A message it can't
-record, because the table failed, it gives back, and logs `release_failed` at the step `abandon`.
-The dead-letter queue has no queue behind it: such a message comes again every two minutes, until
-it is recorded or the queue drops it after 14 days.
+The dead-letter worker records first and lets the message go after. Lambda deletes a message only
+once the function returns without giving it back. So if the function stops between the two, the
+message comes again, and the second time the worker finds the release already `abandoned`. If the
+table fails and the worker can't record a message, it gives the message back, and logs
+`release_failed` at the step `abandon`. The dead-letter queue has no queue behind it. So such a
+message comes again every two minutes, until the worker records it or the queue drops it after 14
+days.
 
-It is a separate function from the release worker so that it needs none of the worker's access.
-Its role may take the dead-letter queue's messages and read and change a release, and nothing
-else, and the queue's policy denies taking a message to every other role. It has a 30-second
-timeout. Lambda holds a queue's visibility timeout to at least its reader's timeout, so the
-dead-letter queue's can be two minutes, rather than the release worker's 20. It is built by
-`ReleaseDeadLetterWorker` in `shared/infra`, and logs to `/flex/shared/release-dead-letter-worker`.
+It is a separate function from the release worker, so that it needs none of the release worker's
+access. Its role may take the dead-letter queue's messages and read and change a release, and
+nothing else. The queue's policy denies taking a message to every other role. It has a 30-second
+timeout. Lambda holds a queue's visibility timeout to at least its reader's timeout. So the
+dead-letter queue's can be two minutes, rather than the release worker's 20.
+`ReleaseDeadLetterWorker` in `shared/infra` builds it, and it logs to
+`/flex/shared/release-dead-letter-worker`.
+
+| Timing | Value |
+|---|---|
+| Release worker's timeout, for each attempt | 15 minutes, less 30 seconds kept back |
+| Release queue's redelivery | after 20 minutes |
+| Attempts before the dead-letter queue | 3 |
+| Dead-letter worker's timeout | 30 seconds |
+| Dead-letter queue's redelivery | every two minutes |
+| Dead-letter queue's retention | 14 days |
 
 #### When a release is abandoned
 
-Two alarms watch the dead-letter worker's log, with no action until the platform has alerting.
-Each counts lines of one event into the namespace `flex/shared/release`, and goes off on any in
-five minutes:
+Two alarms watch the dead-letter worker's log. They have no action until the platform has alerting.
+Each counts lines of one event into the namespace `flex/shared/release`, and goes off on any line
+in five minutes:
 
 | Alarm | Goes off on | Means |
 |---|---|---|
 | `shared-release-abandoned` | `release_abandoned` | A release was given up. The table holds the step and reason its last attempt stopped at, and the release worker's log, `/flex/shared/release-worker`, has each attempt under the release's ID. |
 | `shared-release-abandon-failed` | `release_failed` | A release couldn't be recorded as given up, so the table still says it may be tried. Its message is going round the dead-letter queue. |
 
-The pipeline that asked sees `abandoned` and can ask again, once whatever stopped the release is
-put right.
+The pipeline that asked sees `abandoned`. It can ask again once whatever stopped the release is put
+right.
 
 ### The pipeline API
 
-A domain's pipeline uploads and releases its code through an API of the platform's, never
-through AWS itself, so it holds no AWS credentials. The API answers under `/ci`, at the apex of
-the stage's shared zone, behind a CloudFront distribution of its own.
+A domain's pipeline uploads and releases its code through an API of the platform's, never through
+AWS itself, so it holds no AWS credentials. The API answers under `/ci`, at the apex of the stage's
+shared zone, behind a CloudFront distribution of its own.
 
-A job proves which repository it runs in with the token GitHub issues it, asked for with the
-API's address, `https://<shared zone>/ci`, as its audience. It sends the token alone as
-`x-flex-ci-token`, and not as `Authorization`: CloudFront signs each request for the API, and
-that header holds its signature.
+A job proves which repository it runs in with the token GitHub issues it. The job asks for the
+token with the API's address, `https://<shared zone>/ci`, as its audience. It sends the token alone
+as `x-flex-ci-token`, not as `Authorization`. This is because CloudFront signs each request for the
+API, and that header holds CloudFront's signature.
 
 #### The distribution
 
-Each stage has one, in its shared account, built by `ManagementEdge` in `shared/infra` from the
-constructs [the Frontdoor's](/flex-platform/frontdoor/overview/#the-distribution) is built from.
-It has the same TLS policy, sets the same security
+Each stage has one distribution, in its shared account. `ManagementEdge` in `shared/infra` builds
+it from the constructs [the Frontdoor's](/flex-platform/frontdoor/overview/#the-distribution) is
+built from. It has the same TLS policy, sets the same security
 [headers on every response](/flex-platform/frontdoor/overview/#response-headers), has the same
 [web ACL rules](/flex-platform/frontdoor/overview/#waf), and caches nothing. Three things differ:
 
-- **The rate limits.** One token may make 100 requests in five minutes and one address 500. The
-  token's limit counts the exact value of `x-flex-ci-token`, and the web ACL keeps that header
-  out of its logs and samples.
-- **The origin.** Every path goes to the API's function, at its Lambda function URL, which only
-  CloudFront may call from outside the shared account, as for any
+- **The rate limits.** One token may make 100 requests in five minutes, and one address 500. The
+  token's limit counts the exact value of `x-flex-ci-token`. The web ACL keeps that header out of
+  its logs and samples.
+- **The origin.** Every path goes to the API's function, at its Lambda function URL. Only
+  CloudFront may call the URL from outside the shared account, as for any
   [function behind CloudFront](/flex-platform/infrastructure/overview/#a-function-behind-cloudfront).
   The function relies on the token it verifies, never on where a request came from.
-- **What the origin sees.** Every header the caller sent except `host`, and the
-  `x-correlation-id` the CloudFront Function set. No cookie or query string. The function URL
-  answers only to its own host. The headers aren't held to a list, because CloudFront refuses
+- **What the origin sees.** It sees every header the caller sent except `host`, and the
+  `x-correlation-id` the CloudFront Function set. It sees no cookie or query string. The function
+  URL answers only to its own host. The headers aren't held to a list, because CloudFront refuses
   `x-amz-content-sha256` in one, and signs with it.
 
-Its access logs, the web ACL's logs and the function's go to log groups in us-east-1, as
+Its access logs, the web ACL's logs and the function's logs go to log groups in us-east-1, as
 [the Frontdoor's](/flex-platform/frontdoor/overview/#logs) do.
 
 #### The first check
 
-A CloudFront Function, `shared-management-viewer-request`, runs on each request as it arrives,
-after WAF. Its code is in `shared/viewer-request`. It checks a request's structure as
-[the Frontdoor's](/flex-platform/frontdoor/cloudfront-function/) does, sharing its code for each
-check they have in common, with the same ID,
+A CloudFront Function, `shared-management-viewer-request`, checks each request's structure as it
+arrives, after WAF. Its code is in `shared/viewer-request`. It checks a request as
+[the Frontdoor's](/flex-platform/frontdoor/cloudfront-function/) does. It shares the Frontdoor's
+code for each check they have in common, with the same ID,
 [rejections](/flex-platform/frontdoor/cloudfront-function/#rejections) and
 [log line](/flex-platform/frontdoor/cloudfront-function/#logs). It verifies no signature:
-[the API does](#what-the-api-checks). In order, the function:
+[the API does that](#what-the-api-checks). In order, the function:
 
-1. **Gives the request its ID,** as `x-correlation-id`, and removes any trace context and every
-   `x-flex-` header the caller sent but the token's.
-2. **Checks the method.** Only `GET` and `POST` pass. Anything else is a 405 with an `Allow`
-   header.
-3. **Checks the token's shape.** `x-flex-ci-token` appears once, and is one token of at most
-   8 KB in three base64url segments, each written the one way its bytes encode. The header and
-   payload are JSON objects. `alg` is `RS256`, `iss` is GitHub Actions' issuer, `aud` is the
-   API's address, and `exp` is a finite time in the future. A failure is a 401,
-   before the path is looked at.
-4. **Checks the path.** It is under `/ci/`, with no empty or dot segment and no encoded `/`, `\`
-   or `.`. Anything else is a 404. Which paths the API serves is for the API.
-5. **Checks the content type** of a `POST`. The body is `application/json`. Anything else is a
-   415.
-6. **Checks the body's hash is there,** for a `POST`. `x-amz-content-sha256` appears once, and is
-   64 lowercase hex digits. Anything else is a 400, `Bad request`. CloudFront can't hash a body,
-   so it signs the hash the caller sends, and the API's origin refuses a body with any other. A
-   `GET` has no body, and CloudFront signs it with none.
+1. **Gives the request its ID,** as `x-correlation-id`. It removes any trace context, and every
+   `x-flex-` header the caller sent except the token's.
+2. **Checks the method.** Only `GET` and `POST` pass. It answers anything else with a 405 and an
+   `Allow` header.
+3. **Checks the token's shape,** before it looks at the path. It answers a failure with a 401. The
+   token must meet all of these:
+   - `x-flex-ci-token` appears once, and holds one token of at most 8 KB.
+   - The token is three base64url segments, each written the one way its bytes encode.
+   - The header and payload are JSON objects.
+   - `alg` is `RS256`, `iss` is GitHub Actions' issuer, and `aud` is the API's address.
+   - `exp` is a finite time in the future.
+4. **Checks the path.** It must be under `/ci/`, with no empty or dot segment and no encoded `/`,
+   `\` or `.`. It answers anything else with a 404. The API decides which paths it serves.
+5. **Checks the content type** of a `POST`. The body must be `application/json`. It answers
+   anything else with a 415.
+6. **Checks the body's hash is there,** for a `POST`. `x-amz-content-sha256` must appear once, as
+   64 lowercase hex digits. It answers anything else with a 400, `Bad request`. CloudFront can't
+   hash a body, so it signs the hash the caller sends, and the API's origin refuses a body with any
+   other hash. A `GET` has no body, and CloudFront signs it with none.
 
-The issuer and the audience are baked into the function by `buildViewerRequestFunction`, as the
-Frontdoor's function has [its issuers](/flex-platform/frontdoor/cloudfront-function/#building-the-function).
+`buildViewerRequestFunction` bakes the issuer and the audience into the function, as the
+Frontdoor's function has [its issuers](/flex-platform/frontdoor/cloudfront-function/#building-the-function)
+baked in.
 
 #### What the API checks
 
 The API is one Lambda function, `shared-ci`, in eu-west-2. Its code is in `shared/ci`. For each
 request, in order, it:
 
-1. **Verifies the token.** It checks the signature against the keys GitHub publishes, and that
-   the token is in the one encoding the CloudFront Function accepts. `iss` is GitHub Actions'
-   issuer, `aud` is the API's address, `alg` is `RS256`, `exp` is present and in the future,
-   and `nbf`, if present, has passed. `repository_id` and `repository_owner_id` are each digits.
-   A failure is a 401. The keys are fetched, kept for 10 minutes and fetched again as
-   [Lambda@Edge keeps its issuers'](/flex-platform/frontdoor/lambda-edge/#verifying-the-token),
-   and a request that needs keys it can't fetch gets a 500, never a pass.
-2. **Finds the route.** A path that is no route's is a 404, and a route's path with a method it
-   doesn't take is a 405, with an `Allow` header naming the ones it does. Both come after the
-   token, so a caller without one learns nothing of the routes. There are three:
-   `POST /ci/environments/<environment>/domains/<domain>/uploads`,
-   `POST /ci/environments/<environment>/domains/<domain>/releases` and
-   `GET /ci/environments/<environment>/domains/<domain>/releases/<release ID>`. Each route is a method, a path and
-   its handler, in `shared/ci/src/function/routes/`. Every route's path names an environment and a
-   domain, and the router refuses to start with one that doesn't.
-3. **Decides whether this pipeline may act on that domain there,** the same for every route, so no
-   route can leave it out. A caller of another kind gets a function of its own. Anyone with a GitHub
-   repository can have GitHub sign a token for the API's address, so a verified token says only
-   which repository's pipeline is calling. The pipeline is allowed when:
+1. **Verifies the token.** It answers a failure with a 401. It checks that:
+   - the signature verifies against the keys GitHub publishes;
+   - the token is in the one encoding the CloudFront Function accepts;
+   - `iss` is GitHub Actions' issuer, `aud` is the API's address and `alg` is `RS256`;
+   - `exp` is present and in the future, and `nbf`, if present, has passed;
+   - `repository_id` and `repository_owner_id` are each digits.
+
+   It fetches the keys, keeps them for 10 minutes and fetches them again, as
+   [Lambda@Edge keeps its issuers'](/flex-platform/frontdoor/lambda-edge/#verifying-the-token). If
+   a request needs keys the function can't fetch, it answers with a 500, never a pass.
+2. **Finds the route.** It answers a path that matches no route with a 404. It answers a route's
+   path with a method the route doesn't take with a 405, and an `Allow` header naming the methods
+   it does take. Both come after the token, so a caller without one learns nothing of the routes.
+   There are three:
+   - `POST /ci/environments/<environment>/domains/<domain>/uploads`
+   - `POST /ci/environments/<environment>/domains/<domain>/releases`
+   - `GET /ci/environments/<environment>/domains/<domain>/releases/<release ID>`
+
+   Each route is a method, a path and its handler, in `shared/ci/src/function/routes/`. Every
+   route's path names an environment and a domain, and the router refuses to start with one that
+   doesn't.
+3. **Decides whether this pipeline may act on that domain there.** The decision is the same for
+   every route, so no route can leave it out. A caller of another kind gets a function of its own.
+   Anyone with a GitHub repository can have GitHub sign a token for the API's address. So a
+   verified token says only which repository's pipeline is calling. The pipeline is allowed if:
    - the stage has the environment, and the environment hosts the domain;
    - the token's `repository_id` and `repository_owner_id` are the ones the stage's
-     [config](/flex-platform/infrastructure/overview/#config) holds for the domain. Both, so a
-     repository transferred to another owner is no longer the one registered. A domain with no
+     [config](/flex-platform/infrastructure/overview/#config) holds for the domain. It checks both,
+     so a repository transferred to another owner is no longer the one registered. A domain with no
      repository in config can't be released;
-   - the token's `environment` is the path's. GitHub sets that claim only for a job that runs
-     in the GitHub environment of that name, once the repository's own protection rules for it
-     have passed. So a domain's repository has a GitHub environment named for each of the
-     platform's environments it releases to, and decides there which jobs may reach each.
+   - the token's `environment` is the path's. GitHub sets that claim only for a job that runs in
+     the GitHub environment of that name, once the repository's own protection rules for it have
+     passed. So a domain's repository has a GitHub environment named for each of the platform's
+     environments it releases to. It decides there which jobs may reach each one.
 
-   Nothing is decided by the token's `sub`, whose format a repository's admin can change. A
-   refusal is a 403, the same whatever the reason, so a pipeline learns nothing of which
+   Nothing is decided by the token's `sub`, whose format a repository's admin can change. The API
+   answers a refusal with a 403, the same whatever the reason. So a pipeline learns nothing of which
    environments and domains exist, or which repository a domain belongs to.
 4. **Checks the environment publishes,** for an upload or a release. New code enters a stage only
-   where an environment's `release` is `"publish"`. Anywhere else is a 409, `This environment takes no uploads` or
-   `This environment takes no releases`: the pipeline is allowed, so it is told why.
-5. **Reads the body.** For an upload it is
-   `{ "version": "<major.minor.patch>", "sha256": "<64 lowercase hex digits>", "size": <bytes> }`,
-   with a [version](#versions) and a size from 1 byte to 250 MB, the most Lambda unzips a
-   function's code to. For a release it is `{ "version": "<major.minor.patch>" }`. Either holds
-   nothing else, and anything else is a 400. The body is read only now, for a pipeline that
-   is allowed.
-6. **Claims the version and signs the upload,** and answers 200 with
-   [where to send the bundle](#uploading-a-bundle), or **queues the release** of a bundle that was
-   uploaded, and answers 202. See [releasing a bundle](#releasing-a-bundle). A `GET` of a release
-   answers [how it went](#how-a-release-went).
+   where an environment's `release` is `"publish"`. Anywhere else, the API answers with a 409,
+   `This environment takes no uploads` or `This environment takes no releases`. The pipeline is
+   allowed, so the API tells it why.
+5. **Reads the body.** It reads the body only now, for a pipeline that is allowed. Either body holds
+   nothing else, and the API answers anything else with a 400.
+   - For an upload, the body is
+     `{ "version": "<major.minor.patch>", "sha256": "<64 lowercase hex digits>", "size": <bytes> }`.
+     It holds a [version](#versions), and a size from 1 byte to 250 MB, the most Lambda unzips a
+     function's code to.
+   - For a release, the body is `{ "version": "<major.minor.patch>" }`.
+6. **Acts on the request.** For an upload, it claims the version, signs the upload, and answers 200
+   with [where to send the bundle](#uploading-a-bundle). For a release, it queues the release of a
+   bundle that was uploaded, and answers 202. See [releasing a bundle](#releasing-a-bundle). For a
+   `GET` of a release, it answers with [how the release went](#how-a-release-went).
 
-The issuer, the audience, the environments, whether each publishes, each domain's repository,
-the bucket, the artefacts and release tables' names and the release queue's address are baked
-into the function
-by `buildCiFunction` when the stage is synthesized. So who may release a domain changes only by a
-change to config and a deploy of `shared-release`.
+`buildCiFunction` bakes these into the function when the stage is synthesized:
 
-The function writes one log line for each request: what happened as a fixed code, the request's
-trace ID, how long it took, and for a verified token GitHub's IDs for the repository, its owner
-and the workflow run, and the commit the job runs for. The environment and the domain are logged
-only for a pipeline that was allowed, when they are names from config. An upload's line adds
-the version, the bundle's key and its size, and a release's the version, and once it is found the
-bundle's key, and for a queued release its object's S3 version. A release's status adds its ID,
-once it has a release ID's form, and where the table has it. The token is never logged, and neither is the address an
-upload was signed for, or anything a repository's admin can write, such as its name or an
-environment's.
+- the issuer and the audience;
+- the environments, and whether each publishes;
+- each domain's repository;
+- the bucket;
+- the artefacts and release tables' names;
+- the release queue's address.
+
+So who may release a domain changes only with a change to config and a deploy of `shared-release`.
+
+The function writes one log line for each request. The line holds what happened as a fixed code,
+the request's trace ID and how long the request took. For a verified token, it also holds GitHub's
+IDs for the repository, its owner and the workflow run, and the commit the job runs for. It logs
+the environment and the domain only for a pipeline that was allowed, when they are names from
+config. Each route adds more:
+
+- An upload's line adds the version, the bundle's key and its size.
+- A release's line adds the version. Once the API finds the bundle, it adds the bundle's key. For a
+  queued release, it adds the object's S3 version.
+- A release's status adds the release's ID, once it has a release ID's form, and where the table
+  has the release.
+
+The function never logs the token, or the address it signed an upload for. It never logs anything a
+repository's admin can write, such as the repository's name or an environment's.
 
 #### Uploading a bundle
 
-A domain's code is uploaded as one zip, its bundle, under a [version](#versions), in two
-requests. The pipeline asks the API where to send the bundle, saying what it will send:
+A domain's code is uploaded as one zip, its bundle, under a [version](#versions), in two requests.
+First, the pipeline asks the API where to send the bundle, and says what it will send:
 
 ```http
 POST /ci/environments/<environment>/domains/<domain>/uploads
@@ -717,12 +807,12 @@ x-amz-content-sha256: <this body's SHA-256>
 The API, in order:
 
 1. **Claims the version** for the bundle, in the [artefacts table](#the-artefacts-table), unless
-   it is recorded already.
+   the version is recorded already.
 2. **Refuses a version recorded with another bundle,** with a 409,
-   `This version is already a different bundle`. A version never names another bundle once it is
-   recorded, so a pipeline that didn't change its version finds out here.
-3. **Answers that there is nothing to upload** when the bundle is in the bucket already, uploaded
-   by an earlier run of the same version, or under another version with the same bytes:
+   `This version is already a different bundle`. Once a version is recorded, it never names
+   another bundle. So a pipeline that didn't change its version finds out here.
+3. **Answers that there is nothing to upload** if the bundle is in the bucket already. An earlier
+   run of the same version may have uploaded it, or another version with the same bytes:
 
    ```json
    { "version": "<the version>", "sha256": "<the zip's SHA-256>", "uploaded": true }
@@ -730,10 +820,10 @@ The API, in order:
 
 4. **Signs the upload** otherwise.
 
-The version is claimed before the upload is signed, because the API never sees the upload
-finish. So a version can be claimed with no bundle behind it, by a run that stopped before its
-upload. A run with the same bytes completes it, by the same steps. The run and commit recorded
-are the first run's, and a later upload of the same version and bundle changes nothing.
+The API claims the version before it signs the upload, because it never sees the upload finish. So
+a version can be claimed with no bundle behind it, by a run that stopped before its upload. A run
+with the same bytes completes it, by the same steps. The run and commit recorded are the first
+run's. A later upload of the same version and bundle changes nothing.
 
 A signed upload is one request the pipeline may make of S3:
 
@@ -750,87 +840,92 @@ A signed upload is one request the pipeline may make of S3:
 }
 ```
 
-The pipeline sends the zip to `url` with those headers, within five minutes. The address carries
-the signature of the API's own role, so the pipeline needs no AWS credentials, and the signature
-is good for that one request. It covers three headers, and S3 refuses an upload that differs in
-any of them:
+Send the zip to `url` with those headers, within five minutes. The address carries the signature
+of the API's own role, so the pipeline needs no AWS credentials. The signature is good for that one
+request. It covers three headers, and S3 refuses an upload that differs in any of them:
 
-- **`content-length`,** the size the pipeline gave, so no other length is accepted.
-- **`x-amz-checksum-sha256`,** the hash the pipeline gave. S3 checks the body against it, so
-  the object under a key is the bundle the key names.
-- **`if-none-match: *`,** so S3 writes only where there is no object. A bundle that is already
-  there gets a 412 from S3, which a pipeline takes as done: the key is the bundle's hash, so
-  what is there is the same bundle.
+- **`content-length`,** the size the pipeline gave, so S3 accepts no other length.
+- **`x-amz-checksum-sha256`,** the hash the pipeline gave. S3 checks the body against it, so the
+  object under a key is the bundle the key names.
+- **`if-none-match: *`,** so S3 writes only if there is no object. If the bundle is already there,
+  S3 answers with a 412, and a pipeline takes that as done. The key is the bundle's hash, so what
+  is there is the same bundle.
 
-The key is `<domain>/bundle/<sha256>.zip`. The domain is the one the pipeline was allowed for,
-so a pipeline can write only under its own domain. The API's role may write and read keys of that
-shape, and list the bucket, and nothing else there. A signature carries no more than the signer's
-permission, and covers its method, so no address the API signs can read or delete a bundle.
+The key is `<domain>/bundle/<sha256>.zip`. The domain is the one the pipeline was allowed for, so a
+pipeline can write only under its own domain. The API's role may write and read keys of that shape,
+and list the bucket, and do nothing else there. A signature carries no more than the signer's
+permission, and covers its method. So no address the API signs can read or delete a bundle.
 
-The bucket is `shared-domain-code-<account>`, in the stage's shared account, built by
-`DomainCodeBucket` in `shared/infra`. Its policy refuses, from anyone:
+The bucket is `shared-domain-code-<account>`, in the stage's shared account. `DomainCodeBucket` in
+`shared/infra` builds it. Its policy refuses, from anyone:
 
 - a write by any role but the API's. A key is the bundle's hash only because the API signs each
-  upload with that checksum, so a write it didn't sign could put other code under a bundle's key
+  upload with that checksum. A write the API didn't sign could put other code under a bundle's key
   before the bundle is uploaded, and the bundle's own upload would then get a 412;
 - a write that doesn't carry `If-None-Match`;
-- a request on a presigned address signed more than five minutes before, so an address lasts no
-  longer than the API says even if the API signs for longer;
-- any delete of an object or a version of one;
+- a request on a presigned address signed more than five minutes before. So an address lasts no
+  longer than the API says, even if the API signs for longer;
+- any delete of an object or of a version of one;
 - any change to the bucket's lifecycle rules, which could expire objects without a delete.
 
-So under that policy a key holds only the bundle it names, and a bundle, once uploaded, is
-neither replaced nor removed. A released function's code stays in the bucket, so this is also
-what keeps it running.
+So under that policy, a key holds only the bundle it names. Once a bundle is uploaded, nothing
+replaces or removes it. A released function's code stays in the bucket, so this also keeps the
+function running.
 
 The policy grants two reads of a bundle, by version, in each domain account of an environment that
 publishes:
 
-- Lambda may read one for a domain's function. It names each account with `aws:SourceAccount` and
-  its functions, `domain-<environment>-*`, with `aws:SourceArn`.
-- A domain's [deploy role](#permissions) may read one, since Lambda reads the bundle a function is
-  created or updated from as the caller. One statement names every such account, and its deploy
-  roles, `domain-<environment>-*-deploy`, with `aws:PrincipalArn`. S3 refuses a policy that names a
-  role that doesn't exist yet, and the domain stacks that create the roles deploy after this one.
+- Lambda may read a bundle for a domain's function. The statement names each account with
+  `aws:SourceAccount`, and its functions, `domain-<environment>-*`, with `aws:SourceArn`.
+- A domain's [deploy role](#permissions) may read a bundle, because Lambda reads the bundle a
+  function is created or updated from as the caller. One statement names every such account, and
+  its deploy roles, `domain-<environment>-*-deploy`, with `aws:PrincipalArn`. It names them this way
+  because S3 refuses a policy that names a role that doesn't exist yet, and the domain stacks that
+  create the roles deploy after this one.
 
-Both name an account's domains by pattern, never one by one, so the policy grows with the domain
-accounts and not with the domains. Each deploy role's own policy holds it to its domain's bundles.
+Both statements name an account's domains by pattern, never one by one. So the policy grows with
+the domain accounts, not with the domains. Each deploy role's own policy holds it to its domain's
+bundles.
 
 #### Versions
 
-A domain names each bundle it uploads with a version, `MAJOR.MINOR.PATCH` as semantic versioning
-writes one, and nothing more. Each part is digits, with no leading zero (`0` itself is allowed),
-and at most nine of them. There is no `v` prefix, no pre-release such as `-rc.1`, and no build
-metadata such as `+abc`. Versions compare part by part, as numbers, so `1.10.0` comes after
-`1.9.0`. The check and the comparison are `bundle-version.ts` in `shared/release`.
+A domain names each bundle it uploads with a version. The version is `MAJOR.MINOR.PATCH`, as
+semantic versioning writes one, and nothing more:
 
-The version is the domain's to choose, and the platform holds it to it. A version names one
-bundle, so a version can't be re-run from a build that makes different bytes. A pipeline builds
-its zip so that the same sources give the same bytes: the same entry order, and fixed file times.
-A version belongs to the domain, not an environment, so a domain releases from one line of
-history: a branch that uploaded a version would hold that version for good.
+- Each part is digits, with no leading zero (`0` itself is allowed), and at most nine of them.
+- There is no `v` prefix.
+- There is no pre-release, such as `-rc.1`, and no build metadata, such as `+abc`.
+
+Versions compare part by part, as numbers, so `1.10.0` comes after `1.9.0`. The check and the
+comparison are in `bundle-version.ts` in `shared/release`.
+
+The domain chooses the version, and the platform holds the domain to it. A version names one
+bundle, so a build that makes different bytes can't re-run a version. Build the zip so that the
+same sources give the same bytes: the same entry order, and fixed file times. A version belongs to
+the domain, not to an environment, so a domain releases from one line of history. A branch that
+uploaded a version would hold that version for good.
 
 #### The artefacts table
 
-The API records each version a domain uploads in a DynamoDB table, `shared-release-artefacts`,
-in the stage's shared account, built by `ArtefactTable` in `shared/infra`. A version is kept
-under its domain, partition key `domain`, by its version, sort key `version`, and holds:
+The API records each version a domain uploads in a DynamoDB table, `shared-release-artefacts`, in
+the stage's shared account. `ArtefactTable` in `shared/infra` builds it. Each version is kept under
+its domain, with partition key `domain`, and by its version, with sort key `version`. It holds:
 
 | Attribute | Holds |
 |---|---|
 | `sha256` | The hash of the bundle the version names, in lowercase hex |
 | `recordedAt` | When the API recorded it, in milliseconds |
-| `runId`, `commit` | The run that recorded it, and its commit, when its token said |
+| `runId`, `commit` | The run that recorded it, and its commit, if its token held them |
 
-A version is recorded once, by a put that only succeeds where there is none, and never changes.
-The table's [policy](/flex-platform/infrastructure/overview/#a-tables-policy) denies the API's
-role everything but getting and putting an item, and anyone else everything but managing the
-table, so nothing changes or deletes a version. Like the
-[release table](#the-release-table), it is kept, with point-in-time recovery, when the stack
+The API records a version once, with a put that succeeds only if there is none, and the version
+never changes. The table's [policy](/flex-platform/infrastructure/overview/#a-tables-policy) denies
+the API's role everything but getting and putting an item. It denies anyone else everything but
+managing the table. So nothing changes or deletes a version. Like the
+[release table](#the-release-table), the table is kept, with point-in-time recovery, if the stack
 goes, and can't be deleted.
 
 The bundle stays under its hash in the bucket, so two versions with the same bytes share one
-object. The sort key is the version as text, which doesn't sort as versions do.
+object. The sort key is the version as text, which doesn't sort in version order.
 
 #### Releasing a bundle
 
@@ -846,13 +941,17 @@ x-amz-content-sha256: <this body's SHA-256>
 ```
 
 The API reads the version from the [artefacts table](#the-artefacts-table), under the domain the
-pipeline was allowed for, so a pipeline can release only its own domain's code. It then looks
-for the bundle the version names, `<domain>/bundle/<sha256>.zip`: a version is claimed before
-its bundle is uploaded, so the bundle may never have arrived. If either is missing, it answers
-409, `No bundle with this version has been uploaded`. Otherwise it records the release, with the
-version, the bundle's hash and its object's S3 version, in the
-[release table](#the-release-table), puts its key on the [release worker](#the-release-worker)'s
-queue, and answers 202 with the release's ID:
+pipeline was allowed for. So a pipeline can release only its own domain's code. The API then looks
+for the bundle the version names, `<domain>/bundle/<sha256>.zip`. A version is claimed before its
+bundle is uploaded, so the bundle may never have arrived. If either is missing, the API answers
+with a 409, `No bundle with this version has been uploaded`.
+
+Otherwise, the API:
+
+1. records the release in the [release table](#the-release-table), with the version, the bundle's
+   hash and its object's S3 version;
+2. puts the release's key on the [release worker](#the-release-worker)'s queue;
+3. answers 202 with the release's ID:
 
 ```json
 {
@@ -864,11 +963,11 @@ queue, and answers 202 with the release's ID:
 }
 ```
 
-The release is queued, not done. Each request is a release of its own: asking again for the
-version already on `live` publishes no new function version, unless the configuration the
-platform sets has changed, and leaves `live` where it is. If the queue
-refuses the message, the API records the release `refused`, at the step `queue`, and answers 500:
-no message is behind it, so it will never be tried, and the pipeline asks again.
+The release is queued, not done. Each request is a release of its own. Asking again for the
+version already on `live` publishes no new function version and leaves `live` where it is, unless
+the configuration the platform sets has changed. If the queue refuses the message, the API records
+the release `refused`, at the step `queue`, and answers with a 500. No message is behind the
+release, so it will never be tried, and the pipeline asks again.
 
 #### How a release went
 
@@ -880,8 +979,9 @@ x-flex-ci-token: <the job's token>
 ```
 
 The API reads the release from the [release table](#the-release-table), under the environment and
-domain the pipeline was allowed for, so a pipeline sees only its own domain's releases. It
-answers 200, with `cache-control: no-store`, since the record changes until the release is final:
+domain the pipeline was allowed for. So a pipeline sees only its own domain's releases. The API
+answers 200, with `cache-control: no-store`, because the record changes until the release is
+final:
 
 ```json
 {
@@ -902,13 +1002,13 @@ answers 200, with `cache-control: no-store`, since the record changes until the 
 }
 ```
 
-`status` is one of the [release table](#the-release-table)'s. A release that stopped has `step`
-and `reason` in place of `functionVersion`, `created` and `moved`, such as `check-order` and
-`superseded` for one [`live` is ahead of](#the-order-of-releases). `runId` and `commit` are there
-when the token that asked held them. A pipeline waits for `released`, `refused` or `abandoned`,
-and asks again until then.
+`status` is one of the [release table](#the-release-table)'s statuses. A release that stopped has
+`step` and `reason` in place of `functionVersion`, `created` and `moved`. For example, a release
+[`live` is ahead of](#the-order-of-releases) has `check-order` and `superseded`. `runId` and
+`commit` are there if the token that asked held them. A pipeline waits for `released`, `refused`
+or `abandoned`, and asks again until then.
 
-It answers in any environment, publishing or not, since every release is recorded. An ID that
-isn't a release ID, or names no release the table holds for that domain there, is a 404,
-`Not found`. So is a release recorded before
-releases had versions, which the API can't read.
+The API answers in any environment, publishing or not, because every release is recorded. It
+answers with a 404, `Not found`, for an ID that isn't a release ID, or that names no release the
+table holds for that domain there. It also answers 404 for a release recorded before releases had
+versions, which the API can't read.

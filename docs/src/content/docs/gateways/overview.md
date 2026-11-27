@@ -4,12 +4,12 @@ description: How a gateway is built, what runs when, and what happens to a reque
 ---
 
 A gateway is how the platform calls one upstream. It is a Lambda function, generated from a
-configuration in this repository, and a domain invokes it to call that upstream. See
+configuration in this repository. A domain invokes it to call that upstream. See
 [The platform](/flex-platform/start/platform/) for where gateways sit.
 
 A gateway groups the upstream's operations. It keeps transport details apart from validation and
 dispatch. Anything that names HTTP, or another transport, lives in a driver. The runtime and the
-generator only see an opaque driver definition and an execution function.
+generator see only an opaque driver definition and an execution function.
 
 ## Packages
 
@@ -36,11 +36,11 @@ packages/          Shared TypeScript, ESLint and Vitest tooling, and generic uti
 
 A gateway goes through two commands and then a deployment.
 
-1. **`gateway-schemas`** is run by a person. It uses the gateway's driver to derive schemas from
+1. **`gateway-schemas`**: a person runs it. It uses the gateway's driver to derive schemas from
    the upstream's own description, or from schemas the configuration declares. It compares them
    with the latest committed version. If the shape changed safely, it writes the next version. See
    [Schemas and versions](/flex-platform/gateways/schemas/).
-2. **`gateway-codegen`** runs locally and in CI. It loads the configuration and the latest schema
+2. **`gateway-codegen`**: it runs locally and in CI. It loads the configuration and the latest schema
    version. It checks that each version is compatible with every version before it, and that the
    configuration agrees with the latest version. It then writes `.gen/`, which holds:
    - standalone validators
@@ -49,15 +49,15 @@ A gateway goes through two commands and then a deployment.
    - the client package a domain installs
 
    See [Code generation](/flex-platform/codegen/overview/).
-3. **The bundle** runs as a Lambda function in the egress section. Deploying it is planned. It
-   will be placed `isolated` or `private` depending on how its upstream is reached. When it loads,
-   the entry point:
+3. **The bundle**: it runs as a Lambda function in the egress section. Deploying it is planned.
+   It will be placed `isolated` or `private`, depending on how its upstream is reached. When the
+   bundle loads, the entry point:
    - reads the environment
    - asks the driver for its executor, which retrieves and validates the gateway's secret
    - compiles the handler
 
-   If the initial secret read fails or its value is invalid, initialisation fails before the
-   handler can process an event. Later secret reads can still fail during a request.
+   If the first secret read fails, or the value is invalid, initialisation fails. The handler
+   never processes an event. Later secret reads can still fail during a request.
 
 ## A request
 
@@ -71,25 +71,26 @@ The deployed handler receives an envelope:
 }
 ```
 
-It handles the envelope in a fixed order. Each step has its own error code for a failure at that
-step. Failures handled by the dispatcher are returned as envelopes. Initialisation and Lambda
-invocation failures occur outside this flow and must also be handled by a caller.
+The handler takes the envelope through a fixed order of steps. Each step has its own error code
+for a failure at that step. The dispatcher returns each failure it handles as an envelope.
+Initialisation and Lambda invocation failures happen outside this flow, so a caller must handle
+them too.
 
 | Step | What happens | Failure |
 |---|---|---|
-| Envelope | The envelope is parsed and its shape checked. | `INVALID_INPUT` |
-| Token | The [caller token](/flex-platform/frontdoor/caller-token/) is verified. A call without one is refused, and so is one whose token fails any check. | `UNAUTHENTICATED` without a token, `SECURE_SIGNATURE_INVALID` for one that fails |
-| Routing | The operation name is looked up among the configured operations. | `OPERATION_NOT_FOUND` |
-| Input | The input is checked against the operation's generated validator, before any upstream call. | `INVALID_INPUT` |
-| Bindings | Input fields bound to a claim of the verified token are compared with it. | `SECURE_VALUE_MISMATCH` |
-| Deadline | The request's time budget is worked out from the invocation's remaining time, minus a safety margin. | |
+| Envelope | The handler parses the envelope and checks its shape. | `INVALID_INPUT` |
+| Token | The handler verifies the [caller token](/flex-platform/frontdoor/caller-token/). It refuses a call without one, and a call whose token fails any check. | `UNAUTHENTICATED` without a token, `SECURE_SIGNATURE_INVALID` for one that fails |
+| Routing | The handler looks up the operation name among the configured operations. | `OPERATION_NOT_FOUND` |
+| Input | The handler checks the input against the operation's generated validator, before any upstream call. | `INVALID_INPUT` |
+| Bindings | The handler compares each input field bound to a claim of the verified token with that claim. | `SECURE_VALUE_MISMATCH` |
+| Deadline | The handler works out the request's time budget: the invocation's remaining time, minus a safety margin. | |
 | Execute | The driver's execute function runs. It makes each upstream call through `ctx.upstream`. Each attempt is limited to `upstreamTimeout` or the budget left, whichever is smaller. | Any `GatewayError` the driver raises, or `UPSTREAM_TIMEOUT` if an attempt timed out or had no budget left |
-| Outcome | The driver's result is checked against the schema for the outcome it named. | `UPSTREAM_CONTRACT_VIOLATION` |
-| Health | The result or error is classified for upstream health and logged. | |
-| Response | `{ ok: true, outcome, data }` or `{ ok: false, error: { code } }`, with any declared `meta`. | `INTERNAL` for anything uncaught |
+| Outcome | The handler checks the driver's result against the schema for the outcome it named. | `UPSTREAM_CONTRACT_VIOLATION` |
+| Health | The handler classifies the result or error for upstream health, and logs it. | |
+| Response | The handler returns `{ ok: true, outcome, data }` or `{ ok: false, error: { code } }`, with any declared `meta`. | `INTERNAL` for anything uncaught |
 
 The handler compiles once, when it is created. It takes each invocation's deadline as an
-argument, so nothing specific to one invocation is captured when it is created. Invalid configuration fails when the
+argument, so it captures nothing specific to one invocation. Invalid configuration fails when the
 handler is created, never on a request. See
 [Responses and errors](/flex-platform/gateways/responses/) for the response shapes and every error
 code.

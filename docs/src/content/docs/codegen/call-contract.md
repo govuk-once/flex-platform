@@ -3,17 +3,20 @@ title: The call contract
 description: The generated TypeScript types a caller compiles against.
 ---
 
-`.gen/client/rpc.ts` describes what a caller sends and receives. It contains types only. Its one
-import is a type import of `@repo/gateway-core` for the envelope shapes, which is removed when it
-compiles. That package depends only on `@repo/cloudfront-js-utils`, which depends on no other
-workspace package, so a consumer needs neither the runtime nor the generator. The
-[client package](/flex-platform/codegen/overview/#the-client-package) bundles the contract's
-declarations with the ones it imports, so a domain installs the package, and the gateway client it
-names as a peer, and nothing from this workspace.
+`.gen/client/rpc.ts` describes what a caller sends and receives. It contains only types.
 
-The [gateway client](/flex-platform/domains/overview/#calling-gateways) is typed by the contract's
-`Operations`, so a domain calls typed operations instead of building envelopes. The client package
-exports the contract's types beside the function that creates the client.
+Its one import is a type import of `@repo/gateway-core`, for the envelope shapes, and compiling
+removes it. That package depends only on `@repo/cloudfront-js-utils`, which depends on no other
+workspace package. So a consumer needs neither the runtime nor the generator.
+
+The [client package](/flex-platform/codegen/overview/#the-client-package) bundles the contract's
+declarations together with the ones they import. A domain installs that package and the gateway
+client, which the package names as a peer, and nothing else from this workspace.
+
+The contract's `Operations` type the
+[gateway client](/flex-platform/domains/overview/#calling-gateways), so a domain calls typed
+operations instead of building envelopes. The client package exports the contract's types beside
+the function that creates the client.
 
 The operation's input shape comes from its JSON Schema. The driver decides how its fields reach
 the upstream. For openapi-rest, see
@@ -153,14 +156,17 @@ The generator recognises the same union however a schema writes it:
 - the type enclosing a union of the values;
 - either of these behind a `$ref`, which is followed to the definition it points at.
 
-When it follows a `$ref`, the generator looks at the types the definition declares, instead of the
-`type` keyword it writes. A definition that also admits null, through `nullable` or a list of
-types, is declared as a union with null. Its name cannot be marked open: that would remove the
-null, and a caller could not assign values the validators accept.
+When it follows a `$ref`, the generator looks at the types the definition declares, not at how its
+`type` keyword is written.
 
-The generator does not follow a definition that also admits null, or one that is itself a
-reference or a composition. The editor then does not suggest the values, but nothing is typed
-wrongly.
+It doesn't follow a definition that:
+
+- also admits null, through `nullable` or a list of types. Such a definition is declared as a union
+  with null. Marking its name open would remove the null, and a caller couldn't then assign values
+  the validators accept;
+- is itself a reference or a composition.
+
+In those cases the editor doesn't suggest the values, but nothing is typed wrongly.
 
 The [compatibility check](/flex-platform/gateways/compatibility/#open-enumerations) recognises the
 union only when the type is written inside it.

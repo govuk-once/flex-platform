@@ -3,26 +3,26 @@ title: Custom handlers
 description: Replacing an operation's automatic mapping with a handler of your own.
 ---
 
-An operation with a `handler` skips the automatic mapping. A handler is a value made by the
-driver's `defineHandler` and set on the operation in the configuration. The usual place to write
-it is a module next to the configuration.
+An operation with a `handler` skips the automatic mapping. Make a handler with the driver's
+`defineHandler`, and set it on the operation in the configuration. The usual place to write it is
+a module next to the configuration.
 
 The compiler checks the handler against the driver's handler type, which the definition exposes
 through `HandlerOf`. That type is branded with the driver's `type`, and only `defineHandler`
-produces it. So a plain function, or a handler written for another driver, is a type error on
-that line. `defineHandler` also lets the author name the input type.
+produces it. So a plain function, or a handler written for another driver, is a type error on that
+line. `defineHandler` also lets the author name the input type.
 
 Handlers and the automatic mapping use the same client. Every upstream call still goes through
 `ctx.upstream` once, and transport errors are mapped the same way.
 
-A handler returns only outcomes the operation's schemas declare, and the driver derives those from
-the [success statuses](/flex-platform/drivers/openapi-rest/outcomes/) alone. Anything else it
-reports as an error code, by throwing a `GatewayError`. An outcome of its own, such as `unlinked`,
-fails outcome validation as `UPSTREAM_CONTRACT_VIOLATION`.
+A handler returns only outcomes the operation's schemas declare. The driver derives those from
+the [success statuses](/flex-platform/drivers/openapi-rest/outcomes/) alone. The handler reports
+anything else as an error code, by throwing a `GatewayError`. If it returns an outcome of its own,
+such as `unlinked`, outcome validation fails with `UPSTREAM_CONTRACT_VIOLATION`.
 
-For example, an identity lookup's upstream might answer a user it holds no link for with a 409,
-which the status mapping reports as `UPSTREAM_REJECTED`. To a caller, that means there is no such
-record, so a handler reports it as `NOT_FOUND`:
+For example, an identity lookup's upstream might answer with a 409 for a user it holds no link
+for. The status mapping reports a 409 as `UPSTREAM_REJECTED`. To a caller, the answer means there
+is no such record, so a handler reports it as `NOT_FOUND`:
 
 ```ts
 import { defineHandler } from "@repo/gateway-driver-openapi-rest";
@@ -57,26 +57,31 @@ inferred. Both stay on the handler's type, so calling it with the wrong input is
 | `invoke(call)` | `request` followed by `mapResponse`. |
 
 After `request`, use `mapResponse` on the response you already have. Do not call `invoke` after
-`request`: it would send the request again and duplicate any write. For hand-written calls, build paths with
-`encodePathParam`, which applies the single-segment rule.
+`request`, because it would send the request again and duplicate any write. For hand-written
+calls, build paths with `encodePathParam`, which applies the single-segment rule.
 
 ## What codegen checks for a handler
 
-A handler builds its own request. So codegen does not check what the automatic mapping would need
-from its input schema. The handler decides about these:
+A handler builds its own request, so codegen does not check what the automatic mapping would
+need from its input schema. The handler decides about these:
 
 - an unmapped field;
 - a mapping naming a field the schema does not declare;
 - a path parameter whose field the schema leaves optional;
 - a `payload` the method could not carry.
 
-What the executor compiles for every operation is still checked: the template's parameters, the
-names a mapping takes, and the headers authentication owns. A handler that calls `prepare` is still
-bound by the mapping, and the runtime reports a violation as `INTERNAL`. Nothing at generation
-time can tell a handler that calls `prepare` from one that does not.
+Codegen still checks what the executor compiles for every operation:
+
+- the template's parameters;
+- the names a mapping takes;
+- the headers authentication owns.
+
+A handler that calls `prepare` is still bound by the mapping, and the runtime reports a violation
+as `INTERNAL`. Nothing at generation time can tell a handler that calls `prepare` from one that
+does not.
 
 ## Errors in a handler
 
-If a handler throws its own error (anything other than a `GatewayError`), only its source
-locations are logged, and the call returns `INTERNAL`. When the diagnosis matters, throw a
+If a handler throws its own error, anything other than a `GatewayError`, the runtime logs only
+its source locations, and the call returns `INTERNAL`. When the diagnosis matters, throw a
 `GatewayError` with a message that is safe to log.

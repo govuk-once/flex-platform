@@ -7,7 +7,7 @@ sidebar:
 
 `@repo/gateway-driver-openapi-rest` is the only package that knows HTTP. Methods, paths, status
 codes and headers live here. The runtime and codegen see only an opaque driver definition and an
-execution function. The driver describes an upstream in the terms its OpenAPI document uses, and
+execution function. The driver describes an upstream in the terms its OpenAPI document uses. It
 derives the gateway's schemas from that document.
 
 ## Package layout
@@ -26,10 +26,9 @@ stops anything except tests from importing `derive/`.
 
 ## Input convention
 
-A caller sends one flat `input` object. The caller does not know which fields become path
-parameters, query parameters or headers. The operation declares that for each input field, using
-the OpenAPI document's terms. The request body, if there is one, goes in the top-level `payload`
-field.
+A caller sends one flat `input` object, and does not know which fields become path parameters,
+query parameters or headers. The operation declares that for each input field, in the OpenAPI
+document's terms. If there is a request body, it goes in the top-level `payload` field.
 
 | Operation field | Purpose |
 |---|---|
@@ -54,41 +53,47 @@ updateUser: {
 
 `parameters` must match the operation's input schema:
 
-- every schema field appears in `parameters` or is `payload`;
-- every template parameter appears in `parameters` with `in: "path"`.
+- Every schema field appears in `parameters` or is `payload`.
+- Every template parameter appears in `parameters` with `in: "path"`.
 
-A template parameter with no entry, or a path entry that names a parameter the template lacks,
-fails in three places: as a type error at `defineGateway`, when the executor is created, and
-during generation. The type error shows the corrected `parameters` shape. That is either a
-missing entry keyed by the parameter, or an entry whose `name` must be one of the template's.
+Two mistakes are caught in three places. The mistakes are a template parameter with no entry, and
+a path entry that names a parameter the template lacks. Each one fails:
+
+1. as a type error at `defineGateway`;
+2. when the executor is created;
+3. during generation.
+
+The type error shows the corrected `parameters` shape. That is either the missing entry, keyed by
+the parameter, or an entry whose `name` must be one of the template's.
 
 Codegen also sees the schemas, so it reports more. See
 [What codegen checks](/flex-platform/drivers/openapi-rest/overview/#what-codegen-checks).
 
 ### How values are sent
 
-When a request is built from the mapping, every input field must be mapped or be `payload`. An
-unmapped field is a configuration error, and the request fails as `INTERNAL`. The diagnostic
-gives the number of unmapped fields but never their names. This is because a schema that allows
-additional properties lets the caller choose the names.
+The driver builds each request from the mapping. Every input field must be mapped or be
+`payload`. An unmapped field is a configuration error, and the request fails as `INTERNAL`. The
+diagnostic gives the number of unmapped fields but never their names. This is because a schema
+that allows additional properties lets the caller choose the names.
 
-- **Path** values must be scalars. Each is percent-encoded as one segment. A value is rejected if
-  it is only dots, or if it contains `/`, `\`, `?`, `#`, `%` or a control character. The URL
-  parser would collapse `..`, and an upstream that decodes before it routes would reinterpret the
-  rest. For example, `../../admin` would reach `/admin` with the gateway's credentials. Constrain
-  path parameter formats in the input schema so that callers get `INVALID_INPUT`. Do not rely on
-  this check.
-- **Query** values may be scalars or arrays of scalars. An array repeats the key. A space is
-  written `%20` and a plus `%2B`, so no upstream reads one as the other.
+- **Path** values must be scalars. The driver percent-encodes each one as a single segment. It
+  rejects a value that is only dots, or that contains `/`, `\`, `?`, `#`, `%` or a control
+  character. The URL parser would collapse `..`. An upstream that decodes before it routes would
+  reinterpret the rest. For example, `../../admin` would reach `/admin` with the gateway's
+  credentials. Constrain path parameter formats in the input schema, so that callers get
+  `INVALID_INPUT`. Do not rely on this check.
+- **Query** values may be scalars or arrays of scalars. An array repeats the key. The driver
+  writes a space as `%20` and a plus as `%2B`, so no upstream reads one as the other.
 - **Null and undefined** query and header values are left out.
-- **Bodies** are JSON with `Content-Type: application/json`. A `payload` on a GET is an error.
+- **Bodies** are JSON, sent with `Content-Type: application/json`. A `payload` on a GET is an
+  error.
 - Every request sends `Accept: application/json`.
 
 ### Configuration errors
 
-These fail when the executor is created:
+The executor refuses to be created if the configuration has any of these:
 
-- an `upstream` that codegen would refuse, as [above](#what-codegen-checks);
+- an `upstream` that codegen would refuse (see [What codegen checks](#what-codegen-checks));
 - `payload` mapped as a parameter;
 - a template parameter without an entry;
 - an entry naming a path parameter the template does not declare;
@@ -102,22 +107,25 @@ A misspelled key inside a parameter mapping is a type error at `defineGateway`.
 
 ## What codegen checks
 
-Codegen passes the configuration and the schemas to the driver's
+Codegen checks each operation against its schemas before it emits anything. It passes the
+configuration and the schemas to the driver's
 [`checkSchemas`](/flex-platform/drivers/contract/#checkschemas), and fails when:
 
-- `upstream` is not `"<METHOD> /<path>"` with a supported method; its path holds a query, a
-  fragment, whitespace, a backslash, a dot segment or an incomplete `%` escape; or a `{param}` in
-  it has an invalid name, appears twice, or has an unmatched brace;
-- the input schema does not describe an object, or its `$ref` resolves to no shared definition,
-  or back to one it is reached from;
+- `upstream` is not `"<METHOD> /<path>"` with a supported method;
+- the `upstream` path holds a query, a fragment, whitespace, a backslash, a dot segment or an
+  incomplete `%` escape;
+- a `{param}` in the `upstream` path has an invalid name, appears twice, or has an unmatched
+  brace;
+- the input schema does not describe an object;
+- the input schema's `$ref` resolves to no shared definition, or back to one it is reached from;
 - a `{param}` in the template has no `parameters` entry with `in: "path"` naming it, or an entry
   names a parameter the template does not declare;
 - a mapped field, for a path, query or header parameter, is not a field of the input schema;
 - an input field is neither mapped nor `payload`, so nothing would carry it upstream;
 - a path parameter's input field is not required by the schema, which would leave a segment of
   the path with no value;
-- two fields supply the same path parameter, query parameter or header, so only one would be sent.
-  Header names are compared without regard to case;
+- two fields supply the same path parameter, query parameter or header, so only one would be
+  sent. Header names are compared without regard to case;
 - `payload` is mapped as a parameter, or the input schema declares it for a method that cannot
   carry a body;
 - a mapping names a header that is not a valid name, one the driver sets (`content-type`,
@@ -132,7 +140,7 @@ handler. See
 
 ## The upstream must use https
 
-The target, from `FLEX_UPSTREAM_TARGET` or the secret field `target` names, is an absolute base URL.
-An http target is accepted only for a loopback host. A local stub, or a sidecar that terminates
-TLS, still works. A remote address cannot be configured without TLS. The same rule applies to
-every request an authentication part makes.
+The target is an absolute base URL. It comes from `FLEX_UPSTREAM_TARGET`, or from the secret field
+that `target` names. The driver accepts an http target only for a loopback host. So a local stub,
+or a sidecar that terminates TLS, still works, but a remote address cannot be configured without
+TLS. The same rule applies to every request an authentication part makes.

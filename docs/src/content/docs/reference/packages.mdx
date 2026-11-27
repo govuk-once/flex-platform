@@ -6,9 +6,10 @@ description: Every workspace package, where it lives, where its docs are and how
 import DependencyDiagram from "../../../components/DependencyDiagram.astro";
 import PackageTables from "../../../components/PackageTables.astro";
 
-How workspace packages resolve to each other's sources, with no build step, and why the gateway
-client is the exception, are in
-[Working in the repo](/flex-platform/start/working-in-the-repo/#no-library-build-step).
+This page lists every workspace package, where it lives and which page documents it. Workspace
+packages use each other's sources directly, with no build step. The gateway client is the one
+exception. See
+[Working in the repo](/flex-platform/start/working-in-the-repo/#no-library-build-step) for both.
 
 ## How they depend on each other
 
@@ -91,7 +92,11 @@ The site draws this diagram from the packages' manifests each time it builds.
 
 ## Conventions
 
-Where code belongs, and how `@repo/utils` is exported and used for sorting, are in
-[Conventions](/flex-platform/start/conventions/). What the gateway packages may depend on is
-[design constraint 10](/flex-platform/reference/design-constraints/), and which infrastructure
-package may import which is held by the lint presets in Conventions.
+The rules for what goes where are on other pages:
+
+- Where code belongs, and how to export `@repo/utils` and sort with it:
+  [Conventions](/flex-platform/start/conventions/).
+- What the gateway packages may depend on:
+  [design constraint 10](/flex-platform/reference/design-constraints/).
+- Which infrastructure package may import which: the lint presets, described in
+  [Conventions](/flex-platform/start/conventions/#code).

@@ -5,20 +5,21 @@ description: "Flex is the platform behind the GOV.UK app. It connects what GOV.U
 
 import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-Flex is the platform behind the GOV.UK app. It runs serverless on AWS, and lets the app personalise
+Flex is the platform behind the GOV.UK app. It runs serverless on AWS. It lets the app personalise
 what it shows by bringing together:
 
-- the GOV.UK app data and settings for a user such as their linked accounts and notification preferences
+- a user's GOV.UK app data and settings, such as their linked accounts and notification
+  preferences
 - the government services the GOV.UK app is built to work with
 
-This means each of those services can respond to a known person instead of an anonymous request.
+So each of those services can respond to a known person instead of an anonymous request.
 
-Teams outside the platform write **domains**. Domains hold the logic behind personalised
-features. Flex provides everything around the domains:
+Teams outside the platform write **domains**, which hold the logic behind personalised features.
+Flex provides everything around the domains:
 
 - a **Frontdoor** that checks, authenticates and routes every request
 - a home for each **domain**, with its own API and its own path from development to production
-- **gateways**, which are a domain's access to other services. They validate everything that passes
+- **gateways**, which give a domain access to other services. They validate everything that passes
   through them.
 
 See [The platform](/flex-platform/start/platform/) for how the three parts fit together and what

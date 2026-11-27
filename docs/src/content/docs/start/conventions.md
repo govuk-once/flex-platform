@@ -9,18 +9,21 @@ change you are making.
 
 ## Code
 
-- `packages/` holds the shared TypeScript, ESLint and Vitest configuration, `@repo/release`, which
-  releases the published packages, two sets of generic functions, `@repo/utils` and
-  `@repo/cloudfront-js-utils`, and `@repo/cloudfront-function`, which builds a CloudFront
-  Function and holds what is particular to one, such as its event's types. Neither set of
-  generic functions depends on another workspace package, which a test holds each to, so any
-  package can use them.
-  Gateway code lives under `gateways/`, and what gateways share lives in `gateways/shared/`.
-  Frontdoor code lives under `frontdoor/`, and what its functions share lives in
-  `frontdoor/shared/`. A section's CDK constructs live in its own `infra/`, such as
-  `frontdoor/infra`, the shared account's in `shared/infra`, constructs every section uses in
-  `infra/constructs`, and the CDK app in `infra/app`. A section's `infra/` never imports another section's: only `infra/app` joins them,
-  and lint refuses anything else. See [Infrastructure](/flex-platform/infrastructure/overview/).
+- Code lives here:
+
+  | Where | What |
+  |---|---|
+  | `packages/` | The shared TypeScript, ESLint and Vitest configuration. `@repo/release`, which releases the published packages. Two sets of generic functions, `@repo/utils` and `@repo/cloudfront-js-utils`. `@repo/cloudfront-function`, which builds a CloudFront Function and holds what is particular to one, such as its event's types |
+  | `gateways/` | Gateway code. What gateways share is in `gateways/shared/` |
+  | `frontdoor/` | Frontdoor code. What its functions share is in `frontdoor/shared/` |
+  | A section's own `infra/`, such as `frontdoor/infra` | That section's CDK constructs. The shared account's are in `shared/infra` |
+  | `infra/constructs` | Constructs every section uses |
+  | `infra/app` | The CDK app |
+
+  Neither set of generic functions depends on another workspace package, and a test holds each to
+  that, so any package can use them. A section's `infra/` never imports another section's. Only
+  `infra/app` joins them, and lint refuses anything else. See
+  [Infrastructure](/flex-platform/infrastructure/overview/).
 - `@repo/utils` exports one function per module. Each is imported by its own path, such as
   `@repo/utils/sorted-entries`, so a consumer takes only what it uses. Export a module once
   something outside the package uses it. Code only the package uses lives under `src/internal/`,
@@ -48,15 +51,18 @@ change you are making.
 - Every package extends the one TypeScript base, `base.json`: strict, no emit. The documentation
   site is the exception: it extends Astro's strict base, and turns on `noUncheckedIndexedAccess`
   and `exactOptionalPropertyTypes` as `base.json` does.
-- ESLint provides `base`, `driver`, `service`, `cloudfrontFunction`, `infraConstructs` and
-  `sectionInfra` presets. Drivers own transport access. `service` is for code that reaches an
-  upstream only through a driver: each gateway's package under `gateways/services/`, and the
-  runtime. It blocks common network globals and builtin imports, but it does not fully enforce
-  network isolation, so review transport access too. Code that runs in the CloudFront Functions runtime uses `cloudfrontFunction`, which refuses
-  what that runtime lacks, and names the packages the code may import. `infra/constructs` uses
-  `infraConstructs`, and a section's `infra/` uses `sectionInfra("<prefix>")`, which hold the
-  infrastructure's imports to one direction. The argument is the prefix of the section's package
-  names, such as `"frontdoor"` for `@repo/frontdoor-*` and `"gateway"` for `@repo/gateway-*`.
+- ESLint provides these presets:
+  - `base`.
+  - `driver`, for drivers. Drivers own transport access.
+  - `service`, for code that reaches an upstream only through a driver: each gateway's package
+    under `gateways/services/`, and the runtime. It blocks common network globals and builtin
+    imports, but it doesn't fully enforce network isolation, so review transport access too.
+  - `cloudfrontFunction`, for code that runs in the CloudFront Functions runtime. It refuses what
+    that runtime lacks, and names the packages the code may import.
+  - `infraConstructs`, for `infra/constructs`, and `sectionInfra("<prefix>")`, for a section's
+    `infra/`. Together they hold the infrastructure's imports to one direction. The argument is the
+    prefix of the section's package names, such as `"frontdoor"` for `@repo/frontdoor-*` and
+    `"gateway"` for `@repo/gateway-*`.
 - Every environment variable the platform defines starts with `FLEX_`, such as
   `FLEX_UPSTREAM_TARGET` and `FLEX_ENVIRONMENT`, so it reads as the platform's and never collides
   with one that AWS, a library or a domain's own code defines. A variable AWS sets, such as

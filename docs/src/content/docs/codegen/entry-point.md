@@ -36,14 +36,17 @@ This module is the same for every gateway. The driver comes with the configurati
 own executor, so the entry point names no driver package and no transport. If an entry point would
 need to know about a specific driver or gateway, that is a design error.
 
-`FLEX_UPSTREAM_TARGET` and `FLEX_UPSTREAM_SECRET_ARN` are read here, through
-`readUpstreamOptions`, and the caller token's `FLEX_CALLER_TOKEN_KEYS_TABLE`,
-`FLEX_CALLER_TOKEN_KEYS_ENDPOINT` and `FLEX_CALLER_TOKEN_AUDIENCE` through `readCallerTokenVerifier`,
-and nowhere else. The verifier
-reads no key until the first call. The handler is built while the module loads, during the Lambda initialisation phase.
-So the operations compile, and the secret is retrieved and validated, before the handler can
-process an event. An initialisation failure occurs outside the handler's error envelope; it is
-not a code-generation check of the deployed environment.
+The entry point is the only place that reads the environment:
+
+- `readUpstreamOptions` reads `FLEX_UPSTREAM_TARGET` and `FLEX_UPSTREAM_SECRET_ARN`.
+- `readCallerTokenVerifier` reads the caller token's `FLEX_CALLER_TOKEN_KEYS_TABLE`,
+  `FLEX_CALLER_TOKEN_KEYS_ENDPOINT` and `FLEX_CALLER_TOKEN_AUDIENCE`. The verifier reads no key
+  until the first call.
+
+The handler is built while the module loads, in Lambda's initialisation phase. So the operations
+compile, and the secret is retrieved and validated, before the handler takes an event. A failure
+at that point happens outside the handler's error envelope. Codegen doesn't check the deployed
+environment, so this is where a missing or invalid secret shows up.
 
 The handler is the only export. A gateway runs on Lambda, and the platform is its only caller.
 

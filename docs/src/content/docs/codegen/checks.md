@@ -3,35 +3,35 @@ title: What codegen checks
 description: The checks that reject a gateway, in the order codegen runs them, and what fails while it writes.
 ---
 
-Codegen fails a gateway when its configuration and schemas disagree. Without these checks, each
-problem would instead fail when the executor is created, or cause an `INTERNAL` failure on a
-request in production.
+Codegen fails a gateway if its configuration and schemas disagree. Without these checks, each
+problem would instead fail when the executor is created. Or it would cause an `INTERNAL` failure on
+a request in production.
 
-It checks in stages, in this order, and stops at the first stage that finds a problem, reporting
-what that stage found. So fixing one stage's problems can uncover the next stage's.
+Codegen checks in stages, in this order. It stops at the first stage that finds a problem, and
+reports what that stage found. So fixing one stage's problems can uncover the next stage's.
 
-1. The schema versions are read, by the rules in
+1. It reads the schema versions, by the rules in
    [Schemas and versions](/flex-platform/gateways/schemas/).
-2. The latest schemas are compiled. See [Generic checks](#generic-checks).
-3. Each version is compared with every one before it, by the
+2. It compiles the latest schemas. See [Generic checks](#generic-checks).
+3. It compares each version with every one before it, by the
    [compatibility rules](/flex-platform/gateways/compatibility/).
-4. The configuration is checked against the latest schemas: the generic checks, then the
+4. It checks the configuration against the latest schemas: the generic checks, then the
    [driver's](#driver-checks).
-5. The latest version is compared with [what the driver derives](#what-the-driver-derives).
+5. It compares the latest version with [what the driver derives](#what-the-driver-derives).
 
-Only once every stage has passed is `.gen/` deleted and written again. A failure while writing,
-such as [two types that need one name](#while-writing), fails the command and leaves an incomplete
-`.gen/`, which the next run replaces.
+Codegen deletes `.gen/` and writes it again only once every stage has passed. A failure while
+writing, such as [two types that need one name](#while-writing), fails the command. It leaves an
+incomplete `.gen/`, which the next run replaces.
 
 ## Generic checks
 
-- The gateway's `id` must be 1 to 32 lowercase letters, digits and hyphens, starting with a letter
-  and not ending with a hyphen, as `assertGatewayId` in `@repo/gateway-core` checks. The id names
-  the gateway's function and its client package, and generated code is written from it.
-- No operation may be named `then`. A client with a `then` function would be taken for a promise,
-  and returning it from an async function would call that operation.
+- The gateway's `id` must be 1 to 32 lowercase letters, digits and hyphens. It must start with a
+  letter and not end with a hyphen. `assertGatewayId` in `@repo/gateway-core` checks this. The id
+  names the gateway's function and its client package, and codegen writes generated code from it.
+- No operation may be named `then`. JavaScript would take a client with a `then` function for a
+  promise. Returning the client from an async function would then call that operation.
 - The driver must give `deriveSchemasModule` as a `file:` URL, because every gateway's schemas are
-  derived. This check reads only the URL. The module is loaded later, to check
+  derived. This check reads only the URL. Codegen loads the module later, to check
   [what the driver derives](/flex-platform/codegen/checks/#what-the-driver-derives).
 - The configuration must declare at least one operation.
 - Each operation must have schemas, and each set of schemas must have an operation.
@@ -42,30 +42,35 @@ such as [two types that need one name](#while-writing), fails the command and le
 - Every name in the schemas' `meta` must declare one scalar type: string, number, integer or boolean.
 - Every schema compiles in Ajv's strict mode.
 
-After the configuration and schema versions are loaded, the latest schemas are compiled before
-compatibility and driver checks. An invalid schema is therefore reported as an invalid schema,
-and not through the errors those later checks would produce from it.
+Codegen compiles the latest schemas before the compatibility and driver checks. So it reports an
+invalid schema as an invalid schema, not through the errors those later checks would produce from
+it.
 
 Strict mode makes a misspelt keyword, or a constraint that applies to nothing, fail generation
 instead of passing silently. One strict check is turned off. It requires a tuple's length to be
-fixed, which would reject an array that types its first elements by position and the rest with
+fixed. That would reject an array that types its first elements by position and the rest with
 `items`.
 
-A schema with asynchronous validation is always rejected, because the dispatcher validates
-synchronously. It counts only `true` as a pass, so a validator that answered with a promise
-would have every value refused.
+Codegen always rejects a schema with asynchronous validation, because the dispatcher validates
+synchronously. The dispatcher counts only `true` as a pass. So it would refuse every value given
+to a validator that answered with a promise.
 
 ## While writing
 
 The [call contract](/flex-platform/codegen/call-contract/) gives each shared definition a type of
-its own name, and each operation the types `<Operation>Input`, `<Operation>Result` and
-`<Operation>Response`. Two that need the same name fail the run, and so does a definition named
-like a type the contract or TypeScript declares, such as `OperationResult` or `Record`. Rename one
-of them. A schema the contract cannot describe, such as one nested too deeply, fails the run too.
+its own name. It gives each operation the types `<Operation>Input`, `<Operation>Result` and
+`<Operation>Response`. The run fails if:
+
+- two of these need the same name
+- a definition has the name of a type the contract or TypeScript declares, such as
+  `OperationResult` or `Record`
+- the contract cannot describe a schema, such as one nested too deeply
+
+For a clash of names, rename one of them.
 
 ## Driver checks
 
-The driver checks whether an operation's fields and its schemas describe the same request,
+The driver checks that an operation's fields and its schemas describe the same request,
 through [`checkSchemas`](/flex-platform/drivers/contract/#checkschemas) on its definition. The
 generator itself names no method, path, query parameter or header. Each driver documents its own
 checks. For openapi-rest, see
@@ -75,14 +80,14 @@ checks. For openapi-rest, see
 
 Codegen generates from the committed version, not from what it was derived from. So it also runs
 the driver's derivation, with the network refused, and compares the result with the latest
-version. It fails if `pnpm schemas` would write a new version: for a gateway whose configuration
-declares its schemas, that means they changed and `pnpm schemas` has not been run since.
+version. It fails if `pnpm schemas` would write a new version. For a gateway whose configuration
+declares its schemas, that means they changed and nobody has run `pnpm schemas` since.
 
-It compares them the way `pnpm schemas` does, using the
+Codegen compares them the way `pnpm schemas` does, using the
 [compatibility rules](/flex-platform/gateways/compatibility/). A reworded `description` or a
 change of order writes no version, so it fails nothing here either.
 
-A driver whose derivation has to fetch its upstream's description, as openapi-rest does from an
-https `spec`, cannot be derived without the network, so this check is skipped for it. Its
-versions change only when someone runs `pnpm schemas`, and the comparison of its versions holds
-them.
+Some drivers have to fetch the upstream's description to derive, as openapi-rest does from an
+https `spec`. Their derivation cannot run without the network, so codegen skips this check for
+them. Their versions change only when someone runs `pnpm schemas`, and the comparison of versions
+holds them.

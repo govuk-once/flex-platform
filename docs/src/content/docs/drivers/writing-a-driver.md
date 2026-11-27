@@ -36,13 +36,22 @@ gateways/drivers/json-rpc/
       index.ts        derives the gateway's schemas
 ```
 
-`config/` must not use the network, a secret or the environment, because codegen evaluates it
-without any of them. `runtime/` is loaded when the gateway starts. `derive/` is loaded by
-`gateway-schemas`, and by codegen with the network refused, and is never bundled. Copy
-openapi-rest's `eslint.config.ts` to keep the three apart. It keeps the root and `config/` from
-reaching `runtime/` or `derive/`, the runtime from reaching `derive/`, and `derive/` from reaching
-the runtime. An import of `derive/`, even a dynamic one, would put what it uses into every deployed
-gateway, so the definition names it by URL instead.
+Each folder is loaded at a different time:
+
+- `config/` must not use the network, a secret or the environment, because codegen evaluates it
+  without any of them.
+- `runtime/` is loaded when the gateway starts.
+- `derive/` is loaded by `gateway-schemas`, and by codegen with the network refused. It is never
+  bundled.
+
+Copy openapi-rest's `eslint.config.ts` to keep the three apart. It stops:
+
+- the root and `config/` from reaching `runtime/` or `derive/`;
+- the runtime from reaching `derive/`;
+- `derive/` from reaching the runtime.
+
+An import of `derive/`, even a dynamic one, would put what it uses into every deployed gateway.
+So the definition names it by URL instead.
 
 ```json title="package.json"
 {
@@ -170,12 +179,14 @@ of its own.
 
 ## 3. Deriving the schemas
 
-`gateway-schemas` loads this module and writes what it returns as the gateway's next version,
-once the shape has changed and no caller would break. Here the configuration is the description,
-so deriving takes each operation's declared schemas, in the order they are written, and converts
-them as [every driver must](/flex-platform/reference/design-constraints/): it closes inputs and
-opens outcomes. The two conversions are left out here. openapi-rest's `src/derive/convert.ts`
-does both, compositions, references and `enum`s included, as
+`gateway-schemas` loads this module and writes what it returns as the gateway's next version. It
+does this once the shape has changed and no caller would break.
+
+Here the configuration is the description. Deriving takes each operation's declared schemas, in
+the order they are written. It converts them as
+[every driver must](/flex-platform/reference/design-constraints/): it closes inputs and opens
+outcomes. The example leaves out the two conversions. openapi-rest's `src/derive/convert.ts` does
+both, including compositions, references and `enum`s, as
 [Deriving schemas](/flex-platform/drivers/openapi-rest/deriving-schemas/#inputs-and-outcomes-are-converted-differently)
 describes:
 
@@ -250,6 +261,9 @@ them itself, without the network, and fails if `pnpm schemas` would write a new 
 [What codegen checks](/flex-platform/codegen/checks/#what-the-driver-derives).
 
 ## 5. Custom handlers
+
+`defineHandler` brands a custom handler with the driver's type. It returns the function
+unchanged:
 
 ```ts title="src/config/handler.ts"
 import type { OperationResult } from "@repo/gateway-core";
@@ -464,6 +478,8 @@ A production driver would also:
 
 ## 7. The entry module
 
+`index.ts` is what a configuration imports:
+
 ```ts title="src/index.ts"
 export type {
   JsonRpcDriver,
@@ -546,7 +562,7 @@ Generation, bundling and dispatch are already covered against the fixture gatewa
 
 ## Rules a driver must keep
 
-Breaking one of these rules is silent: the build stays green, but the behaviour is wrong somewhere
+Breaking one of these rules is silent. The build stays green, but the behaviour is wrong somewhere
 else. Each rule is stated in full, with its reasoning, in
 [the design constraints](/flex-platform/reference/design-constraints/).
 

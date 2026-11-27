@@ -39,20 +39,23 @@ Use pnpm and the existing scripts. When a tool has no package script, use `pnpm 
 
 ## No library build step
 
-Library packages have no separate compilation step. Codegen emits validators and call contracts,
-then bundles the generated entry point with esbuild, so a gateway that cannot be bundled fails
-generation. The documentation site has its own Astro build.
+Library packages are never compiled on their own. Workspace packages export their `.ts` sources,
+and resolve to each other's sources. Vitest, esbuild and tsx use the sources as they are. So
+typecheck and tests see a change to a dependency immediately, and no task waits on another
+package.
 
-The gateway client is the exception, because domains install it: its `build` script bundles it
-into `dist/`, which is what a [release](/flex-platform/start/releasing/) publishes. In the workspace it resolves to its sources, like every
-other package, and no task waits on the build.
+Codegen emits validators and call contracts, then bundles the generated entry point with esbuild.
+So a gateway that can't be bundled fails generation. The documentation site has its own Astro
+build.
 
-Workspace packages export their `.ts` sources and resolve to each other's sources. This means
-typecheck and tests see a dependency change immediately, and no task waits on another package,
-with one exception: the CDK app's tests wait on the codegen of each gateway package it depends on,
-because a gateway's stack deploys the bundle codegen writes. Synth runs outside Turborepo, and stops
-with a message to run `pnpm codegen` when a bundle is missing.
-Vitest, esbuild and tsx use the sources as they are.
+There are two exceptions:
+
+- **The gateway client** is built, because domains install it. Its `build` script bundles it into
+  `dist/`, which is what a [release](/flex-platform/start/releasing/) publishes. In the workspace
+  it resolves to its sources like every other package, and no task waits on the build.
+- **The CDK app's tests** wait on the codegen of each gateway package the app depends on, because a
+  gateway's stack deploys the bundle that codegen writes. Synth runs outside Turborepo. If a bundle
+  is missing, it stops with a message to run `pnpm codegen`.
 
 Git ignores generated artifacts: `.gen/`, `dist/`, `.turbo/`, `cdk.out/` and `coverage/`.
 
@@ -82,14 +85,14 @@ Each pull request to `main` runs these, in `.github/workflows/`:
 | Release | Checks the release record. See [Checking a release](/flex-platform/start/releasing/#checking-a-release). |
 | Documentation | Builds the site, when the pull request changes `docs/`. |
 
-gitleaks uses its default rules. `.gitleaks.toml` allows one kind of value through: `SYNTHETIC`,
-alone or followed by groups of capitals and digits joined with `_`, such as `SYNTHETIC_API_KEY`. A
-test that needs a stand-in secret, such as one that proves a payload log leaves it out, uses a
-value of that form, and any other value that looks like a secret fails the check.
+gitleaks uses its default rules. `.gitleaks.toml` lets one kind of value through: `SYNTHETIC`,
+alone or followed by groups of capitals and digits joined with `_`, such as `SYNTHETIC_API_KEY`.
+A test that needs a stand-in secret, such as one proving a payload log leaves it out, uses a value
+of that form. Any other value that looks like a secret fails the check.
 
-SonarQube's settings are in `sonar-project.properties`: what counts as source and as test, what is
-left out of coverage, and each rule ignored, with the reason beside it. A line it flags that is
-right as written carries `// NOSONAR` and the reason.
+SonarQube's settings are in `sonar-project.properties`. They say what counts as source and as
+test, what is left out of coverage, and which rules are ignored, each with its reason beside it. If
+SonarQube flags a line that is right as written, the line carries `// NOSONAR` and the reason.
 
 Dependabot proposes updates weekly, for npm packages and GitHub Actions, once a release is seven
 days old, the same age pnpm requires. Patch and minor updates come grouped in one pull request.
