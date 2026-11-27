@@ -39,6 +39,7 @@ export default defineConfig({
             "frontdoor/cloudfront-function",
             "frontdoor/lambda-edge",
             "frontdoor/caller-token",
+            "frontdoor/key-rotation",
           ],
         },
         {
