@@ -184,7 +184,7 @@ throw new GatewayError("UPSTREAM_ERROR", `Operation "${operation}": upstream ret
 ```
 
 The runtime logs a `GatewayError`'s message as written and returns its code. It logs any other
-error only as its source locations, and returns `INTERNAL`. So a driver raises its own
+error only as [where it was thrown](/flex-platform/gateways/responses/#what-reaches-a-log), and returns `INTERNAL`. So a driver raises its own
 request-time failures as `GatewayError`, to keep the diagnosis. It uses `INTERNAL` for
 configuration bugs. See [error codes](/flex-platform/gateways/responses/#error-codes) for what each code means
 and how it counts towards upstream health.

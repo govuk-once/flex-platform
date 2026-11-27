@@ -33,7 +33,7 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 | The platform's sections | `start/platform.mdx`, `frontdoor/`, `domains/` |
 | What is implemented and what is planned | `start/platform.mdx` |
 | Packages, where each lives and what it depends on | `reference/packages.mdx` |
-| How a gateway works, dispatch order | `gateways/overview.md` |
+| How a gateway works, dispatch order, placement | `gateways/overview.md` |
 | Configuration, policy, logging, bindings | `gateways/configuration.md` |
 | Schema versions and `gateway-schemas` | `gateways/schemas.md` |
 | Deriving schemas, from a description or the configuration | `drivers/contract.md`, `codegen/checks.md` |
@@ -44,9 +44,18 @@ A link on the site such as `/flex-platform/gateways/overview/#a-request` is the 
 | The openapi-rest driver | `drivers/openapi-rest/` |
 | Environment variables and the secret | `reference/environment.md` |
 | Releasing packages, the record, candidates | `start/releasing.md` |
-| The CDK app, stages, config and its rules | `infrastructure/overview.md` |
-| The network, endpoints and DNS allowlist | `infrastructure/network.md` |
+| The accounts and why they are split, stages, stacks, and the rules for stacks | `infrastructure/overview.md` |
+| The CDK app's config and its checks | `infrastructure/config.md` |
+| Deploying a stage, waves | `infrastructure/deploying.md` |
+| Cross-region values, a function behind CloudFront, a table's policy | `infrastructure/building-blocks.md` |
+| Synth checks, tags, feature flags, CDK tests | `infrastructure/checks-and-tests.md` |
+| The network, endpoints, private APIs | `infrastructure/network.md` |
+| DNS Firewall and the allowlist | `infrastructure/dns-filtering.md` |
+| The caller token, its keys and their rotation | `frontdoor/caller-token.md`, `frontdoor/key-rotation.md` |
 | Adding a gateway | `gateways/creating-a-gateway.md` |
 | The domain SDK, a domain's configuration, and how a request is answered | `domains/overview.mdx`, `domains/configuration.md`, `domains/requests.md` |
+| The gateway client and the caller context | `domains/calling-gateways.md` |
+| A domain's stacks, permissions and routing | `domains/hosting.mdx` |
+| Releasing a domain, the pipeline API and the release worker | `domains/releasing.md`, `domains/release-pipeline.md` |
 | CI, secret scanning, SonarQube, Dependabot | `start/working-in-the-repo.md` |
 | Terms | `reference/glossary.md` |

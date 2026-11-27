@@ -49,15 +49,29 @@ A gateway goes through two commands and then a deployment.
    - the client package a domain installs
 
    See [Code generation](/flex-platform/codegen/overview/).
-3. **The bundle**: it runs as a Lambda function in the egress section. Deploying it is planned.
-   It will be placed `isolated` or `private`, depending on how its upstream is reached. When the
-   bundle loads, the entry point:
+3. **The bundle**: it runs as a Lambda function in the egress section, which its
+   [stack](/flex-platform/infrastructure/overview/#stacks) deploys. It is placed `isolated` or
+   `private`, depending on how its upstream is reached. When the bundle loads, the entry point:
    - reads the environment
    - asks the driver for its executor, which retrieves and validates the gateway's secret
    - compiles the handler
 
    If the first secret read fails, or the value is invalid, initialisation fails. The handler
    never processes an event. Later secret reads can still fail during a request.
+
+## Placement
+
+A gateway runs in one of two placements. The placement depends on how its upstream is reached:
+
+| Placement  | Upstream                                             | Route out                              |
+| ---------- | ---------------------------------------------------- | -------------------------------------- |
+| `isolated` | Reached privately, such as another AWS account's API | A VPC endpoint                         |
+| `private`  | Reached over the internet                            | A NAT gateway. Filtering its traffic beyond DNS is planned |
+
+The gateway's code is the same in both placements. Placement belongs to its deployment, in the
+[CDK app's config](/flex-platform/infrastructure/config/), not to the gateway's
+configuration. The upstream's address and the secret the gateway uses to authenticate to it are
+deployment values too. See [Environment](/flex-platform/reference/environment/).
 
 ## A request
 

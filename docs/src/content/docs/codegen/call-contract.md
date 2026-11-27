@@ -14,7 +14,7 @@ declarations together with the ones they import. A domain installs that package 
 client, which the package names as a peer, and nothing else from this workspace.
 
 The contract's `Operations` type the
-[gateway client](/flex-platform/domains/overview/#calling-gateways), so a domain calls typed
+[gateway client](/flex-platform/domains/calling-gateways/), so a domain calls typed
 operations instead of building envelopes. The client package exports the contract's types beside
 the function that creates the client.
 

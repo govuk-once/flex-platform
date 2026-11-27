@@ -28,7 +28,7 @@ the gateway runs. `client/` is what a service that calls the gateway imports.
 | `.gen/runtime/validators/` | Standalone Ajv validators: one for each operation's input, each declared outcome and each `meta` name. `schemas.js` holds them, as self-contained JavaScript with no package imports. `index.js` maps each operation, and each `meta` name, to its validators. |
 | `.gen/runtime/bundle.mjs` | `entry.js` and everything it imports, bundled by esbuild as ESM for Node 26. Only Node's builtins are left for the platform to resolve. This is the deployed artifact, and its handler is `bundle.handler`. |
 | `.gen/client/rpc.ts` | The call contract as types: each operation's input and the union of its outcomes. See [The call contract](/flex-platform/codegen/call-contract/). |
-| `.gen/client/index.ts` | The contract, and a function named for the gateway, such as `createUdpClient`, that creates a [gateway client](/flex-platform/domains/overview/#calling-gateways) typed by it. Codegen builds the client package from it. |
+| `.gen/client/index.ts` | The contract, and a function named for the gateway, such as `createUdpClient`, that creates a [gateway client](/flex-platform/domains/calling-gateways/) typed by it. Codegen builds the client package from it. |
 | `.gen/client/package/` | The [client package](#the-client-package) a domain installs: `package.json`, `index.js` and `index.d.ts`. |
 
 No package includes `.gen/` in its TypeScript project, so nothing typechecks either half where it
@@ -41,23 +41,11 @@ gateway's package. So the generated output is checked in at least one place.
 
 ## Order of a run
 
-Codegen checks a gateway before it writes anything:
-
-1. It loads the configuration. It reads every schema version and checks its shape.
-2. It compiles the latest version's schemas in Ajv's strict mode.
-3. It compares each version with every version before it. See
-   [Compatibility](/flex-platform/gateways/compatibility/).
-4. It checks the configuration against the latest version, first generically and then through the
-   driver's `checkSchemas`. See [What codegen checks](/flex-platform/codegen/checks/).
-5. If the driver can derive without the network, it checks that the latest version is what the
-   driver derives. See [What the driver derives](/flex-platform/codegen/checks/#what-the-driver-derives).
-6. It deletes `.gen/` and writes it again with the validators, entry point, bundle, contract and
-   client package.
-
-If these checks reject a gateway, its existing output stays. After that point, writing and
-bundling can still fail. So can the contract, which refuses a schema it cannot express as types,
-such as two names that would collide. A failure there fails the command and leaves an incomplete
-`.gen/`. The next run replaces it.
+Codegen checks a gateway in stages before it writes anything, and stops at the first stage that
+finds a problem. The stages, in order, are in [What codegen checks](/flex-platform/codegen/checks/).
+Only once every stage has passed does codegen delete `.gen/` and write it again, with the
+validators, entry point, bundle, contract and client package. So a gateway the checks reject keeps
+its existing output.
 
 ## Guarantees and limits
 
@@ -81,7 +69,7 @@ for the gateway, such as `createUdpClient` for `udp`. So a domain that imports s
 packages has no two exports of the same name.
 
 The function takes nothing. It creates a
-[gateway client](/flex-platform/domains/overview/#calling-gateways) for the gateway's function. The
+[gateway client](/flex-platform/domains/calling-gateways/) for the gateway's function. The
 gateway client names that function from the id and the domain's environment. The client has a
 function for each operation the latest schema version holds. The package lists their names,
 because the contract's types are gone at runtime.

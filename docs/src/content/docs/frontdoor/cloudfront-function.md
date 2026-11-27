@@ -126,7 +126,7 @@ The function's code comes from three packages:
 
 Lambda@Edge uses the trace ID, the encoding check, the JSON content type, and everything in
 `@repo/frontdoor-shared` too, so the two functions can't disagree on any of them. The function
-built for [the pipeline API](/flex-platform/domains/hosting/#the-pipeline-api) uses the first two
+built for [the pipeline API](/flex-platform/domains/release-pipeline/#the-pipeline-api) uses the first two
 packages too.
 
 The function bundles what it imports from those packages, so that code is held to the same rules.

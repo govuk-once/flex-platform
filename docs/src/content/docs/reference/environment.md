@@ -58,8 +58,8 @@ codegen writes, with these settings:
 | Variables | `FLEX_UPSTREAM_SECRET_ARN`, `FLEX_CALLER_TOKEN_KEYS_TABLE`, `FLEX_CALLER_TOKEN_KEYS_ENDPOINT`, `FLEX_CALLER_TOKEN_AUDIENCE`, and `FLEX_UPSTREAM_TARGET` unless config's `target` is `null` |
 
 Whether the function is placed `isolated` or `private` depends on how its upstream is reached, and
-is set in [config](/flex-platform/infrastructure/overview/#config). See
-[Egress](/flex-platform/start/platform/#egress).
+is set in [config](/flex-platform/infrastructure/config/). See
+[placement](/flex-platform/gateways/overview/#placement).
 
 The stack owns the code, the version and the alias, so deploying its stack is the only way to
 release a gateway. The alias moves to a new version only once that version exists, so no call

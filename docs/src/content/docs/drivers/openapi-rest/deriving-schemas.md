@@ -168,6 +168,13 @@ For example, `GET /v1/sar/abc/` fits `/v1/{resourcePath+}` as written. But a rou
 the trailing slash would send it to `/v1/sar/{sarId}`, so it is refused. `matches` on a path the
 document does declare is also refused.
 
+An ordinary parameter can be filled the same way. For example, `GET /v1/identity/app/{id}` can
+be matched against `/v1/identity/{serviceName}/{identifier}`. A parameter the path keeps goes by
+the path's name for it. Either way, the request is sent to the path in `upstream`. Only deriving
+reads `matches`.
+
+### How the path is checked
+
 A path with its own parameters is checked the same way. For example, `GET /v1/app/{id}` reaches
 `/v1/app/admin` if the document declares that path. Deriving refuses it unless the parameter's
 schema refuses every value a request would write as that text, through a list of values, a type
@@ -207,11 +214,6 @@ would be checked asynchronously, and does not run it.
 
 This is the only check the text gets. The parameter is no longer part of the input, so neither
 generation nor a request's validator ever sees it.
-
-An ordinary parameter can be filled the same way. For example, `GET /v1/identity/app/{id}` can
-be matched against `/v1/identity/{serviceName}/{identifier}`. A parameter the path keeps goes by
-the path's name for it. Either way, the request is sent to the path in `upstream`. Only deriving
-reads `matches`.
 
 ## Narrowing what the document leaves open
 

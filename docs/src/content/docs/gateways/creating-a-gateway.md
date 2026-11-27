@@ -45,7 +45,7 @@ gateways/services/example/
     "@repo/gateway-codegen": "workspace:*",
     "@repo/gateway-core": "workspace:*",
     "@repo/tsconfig": "workspace:*",
-    "eslint": "10.13.0"
+    "eslint": "10.15.0"
   }
 }
 ```
@@ -127,17 +127,17 @@ until it passes. See [What codegen checks](/flex-platform/codegen/checks/).
 
 The gateway deploys as a Lambda function named `gateway-<environment>-<id>`.
 `gatewayFunctionName` in `@repo/gateway-core` builds the name. The function has one alias, `live`,
-which every [gateway client](/flex-platform/domains/overview/#calling-gateways) invokes.
+which every [gateway client](/flex-platform/domains/calling-gateways/) invokes.
 
 To deploy it:
 
 1. List it in `gateways` on each domain account that runs it, in the
-   [CDK app's config](/flex-platform/infrastructure/overview/#config).
+   [CDK app's config](/flex-platform/infrastructure/config/).
 2. Add its package to `@repo/infra-app`'s dependencies.
 
 The config entry names every host the gateway connects to: its upstream's API, and any host it
 takes a token from. The network resolves only the names on its DNS allowlist, and a name left off
-doesn't resolve. See [the allowlist](/flex-platform/infrastructure/network/#the-allowlist). The
+doesn't resolve. See [the allowlist](/flex-platform/infrastructure/dns-filtering/#the-allowlist). The
 entry also gives the gateway's placement, its secret, its target and the roles it signs as.
 
 A secret that the gateway's stack creates starts empty. Put its value before anything calls the

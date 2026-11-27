@@ -46,9 +46,9 @@ Each folder is loaded at a different time:
 
 Copy openapi-rest's `eslint.config.ts` to keep the three apart. It stops:
 
-- the root and `config/` from reaching `runtime/` or `derive/`;
+- the root and `config/` from importing `runtime/`, other than its types, or `derive/`;
 - the runtime from reaching `derive/`;
-- `derive/` from reaching the runtime.
+- `derive/` from importing the runtime, other than its types.
 
 An import of `derive/`, even a dynamic one, would put what it uses into every deployed gateway.
 So the definition names it by URL instead.
@@ -74,8 +74,8 @@ So the definition names it by URL instead.
     "@repo/eslint-config": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
-    "eslint": "10.13.0",
-    "vitest": "5.0.5"
+    "eslint": "10.15.0",
+    "vitest": "5.1.1"
   }
 }
 ```
@@ -563,10 +563,10 @@ Generation, bundling and dispatch are already covered against the fixture gatewa
 ## Rules a driver must keep
 
 Breaking one of these rules is silent. The build stays green, but the behaviour is wrong somewhere
-else. Each rule is stated in full, with its reasoning, in
-[the design constraints](/flex-platform/reference/design-constraints/).
+else. Each group names the [design constraints](/flex-platform/reference/design-constraints/) that
+state its rules in full, with their reasoning. The certificate rule is the driver's own.
 
-**Transport**
+**Transport** (constraint 1)
 
 - The driver is the only package that names its transport's vocabulary. Callers see outcome names
   such as `ok`, never a status or a header. `meta` names are neutral too.
@@ -574,10 +574,10 @@ else. Each rule is stated in full, with its reasoning, in
   about a specific driver is a design error.
 - Verify an upstream's certificate against the hostname the driver connected to, never a name DNS
   redirected it to, such as a CNAME's target. Never turn verification off or set `servername`.
-  The network's [allowlist](/flex-platform/infrastructure/network/#the-allowlist) trusts
+  The network's [allowlist](/flex-platform/infrastructure/dns-filtering/#the-allowlist) trusts
   redirection, so the certificate is what proves the driver reached its upstream.
 
-**Upstream calls**
+**Upstream calls** (constraints 2 and 8)
 
 - Make each upstream call with `ctx.upstream(fn)`, once per call. `fn` builds its request each
   time and never retries. The driver expresses no retry behaviour.
@@ -590,7 +590,7 @@ else. Each rule is stated in full, with its reasoning, in
   more, inside the same attempt, with the secret read again. A write that is refused is never sent
   again.
 
-**Failures and logging**
+**Failures and logging** (constraints 4 and 6)
 
 - Raise request-time failures as `GatewayError`, with `INTERNAL` for configuration bugs. Never let
   a library error escape with its message, because the message can carry a payload.
@@ -598,7 +598,7 @@ else. Each rule is stated in full, with its reasoning, in
   payload value, or text a caller or an upstream wrote.
 - Report beside a result through `ctx.meta`, as soon as the value is known.
 
-**Configuration and secrets**
+**Configuration and secrets** (constraints 3, 11 and 12)
 
 - Everything that can fail does so in `createExecutor`, before it resolves: configuration first,
   then the secret, then authentication state. A request never finds a configuration error.
@@ -610,7 +610,7 @@ else. Each rule is stated in full, with its reasoning, in
 - Nothing in `config/` reads a secret, the environment or the network when it is imported.
 - Look up anything named at request time in a `Map`, never a plain object.
 
-**Contracts**
+**Contracts** (constraints 1, 10 and 14)
 
 - Brand the handler type with the driver's `type`. Only the driver's `defineHandler` produces it.
 - Keep the driver's own checks relating configuration to schemas in `checkSchemas`, and type-level

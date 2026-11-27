@@ -3,9 +3,7 @@ title: Designing a domain
 description: How domain logic turns upstream capabilities into a service for the app.
 ---
 
-import { Aside, Badge } from "@astrojs/starlight/components";
-
-<Badge text="Planned" variant="caution" size="medium" />
+import { Aside } from "@astrojs/starlight/components";
 
 A domain owns a feature's behaviour and the API the app uses to reach it. The platform provides
 the Frontdoor, domain hosting and gateways to upstreams. The examples here show how to divide the
@@ -82,6 +80,6 @@ fails, an earlier successful write is not undone. Before combining writes behind
 decide what a partial result means for the feature.
 
 A timeout does not show whether an upstream completed a write. The gateway client sends each call
-once, as described under [Calling gateways](/flex-platform/domains/overview/#calling-gateways). The
+once, as described under [Calling gateways](/flex-platform/domains/calling-gateways/). The
 feature's design must handle partial success, and decide whether an operation can safely be
 repeated.

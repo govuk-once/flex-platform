@@ -12,7 +12,7 @@ Deployment values, the target and the secret, arrive as executor options.
 |---|---|
 | `spec` | Where the OpenAPI document is: an https URL, ideally pinned to a release or commit, or a path within the gateway's directory. `gateway-schemas` reads it. Codegen reads it only if it is a path, to check [what the driver derives](/flex-platform/codegen/checks/#what-the-driver-derives). Codegen never fetches a URL. Nothing reads it at runtime. |
 | `auth` | Required. How requests are authenticated, as a list of parts (`[]` for none), and the secret fields each part reads. See [Authentication](/flex-platform/drivers/openapi-rest/authentication/). |
-| `target` | A secret field that holds the upstream's address, such as `fromSecret("apiUrl")`, for an upstream whose secret includes it. If both are set, it is used instead of `FLEX_UPSTREAM_TARGET`, and follows the same rules. If neither is set, the executor refuses to start. The driver reads it when the executor is created. |
+| `target` | A secret field that holds the upstream's address, such as `fromSecret("apiUrl")`, for an upstream whose secret includes it. If both are set, it is used instead of `FLEX_UPSTREAM_TARGET`. Either follows [the same rules](/flex-platform/drivers/openapi-rest/overview/#the-upstream-must-use-https). If neither is set, the executor refuses to start. The driver reads it when the executor is created. |
 | `headers` | Static headers sent on every request, such as an API version. |
 | `metadata` | What the gateway reports beside a result, read from response headers. See [Response metadata](/flex-platform/drivers/openapi-rest/metadata/). |
 | `maxResponseBytes` | The largest response body to buffer. Defaults to 1 MiB. |
@@ -25,7 +25,7 @@ Nothing here is called by hand, and nothing the entry point calls is specific to
 
 | Option | For this driver |
 |---|---|
-| `target` | `FLEX_UPSTREAM_TARGET`, if it is set. It must be an absolute https base URL with no query, fragment or credentials. http is accepted only for a loopback host. A path prefix is kept. |
+| `target` | `FLEX_UPSTREAM_TARGET`, if it is set. See [the upstream must use https](/flex-platform/drivers/openapi-rest/overview/#the-upstream-must-use-https). |
 | `secret` | A provider for the secret that `FLEX_UPSTREAM_SECRET_ARN` names. The driver reads only the fields its `target` and `auth` name. |
 | `log` | Where the driver logs while the executor is created. |
 
@@ -44,19 +44,16 @@ still fail during a request. Creation runs in three steps.
    - `metadata` the driver cannot read;
    - a `target` that is not a `fromSecret` field;
    - a `maxResponseBytes` that is not a positive integer;
-   - a `FLEX_UPSTREAM_TARGET` that is neither an absolute https URL nor http to a loopback host,
-     or that holds a query, a fragment or credentials. It is checked if it is set, even when a
-     `target` field will replace it;
+   - a `FLEX_UPSTREAM_TARGET` that breaks
+     [the target's rules](/flex-platform/drivers/openapi-rest/overview/#the-upstream-must-use-https).
+     It is checked if it is set, even when a `target` field will replace it;
    - neither `FLEX_UPSTREAM_TARGET` nor a `target` field.
 
    The driver then compiles every operation. Compiling fails on the
-   [configuration errors](/flex-platform/drivers/openapi-rest/overview/#configuration-errors).
-2. **The secret is retrieved and validated.** Creation fails if:
-   - the secret is missing, unreadable or not a JSON object;
-   - a required field the configuration names is missing;
-   - a field the configuration names is not a non-empty string without control characters or
-     surrounding spaces.
-
+   [checks it makes at startup](/flex-platform/drivers/openapi-rest/overview/#what-is-checked-and-when).
+2. **The secret is retrieved and validated.** Creation fails if the secret is missing, unreadable
+   or not a JSON object, or if a field the configuration names breaks
+   [the rules for secret fields](/flex-platform/drivers/openapi-rest/authentication/#secret-fields).
    An optional field that is absent is logged by name. The driver reads a `target` field's address
    here, and holds it to the same rules as `FLEX_UPSTREAM_TARGET`. If that field is optional and
    absent, and `FLEX_UPSTREAM_TARGET` is not set, creation fails here.
@@ -89,4 +86,4 @@ An auth part may not set a header it did not declare.
 
 The definition also carries `checkSchemas`. Codegen calls it with the configuration and the
 schemas before it emits anything. For what it refuses, see
-[What codegen checks](/flex-platform/drivers/openapi-rest/overview/#what-codegen-checks).
+[What is checked, and when](/flex-platform/drivers/openapi-rest/overview/#what-is-checked-and-when).

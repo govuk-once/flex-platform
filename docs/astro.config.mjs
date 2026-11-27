@@ -39,16 +39,30 @@ export default defineConfig({
             "frontdoor/cloudfront-function",
             "frontdoor/lambda-edge",
             "frontdoor/caller-token",
+            "frontdoor/key-rotation",
           ],
         },
         {
           label: "Domains",
           items: [
             "domains/overview",
-            "domains/configuration",
-            "domains/requests",
-            "domains/hosting",
             "domains/designing-a-domain",
+            {
+              label: "Building a domain",
+              items: [
+                "domains/configuration",
+                "domains/requests",
+                "domains/calling-gateways",
+              ],
+            },
+            {
+              label: "Hosting and releasing",
+              items: [
+                "domains/hosting",
+                "domains/releasing",
+                "domains/release-pipeline",
+              ],
+            },
           ],
         },
         {
@@ -98,7 +112,15 @@ export default defineConfig({
         },
         {
           label: "Infrastructure",
-          items: ["infrastructure/overview", "infrastructure/network"],
+          items: [
+            "infrastructure/overview",
+            "infrastructure/config",
+            "infrastructure/deploying",
+            "infrastructure/building-blocks",
+            "infrastructure/checks-and-tests",
+            "infrastructure/network",
+            "infrastructure/dns-filtering",
+          ],
         },
         {
           label: "Reference",

@@ -83,5 +83,5 @@ does not.
 ## Errors in a handler
 
 If a handler throws its own error, anything other than a `GatewayError`, the runtime logs only
-its source locations, and the call returns `INTERNAL`. When the diagnosis matters, throw a
+[where it was thrown](/flex-platform/gateways/responses/#what-reaches-a-log), and the call returns `INTERNAL`. When the diagnosis matters, throw a
 `GatewayError` with a message that is safe to log.

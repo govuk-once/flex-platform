@@ -73,24 +73,11 @@ for an integration does not mean that integration is implemented.
    - Refusing `__proto__` doesn't cover this. These names belong to the prototype itself, so a
      caller could be held to the values they hold without any schema mentioning them.
 
-   Each step owns an error code:
-
-   | Step | Code |
-   |---|---|
-   | Envelope parsing, input validation | `INVALID_INPUT` |
-   | Token, without one | `UNAUTHENTICATED` |
-   | Token, failing a check | `SECURE_SIGNATURE_INVALID` |
-   | Routing, for an unknown operation | `OPERATION_NOT_FOUND` |
-   | Secure bindings | `SECURE_VALUE_MISMATCH` |
-   | Outcome validation | `UPSTREAM_CONTRACT_VIOLATION` |
-   | Anything uncaught | `INTERNAL` |
-
-   Execution passes on any `GatewayError` the driver raises. The runtime itself only adds
-   `UPSTREAM_TIMEOUT` at that step. Input validation runs before any upstream call, so an invalid
+   Each step owns an error code, which [a request](/flex-platform/gateways/overview/#a-request)
+   lists beside it. Execution passes on any `GatewayError` the driver raises. The runtime itself
+   only adds `UPSTREAM_TIMEOUT` at that step. Input validation runs before any upstream call, so an invalid
    request never reaches the upstream. Nothing throws out of the handler: every failure leaves as
    an envelope.
-
-   See [a request](/flex-platform/gateways/overview/#a-request).
 
 4. **Errors carry codes.** Failure responses are `{ ok: false, error: { code } }`. Diagnostic
    messages stay in logs and must be safe to log.
@@ -181,7 +168,7 @@ for an integration does not mean that integration is implemented.
      the service behind it chose. So a write that is refused is never sent again.
 
    See [refused credentials](/flex-platform/drivers/openapi-rest/authentication/#when-the-upstream-refuses-a-credential),
-   [calling gateways](/flex-platform/domains/overview/#calling-gateways) and
+   [calling gateways](/flex-platform/domains/calling-gateways/) and
    [the Lambda function](/flex-platform/reference/environment/#the-lambda-function).
 
 9. **Emitted validators are self-contained JavaScript.** Bundle Ajv's runtime helpers and formats

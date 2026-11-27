@@ -29,7 +29,7 @@ This page covers how the distribution is set up. Each function has its own page.
 
 The distribution answers at the apex of the frontdoor account's hosted zone, such as
 `production.flex-domainedge.once.service.gov.uk`. The zone already exists in each frontdoor
-account, delegated, and [config](/flex-platform/infrastructure/overview/#config) names it. The
+account, delegated, and [config](/flex-platform/infrastructure/config/) names it. The
 stack creates no zone. It writes three records into it:
 
 - a CAA record, `0 issue "amazon.com"`, so only Amazon may issue certificates for the zone's

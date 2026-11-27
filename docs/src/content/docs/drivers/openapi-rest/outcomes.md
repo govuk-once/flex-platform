@@ -46,12 +46,9 @@ or streamed larger than this, the driver cancels it and reports `UPSTREAM_CONTRA
 The driver's diagnostics are safe to log. They name the operation, its template, the status, and
 header or field names. They never include a resolved path, a header value or a body.
 
-The driver raises each of its own request-time failures as a `GatewayError`. Its message is
-written to be safe to log, and the runtime records it unchanged.
-
-Other errors can escape, such as a library exception or a custom handler's own error. The runtime
-logs each of these as its source locations and the dispatcher step that was running. It never
-logs the error's message, name, properties, cause or stack text.
+The driver raises each of its own request-time failures as a `GatewayError`, which the runtime
+logs as written. Any other error that escapes, such as a library exception or a custom handler's
+own, is logged only as [where it was thrown](/flex-platform/gateways/responses/#what-reaches-a-log).
 
 Within the attempt, the driver still replaces library exceptions with controlled ones. For
 example, it replaces:

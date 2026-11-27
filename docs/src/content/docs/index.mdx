@@ -25,16 +25,38 @@ Flex provides everything around the domains:
 See [The platform](/flex-platform/start/platform/) for how the three parts fit together and what
 exists today.
 
+## Building a domain
+
 <CardGrid>
   <LinkCard
-    title="The platform"
-    description="Frontdoor, domains and egress, and what is planned."
-    href="/flex-platform/start/platform/"
+    title="Designing a domain"
+    description="Where a feature's logic belongs, and how a domain uses gateways."
+    href="/flex-platform/domains/designing-a-domain/"
   />
   <LinkCard
-    title="Designing a domain"
-    description="App-facing behaviour, linked identities and calls to upstreams."
-    href="/flex-platform/domains/designing-a-domain/"
+    title="Domain configuration"
+    description="Declare a domain's routes and type its handlers with the domain SDK."
+    href="/flex-platform/domains/configuration/"
+  />
+  <LinkCard
+    title="Calling gateways"
+    description="Call an upstream through its gateway's typed client."
+    href="/flex-platform/domains/calling-gateways/"
+  />
+  <LinkCard
+    title="Releasing a domain"
+    description="Upload a domain's code and release it, from its own pipeline."
+    href="/flex-platform/domains/releasing/"
+  />
+</CardGrid>
+
+## Working on the platform
+
+<CardGrid>
+  <LinkCard
+    title="Working in the repo"
+    description="Setup, commands, conventions and the checks on a pull request."
+    href="/flex-platform/start/working-in-the-repo/"
   />
   <LinkCard
     title="How a gateway works"
@@ -47,8 +69,8 @@ exists today.
     href="/flex-platform/gateways/creating-a-gateway/"
   />
   <LinkCard
-    title="Writing a driver"
-    description="The driver contract, and how to add a transport."
-    href="/flex-platform/drivers/writing-a-driver/"
+    title="Infrastructure"
+    description="The accounts, stages and stacks, and the CDK app that deploys them."
+    href="/flex-platform/infrastructure/overview/"
   />
 </CardGrid>

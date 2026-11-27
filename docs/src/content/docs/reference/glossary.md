@@ -8,12 +8,23 @@ description: The terms these docs use, and what each means on the platform.
 Amazon API Gateway. These docs always name it in full, to keep it separate from a _gateway_.
 Each domain is an API Gateway, and many upstreams run on it too.
 
+## Bundle
+
+A domain's code, as one zip, uploaded under a version through the pipeline API. A version names
+one bundle for good. See [Uploading a bundle](/flex-platform/domains/releasing/#uploading-a-bundle).
+
 ## Call contract
 
 The TypeScript types that codegen writes to `.gen/client/rpc.ts`. They give each operation's
 input and the union of its outcomes. A caller compiles against the call contract, and it types
 the gateway client. See
 [The call contract](/flex-platform/codegen/call-contract/).
+
+## Caller token
+
+The token Lambda@Edge signs to say who a request is for, sent to a domain as `x-flex-secure`. A
+domain passes it on to the gateways it calls, and each gateway verifies it before it acts. See
+[The caller token](/flex-platform/frontdoor/caller-token/).
 
 ## CloudFront Function
 
@@ -25,6 +36,11 @@ acts on it. See [CloudFront Function](/flex-platform/frontdoor/cloudfront-functi
 The logic behind a personalised feature of the GOV.UK app. Developers outside the platform team
 write domains, and the Frontdoor routes requests to them. Each domain is an API Gateway with a
 Lambda proxy integration, in isolated subnets. See [Domains](/flex-platform/domains/overview/).
+
+## Domain account
+
+An AWS account that holds an environment's domains, the gateways they call, and the network both
+run in. See [Accounts](/flex-platform/infrastructure/overview/#accounts).
 
 ## Domain SDK
 
@@ -58,17 +74,23 @@ staging and production environments. All three are in the platform-prod stage. S
 The single CloudFront distribution that every request to the platform enters through. See
 [Frontdoor](/flex-platform/frontdoor/overview/).
 
+## Frontdoor account
+
+The AWS account that holds an environment's Frontdoor, and the caller token's keys. See
+[Accounts](/flex-platform/infrastructure/overview/#accounts).
+
 ## Gateway
 
 A Lambda function, generated from this repository, that sits in front of one upstream and exposes
-its operations to domains. See [How a gateway works](/flex-platform/gateways/overview/).
+its operations to domains. Never Amazon API Gateway, which these docs name in full. See
+[How a gateway works](/flex-platform/gateways/overview/).
 
 ## Gateway client
 
 `@govuk-once/flex-gateway-client`. A domain calls a gateway through it. The client invokes the
 gateway's Lambda function directly, by a name derived from the gateway's id. Each gateway's client
 package creates a client typed by the gateway's call contract. See
-[Calling gateways](/flex-platform/domains/overview/#calling-gateways).
+[Calling gateways](/flex-platform/domains/calling-gateways/).
 
 ## Lambda@Edge
 
@@ -85,6 +107,17 @@ names each operation.
 The name of a successful result, such as `ok` or `created`. A caller sees an outcome, never a
 status code.
 
+## Pairwise ID
+
+The ID One Login gives a user at one service. The caller token's `pairwiseId` is the verified
+access token's `username`, and `service` names the service whose ID it is.
+
+## Pipeline API
+
+The API under `/ci` in a stage's shared account. A domain's pipeline uploads and releases its code
+through it, with the token GitHub issues the job, so the pipeline holds no AWS credentials. See
+[The pipeline API](/flex-platform/domains/release-pipeline/#the-pipeline-api).
+
 ## Placement
 
 Where a workload's Lambda runs. There are two placements:
@@ -97,10 +130,31 @@ Where a workload's Lambda runs. There are two placements:
 Each is a tier of subnets in the domain account's
 [network](/flex-platform/infrastructure/network/#tiers).
 
+## Push ID
+
+The ID a caller's notifications are pushed to. Lambda@Edge derives it from the pairwise ID with a
+secret only the edge reads, and signs it into the caller token. See
+[The push ID](/flex-platform/frontdoor/caller-token/#the-push-id).
+
+## Release
+
+Two things in these docs:
+
+- **Releasing a domain** puts a bundle a domain uploaded on its function's `live` alias. See
+  [Releasing a domain's function](/flex-platform/domains/releasing/).
+- **Releasing packages** publishes the packages domains install, such as the gateway client. See
+  [Releasing packages](/flex-platform/start/releasing/).
+
 ## Schema version
 
 One numbered JSON file in a gateway's `schemas/` directory. A merged version never changes. Each
 version must be [compatible](/flex-platform/gateways/compatibility/) with every version before it.
+
+## Shared account
+
+The AWS account each stage has for what spans its environments: the test user pool, and the
+pipeline API, with the bucket and tables domain releases use. See
+[Accounts](/flex-platform/infrastructure/overview/#accounts).
 
 ## Stage
 
