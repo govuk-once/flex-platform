@@ -78,6 +78,12 @@ export { NetworkParameters } from "./network/network-parameters.ts";
 export { NetworkVpc } from "./network/vpc.ts";
 export { WorkloadSecurityGroup } from "./network/workload-security-group.ts";
 export {
+  bundledCode,
+  type PlatformFunction,
+  platformFunction,
+  type PlatformFunctionProps,
+} from "./platform-function.ts";
+export {
   TABLE_MANAGEMENT_ACTIONS,
   tablePolicy,
   type TablePolicyProps,

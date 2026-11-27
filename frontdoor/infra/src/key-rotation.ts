@@ -1,22 +1,14 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import { KEY_POLICIES, type KeyKind } from "@repo/frontdoor-key-rotation";
-import {
-  buildKeyRotationFunction,
-  HANDLER,
-} from "@repo/frontdoor-key-rotation/build";
+import { buildKeyRotationFunction } from "@repo/frontdoor-key-rotation/build";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 import {
-  logGroupWriteStatements,
-  PlatformLogGroup,
+  platformFunction,
   roleArn,
   tableArn,
   tablePolicy,
 } from "@repo/infra-constructs";
 import { sortedNames } from "@repo/utils/sorted-names";
-import { Duration, RemovalPolicy, Stack, Validations } from "aws-cdk-lib";
+import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
 import {
   Alarm,
   ComparisonOperator,
@@ -31,12 +23,7 @@ import {
   Role,
   ServicePrincipal,
 } from "aws-cdk-lib/aws-iam";
-import {
-  Architecture,
-  Code,
-  Function as LambdaFunction,
-  Runtime,
-} from "aws-cdk-lib/aws-lambda";
+import type { Function as LambdaFunction } from "aws-cdk-lib/aws-lambda";
 import { CfnSchedule } from "aws-cdk-lib/aws-scheduler";
 import { Construct } from "constructs";
 
@@ -184,77 +171,67 @@ export class KeyRotation extends Construct {
       props.publicKeyReaderRoleArns,
     );
 
-    const logGroupName = keyRotationLogGroupName(environment, kind);
-    const { logGroup, key: logGroupKey } = new PlatformLogGroup(this, "Logs", {
-      logGroupName,
-    });
-    const logs = logGroupWriteStatements(this, { logGroupName, logGroupKey });
-
     const kmsKey = stack.formatArn({
       service: "kms",
       resource: "key",
       resourceName: "*",
     });
 
-    const statements = [
-      ...logs.statements,
-      // KMS generates the key's ID, so it is found by its alias.
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: ["kms:GenerateDataKeyPairWithoutPlaintext"],
-        resources: [kmsKey],
-        conditions: {
-          "ForAnyValue:StringEquals": { "kms:ResourceAliases": keyAlias },
-          StringEquals: { "kms:EncryptionContext:purpose": purpose },
-        },
-      }),
-      // No Decrypt: this is how rotation checks a key decrypts. Only onto the same key, so a
-      // private key is never encrypted again under one that someone else can use.
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: ["kms:ReEncryptFrom", "kms:ReEncryptTo"],
-        resources: [kmsKey],
-        conditions: {
-          "ForAnyValue:StringEquals": { "kms:ResourceAliases": keyAlias },
-          StringEquals: { "kms:EncryptionContext:purpose": purpose },
-          Bool: { "kms:ReEncryptOnSameKey": "true" },
-        },
-      }),
-      new PolicyStatement({
-        effect: Effect.ALLOW,
-        actions: ROTATION_ACTIONS,
-        resources: [
-          tableArn(stack, privateKeysTable),
-          tableArn(stack, publicKeysTable),
-        ],
-      }),
-    ];
-
-    const role = new Role(this, "Role", {
-      roleName: keyRotationRoleName(environment, kind),
-      assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
-      inlinePolicies: { KeyRotation: new PolicyDocument({ statements }) },
-    });
-
-    this.function = new LambdaFunction(this, "Function", {
+    const { function: fn } = platformFunction(this, {
       functionName: keyRotationFunctionName(environment, kind),
-      runtime: Runtime.NODEJS_26_X,
-      architecture: Architecture.ARM_64,
-      handler: HANDLER,
-      code: Code.fromAsset(
-        bundleDirectory({
-          kind,
-          keyAlias,
-          privateKeysTable,
-          publicKeysTable,
+      roleName: keyRotationRoleName(environment, kind),
+      logGroupName: keyRotationLogGroupName(environment, kind),
+      policyName: "KeyRotation",
+      statements: [
+        // KMS generates the key's ID, so it is found by its alias.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["kms:GenerateDataKeyPairWithoutPlaintext"],
+          resources: [kmsKey],
+          conditions: {
+            "ForAnyValue:StringEquals": { "kms:ResourceAliases": keyAlias },
+            StringEquals: { "kms:EncryptionContext:purpose": purpose },
+          },
         }),
-      ),
-      role,
+        // No Decrypt: this is how rotation checks a key decrypts. Only onto the same key, so a
+        // private key is never encrypted again under one that someone else can use.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["kms:ReEncryptFrom", "kms:ReEncryptTo"],
+          resources: [kmsKey],
+          conditions: {
+            "ForAnyValue:StringEquals": { "kms:ResourceAliases": keyAlias },
+            StringEquals: { "kms:EncryptionContext:purpose": purpose },
+            Bool: { "kms:ReEncryptOnSameKey": "true" },
+          },
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ROTATION_ACTIONS,
+          resources: [
+            tableArn(stack, privateKeysTable),
+            tableArn(stack, publicKeysTable),
+          ],
+        }),
+      ],
+      acknowledgements: [
+        {
+          id: `AwsSolutions-IAM5[Resource::${kmsKey}]`,
+          reason:
+            "KMS generates the key's ID, so the grant names its alias by condition, which holds it to the one key.",
+        },
+      ],
+      code: buildKeyRotationFunction({
+        kind,
+        keyAlias,
+        privateKeysTable,
+        publicKeysTable,
+      }),
       timeout: Duration.minutes(1),
       memorySize: 256,
       reservedConcurrentExecutions: 1,
-      logGroup,
     });
+    this.function = fn;
 
     // Written out rather than with CDK's Scheduler target, which makes its own role under an ID
     // derived from the stack, so the logical ID would differ between environments.
@@ -316,12 +293,6 @@ export class KeyRotation extends Construct {
       // Lambda publishes nothing for a period with no run.
       treatMissingData: TreatMissingData.NOT_BREACHING,
     });
-
-    Validations.of(role).acknowledge(...logs.acknowledgements, {
-      id: `AwsSolutions-IAM5[Resource::${kmsKey}]`,
-      reason:
-        "KMS generates the key's ID, so the grant names its alias by condition, which holds it to the one key.",
-    });
   }
 }
 
@@ -332,17 +303,4 @@ function accountOf(roleArn: string): string {
     throw new Error(`The role ARN ${roleArn} names no account`);
   }
   return account;
-}
-
-// The bundle is per environment, so it's built at synth, into a directory of its own for CDK to
-// stage.
-function bundleDirectory(
-  config: Parameters<typeof buildKeyRotationFunction>[0],
-): string {
-  const directory = mkdtempSync(path.join(tmpdir(), "key-rotation-"));
-  writeFileSync(
-    path.join(directory, "index.js"),
-    buildKeyRotationFunction(config),
-  );
-  return directory;
 }

@@ -1,37 +1,16 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
-import {
-  logGroupWriteStatements,
-  PlatformLogGroup,
-} from "@repo/infra-constructs";
+import { platformFunction } from "@repo/infra-constructs";
 import type { DeadLetterConfig } from "@repo/shared-release";
-import {
-  buildDeadLetterWorker,
-  RELEASE_HANDLER,
-} from "@repo/shared-release/build";
-import { Duration, Stack, Validations } from "aws-cdk-lib";
+import { buildDeadLetterWorker } from "@repo/shared-release/build";
+import { Duration, Stack } from "aws-cdk-lib";
 import {
   Alarm,
   ComparisonOperator,
   TreatMissingData,
 } from "aws-cdk-lib/aws-cloudwatch";
-import {
-  AnyPrincipal,
-  Effect,
-  PolicyDocument,
-  PolicyStatement,
-  Role,
-  ServicePrincipal,
-} from "aws-cdk-lib/aws-iam";
-import {
-  Architecture,
-  Code,
-  EventSourceMapping,
-  Function as LambdaFunction,
-  Runtime,
-} from "aws-cdk-lib/aws-lambda";
+import type { Role } from "aws-cdk-lib/aws-iam";
+import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import type { Function as LambdaFunction } from "aws-cdk-lib/aws-lambda";
+import { EventSourceMapping } from "aws-cdk-lib/aws-lambda";
 import {
   FilterPattern,
   type ILogGroup,
@@ -87,41 +66,39 @@ export class ReleaseDeadLetterWorker extends Construct {
     super(scope, id);
 
     const { deadLetters } = props;
-    const { logGroup, key: logGroupKey } = new PlatformLogGroup(this, "Logs", {
-      logGroupName: RELEASE_DEAD_LETTER_WORKER_LOG_GROUP_NAME,
-    });
-    const logs = logGroupWriteStatements(this, {
-      logGroupName: RELEASE_DEAD_LETTER_WORKER_LOG_GROUP_NAME,
-      logGroupKey,
-    });
-
-    this.role = new Role(this, "Role", {
+    const config: DeadLetterConfig = {
+      region: Stack.of(this).region,
+      table: props.releaseTable.name,
+    };
+    const built = platformFunction(this, {
+      functionName: RELEASE_DEAD_LETTER_WORKER_NAME,
       roleName: RELEASE_DEAD_LETTER_WORKER_NAME,
-      assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
-      inlinePolicies: {
-        DeadLetters: new PolicyDocument({
-          statements: [
-            ...logs.statements,
-            // What Lambda needs to give the function the queue's messages, and take them back.
-            new PolicyStatement({
-              actions: [
-                "sqs:ChangeMessageVisibility",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes",
-                "sqs:ReceiveMessage",
-              ],
-              resources: [deadLetters.queueArn],
-            }),
-            // To read a release, and give it up.
-            new PolicyStatement({
-              actions: RELEASE_WORKER_ACTIONS,
-              resources: [props.releaseTable.arn],
-            }),
+      logGroupName: RELEASE_DEAD_LETTER_WORKER_LOG_GROUP_NAME,
+      policyName: "DeadLetters",
+      statements: [
+        // What Lambda needs to give the function the queue's messages, and take them back.
+        new PolicyStatement({
+          actions: [
+            "sqs:ChangeMessageVisibility",
+            "sqs:DeleteMessage",
+            "sqs:GetQueueAttributes",
+            "sqs:ReceiveMessage",
           ],
+          resources: [deadLetters.queueArn],
         }),
-      },
+        // To read a release, and give it up.
+        new PolicyStatement({
+          actions: RELEASE_WORKER_ACTIONS,
+          resources: [props.releaseTable.arn],
+        }),
+      ],
+      code: buildDeadLetterWorker(config),
+      timeout: DEAD_LETTER_WORKER_TIMEOUT,
+      memorySize: 256,
     });
-    Validations.of(this.role).acknowledge(...logs.acknowledgements);
+    this.function = built.function;
+    this.role = built.role;
+    const { logGroup } = built;
 
     // In the queue's policy: a deny there holds whatever any principal's own policy allows.
     deadLetters.addToResourcePolicy(
@@ -141,21 +118,6 @@ export class ReleaseDeadLetterWorker extends Construct {
       }),
     );
 
-    const config: DeadLetterConfig = {
-      region: Stack.of(this).region,
-      table: props.releaseTable.name,
-    };
-    this.function = new LambdaFunction(this, "Function", {
-      functionName: RELEASE_DEAD_LETTER_WORKER_NAME,
-      runtime: Runtime.NODEJS_26_X,
-      architecture: Architecture.ARM_64,
-      handler: RELEASE_HANDLER,
-      code: Code.fromAsset(bundleDirectory(config)),
-      role: this.role,
-      timeout: DEAD_LETTER_WORKER_TIMEOUT,
-      memorySize: 256,
-      logGroup,
-    });
     new EventSourceMapping(this, "QueueSource", {
       target: this.function,
       eventSourceArn: deadLetters.queueArn,
@@ -206,14 +168,4 @@ export class ReleaseDeadLetterWorker extends Construct {
       treatMissingData: TreatMissingData.NOT_BREACHING,
     });
   }
-}
-
-// The bundle is per stage, so it's built at synth, into a directory of its own for CDK to stage.
-function bundleDirectory(config: DeadLetterConfig): string {
-  const directory = mkdtempSync(path.join(tmpdir(), "release-dead-letters-"));
-  writeFileSync(
-    path.join(directory, "index.js"),
-    buildDeadLetterWorker(config),
-  );
-  return directory;
 }

@@ -1,7 +1,3 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import type { KeyKind } from "@repo/frontdoor-key-rotation";
 import {
   type OriginRequestConfig,
@@ -17,7 +13,7 @@ import {
   SIGNING_KEY_REGION,
   type TrustedIssuer,
 } from "@repo/frontdoor-shared";
-import { tableArn } from "@repo/infra-constructs";
+import { bundledCode, tableArn } from "@repo/infra-constructs";
 import {
   ArnFormat,
   Duration,
@@ -36,7 +32,6 @@ import {
 } from "aws-cdk-lib/aws-iam";
 import {
   Architecture,
-  Code,
   Function as LambdaFunction,
   Runtime,
   type Version,
@@ -208,8 +203,9 @@ export class OriginRequestFunction extends Construct {
       runtime: Runtime.NODEJS_26_X,
       architecture: Architecture.X86_64,
       handler: HANDLER,
-      code: Code.fromAsset(
-        bundleDirectory({
+      // 45 KB is too large for inline code.
+      code: bundledCode(
+        buildOriginRequestFunction({
           issuers: props.issuers,
           routes: props.routes,
           callerTokenAudience: callerTokenAudience(environment),
@@ -227,15 +223,4 @@ export class OriginRequestFunction extends Construct {
     this.function.applyRemovalPolicy(RemovalPolicy.RETAIN);
     this.version = this.function.currentVersion;
   }
-}
-
-// The bundle is per environment, so it's built at synth, into a directory of its own for CDK to
-// stage. 45 KB is too large for inline code.
-function bundleDirectory(config: OriginRequestConfig): string {
-  const directory = mkdtempSync(path.join(tmpdir(), "origin-request-"));
-  writeFileSync(
-    path.join(directory, "index.js"),
-    buildOriginRequestFunction(config),
-  );
-  return directory;
 }
