@@ -1,6 +1,6 @@
 import { PlatformBucket } from "@repo/infra-constructs";
 import { UPLOAD_EXPIRES_SECONDS } from "@repo/shared-ci";
-import { bundleKey } from "@repo/shared-release/bundle-key";
+import { bundleKey } from "@repo/shared-release";
 import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
 import {
   AccountPrincipal,

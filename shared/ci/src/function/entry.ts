@@ -1,7 +1,7 @@
 // What Lambda runs. Only the build bundles this module: it replaces CI_CONFIG with a stage's
 // config.
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { createReleaseTable } from "@repo/shared-release/table";
+import { createReleaseTable } from "@repo/shared-release";
 
 import { createArtefactFinder, createVersionClaim } from "./artefacts.ts";
 import { createAuthoriser, createPublishCheck } from "./authorise.ts";

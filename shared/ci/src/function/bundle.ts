@@ -1,6 +1,6 @@
 // What a pipeline says of the bundle it is about to upload, or asks to release.
 
-import { isBundleVersion } from "@repo/shared-release/bundle-version";
+import { isBundleVersion } from "@repo/shared-release";
 
 import type { FunctionUrlEvent } from "./types.ts";
 

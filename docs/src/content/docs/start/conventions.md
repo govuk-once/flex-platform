@@ -33,6 +33,9 @@ change you are making.
   Node, and lint holds the whole package to
   [what that runtime has](/flex-platform/frontdoor/cloudfront-function/#building-the-function).
   A function nothing in that runtime uses lives in `@repo/utils`.
+- A package that builds a function exports its build as `./build`, and what the function shares
+  with other packages, such as a header's name or its config's type, as `.`. Nothing in `.`
+  imports the build, so another function can import it without bundling esbuild.
 - Sort with `sortedNames` and `sortedEntries` from `@repo/utils`. They order by code unit, which
   gives the same result on every machine. `localeCompare`, which linters suggest for sorting
   "alphabetically", depends on the runtime's locale and ICU data. Generated files, the digests

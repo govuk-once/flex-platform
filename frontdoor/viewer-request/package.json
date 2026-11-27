@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    "./build": "./src/build/build.ts"
   },
   "scripts": {
     "lint": "eslint src/ test/",

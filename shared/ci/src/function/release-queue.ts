@@ -11,17 +11,15 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { HeadObjectCommand, NotFound, S3Client } from "@aws-sdk/client-s3";
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import {
+  createReleaseTable,
   encodeReleaseMessage,
   parseReleaseRequest,
   releaseGroup,
-  type ReleaseRequest,
-} from "@repo/shared-release/request";
-import {
-  createReleaseTable,
   type ReleaseKey,
   type ReleaseRecord,
+  type ReleaseRequest,
   type ReleaseTable,
-} from "@repo/shared-release/table";
+} from "@repo/shared-release";
 import { uuidV7 } from "@repo/utils/uuid-v7";
 
 import type { CiReleases, CiUploads } from "./types.ts";

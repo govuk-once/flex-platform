@@ -2,12 +2,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { KEY_POLICIES, type KeyKind } from "@repo/frontdoor-key-rotation";
 import {
   buildKeyRotationFunction,
   HANDLER,
-  KEY_POLICIES,
-  type KeyKind,
-} from "@repo/frontdoor-key-rotation";
+} from "@repo/frontdoor-key-rotation/build";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
 import {
   logGroupWriteStatements,

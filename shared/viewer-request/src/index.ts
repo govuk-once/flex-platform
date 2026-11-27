@@ -1,3 +1,6 @@
-export { buildViewerRequestFunction } from "./build/build.ts";
-export type { ViewerRequestConfig } from "./function/types.ts";
-export { CI_TOKEN_HEADER } from "./token-header.ts";
+/**
+ * The header a pipeline sends its token in, as the token alone, with no scheme. Not
+ * `Authorization`, which CloudFront replaces with its own signature for the origin. The function
+ * reads it, and the pipeline API's function and the distribution name it. The build is `./build`.
+ */
+export const CI_TOKEN_HEADER = "x-flex-ci-token";

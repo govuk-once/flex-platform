@@ -1,4 +1,4 @@
-import type { ReleaseRecord } from "@repo/shared-release/table";
+import type { ReleaseRecord } from "@repo/shared-release";
 
 import type { SignedUpload } from "./sign-upload.ts";
 import type { FunctionUrlResult } from "./types.ts";

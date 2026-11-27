@@ -5,11 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./bundle-key": "./src/bundle-key.ts",
-    "./bundle-version": "./src/bundle-version.ts",
-    "./release-id": "./src/release-id.ts",
-    "./request": "./src/request.ts",
-    "./table": "./src/table.ts"
+    "./build": "./src/build/build.ts"
   },
   "scripts": {
     "lint": "eslint src/ test/",

@@ -7,13 +7,15 @@ import {
   PlatformLogGroup,
 } from "@repo/infra-constructs";
 import {
-  buildReleaseWorker,
-  RELEASE_HANDLER,
+  bundleKey,
   RELEASE_TIMEOUT_SECONDS,
   type ReleaseConfig,
   type ReleaseTarget,
 } from "@repo/shared-release";
-import { bundleKey } from "@repo/shared-release/bundle-key";
+import {
+  buildReleaseWorker,
+  RELEASE_HANDLER,
+} from "@repo/shared-release/build";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   AnyPrincipal,

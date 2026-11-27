@@ -6,7 +6,7 @@ import "tsx";
 
 // Loaded first, so that whatever the CLI turns out to say is said safely: an error
 // names the schema that caused it, which is an upstream's own text.
-const { printableText } = await import("../src/printable.ts");
+const { printableText } = await import("@repo/utils/printable-text");
 const { main } = await import("../src/cli.ts");
 
 try {

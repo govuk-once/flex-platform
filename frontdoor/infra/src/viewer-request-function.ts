@@ -1,5 +1,5 @@
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
-import { buildViewerRequestFunction } from "@repo/frontdoor-viewer-request";
+import { buildViewerRequestFunction } from "@repo/frontdoor-viewer-request/build";
 import { PlatformCloudFrontFunction } from "@repo/infra-constructs";
 import type { Construct } from "constructs";
 

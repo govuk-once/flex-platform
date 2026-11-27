@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { buildOriginRequestFunction } from "@repo/frontdoor-origin-request";
+import { buildOriginRequestFunction } from "@repo/frontdoor-origin-request/build";
 import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { assert, describe, expect, it } from "vitest";

@@ -1,4 +1,4 @@
-export { buildOriginRequestFunction, HANDLER } from "./build/build.ts";
+// What runs in the function, for the infrastructure that deploys it. The build is `./build`.
 export {
   CALLER_TOKEN_HEADER,
   HEADERS_SET_BY_FUNCTION,

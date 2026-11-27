@@ -1,6 +1,5 @@
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
-import type { ReleaseRequest } from "@repo/shared-release/request";
-import type { ReleaseRecord } from "@repo/shared-release/table";
+import type { ReleaseRecord, ReleaseRequest } from "@repo/shared-release";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
