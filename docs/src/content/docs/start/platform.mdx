@@ -6,6 +6,7 @@ description: "The Frontdoor, domains and egress: what each section of Flex is fo
 import { Badge } from "@astrojs/starlight/components";
 import PlatformDiagram from "../../../components/PlatformDiagram.astro";
 import StatusTables from "../../../components/StatusTables.astro";
+import TimeoutsDiagram from "../../../components/TimeoutsDiagram.astro";
 
 Flex is the platform behind the GOV.UK app. It has three sections:
 
@@ -69,3 +70,9 @@ through.
 6. The gateway validates the input. It calls the upstream through a VPC endpoint, or through a NAT
    gateway, where egress filtering is planned. It then validates the outcome and returns it.
 7. The domain's code responds. The response goes back through API Gateway and CloudFront.
+
+## How long each part waits
+
+Each part's time limit sits inside the limit of the part that called it.
+
+<TimeoutsDiagram />
