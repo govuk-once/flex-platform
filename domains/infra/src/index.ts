@@ -12,6 +12,5 @@ export {
   functionLogGroupName,
   ROLE_NAME_LENGTH,
 } from "./names.ts";
-export type { ProxyApiAlarms } from "./proxy-api.ts";
 export { ProxyApi } from "./proxy-api.ts";
 export { WildcardCertificate } from "./wildcard-certificate.ts";

@@ -1,3 +1,4 @@
+import { CALLER_TOKEN_HEADER } from "@repo/frontdoor-origin-request";
 import {
   CfnOriginRequestPolicy,
   type IOriginRequestPolicy,
@@ -13,7 +14,7 @@ import { originRequestPolicyName } from "./names.ts";
  *
  * It also names every header Lambda@Edge sets, but for `host` and AWS's `x-amz-*` signing
  * headers: CloudFront forwards a header a function adds only some of the time unless the policy
- * names it. `x-flex-secure` is here for that reason alone; the CloudFront Function removes a
+ * names it. The caller token's header is here for that reason alone; the CloudFront Function removes a
  * caller's copy.
  */
 export const FORWARDED_HEADERS = [
@@ -21,7 +22,7 @@ export const FORWARDED_HEADERS = [
   "content-type",
   "accept",
   "x-correlation-id",
-  "x-flex-secure",
+  CALLER_TOKEN_HEADER,
 ] as const;
 
 /**
