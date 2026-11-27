@@ -11,7 +11,7 @@ Each domain is an API Gateway, and many upstreams run on it too.
 ## Bundle
 
 A domain's code, as one zip, uploaded under a version through the pipeline API. A version names
-one bundle for good. See [Uploading a bundle](/flex-platform/domains/hosting/#uploading-a-bundle).
+one bundle for good. See [Uploading a bundle](/flex-platform/domains/releasing/#uploading-a-bundle).
 
 ## Call contract
 
@@ -90,7 +90,7 @@ its operations to domains. Never Amazon API Gateway, which these docs name in fu
 `@govuk-once/flex-gateway-client`. A domain calls a gateway through it. The client invokes the
 gateway's Lambda function directly, by a name derived from the gateway's id. Each gateway's client
 package creates a client typed by the gateway's call contract. See
-[Calling gateways](/flex-platform/domains/overview/#calling-gateways).
+[Calling gateways](/flex-platform/domains/calling-gateways/).
 
 ## Lambda@Edge
 
@@ -116,7 +116,7 @@ access token's `username`, and `service` names the service whose ID it is.
 
 The API under `/ci` in a stage's shared account. A domain's pipeline uploads and releases its code
 through it, with the token GitHub issues the job, so the pipeline holds no AWS credentials. See
-[The pipeline API](/flex-platform/domains/hosting/#the-pipeline-api).
+[The pipeline API](/flex-platform/domains/release-pipeline/#the-pipeline-api).
 
 ## Placement
 
@@ -141,7 +141,7 @@ secret only the edge reads, and signs it into the caller token. See
 Two things in these docs:
 
 - **Releasing a domain** puts a bundle a domain uploaded on its function's `live` alias. See
-  [Releasing a domain's function](/flex-platform/domains/hosting/#releasing-a-domains-function).
+  [Releasing a domain's function](/flex-platform/domains/releasing/).
 - **Releasing packages** publishes the packages domains install, such as the gateway client. See
   [Releasing packages](/flex-platform/start/releasing/).
 

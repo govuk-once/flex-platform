@@ -28,7 +28,7 @@ the gateway runs. `client/` is what a service that calls the gateway imports.
 | `.gen/runtime/validators/` | Standalone Ajv validators: one for each operation's input, each declared outcome and each `meta` name. `schemas.js` holds them, as self-contained JavaScript with no package imports. `index.js` maps each operation, and each `meta` name, to its validators. |
 | `.gen/runtime/bundle.mjs` | `entry.js` and everything it imports, bundled by esbuild as ESM for Node 26. Only Node's builtins are left for the platform to resolve. This is the deployed artifact, and its handler is `bundle.handler`. |
 | `.gen/client/rpc.ts` | The call contract as types: each operation's input and the union of its outcomes. See [The call contract](/flex-platform/codegen/call-contract/). |
-| `.gen/client/index.ts` | The contract, and a function named for the gateway, such as `createUdpClient`, that creates a [gateway client](/flex-platform/domains/overview/#calling-gateways) typed by it. Codegen builds the client package from it. |
+| `.gen/client/index.ts` | The contract, and a function named for the gateway, such as `createUdpClient`, that creates a [gateway client](/flex-platform/domains/calling-gateways/) typed by it. Codegen builds the client package from it. |
 | `.gen/client/package/` | The [client package](#the-client-package) a domain installs: `package.json`, `index.js` and `index.d.ts`. |
 
 No package includes `.gen/` in its TypeScript project, so nothing typechecks either half where it
@@ -81,7 +81,7 @@ for the gateway, such as `createUdpClient` for `udp`. So a domain that imports s
 packages has no two exports of the same name.
 
 The function takes nothing. It creates a
-[gateway client](/flex-platform/domains/overview/#calling-gateways) for the gateway's function. The
+[gateway client](/flex-platform/domains/calling-gateways/) for the gateway's function. The
 gateway client names that function from the id and the domain's environment. The client has a
 function for each operation the latest schema version holds. The package lists their names,
 because the contract's types are gone at runtime.

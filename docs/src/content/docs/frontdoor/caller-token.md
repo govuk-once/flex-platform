@@ -84,7 +84,7 @@ share it.
 ## Verifying
 
 A domain passes the token as the envelope's `secure.token`, through the
-[gateway client](/flex-platform/domains/overview/#the-caller-context). The
+[gateway client](/flex-platform/domains/calling-gateways/#the-caller-context). The
 [domain SDK](/flex-platform/domains/requests/#the-handlers-context) reads `pairwiseId` and `pushId`
 from it for a handler, and has no need to verify it. The gateway verifies it as the second step of
 [a request](/flex-platform/gateways/overview/#a-request), before it routes the call. So a caller

@@ -85,8 +85,8 @@ Each stage's shared account has three more:
 | Stack | Account | Region | One per | Holds |
 |---|---|---|---|---|
 | `shared-identity` | Shared | eu-west-2 | Stage | The [test user pool](#test-users) and its client |
-| `shared-release` | Shared | eu-west-2 | Stage | The pipeline API's function, built with [who may release each domain](/flex-platform/domains/hosting/#what-the-api-checks), its URL, role and log group, the bucket [a domain's code is uploaded to](/flex-platform/domains/hosting/#uploading-a-bundle), the [release worker](/flex-platform/domains/hosting/#the-release-worker), its queues, role and log group, the [dead-letter worker](/flex-platform/domains/hosting/#the-dead-letter-worker), its role, log group and [alarms](/flex-platform/domains/hosting/#when-a-release-is-abandoned), the [table each version is recorded in](/flex-platform/domains/hosting/#the-artefacts-table), the [table each release is recorded in](/flex-platform/domains/hosting/#the-release-table), and the writer of the URL's host to us-east-1 |
-| `shared-management` | Shared | us-east-1 | Stage | The certificate and DNS records, the distribution in front of [the pipeline API](/flex-platform/domains/hosting/#the-pipeline-api), its web ACL and CloudFront Function, and their log groups |
+| `shared-release` | Shared | eu-west-2 | Stage | The pipeline API's function, built with [who may release each domain](/flex-platform/domains/release-pipeline/#what-the-api-checks), its URL, role and log group, the bucket [a domain's code is uploaded to](/flex-platform/domains/release-pipeline/#the-code-bucket), the [release worker](/flex-platform/domains/release-pipeline/#the-release-worker), its queues, role and log group, the [dead-letter worker](/flex-platform/domains/release-pipeline/#the-dead-letter-worker), its role, log group and [alarms](/flex-platform/domains/release-pipeline/#when-a-release-is-abandoned), the [table each version is recorded in](/flex-platform/domains/release-pipeline/#the-artefacts-table), the [table each release is recorded in](/flex-platform/domains/release-pipeline/#the-release-table), and the writer of the URL's host to us-east-1 |
+| `shared-management` | Shared | us-east-1 | Stage | The certificate and DNS records, the distribution in front of [the pipeline API](/flex-platform/domains/release-pipeline/#the-pipeline-api), its web ACL and CloudFront Function, and their log groups |
 
 A stage deploys only to its own accounts, so the shared account's stack names hold neither a stage
 nor an environment.
@@ -249,7 +249,7 @@ GatewayConfig       { id, hostnames, placement, secret, target, roleArns, privat
   - `"publish"` means new code enters the stage here. Only a publishing environment takes uploads
     and releases from a pipeline.
   - `{ promoteFrom }` names the environment whose released code it takes. Promotion is planned.
-    See [releasing a domain's function](/flex-platform/domains/hosting/#releasing-a-domains-function).
+    See [releasing a domain's function](/flex-platform/domains/releasing/).
 - `zone` is the account's public hosted zone, as `{ name, id }`. The zones aren't the platform's.
   Another team creates one in each account, already delegated, named
   `<environment>.flex-<account role>.once.service.gov.uk`. An account writes records only into its

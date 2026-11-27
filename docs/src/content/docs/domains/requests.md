@@ -47,7 +47,7 @@ answers with a 500.
    The SDK reads every object in the body without a prototype. So the schema finds a field only
    where the request set it, never one such as `toString` that every object inherits.
 6. **The handler.** The SDK calls the handler with its [context](#the-handlers-context), inside the
-   gateway client's [caller context](/flex-platform/domains/overview/#the-caller-context). It waits
+   gateway client's [caller context](/flex-platform/domains/calling-gateways/#the-caller-context). It waits
    for the handler until the [deadline](#the-deadline).
 7. **The result.** The SDK holds what the handler returned to the route's
    [responses](#what-a-handler-returns), and sends it.

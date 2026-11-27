@@ -9,7 +9,7 @@ A domain declares its name and routes in `src/domain.ts`, with `defineDomain` fr
 - type each handler;
 - check the configuration as it loads;
 - [answer requests](/flex-platform/domains/requests/);
-- build the domain's [OpenAPI document](/flex-platform/domains/overview/#api-specifications).
+- build the domain's [OpenAPI document](/flex-platform/domains/configuration/#the-openapi-document).
 
 ## An example
 
@@ -192,6 +192,54 @@ For example, `notFound()` returns `{ status: 404 }`, and `notFound(body)` return
 Use `Handler<...>` as an annotation, not with `satisfies`. The compiler reports `satisfies` as a
 circular reference. The compiler refuses a handler on its route's `handler` field if the handler
 has no annotation, or is annotated with another route's key. A program registers one domain.
+
+## The OpenAPI document
+
+The SDK builds a domain's OpenAPI 3.1 document from its configuration alone, without running a
+handler. The SDK
+does not yet export anything a domain can build the document with.
+
+The document describes the domain's routes and schemas, and the answers the SDK sends itself:
+
+- **Each route as an operation.** The operation holds the route's `operationId` and `description`
+  if it sets them, its path and query parameters, its body, and each response it declares. A
+  parameter is required unless its field is optional or has a default.
+- **What the SDK answers on every operation.** These are the SDK's
+  [own answers](/flex-platform/domains/requests/#the-sdks-own-answers) on a route: 400, 500, 502
+  and 504, plus 415 on a route with a body. They also include 503, the one server error that only a
+  handler answers with. Each has the platform's failure body, `PlatformError`. If a route declares
+  a 400 too, the body is `anyOf` the two. `oneOf` would refuse a route's body that also matches
+  `PlatformError`. The 404 and 405 for a path or method that no route has belong to no operation,
+  so the document does not describe them.
+
+Publishing a domain's document is planned. A domain will upload it through an endpoint for its
+metadata uploads, and an endpoint in the Frontdoor will serve the published documents. When a
+document is published, the platform adds what it applies to every domain:
+
+- the server;
+- the access token;
+- the Frontdoor's and API Gateway's answers.
+
+The SDK's document leaves these out, so that the platform writes what it owns rather than accepting
+it from a domain.
+
+Each schema is described as Zod writes it in JSON Schema. A parameter or body is described as the
+request is validated, and a response as it is sent. So a field with a default is optional in a body
+and always there in a response.
+
+A schema named with `.meta({ id })` becomes a component that every use refers to. It becomes two
+components, `<id>` and `<id>Input`, if its input and output differ, or if a named schema it holds
+becomes two. A recursive schema must be named, so that a client has a name for its type.
+
+Building the document checks the configuration first. It then throws a `DomainConfigError` that
+lists every schema it can't describe, each as `<field>: <problem>, <fix>`. It can't describe:
+
+- a schema holding what JSON doesn't carry, such as `z.date()`, or a response with a transform;
+- a recursive schema with no name;
+- an id used for two different schemas, or holding a character other than letters, digits, `.`,
+  `_` and `-`;
+- a component name already taken, such as `PlatformError`, or an id `TodoInput` beside a `Todo`
+  that is two.
 
 ## Errors
 

@@ -45,10 +45,23 @@ export default defineConfig({
           label: "Domains",
           items: [
             "domains/overview",
-            "domains/configuration",
-            "domains/requests",
-            "domains/hosting",
             "domains/designing-a-domain",
+            {
+              label: "Building a domain",
+              items: [
+                "domains/configuration",
+                "domains/requests",
+                "domains/calling-gateways",
+              ],
+            },
+            {
+              label: "Hosting and releasing",
+              items: [
+                "domains/hosting",
+                "domains/releasing",
+                "domains/release-pipeline",
+              ],
+            },
           ],
         },
         {

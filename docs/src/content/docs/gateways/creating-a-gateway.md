@@ -127,7 +127,7 @@ until it passes. See [What codegen checks](/flex-platform/codegen/checks/).
 
 The gateway deploys as a Lambda function named `gateway-<environment>-<id>`.
 `gatewayFunctionName` in `@repo/gateway-core` builds the name. The function has one alias, `live`,
-which every [gateway client](/flex-platform/domains/overview/#calling-gateways) invokes.
+which every [gateway client](/flex-platform/domains/calling-gateways/) invokes.
 
 To deploy it:
 

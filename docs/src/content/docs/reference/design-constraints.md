@@ -181,7 +181,7 @@ for an integration does not mean that integration is implemented.
      the service behind it chose. So a write that is refused is never sent again.
 
    See [refused credentials](/flex-platform/drivers/openapi-rest/authentication/#when-the-upstream-refuses-a-credential),
-   [calling gateways](/flex-platform/domains/overview/#calling-gateways) and
+   [calling gateways](/flex-platform/domains/calling-gateways/) and
    [the Lambda function](/flex-platform/reference/environment/#the-lambda-function).
 
 9. **Emitted validators are self-contained JavaScript.** Bundle Ajv's runtime helpers and formats
