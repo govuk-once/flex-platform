@@ -5,7 +5,8 @@ description: The fields of a domain's configuration, the rules each is held to, 
 
 A domain declares its name and routes in `src/domain.ts`, with `defineDomain` from the
 [domain SDK](/flex-platform/domains/overview/#domain-sdk). The SDK types each handler from it,
-checks it as it loads, and [answers requests](/flex-platform/domains/requests/) from it.
+checks it as it loads, and uses it to [answer requests](/flex-platform/domains/requests/) and build
+the domain's [OpenAPI document](/flex-platform/domains/overview/#api-specifications).
 
 ## An example
 
@@ -45,6 +46,7 @@ routes, its schemas and its handlers.
 | Field | Rule |
 |---|---|
 | `name` | 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen |
+| `description` | Optional. What the domain does, shown in its OpenAPI document. Not blank |
 | `routes` | At least one route, keyed by its [route key](#route-keys) |
 
 ## Route keys
@@ -65,6 +67,8 @@ and are refused. Two keys that can match one request, such as `GET /v1/todos/{id
 | Field | Required | Rule |
 |---|---|---|
 | `handler` | Yes | Annotated with this route's key: see [Handlers](#handlers) |
+| `operationId` | No | The route's name in the OpenAPI document, for a generated client. Camel case, such as `getTodo`, and unique across the domain |
+| `description` | No | What the route does, shown in the OpenAPI document. Not blank |
 | `params` | When the key has parameters | A Zod object with exactly the key's parameters: see [Path and query fields](#path-and-query-fields) |
 | `query` | No | A [strict](#strict-inputs) Zod object: see [Path and query fields](#path-and-query-fields) |
 | `body` | No | A [strict](#strict-inputs) Zod schema. Refused on `GET` and `DELETE` |
@@ -185,13 +189,13 @@ its route's `handler`. A program registers one domain.
 The compiler reports most broken rules on the field that broke them. `defineDomain` checks the
 rest as `src/domain.ts` is imported, and throws a `DomainConfigError` listing every problem: the
 domain's name, strict and unconverted inputs, path and query fields that can't be read from text,
-and two keys for one route. It checks what the types hold too, for a configuration that bypassed
-them. Each problem is written as `<field>: <problem>, <fix>`:
+two keys for one route, and an `operationId` used twice. It checks what the types hold too, for a
+configuration that bypassed them. Each problem is written as `<field>: <problem>, <fix>`:
 
 ```text
 The domain's configuration is not valid:
   - name: invalid format, must be 1 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen
-  - function: unknown field, must be one of: name, routes
+  - function: unknown field, must be one of: name, description, routes
   - routes["GET /v1/todos"].body: not allowed, a GET route takes no body
   - routes: duplicate routes, parameter names do not tell apart: "GET /v1/todos/{id}", "GET /v1/todos/{todoId}"
 ```

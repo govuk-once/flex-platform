@@ -1,3 +1,5 @@
+import { isCamelCase } from "@repo/utils/is-camel-case";
+
 import type { HttpMethod } from "./http.ts";
 import { HTTP_METHODS } from "./http.ts";
 import type { RouteKeyResult } from "./types.ts";
@@ -8,10 +10,27 @@ const VERSION = /^v[1-9]\d*$/;
 
 const LITERAL = /^[a-z][a-z0-9-]*$/;
 
-const PARAMETER = /^\{([a-z][a-zA-Z0-9]*)\}$/;
+const PARAMETER = /^\{(.*)\}$/;
 
 function isHttpMethod(method: string): method is HttpMethod {
   return METHODS.has(method);
+}
+
+// The parameter a segment names, such as `id` for `{id}`.
+function parameterOf(segment: string): string | undefined {
+  const braced = PARAMETER.exec(segment)?.[1];
+
+  return braced !== undefined && isCamelCase(braced) ? braced : undefined;
+}
+
+function literalProblem(segment: string): string | undefined {
+  if (segment === "") {
+    return "empty path segment, remove the extra or trailing slash";
+  }
+
+  return LITERAL.test(segment)
+    ? undefined
+    : `invalid segment ${JSON.stringify(segment)}, must be lowercase letters, digits and hyphens starting with a letter, or a parameter such as {id}`;
 }
 
 export function parseRouteKey(key: string): RouteKeyResult {
@@ -49,23 +68,25 @@ export function parseRouteKey(key: string): RouteKeyResult {
   const pathSegments: string[] = [];
 
   for (const segment of segments) {
-    const parameter = PARAMETER.exec(segment)?.[1];
+    const parameter = parameterOf(segment);
 
-    pathSegments.push(parameter === undefined ? segment : "{}");
+    if (parameter === undefined) {
+      pathSegments.push(segment);
 
-    if (parameter !== undefined) {
-      if (parameters.includes(parameter)) {
-        problems.add(`duplicate path parameter {${parameter}}, name each once`);
-      }
+      const problem = literalProblem(segment);
 
-      parameters.push(parameter);
-    } else if (segment === "") {
-      problems.add("empty path segment, remove the extra or trailing slash");
-    } else if (!LITERAL.test(segment)) {
-      problems.add(
-        `invalid segment ${JSON.stringify(segment)}, must be lowercase letters, digits and hyphens starting with a letter, or a parameter such as {id}`,
-      );
+      if (problem !== undefined) problems.add(problem);
+
+      continue;
     }
+
+    pathSegments.push("{}");
+
+    if (parameters.includes(parameter)) {
+      problems.add(`duplicate path parameter {${parameter}}, name each once`);
+    }
+
+    parameters.push(parameter);
   }
 
   // The method is checked again only so the compiler knows its type here.

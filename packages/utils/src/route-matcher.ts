@@ -7,6 +7,8 @@
 // `/v1/todos/archived` beats `/v1/todos/{id}`, however `archived` is encoded. A parameter is the
 // segment as it was sent, not decoded.
 
+import { isCamelCase } from "./is-camel-case.ts";
+
 export interface Routable {
   readonly method: string;
   readonly path: string;
@@ -33,7 +35,7 @@ interface SegmentsMatch<Route extends Routable> extends ParsedRoute<Route> {
   readonly params: Map<string, string>;
 }
 
-const PARAM_SEGMENT = /^\{([a-z][a-zA-Z0-9]*)\}$/;
+const PARAM_SEGMENT = /^\{(.*)\}$/;
 
 function parseRoute<Route extends Routable>(route: Route): ParsedRoute<Route> {
   const { method, path } = route;
@@ -45,7 +47,9 @@ function parseRoute<Route extends Routable>(route: Route): ParsedRoute<Route> {
   const segments = path.split("/").map((text): RouteSegment => {
     const param = PARAM_SEGMENT.exec(text)?.[1];
 
-    return param === undefined ? { literal: text } : { param };
+    return param !== undefined && isCamelCase(param)
+      ? { param }
+      : { literal: text };
   });
 
   const paramNames = segments.flatMap((segment) =>

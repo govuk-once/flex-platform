@@ -26,6 +26,8 @@ export interface RouteConfig {
   // registered configuration, while the configuration's own type is still being worked out.
   // HandlerCheck holds it to the route's key instead.
   readonly handler: object;
+  readonly operationId?: string;
+  readonly description?: string;
   readonly params?: ZodObject;
   readonly query?: ZodObject;
   readonly body?: ZodType;
@@ -38,6 +40,7 @@ export type DomainRoutes = Readonly<Record<string, RouteConfig>>;
 
 export interface DomainConfig<Routes extends DomainRoutes = DomainRoutes> {
   readonly name: string;
+  readonly description?: string;
   readonly routes: Routes;
 }
 

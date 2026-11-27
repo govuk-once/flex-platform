@@ -17,14 +17,18 @@ import {
 
 const domain = defineDomain({
   name: "domain-a",
+  description: "Domain for my todos",
   routes: {
     "GET /v1/todos": {
       handler: listTodos,
+      operationId: "listTodos",
       query: TodoQuerySchema,
       responses: { 200: TodoListSchema },
     },
     "GET /v1/todos/{id}": {
       handler: getTodo,
+      operationId: "getTodo",
+      description: "Retrieve a single todo",
       params: TodoParamsSchema,
       responses: { 200: TodoSchema, 404: TodoErrorSchema },
     },

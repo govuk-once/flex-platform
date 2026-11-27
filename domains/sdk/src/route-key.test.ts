@@ -61,6 +61,8 @@ describe("parseRouteKey", () => {
     ["GET /v1/Todos", SEGMENT_PROBLEM("Todos")],
     ["GET /v1/todos?done=true", SEGMENT_PROBLEM("todos?done=true")],
     ["GET /v1/{todo_id}", SEGMENT_PROBLEM("{todo_id}")],
+    ["GET /v1/{TodoId}", SEGMENT_PROBLEM("{TodoId}")],
+    ["GET /v1/{}", SEGMENT_PROBLEM("{}")],
   ])("refuses %s", (key, problem) => {
     expect(parseRouteKey(key)).toEqual({ ok: false, problems: [problem] });
   });
