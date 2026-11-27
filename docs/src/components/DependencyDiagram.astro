@@ -1,6 +1,6 @@
 ---
 // The workspace's packages and their dependencies, drawn from the manifests as the site builds,
-// so the diagram is never out of date. Drawn with Starlight's colour variables so it follows the
+// so the diagram is never out of date. Each section's packages are drawn inside its box. Drawn with Starlight's colour variables so it follows the
 // light and dark themes.
 import { BOX_HEIGHT, BOX_WIDTH, dependencyGraph } from "./dependency-graph.ts";
 
@@ -32,6 +32,27 @@ import Diagram from "./Diagram.astro";
     </defs>
 
     {
+      graph.sections.map((section) => (
+        <g>
+          <rect
+            class="section"
+            x={section.x.toFixed(1)}
+            y={section.y.toFixed(1)}
+            width={section.width.toFixed(1)}
+            height={section.height.toFixed(1)}
+            rx="10"
+          />
+          <text
+            class="section-title"
+            x={(section.x + 14).toFixed(1)}
+            y={(section.y + 28).toFixed(1)}
+          >
+            {section.title}
+          </text>
+        </g>
+      ))
+    }
+    {
       graph.lines.map((line) => (
         <path class:list={["line", { dev: line.dev }]} d={line.path}>
           <title>{`${line.from} → ${line.to}`}</title>
@@ -60,11 +81,13 @@ import Diagram from "./Diagram.astro";
     }
   </svg>
   <Fragment slot="caption">
-  Each package sits above what it depends on. Every gateway is drawn as one box, and every
-  driver as another, since each has the same shape. An arrow is left out where another
-  dependency already reaches the package. A dashed arrow is a dev dependency only. A highlighted package is
-  in the <code>@govuk-once/</code> scope. The shared ESLint, TypeScript and Vitest configuration,
-  which every package uses, is left out, and so is this site.
+    Each package sits above what it depends on, in its section. Every gateway is drawn as one box,
+    and every driver as another, since each has the same shape. An arrow is left out where another
+    dependency already reaches the package. A dashed arrow is a dev dependency only. A highlighted
+    package is in the <code>@govuk-once/</code> scope. Any package may use
+    <code>@repo/utils</code> and <code>@repo/cloudfront-js-utils</code>, so no arrow is drawn to
+    either. The shared ESLint, TypeScript and Vitest configuration, which every package uses, is
+    left out, and so is this site.
   </Fragment>
 </Diagram>
 

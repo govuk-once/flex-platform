@@ -1,7 +1,7 @@
 // The workspace's packages and what each depends on, read from their manifests as the site builds,
-// and laid out by dagre in layers: each package sits above everything it depends on. A dependency
-// already reached through another is not drawn, so the diagram shows the structure rather than
-// every line a manifest holds.
+// and laid out by dagre in layers: each package sits above everything it depends on, inside its
+// section. A dependency already reached through another is not drawn, nor one on a package any
+// package may use, so the diagram shows the structure rather than every line a manifest holds.
 
 import { existsSync, globSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -33,6 +33,23 @@ const GROUPS = [
     label: "gateways/drivers/<name>",
   },
 ];
+
+// Each package sits in its section's box, by the first folder of its directory.
+const SECTIONS = new Map([
+  ["domains", "Domains"],
+  ["frontdoor", "Frontdoor"],
+  ["gateways", "Gateways"],
+  ["infra", "Infrastructure"],
+  ["packages", "Packages"],
+  ["shared", "Shared account"],
+]);
+
+// Any package may use these, and neither depends on another workspace package, so an arrow to
+// either would only cross the diagram. They are drawn, without the arrows into them.
+const ANY_PACKAGE_MAY_USE = new Set([
+  "@repo/cloudfront-js-utils",
+  "@repo/utils",
+]);
 
 export const BOX_WIDTH = 252;
 export const BOX_HEIGHT = 46;
@@ -169,65 +186,317 @@ function drawnEdges(workspace: ReadonlyMap<string, WorkspacePackage>) {
   );
 }
 
-// A line through the points dagre routes an edge along, bending at each through its midpoints.
-function curve(points: readonly Point[]): string {
-  const at = ({ x, y }: Point) => `${x.toFixed(1)},${y.toFixed(1)}`;
-  const [first, ...rest] = points;
-  if (first === undefined)
-    throw new Error("dagre routed an edge through no points");
-  let d = `M${at(first)}`;
-  rest.forEach((p, i) => {
-    const next = rest[i + 1];
-    d +=
-      next === undefined
-        ? ` L${at(p)}`
-        : ` Q${at(p)} ${at({ x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 })}`;
+function sectionOf(directory: string): string {
+  const folder = directory.split("/")[0] ?? "";
+  const section = SECTIONS.get(folder);
+  if (section === undefined) {
+    throw new Error(
+      `No section for packages in ${folder}/: add it to SECTIONS`,
+    );
+  }
+  return section;
+}
+
+// dagre places the packages and the sections, and finds where each edge can pass the rows between
+// its ends. The diagram then draws each edge in right angles, turning only in the gaps between
+// rows, and makes each gap as tall as the edges that cross it need.
+
+const MARGIN = 20;
+// Around a section's packages, and above them for its title.
+const SECTION_PADDING = 16;
+const TITLE_SPACE = 32;
+// Between the top or bottom of a gap and a run across it, and between two runs.
+const RUN_MARGIN = 14;
+const RUN_SPACING = 10;
+// How near a box's corner an edge leaves or enters it, and how near another edge doing the same.
+const PORT_MARGIN = 16;
+const PORT_SPACING = 20;
+// The least room an edge straightened onto a box's corner keeps from it.
+const CORNER = 6;
+// How far an edge passing a row stays from that row's boxes.
+const CLEARANCE = 10;
+
+interface Span {
+  readonly left: number;
+  readonly right: number;
+}
+
+interface Box extends Span {
+  readonly row: number;
+}
+
+function at<T>(values: readonly T[], index: number): T {
+  const value = values[index];
+  if (value === undefined) {
+    throw new Error(`Nothing at index ${index.toString()}`);
+  }
+  return value;
+}
+
+const clamp = (x: number, { left, right }: Span) =>
+  Math.min(right, Math.max(left, x));
+
+const centreOf = ({ left, right }: Span) => (left + right) / 2;
+
+// Spreads the edges that leave or enter one box along its side, in the order of where each is
+// headed, so none crosses another as it leaves. Each is placed as near as it can be to where it
+// would run straight, at least PORT_SPACING from its neighbours. Any pushed past the
+// box's end are pushed back, and only as far as they must be.
+function placePorts(box: Span, wanted: readonly number[]): number[] {
+  const range = {
+    left: box.left + PORT_MARGIN,
+    right: box.right - PORT_MARGIN,
+  };
+  const order = wanted
+    .map((x, i) => ({ x: clamp(x, range), wanted: x, i }))
+    .sort((a, b) => a.x - b.x || a.wanted - b.wanted || a.i - b.i);
+  const xs = order.map(({ x }) => x);
+  for (let k = 1; k < xs.length; k++) {
+    xs[k] = Math.max(at(xs, k), at(xs, k - 1) + PORT_SPACING);
+  }
+  for (let k = xs.length - 1; k >= 0; k--) {
+    const after = xs[k + 1];
+    xs[k] = Math.max(
+      range.left,
+      Math.min(
+        at(xs, k),
+        range.right,
+        after === undefined ? Infinity : after - PORT_SPACING,
+      ),
+    );
+  }
+  const placed = wanted.map(() => 0);
+  order.forEach(({ i }, k) => {
+    placed[i] = at(xs, k);
   });
-  return d;
+  return placed;
+}
+
+function isClear(x: number, row: readonly Span[]): boolean {
+  return row.every(
+    ({ left, right }) => x < left - CLEARANCE || x > right + CLEARANCE,
+  );
 }
 
 export function dependencyGraph() {
   const workspace = readWorkspace();
-  const edges = drawnEdges(workspace);
+  const names = [...workspace.keys()];
+  const edges = drawnEdges(workspace).filter(
+    ({ to }) => !ANY_PACKAGE_MAY_USE.has(to),
+  );
 
-  // Top to bottom, from each package to what it depends on.
-  const graph = new graphlib.Graph();
-  graph.setGraph({
-    rankdir: "TB",
-    nodesep: 24,
-    ranksep: 56,
-    marginx: 20,
-    marginy: 20,
-  });
+  // Top to bottom, from each package to what it depends on, each inside its section.
+  const graph = new graphlib.Graph({ compound: true });
+  graph.setGraph({ rankdir: "TB", nodesep: 24, ranksep: 40, marginx: MARGIN });
   graph.setDefaultEdgeLabel(() => ({}));
-  for (const name of workspace.keys()) {
+  const sectionOfPackage = new Map<string, string>();
+  for (const [name, { directory }] of workspace) {
+    const section = sectionOf(directory);
+    sectionOfPackage.set(name, section);
+    graph.setNode(section, {});
     graph.setNode(name, { width: BOX_WIDTH, height: BOX_HEIGHT });
+    graph.setParent(name, section);
   }
   for (const { from, to } of edges) graph.setEdge(from, to);
   layout(graph);
 
-  const { width, height } = graph.graph() as { width: number; height: number };
+  // dagre gives each package's centre. Packages whose centres are level make a row.
+  const centre = (name: string) => graph.node(name) as Point;
+  const levels = [...new Set(names.map((name) => centre(name).y))].sort(
+    (a, b) => a - b,
+  );
+  const boxes = new Map<string, Box>(
+    names.map((name) => {
+      const { x, y } = centre(name);
+      return [
+        name,
+        {
+          left: x - BOX_WIDTH / 2,
+          right: x + BOX_WIDTH / 2,
+          row: levels.indexOf(y),
+        },
+      ];
+    }),
+  );
+  const rows = levels.map((_, row) =>
+    [...boxes.values()].filter((box) => box.row === row),
+  );
+
+  // Each edge, with where dagre passes it through each row between its ends, and the x it takes
+  // at each row from its first to its last.
+  const routes = edges.map((edge) => {
+    const from = heldValue(boxes, edge.from);
+    const to = heldValue(boxes, edge.to);
+    const points = (graph.edge(edge.from, edge.to) as { points: Point[] })
+      .points;
+    const passes = new Map<number, number>();
+    for (let row = from.row + 1; row < to.row; row++) {
+      const level = at(levels, row);
+      const point = points.find((p) => Math.abs(p.y - level) < 1);
+      if (point !== undefined) passes.set(row, point.x);
+    }
+    return { edge, from, to, passes, xs: [] as number[] };
+  });
+
+  // An edge leaves its package below where it goes next, as near as the box allows.
+  for (const [name, box] of boxes) {
+    const leaving = routes.filter(({ edge }) => edge.from === name);
+    const wanted = leaving.map(
+      ({ to, passes }) => passes.get(box.row + 1) ?? centreOf(to),
+    );
+    placePorts(box, wanted).forEach((x, k) => {
+      at(leaving, k).xs.push(x);
+    });
+  }
+
+  // It goes straight down past each row it can, and otherwise where dagre passed it.
+  for (const { from, to, passes, xs } of routes) {
+    for (let row = from.row + 1; row < to.row; row++) {
+      const x = at(xs, xs.length - 1);
+      xs.push(isClear(x, at(rows, row)) ? x : (passes.get(row) ?? x));
+    }
+  }
+
+  // It enters its package above where it arrives, as near as the box allows.
+  for (const [name, box] of boxes) {
+    const entering = routes.filter(({ edge }) => edge.to === name);
+    const wanted = entering.map(({ xs }) => at(xs, xs.length - 1));
+    placePorts(box, wanted).forEach((x, k) => {
+      at(entering, k).xs.push(x);
+    });
+  }
+
+  // An edge between neighbouring rows that turns by less than PORT_SPACING, because its ports
+  // were spread or kept from a corner, leaves its package where it enters the next instead, if
+  // that is inside the box and clear of the box's other edges.
+  for (const { from, to, xs } of routes) {
+    const start = at(xs, 0);
+    const end = at(xs, xs.length - 1);
+    const turn = Math.abs(end - start);
+    if (to.row !== from.row + 1 || turn < 1 || turn >= PORT_SPACING) continue;
+    const others = routes
+      .filter((route) => route.from === from && route.xs !== xs)
+      .map((route) => at(route.xs, 0));
+    if (
+      end >= from.left + CORNER &&
+      end <= from.right - CORNER &&
+      others.every((x) => Math.abs(x - end) >= PORT_SPACING)
+    ) {
+      xs[0] = end;
+    }
+  }
+
+  // Each turn is a run across the gap above a row. The runs in a gap are stacked from its top, the
+  // longest first, so each can be followed on its own and no shorter run's drop crosses a longer
+  // run.
+  const runs = routes.map(({ xs }) =>
+    xs.map((): number | undefined => undefined),
+  );
+  const gaps = new Map<
+    number,
+    { route: number; turn: number; length: number; left: number }[]
+  >();
+  routes.forEach(({ from, xs }, route) => {
+    xs.forEach((x, turn) => {
+      const before = xs[turn - 1];
+      if (before === undefined || Math.abs(x - before) < 1) return;
+      const gap = from.row + turn;
+      const inGap = gaps.get(gap) ?? [];
+      inGap.push({
+        route,
+        turn,
+        length: Math.abs(x - before),
+        left: Math.min(x, before),
+      });
+      gaps.set(gap, inGap);
+    });
+  });
+  for (const inGap of gaps.values()) {
+    inGap.sort((a, b) => b.length - a.length || a.left - b.left);
+    inGap.forEach(({ route, turn }, k) => {
+      at(runs, route)[turn] = k;
+    });
+  }
+
+  // Where each section starts and ends, by row.
+  const sections = sortedNames(new Set(sectionOfPackage.values())).map(
+    (title) => {
+      const members = names.filter(
+        (name) => sectionOfPackage.get(name) === title,
+      );
+      const memberRows = members.map((name) => heldValue(boxes, name).row);
+      return {
+        title,
+        top: Math.min(...memberRows),
+        bottom: Math.max(...memberRows),
+      };
+    },
+  );
+  const opens = (row: number) => sections.some(({ top }) => top === row);
+  const closes = (row: number) => sections.some(({ bottom }) => bottom === row);
+
+  // Each row's top. A gap holds the bottom of the sections that end above it, its runs, and the
+  // top and title of the sections that start below it.
+  const tops = [MARGIN + (opens(0) ? SECTION_PADDING + TITLE_SPACE : 0)];
+  const runTops = [0];
+  for (let row = 1; row < levels.length; row++) {
+    const bottom = at(tops, row - 1) + BOX_HEIGHT;
+    const count = gaps.get(row)?.length ?? 0;
+    const closing = closes(row - 1) ? SECTION_PADDING : 0;
+    const opening = opens(row) ? SECTION_PADDING + TITLE_SPACE : 0;
+    runTops.push(bottom + closing + RUN_MARGIN);
+    tops.push(
+      bottom +
+        closing +
+        2 * RUN_MARGIN +
+        Math.max(0, count - 1) * RUN_SPACING +
+        opening,
+    );
+  }
+  const last = levels.length - 1;
+  const height =
+    at(tops, last) + BOX_HEIGHT + (closes(last) ? SECTION_PADDING : 0) + MARGIN;
+
+  const lines = routes.map(({ edge, from, to, xs }, route) => {
+    const n = (value: number) => value.toFixed(1);
+    let d = `M${n(at(xs, 0))},${n(at(tops, from.row) + BOX_HEIGHT)}`;
+    xs.forEach((x, turn) => {
+      const run = at(runs, route)[turn];
+      if (run !== undefined) {
+        d += ` V${n(at(runTops, from.row + turn) + run * RUN_SPACING)} H${n(x)}`;
+      }
+    });
+    return { ...edge, path: `${d} V${n(at(tops, to.row))}` };
+  });
+
+  const { width } = graph.graph() as { width: number };
   return {
     width,
     height,
-    // dagre gives each package's centre.
     boxes: [...workspace].map(([name, { directory }]) => {
-      const { x, y } = graph.node(name) as Point;
+      const box = heldValue(boxes, name);
       return {
         name,
         directory,
         published: name.startsWith("@govuk-once/"),
-        x: x - BOX_WIDTH / 2,
-        y: y - BOX_HEIGHT / 2,
+        x: box.left,
+        y: at(tops, box.row),
+      };
+    }),
+    // dagre gives each section's width around its packages and the edges that pass them.
+    sections: sections.map(({ title, top, bottom }) => {
+      const node = graph.node(title) as Point & { width: number };
+      const y = at(tops, top) - SECTION_PADDING - TITLE_SPACE;
+      return {
+        title,
+        x: node.x - node.width / 2,
+        y,
+        width: node.width,
+        height: at(tops, bottom) + BOX_HEIGHT + SECTION_PADDING - y,
       };
     }),
     // A dev line is a dev dependency only, such as the shared types the published client bundles.
-    lines: edges.map((edge) => ({
-      ...edge,
-      path: curve(
-        (graph.edge(edge.from, edge.to) as { points: Point[] }).points,
-      ),
-    })),
+    lines,
     // Each package and what it depends on directly, as the diagram's text alternative.
     description: [...workspace]
       .map(
