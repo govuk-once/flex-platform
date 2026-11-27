@@ -62,7 +62,7 @@ describe("OriginRequestFunction", () => {
     );
   });
 
-  it("runs on Node.js 24 on x86-64, with 1,024 MB and 10 seconds, and is retained", () => {
+  it("runs on Node.js 26 on x86-64, with 1,024 MB and 10 seconds, and is retained", () => {
     const { stack } = build();
     const template = Template.fromStack(stack);
 
@@ -71,7 +71,7 @@ describe("OriginRequestFunction", () => {
       UpdateReplacePolicy: "Retain",
       Properties: {
         FunctionName: "frontdoor-sandbox-origin-request",
-        Runtime: "nodejs24.x",
+        Runtime: "nodejs26.x",
         Architectures: ["x86_64"],
         Handler: "index.handler",
         MemorySize: 1024,

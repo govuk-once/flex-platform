@@ -147,7 +147,7 @@ export class ReleaseDeadLetterWorker extends Construct {
     };
     this.function = new LambdaFunction(this, "Function", {
       functionName: RELEASE_DEAD_LETTER_WORKER_NAME,
-      runtime: Runtime.NODEJS_24_X,
+      runtime: Runtime.NODEJS_26_X,
       architecture: Architecture.ARM_64,
       handler: RELEASE_HANDLER,
       code: Code.fromAsset(bundleDirectory(config)),

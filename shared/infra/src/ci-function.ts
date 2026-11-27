@@ -170,7 +170,7 @@ export class CiFunction extends Construct {
 
     this.function = new LambdaFunction(this, "Function", {
       functionName: CI_FUNCTION_NAME,
-      runtime: Runtime.NODEJS_24_X,
+      runtime: Runtime.NODEJS_26_X,
       architecture: Architecture.ARM_64,
       handler: HANDLER,
       code: Code.fromAsset(

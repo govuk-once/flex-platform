@@ -164,5 +164,16 @@ export class CrossRegionParameters extends Construct {
         installLatestAwsSdk: false,
       });
     }
+
+    // CDK chooses this function's runtime, the newest one it knows to be in every region, which
+    // can trail the newest one it knows of.
+    const provider = stack.node.tryFindChild(PROVIDER_ID);
+    if (provider !== undefined) {
+      Validations.of(provider).acknowledge({
+        id: "AwsSolutions-L1",
+        reason:
+          "CDK sets the runtime of the function that runs a stack's AWS custom resources, and gives no way to choose it.",
+      });
+    }
   }
 }

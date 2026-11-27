@@ -89,7 +89,7 @@ export async function bundleEntry(runtime: string): Promise<void> {
     bundle: true,
     format: "esm",
     platform: "node",
-    target: "node24",
+    target: "node26",
     // esbuild's own report would print beside the error it throws, which carries the same
     // messages and reaches the CLI.
     logLevel: "silent",

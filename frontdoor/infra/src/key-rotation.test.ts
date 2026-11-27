@@ -89,7 +89,7 @@ describe("KeyRotation", () => {
     const template = Template.fromStack(stack);
     template.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "frontdoor-sandbox-caller-token-key-rotation",
-      Runtime: "nodejs24.x",
+      Runtime: "nodejs26.x",
       Handler: "index.handler",
       ReservedConcurrentExecutions: 1,
       LoggingConfig: {

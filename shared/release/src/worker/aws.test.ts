@@ -205,7 +205,7 @@ describe("the function", () => {
         input: {
           FunctionName: TARGET.functionName,
           Role: TARGET.executionRoleArn,
-          Runtime: "nodejs24.x",
+          Runtime: "nodejs26.x",
           Handler: "index.handler",
           MemorySize: 1024,
           Timeout: 29,

@@ -121,7 +121,7 @@ fresh Node.js process outside the workspace.
 | Setting | Value |
 |---|---|
 | Name | `frontdoor-<environment>-origin-request`, in us-east-1, as Lambda@Edge requires |
-| Runtime | Node.js 24, on x86-64: Lambda@Edge has no arm64 |
+| Runtime | Node.js 26, on x86-64: Lambda@Edge has no arm64 |
 | Memory | 1,024 MB. Lambda gives CPU in proportion to memory, which speeds the first request's key fetch and the signature check |
 | Timeout | 10 seconds. The key fetch's worst case is about 6 |
 | Body | Included, so the signature covers it |

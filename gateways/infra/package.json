@@ -14,7 +14,7 @@
   "dependencies": {
     "@repo/gateway-core": "workspace:*",
     "@repo/infra-constructs": "workspace:*",
-    "aws-cdk-lib": "2.276.0",
+    "aws-cdk-lib": "2.277.0",
     "constructs": "10.8.1"
   },
   "devDependencies": {
@@ -22,7 +22,7 @@
     "@repo/tsconfig": "workspace:*",
     "@repo/vitest-config": "workspace:*",
     "cdk-nag": "3.0.2",
-    "eslint": "10.14.0",
-    "vitest": "5.1.0"
+    "eslint": "10.15.0",
+    "vitest": "5.1.1"
   }
 }

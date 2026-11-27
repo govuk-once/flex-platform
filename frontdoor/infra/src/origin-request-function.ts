@@ -209,7 +209,7 @@ export class OriginRequestFunction extends Construct {
 
     this.function = new LambdaFunction(this, "Function", {
       functionName: originRequestFunctionName(props.environment),
-      runtime: Runtime.NODEJS_24_X,
+      runtime: Runtime.NODEJS_26_X,
       architecture: Architecture.X86_64,
       handler: HANDLER,
       code: Code.fromAsset(

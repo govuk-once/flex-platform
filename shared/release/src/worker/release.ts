@@ -31,7 +31,7 @@ export const LIVE_ALIAS = "live";
  * API waits 29 seconds for the function, so a function never runs on after no one is waiting.
  */
 export const FUNCTION_SETTINGS = {
-  runtime: "nodejs24.x",
+  runtime: "nodejs26.x",
   handler: "index.handler",
   architecture: "arm64",
   memoryMb: 1024,

@@ -3,7 +3,7 @@ title: Working in the repo
 description: Commands, setup and conventions for contributors.
 ---
 
-Use Node 24 (`.nvmrc`) and the pnpm version pinned in the root `package.json`. Turborepo runs the
+Use Node 26 (`.nvmrc`) and the pnpm version pinned in the root `package.json`. Turborepo runs the
 package tasks.
 
 ```bash

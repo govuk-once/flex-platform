@@ -18,7 +18,7 @@ export function buildCiFunction(config: CiConfig): string {
     write: false,
     format: "cjs",
     platform: "node",
-    target: "node24",
+    target: "node26",
     define: { CI_CONFIG: JSON.stringify(config) },
     // Not minified, so the source locations a failure logs point at a line worth reading.
   });

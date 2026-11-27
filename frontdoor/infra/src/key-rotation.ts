@@ -245,7 +245,7 @@ export class KeyRotation extends Construct {
 
     this.function = new LambdaFunction(this, "Function", {
       functionName: keyRotationFunctionName(environment, kind),
-      runtime: Runtime.NODEJS_24_X,
+      runtime: Runtime.NODEJS_26_X,
       architecture: Architecture.ARM_64,
       handler: HANDLER,
       code: Code.fromAsset(

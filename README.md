@@ -11,7 +11,7 @@ domains a typed, validated way to reach the upstreams they depend on.
 
 ## Working in this repo
 
-Use Node 24 and the pnpm version pinned in `package.json`.
+Use Node 26 and the pnpm version pinned in `package.json`.
 
 ```bash
 pnpm install

@@ -24,7 +24,7 @@ async function bundleModule(source: string): Promise<string> {
     bundle: true,
     format: "esm",
     platform: "node",
-    target: "node24",
+    target: "node26",
     write: false,
   });
 

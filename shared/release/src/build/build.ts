@@ -37,7 +37,7 @@ function bundle(entry: string, define: Record<string, string>): string {
     write: false,
     format: "cjs",
     platform: "node",
-    target: "node24",
+    target: "node26",
     define,
     // Not minified, so the source locations a failure logs point at a line worth reading.
   });

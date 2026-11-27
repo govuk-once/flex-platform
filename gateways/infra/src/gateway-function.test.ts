@@ -41,12 +41,12 @@ function build(props: GatewayFunctionProps = PROPS, nag = false) {
 }
 
 describe("GatewayFunction", () => {
-  it("runs the bundle on Node.js 24, named, with its environment", () => {
+  it("runs the bundle on Node.js 26, named, with its environment", () => {
     const template = Template.fromStack(build().scope);
 
     template.hasResourceProperties("AWS::Lambda::Function", {
       FunctionName: "gateway-sandbox-udp",
-      Runtime: "nodejs24.x",
+      Runtime: "nodejs26.x",
       Architectures: ["arm64"],
       Handler: "bundle.handler",
       Timeout: 28,

@@ -72,7 +72,7 @@ describe("emitted entry point", () => {
       loader: "js",
       format: "esm",
       platform: "node",
-      target: "node24",
+      target: "node26",
     });
     expect(built.warnings).toEqual([]);
   });
