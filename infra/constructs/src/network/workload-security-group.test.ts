@@ -1,5 +1,5 @@
 import { Stack } from "aws-cdk-lib";
-import { Match } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import {
   InterfaceVpcEndpointAwsService,
   type IVpc,
@@ -13,7 +13,6 @@ import { ACCOUNT, buildNetwork } from "../../test/network.ts";
 import { cdkApp } from "../cdk-app.ts";
 import { WorkloadSecurityGroup } from "./workload-security-group.ts";
 
-type Template = ReturnType<typeof buildNetwork>["template"];
 type Rule = Record<string, unknown>;
 
 function rules(template: Template, type: string, props = {}): Rule[] {
@@ -42,7 +41,7 @@ function egress(template: Template, from: string): unknown[] {
 
 describe("WorkloadSecurityGroup", () => {
   it("lets an isolated workload out only to its endpoints, on TCP 443", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     // CDK's rule that matches nothing, which keeps EC2's default allow-all egress off the group.
     template.hasResourceProperties("AWS::EC2::SecurityGroup", {
@@ -63,7 +62,7 @@ describe("WorkloadSecurityGroup", () => {
   });
 
   it("lets a private workload out to its endpoints and through NAT, on TCP 443", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     template.hasResourceProperties("AWS::EC2::SecurityGroup", {
       GroupDescription: "private-gateway workloads, private tier",
@@ -101,7 +100,7 @@ describe("WorkloadSecurityGroup", () => {
   });
 
   it("is let into each of its endpoints, and no other", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
     const ingress = rules(template, "AWS::EC2::SecurityGroupIngress").map(
       ({ GroupId, SourceSecurityGroupId, FromPort, ToPort }) => [
         group(GroupId),

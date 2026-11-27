@@ -43,10 +43,10 @@ function write(stack: Stack, parameters: Parameters): void {
   });
 }
 
-function build(parameters: Parameters = ONE): Template {
+function build(parameters: Parameters = ONE): Stack {
   const { stack } = testStack();
   write(stack, parameters);
-  return Template.fromStack(stack);
+  return stack;
 }
 
 // A custom resource's calls are JSON in its properties.
@@ -92,7 +92,7 @@ describe("CrossRegionParameters", () => {
   });
 
   it("writes a value to its parameter in the other region, on create and on update", () => {
-    const template = build();
+    const template = Template.fromStack(build());
 
     const expected = {
       service: "SSM",
@@ -111,7 +111,7 @@ describe("CrossRegionParameters", () => {
   });
 
   it("deletes the parameter with its stack, and accepts one already gone", () => {
-    expect(call(build(), "Delete")).toEqual({
+    expect(call(Template.fromStack(build()), "Delete")).toEqual({
       service: "SSM",
       action: "deleteParameter",
       parameters: { Name: HOST },
@@ -123,13 +123,17 @@ describe("CrossRegionParameters", () => {
   // A timestamp, or anything else that differs between synths, would write on every deploy and
   // make every template differ from the last.
   it("synthesizes the same template every time", () => {
-    expect(build(TWO).toJSON()).toEqual(build(TWO).toJSON());
+    expect(Template.fromStack(build(TWO)).toJSON()).toEqual(
+      Template.fromStack(build(TWO)).toJSON(),
+    );
   });
 
   it("keeps a writer's logical ID whatever else is written, in any order", () => {
     const ids = (parameters: Parameters) =>
       Object.entries(
-        build(parameters).findResources("Custom::CrossRegionParameter"),
+        Template.fromStack(build(parameters)).findResources(
+          "Custom::CrossRegionParameter",
+        ),
       )
         .filter(([, resource]) =>
           JSON.stringify(resource.Properties).includes(HOST),
@@ -148,8 +152,8 @@ describe("CrossRegionParameters", () => {
   });
 
   it("may write and delete only its own parameters, in the other region", () => {
-    const ssm = policyStatements(build(TWO)).filter(({ Action }) =>
-      JSON.stringify(Action).includes("ssm:"),
+    const ssm = policyStatements(Template.fromStack(build(TWO))).filter(
+      ({ Action }) => JSON.stringify(Action).includes("ssm:"),
     );
 
     expect(ssm).toEqual([
@@ -165,10 +169,12 @@ describe("CrossRegionParameters", () => {
   });
 
   it("writes a name in each region it is given for, as its own resource", () => {
-    const template = build({
-      "us-east-1": { [HOST]: "abc.example" },
-      "eu-west-1": { [HOST]: "abc.example" },
-    });
+    const template = Template.fromStack(
+      build({
+        "us-east-1": { [HOST]: "abc.example" },
+        "eu-west-1": { [HOST]: "abc.example" },
+      }),
+    );
 
     const regions = Object.values(
       template.findResources("Custom::CrossRegionParameter"),
@@ -197,9 +203,7 @@ describe("CrossRegionParameters", () => {
   });
 
   it("runs every writer in one function, with one role and one log group", () => {
-    const { stack } = testStack();
-    write(stack, TWO);
-    const template = Template.fromStack(stack);
+    const template = Template.fromStack(build(TWO));
 
     template.resourceCountIs("Custom::CrossRegionParameter", 2);
     template.resourceCountIs("AWS::Lambda::Function", 1);
@@ -209,7 +213,7 @@ describe("CrossRegionParameters", () => {
   });
 
   it("logs to the platform's log group by its name, and can create no other", () => {
-    const template = build();
+    const template = Template.fromStack(build());
 
     template.hasResourceProperties("AWS::Logs::LogGroup", {
       LogGroupName: LOG_GROUP,

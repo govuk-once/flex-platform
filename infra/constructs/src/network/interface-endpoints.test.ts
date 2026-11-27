@@ -101,7 +101,7 @@ describe("InterfaceEndpoints", () => {
   ])(
     "has a %s endpoint in the isolated subnets, for this account, one action and what it names",
     (service, action, resource, principals?: string, privateDns?: boolean) => {
-      buildNetwork().template.hasResourceProperties(
+      Template.fromStack(buildNetwork().stack).hasResourceProperties(
         "AWS::EC2::VPCEndpoint",
         endpoint(service, action, resource, principals, privateDns),
       );
@@ -175,7 +175,7 @@ describe("InterfaceEndpoints", () => {
   });
 
   it("gives each endpoint a group of its own, which lets nothing out and lets in only workloads", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
     const groups = Object.values(
       template.findResources("AWS::EC2::SecurityGroup", {
         Properties: {

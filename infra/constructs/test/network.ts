@@ -1,5 +1,4 @@
 import { type App, Stack, Validations } from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
 import { AwsSolutionsChecks } from "cdk-nag";
 
 import { cdkApp } from "../src/cdk-app.ts";
@@ -56,7 +55,6 @@ export const UPSTREAM: UpstreamNames = {
 export interface BuiltNetwork {
   readonly app: App;
   readonly stack: Stack;
-  readonly template: Template;
 }
 
 /** Every network construct, wired as the app's network stack wires them. */
@@ -129,5 +127,5 @@ export function buildNetwork(
     endpointAddresses: { dynamodb: endpoints.dynamoDbAddress },
   });
 
-  return { app, stack, template: Template.fromStack(stack) };
+  return { app, stack };
 }

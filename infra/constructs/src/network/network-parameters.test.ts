@@ -88,6 +88,8 @@ describe("NetworkParameters", () => {
 
 describe("the network", () => {
   it("has no unacknowledged cdk-nag finding, and passes the platform's checks", () => {
-    expect(() => buildNetwork(undefined, true)).not.toThrow();
+    expect(() =>
+      Template.fromStack(buildNetwork(undefined, true).stack),
+    ).not.toThrow();
   });
 });

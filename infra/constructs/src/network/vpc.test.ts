@@ -33,11 +33,9 @@ function subnetRanges(template: Template): Record<string, unknown> {
 
 describe("NetworkVpc", () => {
   it("gives each zone's subnets the ranges the layout does", () => {
-    const { template } = buildNetwork([
-      "eu-west-2a",
-      "eu-west-2b",
-      "eu-west-2c",
-    ]);
+    const template = Template.fromStack(
+      buildNetwork(["eu-west-2a", "eu-west-2b", "eu-west-2c"]).stack,
+    );
 
     for (const [zone, layout] of Object.entries(ZONE_LAYOUT)) {
       for (const tier of ["public", "private", "isolated"] as const) {
@@ -58,10 +56,12 @@ describe("NetworkVpc", () => {
   // A subnet whose ID or range changes is replaced, and so is everything in it.
   it("leaves a zone's subnets as they are when another zone is added", () => {
     const two = subnetRanges(
-      buildNetwork(["eu-west-2a", "eu-west-2b"]).template,
+      Template.fromStack(buildNetwork(["eu-west-2a", "eu-west-2b"]).stack),
     );
     const three = subnetRanges(
-      buildNetwork(["eu-west-2a", "eu-west-2b", "eu-west-2c"]).template,
+      Template.fromStack(
+        buildNetwork(["eu-west-2a", "eu-west-2b", "eu-west-2c"]).stack,
+      ),
     );
 
     expect(Object.keys(two)).toHaveLength(6);
@@ -70,12 +70,18 @@ describe("NetworkVpc", () => {
 
   it("builds the same template whatever order config lists the zones in", () => {
     expect(
-      buildNetwork(["eu-west-2b", "eu-west-2a"]).template.toJSON(),
-    ).toEqual(buildNetwork(["eu-west-2a", "eu-west-2b"]).template.toJSON());
+      Template.fromStack(
+        buildNetwork(["eu-west-2b", "eu-west-2a"]).stack,
+      ).toJSON(),
+    ).toEqual(
+      Template.fromStack(
+        buildNetwork(["eu-west-2a", "eu-west-2b"]).stack,
+      ).toJSON(),
+    );
   });
 
   it("routes nothing out of an isolated subnet, and a private one through its own zone's NAT gateway", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
     // Each route as its table and its target, by logical ID without the hash.
     const unhashed = (reference: unknown) =>
       (reference as { Ref: string }).Ref.replace(/[0-9A-F]{8}$/, "");
@@ -107,7 +113,7 @@ describe("NetworkVpc", () => {
   });
 
   it("gives each NAT gateway its zone's retained address", () => {
-    const { template } = buildNetwork();
+    const template = Template.fromStack(buildNetwork().stack);
 
     template.resourceCountIs("AWS::EC2::NatGateway", 2);
     for (const zone of ["eu-west-2a", "eu-west-2b"]) {
