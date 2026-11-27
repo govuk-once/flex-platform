@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./token-header": "./src/token-header.ts"
+    "./build": "./src/build/build.ts"
   },
   "scripts": {
     "lint": "eslint src/ test/",

@@ -4,11 +4,13 @@ import path from "node:path";
 
 import type { KeyKind } from "@repo/frontdoor-key-rotation";
 import {
-  buildOriginRequestFunction,
-  HANDLER,
   type OriginRequestConfig,
   SIGNING_REGION,
 } from "@repo/frontdoor-origin-request";
+import {
+  buildOriginRequestFunction,
+  HANDLER,
+} from "@repo/frontdoor-origin-request/build";
 import {
   callerTokenAudience,
   SIGNING_KEY_PURPOSE,

@@ -1,5 +1,5 @@
 import { PlatformCloudFrontFunction } from "@repo/infra-constructs";
-import { buildViewerRequestFunction } from "@repo/shared-viewer-request";
+import { buildViewerRequestFunction } from "@repo/shared-viewer-request/build";
 import type { Construct } from "constructs";
 
 import {

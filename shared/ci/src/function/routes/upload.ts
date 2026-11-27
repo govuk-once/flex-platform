@@ -1,4 +1,4 @@
-import { bundleKey } from "@repo/shared-release/bundle-key";
+import { bundleKey } from "@repo/shared-release";
 
 import { uploadOf } from "../bundle.ts";
 import {

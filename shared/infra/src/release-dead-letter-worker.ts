@@ -6,11 +6,11 @@ import {
   logGroupWriteStatements,
   PlatformLogGroup,
 } from "@repo/infra-constructs";
+import type { DeadLetterConfig } from "@repo/shared-release";
 import {
   buildDeadLetterWorker,
-  type DeadLetterConfig,
   RELEASE_HANDLER,
-} from "@repo/shared-release";
+} from "@repo/shared-release/build";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   Alarm,

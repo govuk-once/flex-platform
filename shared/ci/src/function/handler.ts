@@ -1,5 +1,5 @@
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
-import { CI_TOKEN_HEADER } from "@repo/shared-viewer-request/token-header";
+import { CI_TOKEN_HEADER } from "@repo/shared-viewer-request";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 import { heldValue } from "@repo/utils/held-value";
 

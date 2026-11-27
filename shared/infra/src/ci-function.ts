@@ -7,13 +7,9 @@ import {
   logGroupWriteStatements,
   PlatformLogGroup,
 } from "@repo/infra-constructs";
-import {
-  buildCiFunction,
-  type CiDomain,
-  type CiEnvironment,
-  HANDLER,
-} from "@repo/shared-ci";
-import { bundleKey } from "@repo/shared-release/bundle-key";
+import type { CiDomain, CiEnvironment } from "@repo/shared-ci";
+import { buildCiFunction, HANDLER } from "@repo/shared-ci/build";
+import { bundleKey } from "@repo/shared-release";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
 import {
   PolicyDocument,

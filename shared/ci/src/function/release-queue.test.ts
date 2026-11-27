@@ -3,8 +3,8 @@ import { SQSClient } from "@aws-sdk/client-sqs";
 import {
   parseReleaseMessage,
   type ReleaseRequest,
-} from "@repo/shared-release/request";
-import type { ReleaseTable } from "@repo/shared-release/table";
+  type ReleaseTable,
+} from "@repo/shared-release";
 import { uuidV7 } from "@repo/utils/uuid-v7";
 import { assert, describe, expect, it } from "vitest";
 

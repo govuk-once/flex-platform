@@ -1,5 +1,5 @@
 import { tablePolicy } from "@repo/infra-constructs";
-import { FIXED_ATTRIBUTES } from "@repo/shared-release/table";
+import { FIXED_ATTRIBUTES } from "@repo/shared-release";
 import { RemovalPolicy, Stack } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";

@@ -1,4 +1,4 @@
-import { isReleaseId } from "@repo/shared-release/release-id";
+import { isReleaseId } from "@repo/shared-release";
 import { heldValue } from "@repo/utils/held-value";
 
 import { notFound, releaseStatus } from "../responses.ts";

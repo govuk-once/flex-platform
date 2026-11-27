@@ -15,7 +15,7 @@ import {
 } from "@repo/cloudfront-function";
 import { traceIdFor } from "@repo/cloudfront-js-utils/trace-id-for";
 
-import { CI_TOKEN_HEADER } from "../token-header.ts";
+import { CI_TOKEN_HEADER } from "../index.ts";
 import { isCiPath } from "./ci-path.ts";
 import { hasContentHash } from "./content-hash.ts";
 import { logEvent } from "./telemetry.ts";
