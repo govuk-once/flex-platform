@@ -4,6 +4,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { KMSClient } from "@aws-sdk/client-kms";
 import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { SIGNING_KEY_REGION } from "@repo/frontdoor-shared";
+import { credentialsFromEnvironment } from "@repo/lambda-function";
 
 import {
   createCallerTokenSigner,
@@ -11,7 +12,7 @@ import {
 } from "./caller-token.ts";
 import { createOriginRequestHandler } from "./origin-request.ts";
 import { createPushIdDeriver } from "./push-id.ts";
-import { createRequestSigner, credentialsFromEnvironment } from "./sign.ts";
+import { createRequestSigner } from "./sign.ts";
 import { createTokenVerifier } from "./token.ts";
 import type { OriginRequestConfig } from "./types.ts";
 

@@ -18,6 +18,7 @@
     "@aws-sdk/client-secrets-manager": "3.1173.0",
     "@repo/cloudfront-js-utils": "workspace:*",
     "@repo/frontdoor-shared": "workspace:*",
+    "@repo/lambda-function": "workspace:*",
     "@repo/utils": "workspace:*",
     "@smithy/hash-node": "4.5.2",
     "@smithy/signature-v4": "5.7.5",

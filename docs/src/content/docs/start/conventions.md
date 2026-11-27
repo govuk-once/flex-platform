@@ -13,7 +13,7 @@ change you are making.
 
   | Where | What |
   |---|---|
-  | `packages/` | The shared TypeScript, ESLint and Vitest configuration. `@repo/release`, which releases the published packages. Two sets of generic functions, `@repo/utils` and `@repo/cloudfront-js-utils`. `@repo/cloudfront-function`, which builds a CloudFront Function and holds what is particular to one, such as its event's types |
+  | `packages/` | The shared TypeScript, ESLint and Vitest configuration. `@repo/release`, which releases the published packages. Two sets of generic functions, `@repo/utils` and `@repo/cloudfront-js-utils`. `@repo/cloudfront-function`, which builds a CloudFront Function and holds what is particular to one, such as its event's types. `@repo/lambda-function`, which does the same for a Lambda function the platform deploys: its build, the check of an issuer's tokens, and the role's credentials |
   | `gateways/` | Gateway code. What gateways share is in `gateways/shared/` |
   | `frontdoor/` | Frontdoor code. What its functions share is in `frontdoor/shared/` |
   | A section's own `infra/`, such as `frontdoor/infra` | That section's CDK constructs. The shared account's are in `shared/infra` |
