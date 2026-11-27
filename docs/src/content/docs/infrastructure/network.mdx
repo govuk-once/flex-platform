@@ -3,6 +3,8 @@ title: Network
 description: The VPC in each domain account that domains and gateways run in, its tiers, endpoints, DNS filtering and logs, and how other stacks find its IDs.
 ---
 
+import NetworkDiagram from "../../../components/NetworkDiagram.astro";
+
 Each domain account has one network in each environment, in its own stack,
 `network-<environment>-<account>`, in eu-west-2. Domains and gateways run in it. A domain's stack
 holds its function to the network's [placement](/flex-platform/domains/hosting/#network), and a
@@ -65,6 +67,8 @@ out only on TCP port 443:
 | `domain` | `isolated` | The `lambda` endpoint |
 | `isolated-gateway` | `isolated` | The `secretsmanager`, `sts`, `dynamodb` and `execute-api` endpoints |
 | `private-gateway` | `private` | The `secretsmanager`, `sts` and `dynamodb` endpoints, and its zone's NAT gateway |
+
+<NetworkDiagram />
 
 Each endpoint has a use:
 

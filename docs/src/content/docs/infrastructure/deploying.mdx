@@ -3,6 +3,8 @@ title: Deploying
 description: How a merge to main deploys a stage, one account at a time in waves, and why a deploy never goes back.
 ---
 
+import StackWavesDiagram from "../../../components/StackWavesDiagram.astro";
+
 A merge to `main` deploys platform-dev through GitHub Actions, once the quality checks pass. No
 person deploys from their own machine. platform-staging and platform-prod have no deploy yet.
 
@@ -35,6 +37,8 @@ For platform-dev, the waves are:
 | 1 | `shared-identity`, `shared-release` | `network-<environment>-<account>`, `domainaccount-<environment>-<account>` | `frontdoor-<environment>-edge-logs-eu-west-2`, `frontdoor-<environment>-caller-token-keys` |
 | 2 | `shared-management` | `domain-<environment>-<domain>`, `gateway-<environment>-<account>-<id>` | |
 | 3 | | | `frontdoor-<environment>` |
+
+<StackWavesDiagram />
 
 The workflow has three wave jobs. If a stage's stacks would need a fourth wave, its plan fails
 before anything deploys. A test holds every stage in config to three waves. To add a wave, add a

@@ -1,0 +1,127 @@
+---
+// One stage's stacks as a deploy sees them: a column per account, a row per wave, and an arrow
+// from each stack to the stacks that depend on it. Drawn with Starlight's colour variables so it
+// follows the light and dark themes.
+import Diagram from "./Diagram.astro";
+---
+
+<Diagram title="Deploy waves" minWidth={600} maxWidth={900}>
+  <svg
+    viewBox="0 0 900 480"
+    role="img"
+    aria-labelledby="waves-title waves-desc"
+  >
+    <title id="waves-title">Deploy waves</title>
+    <desc id="waves-desc">
+      A stage deploys in three waves, with one job per account in each. In wave 1, the shared
+      account deploys shared-identity and shared-release, the domain account deploys
+      domainaccount-environment-account and network-environment-account, and the frontdoor account
+      deploys frontdoor-environment-edge-logs-eu-west-2 and frontdoor-environment-caller-token-keys.
+      In wave 2, the shared account deploys shared-management, in us-east-1, which depends on
+      shared-release and reads the pipeline API's host from a parameter in us-east-1 that
+      shared-release writes. The domain account deploys each gateway's stack, which depends on the
+      network's stack, and each domain's stack, which depends on the network's stack and the
+      domain account's stack. In wave 3, the frontdoor account deploys frontdoor-environment, in
+      us-east-1, which depends on the edge logs stack, the caller token's stack and every domain
+      stack.
+    </desc>
+    <defs>
+      <marker
+        id="waves-arrow"
+        viewBox="0 0 10 10"
+        refX="9"
+        refY="5"
+        markerWidth="6"
+        markerHeight="6"
+        orient="auto-start-reverse"
+      >
+        <path d="M0,0 L10,5 L0,10 z" class="head"></path>
+      </marker>
+    </defs>
+
+    <!-- Accounts -->
+    <rect class="section" x="78" y="20" width="264" height="440" rx="10"></rect>
+    <text class="section-title" x="94" y="48">Shared account</text>
+    <rect class="section" x="352" y="20" width="264" height="440" rx="10"></rect>
+    <text class="section-title" x="368" y="48">Domain account</text>
+    <rect class="section" x="626" y="20" width="264" height="440" rx="10"></rect>
+    <text class="section-title" x="642" y="48">Frontdoor account</text>
+
+    <!-- Waves -->
+    <line class="wave-rule" x1="20" y1="220" x2="890" y2="220"></line>
+    <line class="wave-rule" x1="20" y1="372" x2="890" y2="372"></line>
+    <text class="label small" x="45" y="146">Wave 1</text>
+    <text class="label small" x="45" y="300">Wave 2</text>
+    <text class="label small" x="45" y="420">Wave 3</text>
+
+    <!-- Shared account -->
+    <rect class="box" x="106" y="80" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="210" y="111">shared-identity</text>
+    <rect class="box" x="106" y="148" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="210" y="179">shared-release</text>
+    <rect class="box" x="106" y="236" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="210" y="258">shared-management</text>
+    <text class="sub" x="210" y="277">us-east-1</text>
+    <text class="note" x="106" y="312">Reads the pipeline API's host</text>
+    <text class="note" x="106" y="330">from a parameter in us-east-1,</text>
+    <text class="note" x="106" y="348">which <tspan class="mono">shared-release</tspan> writes</text>
+
+    <!-- Domain account -->
+    <rect class="box" x="380" y="80" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="484" y="102">domainaccount-</text>
+    <text class="stack" x="484" y="120">&lt;environment&gt;-&lt;account&gt;</text>
+    <rect class="box" x="380" y="148" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="484" y="170">network-&lt;environment&gt;-</text>
+    <text class="stack" x="484" y="188">&lt;account&gt;</text>
+    <rect class="box" x="380" y="236" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="484" y="258">gateway-&lt;environment&gt;-</text>
+    <text class="stack" x="484" y="276">&lt;account&gt;-&lt;id&gt;</text>
+    <rect class="box" x="380" y="304" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="484" y="326">domain-&lt;environment&gt;-</text>
+    <text class="stack" x="484" y="344">&lt;domain&gt;</text>
+
+    <!-- Frontdoor account -->
+    <rect class="box" x="654" y="80" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="758" y="102">frontdoor-&lt;environment&gt;-</text>
+    <text class="stack" x="758" y="120">edge-logs-eu-west-2</text>
+    <rect class="box" x="654" y="148" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="758" y="170">frontdoor-&lt;environment&gt;-</text>
+    <text class="stack" x="758" y="188">caller-token-keys</text>
+    <rect class="box accent" x="654" y="388" width="208" height="52" rx="6"></rect>
+    <text class="stack" x="758" y="410">frontdoor-&lt;environment&gt;</text>
+    <text class="sub" x="758" y="429">us-east-1</text>
+
+    <!-- Dependencies, from a stack to the stacks that depend on it -->
+    <line class="flow" x1="210" y1="200" x2="210" y2="234"></line>
+
+    <line class="flow" x1="484" y1="200" x2="484" y2="234"></line>
+    <polyline class="bus" points="588,174 602,174 602,330"></polyline>
+    <line class="flow" x1="602" y1="330" x2="590" y2="330"></line>
+    <polyline class="flow" points="380,106 366,106 366,330 378,330"></polyline>
+
+    <polyline class="flow" points="484,356 484,414 652,414"></polyline>
+    <text class="note" x="494" y="406">every domain stack</text>
+
+    <line class="flow" x1="758" y1="200" x2="758" y2="386"></line>
+    <polyline class="flow" points="862,106 876,106 876,414 864,414"></polyline>
+  </svg>
+  <Fragment slot="caption">
+    An arrow runs from a stack to one that depends on it. A stage with more environments has a
+    domain and a frontdoor column for each.
+  </Fragment>
+</Diagram>
+
+<style>
+  .flow {
+    marker-end: url(#waves-arrow);
+  }
+  .wave-rule {
+    stroke: var(--sl-color-gray-4);
+    stroke-dasharray: 6 4;
+  }
+  .stack {
+    font-family: var(--sl-font-mono, var(--sl-font-system-mono));
+    font-size: 13px;
+    text-anchor: middle;
+  }
+</style>
