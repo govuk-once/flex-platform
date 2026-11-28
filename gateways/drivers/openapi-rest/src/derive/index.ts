@@ -1058,10 +1058,9 @@ function reachesOthers(
     const readings = readingsOf(text);
     return (
       schema !== undefined &&
-      readings !== undefined &&
-      readings.every(
+      readings?.every(
         (value) => checkValue(schema, value, components).verdict === "refused",
-      )
+      ) === true
     );
   };
 
