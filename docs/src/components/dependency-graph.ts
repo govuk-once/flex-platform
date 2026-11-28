@@ -230,10 +230,13 @@ export function dependencyGraph() {
     })),
     // Each package and what it depends on directly, as the diagram's text alternative.
     description: [...workspace]
-      .map(
-        ([name, { runtime, dev }]) =>
-          `${name} depends on ${runtime.length > 0 ? runtime.join(", ") : "no other package"}${dev.length > 0 ? `, with the dev dependencies ${dev.join(", ")}` : ""}.`,
-      )
+      .map(([name, { runtime, dev }]) => {
+        const runs =
+          runtime.length > 0 ? runtime.join(", ") : "no other package";
+        const devs =
+          dev.length > 0 ? `, with the dev dependencies ${dev.join(", ")}` : "";
+        return `${name} depends on ${runs}${devs}.`;
+      })
       .join(" "),
   };
 }

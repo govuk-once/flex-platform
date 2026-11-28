@@ -50,6 +50,11 @@ export function cloudfrontFunction(
   ];
   return {
     rules: {
+      // What the base preset asks for in place of what the runtime has.
+      "@typescript-eslint/prefer-for-of": "off",
+      "unicorn/prefer-at": "off",
+      "unicorn/prefer-node-protocol": "off",
+      "unicorn/prefer-set-has": "off",
       "no-eval": "error",
       "no-new-func": "error",
       "no-console": ["error", { allow: ["log"] }],

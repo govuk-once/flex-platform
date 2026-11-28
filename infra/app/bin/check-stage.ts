@@ -39,7 +39,9 @@ async function github(path: string): Promise<unknown[]> {
     throw new Error(`GitHub answered ${String(response.status)} for ${path}`);
   }
   const body: unknown = await response.json();
-  if (!Array.isArray(body)) throw new Error(`GitHub's ${path} is not a list`);
+  if (!Array.isArray(body)) {
+    throw new TypeError(`GitHub's ${path} is not a list`);
+  }
   return body as unknown[];
 }
 

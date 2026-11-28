@@ -5,6 +5,7 @@ import { defineConfig, includeIgnoreFile } from "eslint/config";
 import prettier from "eslint-plugin-prettier/recommended";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
 import sonarjs from "eslint-plugin-sonarjs";
+import unicorn from "eslint-plugin-unicorn";
 import tseslint from "typescript-eslint";
 
 import { findUpSync } from "./find-up.ts";
@@ -20,6 +21,7 @@ export const base = defineConfig(
   {
     plugins: {
       "simple-import-sort": simpleImportSort,
+      unicorn,
     },
     languageOptions: {
       parserOptions: {
@@ -33,11 +35,39 @@ export const base = defineConfig(
         { argsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/consistent-type-imports": "error",
-      "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-deprecated": "error",
+      "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
-      "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",
+      "simple-import-sort/imports": "error",
+    },
+  },
+  {
+    // Rules SonarQube runs on source, as S3358, S4138, S4624, S6582, S6598, S7755, S7758, S7763,
+    // S7772, S7776, S7778, S7780 and S7786, so code it would flag fails lint first. It runs none
+    // of them on what sonar-project.properties counts as tests.
+    ignores: [
+      "**/*.test.ts",
+      "**/*.spec.ts",
+      "**/__mocks__/**",
+      "**/__tests__/**",
+      "**/test/**",
+    ],
+    plugins: { sonarjs },
+    rules: {
+      "@typescript-eslint/prefer-for-of": "error",
+      "@typescript-eslint/prefer-function-type": "error",
+      "@typescript-eslint/prefer-optional-chain": "error",
+      "sonarjs/no-nested-conditional": "error",
+      "sonarjs/no-nested-template-literals": "error",
+      "unicorn/prefer-at": "error",
+      "unicorn/prefer-code-point": "error",
+      "unicorn/prefer-export-from": "error",
+      "unicorn/prefer-node-protocol": "error",
+      "unicorn/prefer-set-has": "error",
+      "unicorn/prefer-single-call": "error",
+      "unicorn/prefer-string-raw": "error",
+      "unicorn/prefer-type-error": "error",
     },
   },
   {
