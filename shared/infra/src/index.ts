@@ -1,14 +1,6 @@
-export { ArtefactTable, type ArtefactTableProps } from "./artefact-table.ts";
-export {
-  CI_CONCURRENCY,
-  CiFunction,
-  type CiFunctionProps,
-} from "./ci-function.ts";
-export {
-  type BundleReader,
-  DomainCodeBucket,
-  type DomainCodeBucketProps,
-} from "./domain-code-bucket.ts";
+export { ArtefactTable } from "./artefact-table.ts";
+export { CiFunction } from "./ci-function.ts";
+export { type BundleReader, DomainCodeBucket } from "./domain-code-bucket.ts";
 export { ManagementEdge } from "./management-edge.ts";
 export {
   ARTEFACT_TABLE_NAME,
@@ -25,18 +17,8 @@ export {
   RELEASE_WORKER_NAME,
   releaseQueueUrl,
   SHARED_REGION,
-  TEST_USER_POOL_NAME,
 } from "./names.ts";
-export {
-  DEAD_LETTER_WORKER_TIMEOUT,
-  ReleaseDeadLetterWorker,
-  type ReleaseDeadLetterWorkerProps,
-} from "./release-dead-letter-worker.ts";
-export { ReleaseTable, type ReleaseTableProps } from "./release-table.ts";
-export {
-  RELEASE_ATTEMPTS,
-  RELEASE_TIMEOUT,
-  ReleaseWorker,
-  type ReleaseWorkerProps,
-} from "./release-worker.ts";
-export { MIN_PASSWORD_LENGTH, TestUserPool } from "./test-user-pool.ts";
+export { ReleaseDeadLetterWorker } from "./release-dead-letter-worker.ts";
+export { ReleaseTable } from "./release-table.ts";
+export { ReleaseWorker } from "./release-worker.ts";
+export { TestUserPool } from "./test-user-pool.ts";

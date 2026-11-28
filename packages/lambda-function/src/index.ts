@@ -3,9 +3,7 @@
 export { type Credentials, credentialsFromEnvironment } from "./credentials.ts";
 export {
   createJwtVerifier,
-  type JwtIssuer,
   type JwtRejectionReason,
   KEYS_BACKOFF_MS,
   KEYS_MAX_AGE_MS,
-  type VerifyJwt,
 } from "./jwt-verifier.ts";

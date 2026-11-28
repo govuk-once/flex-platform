@@ -4,7 +4,6 @@ export {
   edgeRoleName,
   keyRotationRoleName,
   ORIGIN_REQUEST_LOG_REGION,
-  originRequestLogGroupName,
   publicKeysTableName,
   signingKeyAliasName,
   viewerRequestFunctionName,

@@ -1,40 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import * as codegen from "./index.ts";
+import * as layout from "./layout.ts";
 
 // The package's public surface. A consumer imports the barrel, so a rename or a moved file that
 // breaks it fails here rather than in whatever imports it next.
 describe("@repo/gateway-codegen", () => {
   it("exports what the CLI and its callers use", () => {
     expect(Object.keys(codegen).toSorted()).toEqual([
-      "BUNDLE_MODULE",
-      "CLIENT_DIR",
       "COMPOSITION",
       "CONTAINS_BOUNDS",
-      "CONTRACT_MODULE",
-      "ENTRY_MODULE",
-      "GENERATED_DIR",
-      "GatewayCheckError",
       "ProblemsError",
-      "RUNTIME_DIR",
       "SUBSCHEMAS",
       "SUBSCHEMA_LISTS",
       "SUBSCHEMA_MAPS",
-      "SchemaCompatibilityError",
-      "SchemaStoreError",
-      "VALIDATORS_DIR",
-      "bundleEntry",
-      "checkGateway",
       "checkValue",
-      "compareSchemas",
-      "emitContract",
-      "emitEntry",
       "emitValidators",
-      "generate",
-      "loadConfig",
-      "loadVersions",
-      "main",
-      "updateSchemas",
     ]);
   });
 
@@ -42,13 +23,13 @@ describe("@repo/gateway-codegen", () => {
     // Every segment of a generated path, the directory they are all under included: a caller
     // that can name the rest and not that one cannot build a path at all.
     expect([
-      codegen.GENERATED_DIR,
-      codegen.RUNTIME_DIR,
-      codegen.VALIDATORS_DIR,
-      codegen.ENTRY_MODULE,
-      codegen.BUNDLE_MODULE,
-      codegen.CLIENT_DIR,
-      codegen.CONTRACT_MODULE,
+      layout.GENERATED_DIR,
+      layout.RUNTIME_DIR,
+      layout.VALIDATORS_DIR,
+      layout.ENTRY_MODULE,
+      layout.BUNDLE_MODULE,
+      layout.CLIENT_DIR,
+      layout.CONTRACT_MODULE,
     ]).toEqual([
       ".gen",
       "runtime",
