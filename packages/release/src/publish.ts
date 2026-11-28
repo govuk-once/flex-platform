@@ -1,11 +1,10 @@
-import { execFile as execFileCb } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import { heldValue } from "@repo/utils/held-value";
 import { isRecord } from "@repo/utils/is-record";
 
+import { execFile } from "./exec-file.ts";
 import { publishedManifest } from "./manifest.ts";
 import { packPackage, tarballName } from "./package.ts";
 import { readRecord, RECORD_FILE } from "./record.ts";
@@ -193,8 +192,6 @@ export interface Registry {
   versions(name: string): Promise<string[]>;
   publish(file: string, tag: string): Promise<void>;
 }
-
-const execFile = promisify(execFileCb);
 
 // What `pnpm view <name> versions --json` says of a package: its versions, one as a string and
 // more as a list, or an error whose code says the package is not there. Any other error, such as

@@ -1,25 +1,18 @@
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
-import { parseReleaseMessage } from "../request.ts";
 import {
-  type ReleaseKey,
   type ReleaseOutcome,
-  type ReleaseRecord,
   type ReleaseTable,
   releaseTarget,
 } from "../table.ts";
+import { askedFor, eachMessage, messageLog, releaseFor } from "./message.ts";
 import {
-  reasonOf,
   release,
   type ReleaseAws,
   ReleaseFailure,
   type TimeLeft,
 } from "./release.ts";
-import {
-  logRelease,
-  type ReleaseDetails,
-  type ReleaseEventName,
-} from "./telemetry.ts";
+import { logRelease, type ReleaseEventName } from "./telemetry.ts";
 import type {
   LambdaContext,
   ReleaseConfig,
@@ -61,19 +54,15 @@ export function createReleaseHandler(options: ReleaseHandlerOptions) {
     ]),
   );
 
-  return async (
+  return (
     event: SqsEvent,
     context: LambdaContext,
   ): Promise<SqsBatchResponse> => {
     const timeLeft = () =>
       context.getRemainingTimeInMillis() - RECORDING_TIME_MS;
-    const failures: { itemIdentifier: string }[] = [];
-    for (const { messageId, body } of event.Records) {
-      // In order, one at a time: a FIFO batch holds a group's messages in the order they were sent.
-      const done = await handle(options, targets, timeLeft, messageId, body); // NOSONAR
-      if (!done) failures.push({ itemIdentifier: messageId });
-    }
-    return { batchItemFailures: failures };
+    return eachMessage(event, (messageId, body) =>
+      handle(options, targets, timeLeft, messageId, body),
+    );
   };
 }
 
@@ -85,50 +74,14 @@ async function handle(
   messageId: string,
   body: string,
 ): Promise<boolean> {
-  const started = options.now();
-  const details = (more: Partial<ReleaseDetails> = {}): ReleaseDetails => ({
-    messageId,
-    durationMs: options.now() - started,
-    ...more,
-  });
-  // A table call that failed, which may not next time.
-  const failed = (step: string, error: unknown, more = {}) => {
-    logRelease("ERROR", "release_failed", {
-      ...details(more),
-      step,
-      reason: reasonOf(error),
-      frames: describeUnexpectedError(error).frames,
-    });
-    return false;
-  };
-
-  const key: ReleaseKey | undefined = parseReleaseMessage(body);
-  if (key === undefined) {
-    logRelease("ERROR", "release_invalid", details());
-    return true;
-  }
-
-  let record: ReleaseRecord | undefined;
-  try {
-    record = await options.table.get(key);
-  } catch (error) {
-    return failed("read-record", error);
-  }
-  if (record === undefined) {
-    logRelease("ERROR", "release_unknown", details());
-    return true;
-  }
+  const log = messageLog(messageId, options.now);
+  const { details, failed } = log;
+  const found = await releaseFor(options.table, body, log, "read-record");
+  if (typeof found === "boolean") return found;
+  const { key, record } = found;
 
   // The names are the table's from here on.
-  const asked = {
-    releaseId: record.id,
-    environment: record.environment,
-    domain: record.domain,
-    version: record.version,
-    sha256: record.sha256,
-    runId: record.runId,
-    commit: record.commit,
-  };
+  const asked = askedFor(record);
   // Recorded over the claim, so never over what another writer recorded since.
   const finish = async (outcome: ReleaseOutcome) => {
     try {

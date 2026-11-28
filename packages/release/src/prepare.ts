@@ -5,7 +5,7 @@ import { heldValue } from "@repo/utils/held-value";
 
 import { readRecord, writeRecord } from "./record.ts";
 import type { Status } from "./status.ts";
-import { nextVersion, statusesOf } from "./status.ts";
+import { nextVersion, pendingNames, statusesOf } from "./status.ts";
 import type { Bump } from "./versions.ts";
 import { bumped, nextDerivedVersion } from "./versions.ts";
 import type { Publishable, Workspace } from "./workspace.ts";
@@ -89,11 +89,7 @@ export async function prepare(
   const record = new Map(await readRecord(root));
   let pkgs = await buildWorkspace(workspace);
   let statuses = await statusesOf(workspace, pkgs, record);
-  const pending = new Set(
-    [...statuses.values()]
-      .filter((s) => s.reason !== undefined)
-      .map((s) => nameOf(s.pkg)),
-  );
+  const pending = pendingNames(statuses.values());
   if (pending.size === 0) return [];
   const choices = new Map(
     [...statuses].map(([name, s]) => [name, { ...s, next: nextVersion(s) }]),
@@ -160,11 +156,6 @@ export async function prepare(
 // Answers the way `--all` does: everything with unreleased changes, and what they bring with them,
 // each declared package raised by a patch.
 export const releaseAll: Chooser = {
-  select: (choices) =>
-    Promise.resolve(
-      new Set(
-        choices.filter((c) => c.reason !== undefined).map((c) => nameOf(c.pkg)),
-      ),
-    ),
+  select: (choices) => Promise.resolve(pendingNames(choices)),
   bump: () => Promise.resolve("patch"),
 };

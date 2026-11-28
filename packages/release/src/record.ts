@@ -1,11 +1,10 @@
-import { execFile as execFileCb } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import { isRecord } from "@repo/utils/is-record";
 import { sortedEntries } from "@repo/utils/sorted-entries";
 
+import { execFile } from "./exec-file.ts";
 import { compareVersions, parseVersion } from "./versions.ts";
 
 // The record: each published package's last released version, and the digest of what was
@@ -63,8 +62,6 @@ export async function writeRecord(
 ): Promise<void> {
   await writeFile(path.join(root, RECORD_FILE), serializeRecord(record));
 }
-
-const execFile = promisify(execFileCb);
 
 // The record as a commit holds it. A commit from before the record existed released nothing.
 export async function recordAt(

@@ -17,6 +17,7 @@ import {
 import { heldValue } from "@repo/utils/held-value";
 
 import type { Choice, Chooser, Lock } from "./prepare.ts";
+import { pendingNames } from "./status.ts";
 import { type Bump, bumped } from "./versions.ts";
 import { nameOf } from "./workspace.ts";
 
@@ -91,9 +92,7 @@ export async function chooseRelease(
   terminal: { input?: Readable; output?: Writable } = {},
 ): Promise<ReadonlySet<string>> {
   const byName = new Map(choices.map((c) => [nameOf(c.pkg), c]));
-  const pending = new Set(
-    choices.filter((c) => c.reason !== undefined).map((c) => nameOf(c.pkg)),
-  );
+  const pending = pendingNames(choices);
   const groups = new Map<string, Item[]>();
   for (const { pkg } of choices) {
     const members = groups.get(pkg.source.group) ?? [];

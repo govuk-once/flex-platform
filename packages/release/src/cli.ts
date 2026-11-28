@@ -1,8 +1,8 @@
-import { execFile as execFileCb } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { parseArgs, promisify } from "node:util";
+import { parseArgs } from "node:util";
 
+import { execFile } from "./exec-file.ts";
 import { type Planned, prepare, releaseAll } from "./prepare.ts";
 import { terminalChooser } from "./prompt.ts";
 import {
@@ -31,8 +31,6 @@ const workspaceAt = (root: string): Workspace => ({
 //
 // Exported and free of process handling, so it is exercised as a function; the bin script is the
 // exit code and nothing else.
-
-const execFile = promisify(execFileCb);
 
 export function pullRequestBody(planned: readonly Planned[]): string {
   const rows = planned.map(

@@ -1,9 +1,11 @@
-import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
-
-import { parseReleaseMessage } from "../request.ts";
-import type { ReleaseRecord, ReleaseTable } from "../table.ts";
-import { reasonOf } from "../worker/release.ts";
-import { logRelease, type ReleaseDetails } from "../worker/telemetry.ts";
+import type { ReleaseTable } from "../table.ts";
+import {
+  askedFor,
+  eachMessage,
+  messageLog,
+  releaseFor,
+} from "../worker/message.ts";
+import { logRelease } from "../worker/telemetry.ts";
 import type { SqsBatchResponse, SqsEvent } from "../worker/types.ts";
 
 export interface DeadLetterHandlerOptions {
@@ -27,15 +29,8 @@ export interface DeadLetterHandlerOptions {
 // only once the handler returns without giving it back. So a handler that stops after recording
 // leaves the message to come again, and finds the release already given up the next time.
 export function createDeadLetterHandler(options: DeadLetterHandlerOptions) {
-  return async (event: SqsEvent): Promise<SqsBatchResponse> => {
-    const failures: { itemIdentifier: string }[] = [];
-    for (const { messageId, body } of event.Records) {
-      // One at a time, as the release worker takes them.
-      const done = await giveUp(options, messageId, body); // NOSONAR
-      if (!done) failures.push({ itemIdentifier: messageId });
-    }
-    return { batchItemFailures: failures };
-  };
+  return (event: SqsEvent): Promise<SqsBatchResponse> =>
+    eachMessage(event, (messageId, body) => giveUp(options, messageId, body));
 }
 
 // Whether the message is done with. `false` gives it back to the queue.
@@ -44,63 +39,26 @@ async function giveUp(
   messageId: string,
   body: string,
 ): Promise<boolean> {
-  const started = options.now();
-  const details = (more: Partial<ReleaseDetails> = {}): ReleaseDetails => ({
-    messageId,
-    durationMs: options.now() - started,
-    ...more,
-  });
-  const failed = (error: unknown, more: Partial<ReleaseDetails> = {}) => {
-    logRelease("ERROR", "release_failed", {
-      ...details(more),
-      step: "abandon",
-      reason: reasonOf(error),
-      frames: describeUnexpectedError(error).frames,
-    });
-    return false;
-  };
-
-  const key = parseReleaseMessage(body);
-  if (key === undefined) {
-    logRelease("ERROR", "release_invalid", details());
-    return true;
-  }
-
-  let record: ReleaseRecord | undefined;
-  try {
-    record = await options.table.get(key);
-  } catch (error) {
-    return failed(error);
-  }
-  if (record === undefined) {
-    logRelease("ERROR", "release_unknown", details());
-    return true;
-  }
+  const log = messageLog(messageId, options.now);
+  const found = await releaseFor(options.table, body, log, "abandon");
+  if (typeof found === "boolean") return found;
+  const { key, record } = found;
 
   // The names are the table's from here on.
-  const asked = {
-    releaseId: record.id,
-    environment: record.environment,
-    domain: record.domain,
-    version: record.version,
-    sha256: record.sha256,
-    runId: record.runId,
-    commit: record.commit,
-    status: record.status,
-  };
+  const asked = { ...askedFor(record), status: record.status };
   let abandoned: boolean;
   try {
     abandoned = await options.table.abandon(key, options.now());
   } catch (error) {
-    return failed(error, asked);
+    return log.failed("abandon", error, asked);
   }
   // Final or given up already, such as by the last attempt, or by this worker before it stopped.
   if (!abandoned) {
-    logRelease("INFO", "release_not_abandoned", details(asked));
+    logRelease("INFO", "release_not_abandoned", log.details(asked));
     return true;
   }
   logRelease("ERROR", "release_abandoned", {
-    ...details(asked),
+    ...log.details(asked),
     attempts: record.attempts,
     ...(record.step !== undefined && { step: record.step }),
     ...(record.reason !== undefined && { reason: record.reason }),
