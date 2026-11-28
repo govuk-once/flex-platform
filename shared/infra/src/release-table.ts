@@ -1,6 +1,6 @@
-import { tablePolicy } from "@repo/infra-constructs";
+import { tableArn, tablePolicy } from "@repo/infra-constructs";
 import { FIXED_ATTRIBUTES } from "@repo/shared-release";
-import { RemovalPolicy, Stack } from "aws-cdk-lib";
+import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
@@ -47,11 +47,7 @@ export class ReleaseTable extends Construct {
     super(scope, id);
 
     // By name, since the policy is part of the table, which can't name its own ARN.
-    const tableArn = Stack.of(this).formatArn({
-      service: "dynamodb",
-      resource: "table",
-      resourceName: RELEASE_TABLE_NAME,
-    });
+    const arn = tableArn(this, RELEASE_TABLE_NAME);
 
     this.table = new Table(this, "Table", {
       tableName: RELEASE_TABLE_NAME,
@@ -62,7 +58,7 @@ export class ReleaseTable extends Construct {
       deletionProtection: true,
       removalPolicy: RemovalPolicy.RETAIN,
       resourcePolicy: tablePolicy({
-        tableArn,
+        tableArn: arn,
         roles: [
           {
             name: "PipelineApi",
@@ -84,7 +80,7 @@ export class ReleaseTable extends Construct {
             effect: Effect.DENY,
             principals: [new AnyPrincipal()],
             actions: ["dynamodb:UpdateItem"],
-            resources: [tableArn],
+            resources: [arn],
             conditions: {
               "ForAnyValue:StringEquals": {
                 "dynamodb:Attributes": [...FIXED_ATTRIBUTES],

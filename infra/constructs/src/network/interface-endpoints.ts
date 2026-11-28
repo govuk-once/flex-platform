@@ -1,4 +1,4 @@
-import { ArnFormat, Fn, Stack } from "aws-cdk-lib";
+import { Fn, Stack } from "aws-cdk-lib";
 import {
   InterfaceVpcEndpoint,
   InterfaceVpcEndpointAwsService,
@@ -8,6 +8,8 @@ import {
 } from "aws-cdk-lib/aws-ec2";
 import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
+
+import { functionArn, roleArn } from "../arns.ts";
 
 /** Private API Gateway APIs, and the accounts a call to one may be signed in. */
 export interface PrivateApiAccess {
@@ -96,18 +98,8 @@ export class InterfaceEndpoints extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    const gatewayRoles = stack.formatArn({
-      service: "iam",
-      region: "",
-      resource: "role",
-      resourceName: props.gatewayRoles,
-    });
-    const functions = stack.formatArn({
-      service: "lambda",
-      resource: "function",
-      resourceName: props.invokableFunctions,
-      arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-    });
+    const gatewayRoles = roleArn(stack, props.gatewayRoles);
+    const functions = functionArn(stack, props.invokableFunctions);
 
     this.lambda = this.endpoint(
       props,

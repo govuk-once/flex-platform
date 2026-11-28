@@ -1,37 +1,16 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
-import {
-  logGroupWriteStatements,
-  PlatformLogGroup,
-} from "@repo/infra-constructs";
+import { platformFunction, requireRegion } from "@repo/infra-constructs";
 import {
   bundleKey,
   RELEASE_TIMEOUT_SECONDS,
   type ReleaseConfig,
   type ReleaseTarget,
 } from "@repo/shared-release";
-import {
-  buildReleaseWorker,
-  RELEASE_HANDLER,
-} from "@repo/shared-release/build";
+import { buildReleaseWorker } from "@repo/shared-release/build";
 import { Duration, Stack, Validations } from "aws-cdk-lib";
-import {
-  AnyPrincipal,
-  Effect,
-  PolicyDocument,
-  PolicyStatement,
-  Role,
-  ServicePrincipal,
-} from "aws-cdk-lib/aws-iam";
-import {
-  Architecture,
-  Code,
-  EventSourceMapping,
-  Function as LambdaFunction,
-  Runtime,
-} from "aws-cdk-lib/aws-lambda";
+import type { Role } from "aws-cdk-lib/aws-iam";
+import { AnyPrincipal, Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import type { Function as LambdaFunction } from "aws-cdk-lib/aws-lambda";
+import { EventSourceMapping } from "aws-cdk-lib/aws-lambda";
 import { Queue, QueueEncryption, RedrivePermission } from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
 
@@ -43,6 +22,14 @@ import {
   SHARED_REGION,
 } from "./names.ts";
 import { RELEASE_WORKER_ACTIONS } from "./release-table.ts";
+
+/** What Lambda needs to give a function a queue's messages, and take them back. */
+export const QUEUE_READER_ACTIONS = [
+  "sqs:ChangeMessageVisibility",
+  "sqs:DeleteMessage",
+  "sqs:GetQueueAttributes",
+  "sqs:ReceiveMessage",
+];
 
 /**
  * The longest one attempt at a release may take. A first release creates a function in a VPC,
@@ -111,11 +98,11 @@ export class ReleaseWorker extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    if (stack.region !== SHARED_REGION) {
-      throw new Error(
-        `The release worker runs in ${SHARED_REGION}, not ${stack.region}`,
-      );
-    }
+    requireRegion(
+      this,
+      SHARED_REGION,
+      `The release worker runs in ${SHARED_REGION}`,
+    );
 
     const queueArn = stack.formatArn({
       service: "sqs",
@@ -157,14 +144,6 @@ export class ReleaseWorker extends Construct {
         "It is the release queue's dead-letter queue. The dead-letter worker gives a message back only while it can't record the release, which an alarm on its log says, so the queue keeps it to try again.",
     });
 
-    const { logGroup, key: logGroupKey } = new PlatformLogGroup(this, "Logs", {
-      logGroupName: RELEASE_WORKER_LOG_GROUP_NAME,
-    });
-    const logs = logGroupWriteStatements(this, {
-      logGroupName: RELEASE_WORKER_LOG_GROUP_NAME,
-      logGroupKey,
-    });
-
     const bundles = stack.formatArn({
       service: "s3",
       region: "",
@@ -173,71 +152,56 @@ export class ReleaseWorker extends Construct {
       resourceName: bundleKey("*", "*"),
     });
     const deployRoles = props.targets.map(({ deployRoleArn }) => deployRoleArn);
-    const role = new Role(this, "Role", {
-      roleName: RELEASE_WORKER_NAME,
-      assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
-      inlinePolicies: {
-        Release: new PolicyDocument({
-          statements: [
-            ...logs.statements,
-            // What Lambda needs to give the function the queue's messages, and take them back.
-            new PolicyStatement({
-              actions: [
-                "sqs:ChangeMessageVisibility",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes",
-                "sqs:ReceiveMessage",
-              ],
-              resources: [this.queue.queueArn],
-            }),
-            // To read each release, claim it, and record how it went.
-            new PolicyStatement({
-              actions: RELEASE_WORKER_ACTIONS,
-              resources: [props.releaseTable.arn],
-            }),
-            // To hash a bundle, by version, before anything is made of it.
-            new PolicyStatement({
-              actions: ["s3:GetObject", "s3:GetObjectVersion"],
-              resources: [bundles],
-            }),
-            ...(deployRoles.length === 0
-              ? []
-              : [
-                  new PolicyStatement({
-                    actions: ["sts:AssumeRole"],
-                    resources: deployRoles,
-                  }),
-                ]),
-          ],
-        }),
-      },
-    });
-    this.role = role;
-    this.denyAllButTheApiAndWorker(deadLetters, props.producerRoleArn);
-    Validations.of(role).acknowledge(...logs.acknowledgements, {
-      id: `AwsSolutions-IAM5[Resource::${bundles}]`,
-      reason:
-        "A bundle's key holds its domain and its hash, which no stack knows. The grant is held to keys of that shape, and to reading them.",
-    });
-
     const config: ReleaseConfig = {
       bucket: props.codeBucketName,
       region: stack.region,
       table: props.releaseTable.name,
       targets: props.targets,
     };
-    this.function = new LambdaFunction(this, "Function", {
+    const built = platformFunction(this, {
       functionName: RELEASE_WORKER_NAME,
-      runtime: Runtime.NODEJS_26_X,
-      architecture: Architecture.ARM_64,
-      handler: RELEASE_HANDLER,
-      code: Code.fromAsset(bundleDirectory(config)),
-      role,
+      roleName: RELEASE_WORKER_NAME,
+      logGroupName: RELEASE_WORKER_LOG_GROUP_NAME,
+      policyName: "Release",
+      statements: [
+        new PolicyStatement({
+          actions: QUEUE_READER_ACTIONS,
+          resources: [this.queue.queueArn],
+        }),
+        // To read each release, claim it, and record how it went.
+        new PolicyStatement({
+          actions: RELEASE_WORKER_ACTIONS,
+          resources: [props.releaseTable.arn],
+        }),
+        // To hash a bundle, by version, before anything is made of it.
+        new PolicyStatement({
+          actions: ["s3:GetObject", "s3:GetObjectVersion"],
+          resources: [bundles],
+        }),
+        ...(deployRoles.length === 0
+          ? []
+          : [
+              new PolicyStatement({
+                actions: ["sts:AssumeRole"],
+                resources: deployRoles,
+              }),
+            ]),
+      ],
+      acknowledgements: [
+        {
+          id: `AwsSolutions-IAM5[Resource::${bundles}]`,
+          reason:
+            "A bundle's key holds its domain and its hash, which no stack knows. The grant is held to keys of that shape, and to reading them.",
+        },
+      ],
+      code: buildReleaseWorker(config),
       timeout: RELEASE_TIMEOUT,
       // A bundle is hashed as it streams, so its size needs no memory to match.
       memorySize: 512,
-      logGroup,
     });
+    this.function = built.function;
+    this.role = built.role;
+    this.denyAllButTheApiAndWorker(deadLetters, props.producerRoleArn);
 
     // One release at a time, so each attempt is its own, and a failed one is given back alone.
     new EventSourceMapping(this, "QueueSource", {
@@ -311,11 +275,4 @@ export class ReleaseWorker extends Construct {
       );
     }
   }
-}
-
-// The bundle is per stage, so it's built at synth, into a directory of its own for CDK to stage.
-function bundleDirectory(config: ReleaseConfig): string {
-  const directory = mkdtempSync(path.join(tmpdir(), "release-worker-"));
-  writeFileSync(path.join(directory, "index.js"), buildReleaseWorker(config));
-  return directory;
 }

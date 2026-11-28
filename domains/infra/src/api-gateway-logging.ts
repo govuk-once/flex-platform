@@ -1,4 +1,5 @@
-import { ArnFormat, Stack, Validations } from "aws-cdk-lib";
+import { logGroupArn } from "@repo/infra-constructs";
+import { Stack, Validations } from "aws-cdk-lib";
 import { CfnAccount } from "aws-cdk-lib/aws-apigateway";
 import {
   Effect,
@@ -37,14 +38,6 @@ export class ApiGatewayLogging extends Construct {
 
     const stack = Stack.of(this);
 
-    const logGroupArn = (resourceName: string) =>
-      stack.formatArn({
-        service: "logs",
-        resource: "log-group",
-        resourceName,
-        arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-      });
-
     const anyKey = stack.formatArn({
       service: "kms",
       resource: "key",
@@ -69,8 +62,8 @@ export class ApiGatewayLogging extends Construct {
                 },
                 ArnLike: {
                   "kms:EncryptionContext:aws:logs:arn": [
-                    logGroupArn(apiAccessLogGroupName(environment, "*")),
-                    logGroupArn(apiExecutionLogGroupName("*", "*")),
+                    logGroupArn(stack, apiAccessLogGroupName(environment, "*")),
+                    logGroupArn(stack, apiExecutionLogGroupName("*", "*")),
                   ],
                 },
               },

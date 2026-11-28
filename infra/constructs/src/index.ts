@@ -1,3 +1,10 @@
+export {
+  accountOf,
+  functionArn,
+  logGroupArn,
+  roleArn,
+  tableArn,
+} from "./arns.ts";
 export { PlatformBucket } from "./bucket.ts";
 export { cdkApp } from "./cdk-app.ts";
 export {
@@ -76,6 +83,13 @@ export { NetworkAcls } from "./network/network-acls.ts";
 export { NetworkParameters } from "./network/network-parameters.ts";
 export { NetworkVpc } from "./network/vpc.ts";
 export { WorkloadSecurityGroup } from "./network/workload-security-group.ts";
+export {
+  bundledCode,
+  type PlatformFunction,
+  platformFunction,
+  type PlatformFunctionProps,
+} from "./platform-function.ts";
+export { requireRegion } from "./require-region.ts";
 export {
   TABLE_MANAGEMENT_ACTIONS,
   tablePolicy,

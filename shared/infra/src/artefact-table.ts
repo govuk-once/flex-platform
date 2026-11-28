@@ -1,5 +1,5 @@
-import { tablePolicy } from "@repo/infra-constructs";
-import { RemovalPolicy, Stack } from "aws-cdk-lib";
+import { tableArn, tablePolicy } from "@repo/infra-constructs";
+import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
 
@@ -45,11 +45,7 @@ export class ArtefactTable extends Construct {
       removalPolicy: RemovalPolicy.RETAIN,
       resourcePolicy: tablePolicy({
         // By name, since the policy is part of the table, which can't name its own ARN.
-        tableArn: Stack.of(this).formatArn({
-          service: "dynamodb",
-          resource: "table",
-          resourceName: ARTEFACT_TABLE_NAME,
-        }),
+        tableArn: tableArn(this, ARTEFACT_TABLE_NAME),
         roles: [
           {
             name: "PipelineApi",

@@ -2,9 +2,11 @@ import { domainHost } from "@repo/domain-infra";
 import {
   Edge,
   OriginRequestFunction,
-  ViewerRequestFunction,
+  viewerRequestFunctionName,
 } from "@repo/frontdoor-infra";
 import type { TrustedIssuer } from "@repo/frontdoor-shared";
+import { buildViewerRequestFunction } from "@repo/frontdoor-viewer-request/build";
+import { PlatformCloudFrontFunction } from "@repo/infra-constructs";
 import { sortedEntries } from "@repo/utils/sorted-entries";
 import { CfnOutput, Stack } from "aws-cdk-lib";
 import type { Construct } from "constructs";
@@ -37,10 +39,15 @@ export class FrontdoorStack extends Stack {
       terminationProtection: true,
     });
 
-    const viewerRequest = new ViewerRequestFunction(this, "ViewerRequest", {
-      environment: environment.name,
-      issuers,
-    });
+    // Checks each request's structure, with the environment's issuers baked in.
+    const viewerRequest = new PlatformCloudFrontFunction(
+      this,
+      "ViewerRequest",
+      {
+        functionName: viewerRequestFunctionName(environment.name),
+        code: buildViewerRequestFunction({ issuers }),
+      },
+    );
 
     const originRequest = new OriginRequestFunction(this, "OriginRequest", {
       environment: environment.name,

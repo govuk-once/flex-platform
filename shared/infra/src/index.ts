@@ -10,7 +10,6 @@ export {
   type DomainCodeBucketProps,
 } from "./domain-code-bucket.ts";
 export { ManagementEdge } from "./management-edge.ts";
-export { ManagementViewerRequestFunction } from "./management-viewer-request-function.ts";
 export {
   ARTEFACT_TABLE_NAME,
   CI_FUNCTION_NAME,
@@ -19,6 +18,8 @@ export {
   CROSS_REGION_WRITER_LOG_GROUP_NAME,
   domainCodeBucketName,
   MANAGEMENT_REGION,
+  MANAGEMENT_VIEWER_REQUEST_FUNCTION_NAME,
+  PIPELINE_TOKEN_ISSUER,
   RELEASE_DEAD_LETTER_WORKER_NAME,
   RELEASE_TABLE_NAME,
   RELEASE_WORKER_NAME,

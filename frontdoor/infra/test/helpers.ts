@@ -1,11 +1,12 @@
-import { cdkApp } from "@repo/infra-constructs";
+import { buildViewerRequestFunction } from "@repo/frontdoor-viewer-request/build";
+import { cdkApp, PlatformCloudFrontFunction } from "@repo/infra-constructs";
 import { App, Stack, Validations } from "aws-cdk-lib";
 import { AwsSolutionsChecks } from "cdk-nag";
 import { assert } from "vitest";
 
 import { Edge } from "../src/edge.ts";
+import { viewerRequestFunctionName } from "../src/names.ts";
 import { OriginRequestFunction } from "../src/origin-request-function.ts";
-import { ViewerRequestFunction } from "../src/viewer-request-function.ts";
 
 export const ISSUERS = [
   {
@@ -36,10 +37,13 @@ export function stackIn(region: string, nag = false): Stack {
 // The functions are built in `functionsStack` when it is given, so a test can build the edge
 // somewhere they refuse to be.
 export function edgeIn(stack: Stack, functionsStack = stack): Edge {
-  const viewerRequest = new ViewerRequestFunction(
+  const viewerRequest = new PlatformCloudFrontFunction(
     functionsStack,
     "ViewerRequest",
-    { environment: "sandbox", issuers: ISSUERS },
+    {
+      functionName: viewerRequestFunctionName("sandbox"),
+      code: buildViewerRequestFunction({ issuers: ISSUERS }),
+    },
   );
   const originRequest = new OriginRequestFunction(
     functionsStack,

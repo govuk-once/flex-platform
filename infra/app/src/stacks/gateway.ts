@@ -14,6 +14,7 @@ import {
   endpointAddressParameterName,
   endpointIdParameterName,
   NETWORK_REGION,
+  roleArn,
   securityGroupIdParameterName,
   subnetIdsParameterName,
 } from "@repo/infra-constructs";
@@ -107,12 +108,7 @@ export class GatewayStack extends Stack {
       gateway.secret === "create"
         ? new GatewaySecret(this, "Secret", {
             secretName: gatewaySecretName(environment.name, gateway.id),
-            readerArn: this.formatArn({
-              service: "iam",
-              region: "",
-              resource: "role",
-              resourceName: roleName,
-            }),
+            readerArn: roleArn(this, roleName),
             endpointId: secretsEndpointId,
           }).secret.secretArn
         : gateway.secret.arn;

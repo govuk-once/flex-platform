@@ -1,28 +1,15 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
 import {
   cloudFrontFunctionUrl,
-  logGroupWriteStatements,
-  PlatformLogGroup,
+  platformFunction,
+  requireRegion,
 } from "@repo/infra-constructs";
 import type { CiDomain, CiEnvironment } from "@repo/shared-ci";
-import { buildCiFunction, HANDLER } from "@repo/shared-ci/build";
+import { buildCiFunction } from "@repo/shared-ci/build";
 import { bundleKey } from "@repo/shared-release";
-import { Duration, Stack, Validations } from "aws-cdk-lib";
-import {
-  PolicyDocument,
-  PolicyStatement,
-  Role,
-  ServicePrincipal,
-} from "aws-cdk-lib/aws-iam";
-import {
-  Architecture,
-  Code,
-  Function as LambdaFunction,
-  Runtime,
-} from "aws-cdk-lib/aws-lambda";
+import { Duration, Stack } from "aws-cdk-lib";
+import type { Role } from "aws-cdk-lib/aws-iam";
+import { PolicyStatement } from "aws-cdk-lib/aws-iam";
+import type { Function as LambdaFunction } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
 import { ARTEFACT_RECORDER_ACTIONS } from "./artefact-table.ts";
@@ -89,19 +76,11 @@ export class CiFunction extends Construct {
     super(scope, id);
 
     const stack = Stack.of(this);
-    if (stack.region !== SHARED_REGION) {
-      throw new Error(
-        `The pipeline API's function runs in ${SHARED_REGION}, not ${stack.region}`,
-      );
-    }
-
-    const { logGroup, key: logGroupKey } = new PlatformLogGroup(this, "Logs", {
-      logGroupName: CI_LOG_GROUP_NAME,
-    });
-    const logs = logGroupWriteStatements(this, {
-      logGroupName: CI_LOG_GROUP_NAME,
-      logGroupKey,
-    });
+    requireRegion(
+      this,
+      SHARED_REGION,
+      `The pipeline API's function runs in ${SHARED_REGION}`,
+    );
 
     // Every key a bundle can have: any domain's, any hash. The function signs only the key of
     // the domain a pipeline is allowed for.
@@ -118,91 +97,71 @@ export class CiFunction extends Construct {
       account: "",
       resource: props.codeBucketName,
     });
-    const role = new Role(this, "Role", {
-      roleName: CI_FUNCTION_NAME,
-      assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
-      inlinePolicies: {
-        Ci: new PolicyDocument({
-          statements: [
-            ...logs.statements,
-            // PutObject, to sign each upload. GetObject for HeadObject, which S3 authorises as a
-            // read, to find the version of a bundle to release. An upload's signature covers its
-            // method, so no address the function signs reads a bundle.
-            new PolicyStatement({
-              actions: ["s3:GetObject", "s3:PutObject"],
-              resources: [bundles],
-            }),
-            // Without it, S3 refuses to say an object is missing, rather than saying so.
-            new PolicyStatement({
-              actions: ["s3:ListBucket"],
-              resources: [bucket],
-            }),
-            new PolicyStatement({
-              actions: ["sqs:SendMessage"],
-              resources: [props.releaseQueue.arn],
-            }),
-            // To claim each version for its bundle, and to find the bundle a release names. A
-            // version is never changed, so only put and get.
-            new PolicyStatement({
-              actions: ARTEFACT_RECORDER_ACTIONS,
-              resources: [props.artefactTable.arn],
-            }),
-            // To record each release, to record one the queue wouldn't take as refused, and to
-            // answer how one went.
-            new PolicyStatement({
-              actions: RELEASE_RECORDER_ACTIONS,
-              resources: [props.releaseTable.arn],
-            }),
-          ],
-        }),
-      },
-    });
-    this.role = role;
-    Validations.of(role).acknowledge(...logs.acknowledgements, {
-      id: `AwsSolutions-IAM5[Resource::${bundles}]`,
-      reason:
-        "A bundle's key holds its domain and its hash, which no stack knows. The grant is held to keys of that shape, and the function signs one only for the domain a pipeline is allowed for.",
-    });
-
-    this.function = new LambdaFunction(this, "Function", {
+    const built = platformFunction(this, {
       functionName: CI_FUNCTION_NAME,
-      runtime: Runtime.NODEJS_26_X,
-      architecture: Architecture.ARM_64,
-      handler: HANDLER,
-      code: Code.fromAsset(
-        bundleDirectory({
-          issuer: PIPELINE_TOKEN_ISSUER,
-          keysUri: PIPELINE_TOKEN_KEYS_URI,
-          audience: ciAudience(props.zoneName),
-          environments: props.environments,
-          domains: props.domains,
-          uploads: {
-            bucket: props.codeBucketName,
-            region: stack.region,
-            table: props.artefactTable.name,
-          },
-          releases: {
-            queueUrl: props.releaseQueue.url,
-            table: props.releaseTable.name,
-          },
+      roleName: CI_FUNCTION_NAME,
+      logGroupName: CI_LOG_GROUP_NAME,
+      policyName: "Ci",
+      statements: [
+        // PutObject, to sign each upload. GetObject for HeadObject, which S3 authorises as a
+        // read, to find the version of a bundle to release. An upload's signature covers its
+        // method, so no address the function signs reads a bundle.
+        new PolicyStatement({
+          actions: ["s3:GetObject", "s3:PutObject"],
+          resources: [bundles],
         }),
-      ),
-      role,
+        // Without it, S3 refuses to say an object is missing, rather than saying so.
+        new PolicyStatement({
+          actions: ["s3:ListBucket"],
+          resources: [bucket],
+        }),
+        new PolicyStatement({
+          actions: ["sqs:SendMessage"],
+          resources: [props.releaseQueue.arn],
+        }),
+        // To claim each version for its bundle, and to find the bundle a release names. A
+        // version is never changed, so only put and get.
+        new PolicyStatement({
+          actions: ARTEFACT_RECORDER_ACTIONS,
+          resources: [props.artefactTable.arn],
+        }),
+        // To record each release, to record one the queue wouldn't take as refused, and to
+        // answer how one went.
+        new PolicyStatement({
+          actions: RELEASE_RECORDER_ACTIONS,
+          resources: [props.releaseTable.arn],
+        }),
+      ],
+      acknowledgements: [
+        {
+          id: `AwsSolutions-IAM5[Resource::${bundles}]`,
+          reason:
+            "A bundle's key holds its domain and its hash, which no stack knows. The grant is held to keys of that shape, and the function signs one only for the domain a pipeline is allowed for.",
+        },
+      ],
+      code: buildCiFunction({
+        issuer: PIPELINE_TOKEN_ISSUER,
+        keysUri: PIPELINE_TOKEN_KEYS_URI,
+        audience: ciAudience(props.zoneName),
+        environments: props.environments,
+        domains: props.domains,
+        uploads: {
+          bucket: props.codeBucketName,
+          region: stack.region,
+          table: props.artefactTable.name,
+        },
+        releases: {
+          queueUrl: props.releaseQueue.url,
+          table: props.releaseTable.name,
+        },
+      }),
       timeout: Duration.seconds(10),
       memorySize: CI_MEMORY_MB,
       reservedConcurrentExecutions: CI_CONCURRENCY,
-      logGroup,
     });
+    this.function = built.function;
+    this.role = built.role;
 
     this.urlHost = cloudFrontFunctionUrl(this.function);
   }
-}
-
-// The bundle is per stage, so it's built at synth, into a directory of its own for CDK to stage.
-function bundleDirectory(
-  config: Parameters<typeof buildCiFunction>[0],
-): string {
-  const directory = mkdtempSync(path.join(tmpdir(), "pipeline-api-"));
-  writeFileSync(path.join(directory, "index.js"), buildCiFunction(config));
-  return directory;
 }

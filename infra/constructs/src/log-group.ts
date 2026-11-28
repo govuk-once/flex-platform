@@ -1,9 +1,10 @@
-import { ArnFormat, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { RemovalPolicy, Stack } from "aws-cdk-lib";
 import { Effect, PolicyStatement, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import { Key } from "aws-cdk-lib/aws-kms";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
+import { logGroupArn } from "./arns.ts";
 import { LOG_RETENTION } from "./validation/log-group-check.ts";
 
 export interface PlatformLogGroupProps {
@@ -67,12 +68,7 @@ function logGroupKey(stack: Stack): Key {
       resources: ["*"],
       conditions: {
         ArnLike: {
-          "kms:EncryptionContext:aws:logs:arn": stack.formatArn({
-            service: "logs",
-            resource: "log-group",
-            resourceName: "*",
-            arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-          }),
+          "kms:EncryptionContext:aws:logs:arn": logGroupArn(stack, "*"),
         },
       },
     }),
