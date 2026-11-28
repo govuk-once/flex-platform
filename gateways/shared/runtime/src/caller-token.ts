@@ -18,10 +18,13 @@ import {
   DynamoDBClient,
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
+import { isCanonicalBase64url } from "@repo/cloudfront-js-utils/is-canonical-base64url";
+import { jwtSegmentObject } from "@repo/cloudfront-js-utils/jwt-segment-object";
 import { SECURE_CLAIMS, type SecureClaims } from "@repo/gateway-core";
-import { isRecord } from "@repo/utils/is-record";
+import { ownValue } from "@repo/utils/own-value";
 import { type Env, requiredEnv } from "@repo/utils/required-env";
 
+import { AWS_REQUEST_HANDLER } from "./aws-request-handler.ts";
 import { GatewayError } from "./errors.ts";
 import { readGatewayRegion } from "./upstream-target.ts";
 
@@ -51,8 +54,6 @@ export const MAX_LIFETIME_SECONDS = 60;
 
 // A token is a few hundred characters. Anything far longer isn't one, and isn't decoded.
 const MAX_TOKEN_LENGTH = 4096;
-
-const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
 // RFC 8032 fixes the length.
 const ED25519_SIGNATURE_BYTES = 64;
@@ -112,25 +113,9 @@ function invalid(check: string): GatewayError {
 
 // Base64url as every encoder writes it, so one token has one form.
 function decodeSegment(segment: string): Buffer | undefined {
-  if (!BASE64URL.test(segment)) return undefined;
-  const bytes = Buffer.from(segment, "base64url");
-  return bytes.toString("base64url") === segment ? bytes : undefined;
-}
-
-function decodeJson(segment: string): Record<string, unknown> | undefined {
-  const bytes = decodeSegment(segment);
-  if (bytes === undefined) return undefined;
-  try {
-    const value: unknown = JSON.parse(bytes.toString("utf8"));
-    return isRecord(value) ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-// Own properties only: every value came from JSON.parse, so Object.prototype is behind it.
-function own(record: Record<string, unknown>, name: string): unknown {
-  return Object.hasOwn(record, name) ? record[name] : undefined;
+  return isCanonicalBase64url(segment)
+    ? Buffer.from(segment, "base64url")
+    : undefined;
 }
 
 interface CompactJws {
@@ -157,13 +142,13 @@ function splitToken(token: string | undefined): CompactJws {
 }
 
 function readKeyId(encodedHeader: string): string {
-  const header = decodeJson(encodedHeader);
+  const header = jwtSegmentObject(encodedHeader);
   if (header === undefined) throw invalid("header");
   // Pinned: the header never chooses how the token is checked.
-  if (own(header, "alg") !== "EdDSA") throw invalid("algorithm");
-  if (own(header, "crit") !== undefined) throw invalid("critical header");
+  if (ownValue(header, "alg") !== "EdDSA") throw invalid("algorithm");
+  if (ownValue(header, "crit") !== undefined) throw invalid("critical header");
 
-  const kid = own(header, "kid");
+  const kid = ownValue(header, "kid");
   // Checked before it is looked up, since a caller chose it.
   if (typeof kid !== "string" || !KEY_ID.test(kid)) throw invalid("key ID");
 
@@ -175,8 +160,8 @@ function checkTimes(
   key: CallerTokenKey,
   seconds: number,
 ): void {
-  const iat = own(payload, "iat");
-  const exp = own(payload, "exp");
+  const iat = ownValue(payload, "iat");
+  const exp = ownValue(payload, "exp");
   if (typeof iat !== "number" || typeof exp !== "number") {
     throw invalid("times");
   }
@@ -196,14 +181,14 @@ function checkTimes(
 }
 
 function readCaller(payload: Record<string, unknown>): VerifiedCaller {
-  const tokenId = own(payload, "jti");
+  const tokenId = ownValue(payload, "jti");
   if (typeof tokenId !== "string" || !TOKEN_ID.test(tokenId)) {
     throw invalid("token ID");
   }
 
   const claims: Record<string, string> = {};
   for (const claim of SECURE_CLAIMS) {
-    const value = own(payload, claim);
+    const value = ownValue(payload, claim);
     if (typeof value !== "string" || value.length === 0) {
       throw invalid(`claim ${claim}`);
     }
@@ -232,9 +217,10 @@ export function createCallerTokenVerifier(
     const signed = Buffer.from(`${jws.header}.${jws.payload}`);
     if (!verify(null, signed, key.key, signature)) throw invalid("signature");
 
-    const payload = decodeJson(jws.payload);
+    const payload = jwtSegmentObject(jws.payload);
     if (payload === undefined) throw invalid("payload");
-    if (own(payload, "aud") !== options.audience) throw invalid("audience");
+    if (ownValue(payload, "aud") !== options.audience)
+      throw invalid("audience");
 
     checkTimes(payload, key, now() / 1000);
 
@@ -467,11 +453,7 @@ export function readCallerTokenVerifier(
   const dynamodb = new DynamoDBClient({
     region,
     endpoint,
-    requestHandler: {
-      connectionTimeout: 2_000,
-      requestTimeout: 5_000,
-      throwOnRequestTimeout: true,
-    },
+    requestHandler: AWS_REQUEST_HANDLER,
   });
   return createCallerTokenVerifier({
     audience,

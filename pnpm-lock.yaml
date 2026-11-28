@@ -763,6 +763,9 @@ importers:
       '@aws-sdk/client-secrets-manager':
         specifier: 3.1173.0
         version: 3.1173.0
+      '@repo/cloudfront-js-utils':
+        specifier: workspace:*
+        version: link:../../../packages/cloudfront-js-utils
       '@repo/gateway-config':
         specifier: workspace:*
         version: link:../config

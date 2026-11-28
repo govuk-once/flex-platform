@@ -1,5 +1,5 @@
 import { fromTemporaryCredentials } from "@aws-sdk/credential-providers";
-import { GatewayError } from "@repo/gateway-runtime";
+import { AWS_REQUEST_HANDLER, GatewayError } from "@repo/gateway-runtime";
 import { keptWhile } from "@repo/utils/kept-while";
 import { Hash } from "@smithy/hash-node";
 import { SignatureV4 } from "@smithy/signature-v4";
@@ -64,12 +64,6 @@ export interface SigV4Deps {
   readonly now?: () => Date;
 }
 
-// SDK-level bounds on one call to STS, as on a secret's retrieval. A request's attempt keeps its
-// own deadline, but an assumption is shared by every request that waits for it and held until it
-// settles: one that never did would leave each of them waiting on it until they timed out.
-const CONNECTION_TIMEOUT_MS = 2_000;
-const REQUEST_TIMEOUT_MS = 5_000;
-
 // STS is called in the gateway's own region, the SDK's default from `AWS_REGION`, whatever region
 // the upstream signs in: that is where the network's STS endpoint is, and credentials from a
 // regional STS endpoint are valid in every region.
@@ -81,12 +75,8 @@ const assumeWithSts = (role: AssumedRole): (() => Promise<Credentials>) =>
       ...(role.externalId === undefined ? {} : { ExternalId: role.externalId }),
     },
     clientConfig: {
-      // Without throwOnRequestTimeout the SDK only logs a breach of requestTimeout.
-      requestHandler: {
-        connectionTimeout: CONNECTION_TIMEOUT_MS,
-        requestTimeout: REQUEST_TIMEOUT_MS,
-        throwOnRequestTimeout: true,
-      },
+      // Bounded, since an assumption is shared by every request that waits for it.
+      requestHandler: AWS_REQUEST_HANDLER,
     },
   });
 

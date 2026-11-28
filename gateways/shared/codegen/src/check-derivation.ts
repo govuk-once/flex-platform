@@ -1,6 +1,7 @@
 import { compareCandidate } from "./compare-schemas.ts";
 import { loadDerive } from "./derive-module.ts";
 import type { AnyGatewayConfig } from "./load-config.ts";
+import { ProblemsError } from "./problems-error.ts";
 import { OfflineSourceError, schemaSources } from "./schema-sources.ts";
 import { type SchemaVersion, versionAfter } from "./schema-store.ts";
 
@@ -14,21 +15,17 @@ import { type SchemaVersion, versionAfter } from "./schema-store.ts";
 // that has to fetch its upstream's description cannot be derived here, and is not checked: its
 // versions change when someone runs `pnpm schemas`, and the comparison of the versions holds them.
 
-export class DerivationDriftError extends Error {
-  readonly problems: readonly string[];
-
+export class DerivationDriftError extends ProblemsError {
   constructor(gatewayId: string, problems: readonly string[], breaks: boolean) {
     super(
+      `Gateway "${gatewayId}" schemas are not what its driver derives:`,
+      problems,
       [
-        `Gateway "${gatewayId}" schemas are not what its driver derives:`,
-        ...problems.map((problem) => `  - ${problem}`),
         breaks
           ? "Some of these would break a caller. An incompatible contract needs a gateway of its own, under another id."
           : "Run `pnpm schemas` to write the next version.",
-      ].join("\n"),
+      ],
     );
-    this.name = "DerivationDriftError";
-    this.problems = problems;
   }
 }
 

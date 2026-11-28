@@ -19,6 +19,14 @@ export {
 } from "./layout.ts";
 export type { AnyGatewayConfig } from "./load-config.ts";
 export { loadConfig } from "./load-config.ts";
+export { ProblemsError } from "./problems-error.ts";
+export {
+  COMPOSITION,
+  CONTAINS_BOUNDS,
+  SUBSCHEMA_LISTS,
+  SUBSCHEMA_MAPS,
+  SUBSCHEMAS,
+} from "./schema-keywords.ts";
 export type { SchemaVersion } from "./schema-store.ts";
 export { loadVersions, SchemaStoreError } from "./schema-store.ts";
 export type { SchemasReport, SchemasUpdate } from "./update-schemas.ts";

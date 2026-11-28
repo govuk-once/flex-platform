@@ -1,3 +1,10 @@
+import {
+  COMPOSITION,
+  CONTAINS_BOUNDS,
+  SUBSCHEMA_LISTS,
+  SUBSCHEMA_MAPS,
+  SUBSCHEMAS,
+} from "@repo/gateway-codegen";
 import { asStringList } from "@repo/utils/as-string-list";
 import { isRecord } from "@repo/utils/is-record";
 
@@ -114,33 +121,6 @@ const APPLIES_TO: Readonly<Record<string, string>> = {
   multipleOf: "number",
 };
 
-// The bounds that count matches rather than measure a value. Every other bound left out is the
-// loosest it could be, so removing one relaxes; `minContains` left out is one.
-const CONTAINS_BOUNDS = new Set(["maxContains", "minContains"]);
-
-const COMPOSITION = ["allOf", "anyOf", "oneOf"];
-// Where a schema holds other schemas, read the same way wherever a schema is walked: under a
-// name of its own, in a list, or on its own.
-export const SUBSCHEMA_MAPS = [
-  "$defs",
-  "dependentSchemas",
-  "patternProperties",
-  "properties",
-];
-export const SUBSCHEMA_LISTS = [...COMPOSITION, "prefixItems"];
-export const SUBSCHEMAS = [
-  "additionalProperties",
-  "contains",
-  "else",
-  "if",
-  "items",
-  "not",
-  "propertyNames",
-  "then",
-  "unevaluatedItems",
-  "unevaluatedProperties",
-];
-
 // Where a schema holds another schema, and nowhere else. What a walk finds has to be decided by
 // the position it is in rather than by the shape of what is there: `const`, `enum`, `default`
 // and `examples` hold values, and a value written as `{ "$ref": "Name" }` is that object, not a
@@ -156,13 +136,13 @@ export function mapSubschemas(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(schema)) {
-    if (SUBSCHEMA_MAPS.includes(key) && isRecord(value)) {
+    if (SUBSCHEMA_MAPS.has(key) && isRecord(value)) {
       const members: Record<string, unknown> = {};
       for (const [name, member] of Object.entries(value)) {
         setKey(members, name, map(member, `${key}.${name}`));
       }
       setKey(result, key, members);
-    } else if (SUBSCHEMA_LISTS.includes(key) && Array.isArray(value)) {
+    } else if (SUBSCHEMA_LISTS.has(key) && Array.isArray(value)) {
       setKey(
         result,
         key,
@@ -170,7 +150,7 @@ export function mapSubschemas(
           map(member, `${key}.${String(index)}`),
         ),
       );
-    } else if (SUBSCHEMAS.includes(key)) {
+    } else if (SUBSCHEMAS.has(key)) {
       setKey(result, key, map(value, key));
     } else {
       setKey(result, key, value);
@@ -361,7 +341,8 @@ export function convertSchema(
 
   const { side, notes } = conversion;
   const composed =
-    position.composed || COMPOSITION.some((key) => Object.hasOwn(schema, key));
+    position.composed ||
+    [...COMPOSITION].some((key) => Object.hasOwn(schema, key));
   let converted: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(schema)) {
@@ -437,7 +418,7 @@ function convertHeld(
   conversion: Conversion,
   { composed, unionBranch, reversed }: Omit<Position, "branchField">,
 ): unknown {
-  if (SUBSCHEMA_MAPS.includes(key) && isRecord(value)) {
+  if (SUBSCHEMA_MAPS.has(key) && isRecord(value)) {
     const held: Record<string, unknown> = {};
     for (const [name, member] of Object.entries(value)) {
       setKey(
@@ -453,7 +434,7 @@ function convertHeld(
     }
     return held;
   }
-  if (SUBSCHEMAS.includes(key)) {
+  if (SUBSCHEMAS.has(key)) {
     return convertSchema(value, `${where}.${key}`, conversion, {
       composed,
       unionBranch: false,
@@ -461,7 +442,7 @@ function convertHeld(
       reversed,
     });
   }
-  if (COMPOSITION.includes(key) && Array.isArray(value)) {
+  if (COMPOSITION.has(key) && Array.isArray(value)) {
     // A branch of an `anyOf` that comes to admit more makes the whole admit more, which is
     // the way every conversion here already runs. A branch of a `oneOf` does that only while
     // the branches stay apart, so one whose branches nothing tells apart is left as written.

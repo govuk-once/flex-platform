@@ -6,6 +6,7 @@ import { isRecord } from "@repo/utils/is-record";
 import { sortedNames } from "@repo/utils/sorted-names";
 
 import { SCHEMAS_DIR } from "./layout.ts";
+import { ProblemsError } from "./problems-error.ts";
 
 // A gateway's schemas as they are kept: one JSON file for each version, numbered from 0001 with
 // nothing left out, the highest being the one a gateway is generated from. The width is fixed so
@@ -19,20 +20,13 @@ const versionName = (index: number): string =>
 
 // Everything wrong with a gateway's schemas directory or with one version in it, reported
 // together: the command prints a message and nothing else, so one run has to say all of it.
-export class SchemaStoreError extends Error {
-  readonly problems: readonly string[];
-
+export class SchemaStoreError extends ProblemsError {
   constructor(
     where: string,
     problems: readonly string[],
     options?: ErrorOptions,
   ) {
-    super(
-      [`${where}:`, ...problems.map((problem) => `  - ${problem}`)].join("\n"),
-      options,
-    );
-    this.name = "SchemaStoreError";
-    this.problems = problems;
+    super(`${where}:`, problems, [], options);
   }
 }
 

@@ -8,6 +8,14 @@ import { sortedEntries } from "@repo/utils/sorted-entries";
 import { sortedNames } from "@repo/utils/sorted-names";
 import { stringsIn } from "@repo/utils/strings-in";
 
+import { ProblemsError } from "./problems-error.ts";
+import {
+  COMPOSITION,
+  CONTAINS_BOUNDS,
+  SUBSCHEMA_LISTS,
+  SUBSCHEMA_MAPS,
+  SUBSCHEMAS,
+} from "./schema-keywords.ts";
 import type { SchemaVersion } from "./schema-store.ts";
 
 // Whether one version of a gateway's schemas can follow another without breaking a caller written
@@ -118,39 +126,11 @@ const BOUND_DEFAULTS = {
 // Every bound has a default, so each one read can be placed.
 type Bound = keyof typeof BOUND_DEFAULTS;
 
-// The two bounds that count matches rather than measure a value. With no `contains` to count
-// they constrain nothing, and a `contains` that came or went is a difference in its own right.
-const CONTAINS_BOUNDS = new Set(["maxContains", "minContains"]);
-
 // Nothing counts matches without a `contains` on both sides to count; one that came or went is
 // read as the difference it is.
 const countsNothing = (key: string, previous: Schema, next: Schema): boolean =>
   CONTAINS_BOUNDS.has(key) &&
   !(Object.hasOwn(previous, "contains") && Object.hasOwn(next, "contains"));
-
-const SUBSCHEMA_MAPS = new Set([
-  "$defs",
-  "dependentSchemas",
-  "patternProperties",
-  "properties",
-]);
-const SUBSCHEMA_LISTS = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
-// Lists whose branches are read as a set: every one holds, one at least does, or exactly one
-// does, none of which depends on where a branch is written. `prefixItems` types the element at
-// each place, so its order is what it says.
-const BRANCH_LISTS = new Set(["allOf", "anyOf", "oneOf"]);
-const SUBSCHEMAS = new Set([
-  "additionalProperties",
-  "contains",
-  "else",
-  "if",
-  "items",
-  "not",
-  "propertyNames",
-  "then",
-  "unevaluatedItems",
-  "unevaluatedProperties",
-]);
 
 // A reference resolved more deeply than any schema is written is one that comes back on itself
 // through a definition under another name.
@@ -199,7 +179,7 @@ function keywordShape(key: string, held: unknown): unknown {
       sortedNames(Object.keys(held)).map((name) => [name, shapeOf(held[name])]),
     );
   }
-  if (BRANCH_LISTS.has(key) && Array.isArray(held)) {
+  if (COMPOSITION.has(key) && Array.isArray(held)) {
     return byJson(held.map(shapeOf));
   }
   if (SUBSCHEMA_LISTS.has(key) && Array.isArray(held)) return held.map(shapeOf);
@@ -919,7 +899,12 @@ class Comparison {
     }
 
     const pairing = pairBranches(rest(previous), rest(next));
-    for (const [was, is] of pairing.same) {
+    // Branches left over on each side in equal numbers are read in order, as `allOf`'s are.
+    const paired = pairing.previous.length === pairing.next.length;
+    for (const [was, is] of [
+      ...pairing.same,
+      ...(paired ? inOrder(pairing.previous, pairing.next) : []),
+    ]) {
       this.schema(
         was.branch,
         is.branch,
@@ -928,18 +913,7 @@ class Comparison {
         depth + 1,
       );
     }
-    if (pairing.previous.length === pairing.next.length) {
-      for (const [was, is] of inOrder(pairing.previous, pairing.next)) {
-        this.schema(
-          was.branch,
-          is.branch,
-          position,
-          `${at}.${String(is.index)}`,
-          depth + 1,
-        );
-      }
-      return;
-    }
+    if (paired) return;
     // Branches that only came, or only went, move the whole the way they move it. Some of each
     // is a union that changed too much to place.
     this.add(
@@ -1254,20 +1228,16 @@ function compareDefinitions(
 
 // A version a caller of one before it would not survive. Every break between every pair is
 // reported together, since the command prints a message and nothing else.
-export class SchemaCompatibilityError extends Error {
-  readonly problems: readonly string[];
-
+export class SchemaCompatibilityError extends ProblemsError {
   constructor(gatewayId: string, problems: readonly string[]) {
     super(
+      `Gateway "${gatewayId}" has a version of its schemas that breaks one before it:`,
+      problems,
       [
-        `Gateway "${gatewayId}" has a version of its schemas that breaks one before it:`,
-        ...problems.map((problem) => `  - ${problem}`),
         "A version not yet merged can be fixed, or removed and the versions after it renumbered.",
         "An incompatible contract needs a gateway of its own, under another id.",
-      ].join("\n"),
+      ],
     );
-    this.name = "SchemaCompatibilityError";
-    this.problems = problems;
   }
 }
 
