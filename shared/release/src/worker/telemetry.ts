@@ -3,6 +3,8 @@
 // version, or a source location. Never an AWS error's message, which can quote a request, or a message the
 // worker couldn't read.
 
+import { logTelemetry } from "@repo/cloudfront-js-utils/log-telemetry";
+
 export type ReleaseEventName =
   | "release_done"
   | "release_invalid"
@@ -46,11 +48,5 @@ export function logRelease(
   event: ReleaseEventName,
   details: ReleaseDetails,
 ): void {
-  console.log(
-    JSON.stringify({
-      level,
-      message: "telemetry",
-      telemetry: { event, details },
-    }),
-  );
+  logTelemetry(level, event, details);
 }

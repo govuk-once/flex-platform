@@ -1,31 +1,17 @@
 import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
-import { buildSync } from "esbuild";
+import { buildLambdaFunction } from "@repo/lambda-function/build";
 
 import type { CiConfig } from "../function/types.ts";
 
 const ENTRY = new URL("../function/entry.ts", import.meta.url).pathname;
 
-// The bundle is CommonJS, deployed as `index.js` with the handler `index.handler`.
-export const HANDLER = "index.handler";
+export { HANDLER } from "@repo/lambda-function/build";
 
 // Synchronous, because CDK builds constructs synchronously. Returns the code of `index.js`, with
 // every dependency bundled and the config baked in.
 export function buildCiFunction(config: CiConfig): string {
   checkConfig(config);
-  const result = buildSync({
-    entryPoints: [ENTRY],
-    bundle: true,
-    write: false,
-    format: "cjs",
-    platform: "node",
-    target: "node26",
-    define: { CI_CONFIG: JSON.stringify(config) },
-    // Not minified, so the source locations a failure logs point at a line worth reading.
-  });
-
-  const output = result.outputFiles[0]?.text;
-  if (output === undefined) throw new Error("esbuild produced no output");
-  return output;
+  return buildLambdaFunction({ entry: ENTRY, define: { CI_CONFIG: config } });
 }
 
 const HTTPS_URL = /^https:\/\/[a-z0-9.-]+(?::\d{1,5})?(?:\/[A-Za-z0-9._/-]*)?$/;

@@ -2,6 +2,7 @@
 // pipeline holds no AWS credentials. It is given an address that carries the function's role's
 // signature, which S3 accepts for five minutes and for nothing but the request signed.
 
+import type { Credentials } from "@repo/lambda-function";
 import { heldValue } from "@repo/utils/held-value";
 import { Hash } from "@smithy/hash-node";
 import { SignatureV4 } from "@smithy/signature-v4";
@@ -11,13 +12,6 @@ import type { CiUploads } from "./types.ts";
 
 /** How long a pipeline has to start its upload. */
 export const UPLOAD_EXPIRES_SECONDS = 300;
-
-// A role's credentials are temporary, so they always carry a session token.
-export interface Credentials {
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
-  readonly sessionToken: string;
-}
 
 export interface SignedUpload {
   /** Where to `PUT` the bundle. Whoever holds it can make the upload, so it is never logged. */
@@ -119,15 +113,4 @@ function escape(value: string): string {
   return encodeURIComponent(value).replace(/[!'()*]/g, (character) =>
     heldValue(ESCAPED, character),
   );
-}
-
-/** The role's credentials, from the variables Lambda sets. */
-export function credentialsFromEnvironment(): Credentials {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  const sessionToken = process.env.AWS_SESSION_TOKEN;
-  if (!accessKeyId || !secretAccessKey || !sessionToken) {
-    throw new Error("The role's credentials aren't in the environment");
-  }
-  return { accessKeyId, secretAccessKey, sessionToken };
 }

@@ -1,12 +1,11 @@
 import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
-import { buildSync } from "esbuild";
+import { buildLambdaFunction } from "@repo/lambda-function/build";
 
 import type { OriginRequestConfig } from "../function/types.ts";
 
 const ENTRY = new URL("../function/entry.ts", import.meta.url).pathname;
 
-// The bundle is CommonJS, deployed as `index.js` with the handler `index.handler`.
-export const HANDLER = "index.handler";
+export { HANDLER } from "@repo/lambda-function/build";
 
 // Synchronous, because CDK builds constructs synchronously. Returns the code of `index.js`, with
 // every dependency bundled and the config baked in.
@@ -14,20 +13,10 @@ export function buildOriginRequestFunction(
   config: OriginRequestConfig,
 ): string {
   checkRoutes(config.routes);
-  const result = buildSync({
-    entryPoints: [ENTRY],
-    bundle: true,
-    write: false,
-    format: "cjs",
-    platform: "node",
-    target: "node26",
-    define: { ORIGIN_REQUEST_CONFIG: JSON.stringify(config) },
-    // Not minified, so the source locations a failure logs point at a line worth reading.
+  return buildLambdaFunction({
+    entry: ENTRY,
+    define: { ORIGIN_REQUEST_CONFIG: config },
   });
-
-  const output = result.outputFiles[0]?.text;
-  if (output === undefined) throw new Error("esbuild produced no output");
-  return output;
 }
 
 // Lowercase labels, at least two, the last starting with a letter, so never a URL, a port or an IP

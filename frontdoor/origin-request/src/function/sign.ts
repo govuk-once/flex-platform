@@ -2,6 +2,7 @@
 // authorisation. The credentials are the function's role's, which Lambda rotates and gives each
 // invocation in its reserved environment variables; there is no secret to keep.
 
+import type { Credentials } from "@repo/lambda-function";
 import { Hash } from "@smithy/hash-node";
 import { SignatureV4 } from "@smithy/signature-v4";
 
@@ -41,13 +42,6 @@ export class UnsignableQuery extends Error {
   constructor(readonly reason: UnsignableQueryReason) {
     super(`The query cannot be signed: ${reason}`);
   }
-}
-
-// A role's credentials are temporary, so they always carry a session token.
-export interface Credentials {
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
-  readonly sessionToken: string;
 }
 
 export interface RequestToSign {
@@ -146,15 +140,4 @@ function decodeQuery(text: string): string {
   } catch {
     throw new UnsignableQuery("malformed");
   }
-}
-
-/** The role's credentials, from the variables Lambda sets for each invocation. */
-export function credentialsFromEnvironment(): Credentials {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  const sessionToken = process.env.AWS_SESSION_TOKEN;
-  if (!accessKeyId || !secretAccessKey || !sessionToken) {
-    throw new Error("The role's credentials aren't in the environment");
-  }
-  return { accessKeyId, secretAccessKey, sessionToken };
 }

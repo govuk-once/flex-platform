@@ -4,6 +4,7 @@
 // token, a claim a repository's admin can write, the caller's path, the address an upload is
 // signed for, or a library's error text, which can quote a claim.
 
+import { logTelemetry } from "@repo/cloudfront-js-utils/log-telemetry";
 import type { UnexpectedErrorSummary } from "@repo/utils/describe-unexpected-error";
 
 export type CiEventName =
@@ -65,26 +66,12 @@ export function logOutcome(
   request: RequestDetails,
   details: OutcomeDetails = {},
 ): void {
-  write("INFO", event, { ...request, ...details });
+  logTelemetry("INFO", event, { ...request, ...details });
 }
 
 export function logFailure(
   request: RequestDetails,
   error: UnexpectedErrorSummary,
 ): void {
-  write("ERROR", "ci_failed", { ...request, frames: error.frames });
-}
-
-function write(
-  level: "INFO" | "ERROR",
-  event: CiEventName,
-  details: Record<string, unknown>,
-): void {
-  console.log(
-    JSON.stringify({
-      level,
-      message: "telemetry",
-      telemetry: { event, details },
-    }),
-  );
+  logTelemetry("ERROR", "ci_failed", { ...request, frames: error.frames });
 }

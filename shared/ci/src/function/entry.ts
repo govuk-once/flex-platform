@@ -1,16 +1,14 @@
 // What Lambda runs. Only the build bundles this module: it replaces CI_CONFIG with a stage's
 // config.
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { credentialsFromEnvironment } from "@repo/lambda-function";
 import { createReleaseTable } from "@repo/shared-release";
 
 import { createArtefactFinder, createVersionClaim } from "./artefacts.ts";
 import { createAuthoriser, createPublishCheck } from "./authorise.ts";
 import { createCiHandler } from "./handler.ts";
 import { createBundleFinder, createReleaseQueue } from "./release-queue.ts";
-import {
-  createUploadSigner,
-  credentialsFromEnvironment,
-} from "./sign-upload.ts";
+import { createUploadSigner } from "./sign-upload.ts";
 import { createTokenVerifier } from "./token.ts";
 import type { CiConfig } from "./types.ts";
 

@@ -11,6 +11,7 @@ import {
   GetItemCommand,
   PutItemCommand,
 } from "@aws-sdk/client-dynamodb";
+import { isSha256Hex } from "@repo/cloudfront-js-utils/is-sha256-hex";
 
 import type { CiUploads } from "./types.ts";
 
@@ -44,8 +45,6 @@ export interface VersionClaimOptions {
   readonly now: () => number;
   readonly client?: DynamoDBClient;
 }
-
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 export function createVersionClaim(options: VersionClaimOptions): ClaimVersion {
   const { table, region } = options.uploads;
@@ -108,7 +107,7 @@ export function createArtefactFinder(
 // Only this function records a version, always with a hash. Anything else isn't one to use, so
 // the request fails rather than taking it as an answer.
 function heldHash(sha256: string | undefined): string {
-  if (sha256 === undefined || !SHA256_HEX.test(sha256)) {
+  if (sha256 === undefined || !isSha256Hex(sha256)) {
     throw new Error("The version's record holds no bundle's hash");
   }
   return sha256;

@@ -1,6 +1,8 @@
 // One log line per request, in a fixed shape. Function logs all land in us-east-1, so a metric
 // filter can count each event.
 
+import { logTelemetry } from "@repo/cloudfront-js-utils/log-telemetry";
+
 // The two IDs that join this line to the rest of the request: the trace ID every later hop logs,
 // and the request ID in CloudFront's own logs. Only this line holds both.
 export interface RequestIds {
@@ -20,11 +22,5 @@ export function logOutcome(
     requestId: ids.requestId,
   };
   if (reason !== undefined) details.reason = reason;
-  console.log(
-    JSON.stringify({
-      level: "INFO",
-      message: "telemetry",
-      telemetry: { event, details },
-    }),
-  );
+  logTelemetry("INFO", event, details);
 }

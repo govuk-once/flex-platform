@@ -1,5 +1,5 @@
 import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
-import { buildSync } from "esbuild";
+import { buildLambdaFunction } from "@repo/lambda-function/build";
 
 import type { DeadLetterConfig } from "../dead-letter/types.ts";
 import type { ReleaseConfig, ReleaseTarget } from "../worker/types.ts";
@@ -9,14 +9,16 @@ const WORKER_ENTRY = new URL("../worker/entry.ts", import.meta.url).pathname;
 const DEAD_LETTER_ENTRY = new URL("../dead-letter/entry.ts", import.meta.url)
   .pathname;
 
-// Each bundle is CommonJS, deployed as `index.js` with the handler `index.handler`.
-export const RELEASE_HANDLER = "index.handler";
+export { HANDLER as RELEASE_HANDLER } from "@repo/lambda-function/build";
 
 // Synchronous, because CDK builds constructs synchronously. Each returns the code of `index.js`,
 // with every dependency, the AWS SDK's clients included, bundled and the config baked in.
 export function buildReleaseWorker(config: ReleaseConfig): string {
   checkConfig(config);
-  return bundle(WORKER_ENTRY, { RELEASE_CONFIG: JSON.stringify(config) });
+  return buildLambdaFunction({
+    entry: WORKER_ENTRY,
+    define: { RELEASE_CONFIG: config },
+  });
 }
 
 export function buildDeadLetterWorker(config: DeadLetterConfig): string {
@@ -25,26 +27,10 @@ export function buildDeadLetterWorker(config: DeadLetterConfig): string {
       `The dead-letter worker's table, ${JSON.stringify(config.table)} in ${JSON.stringify(config.region)}, is not a table's name and a region`,
     );
   }
-  return bundle(DEAD_LETTER_ENTRY, {
-    DEAD_LETTER_CONFIG: JSON.stringify(config),
+  return buildLambdaFunction({
+    entry: DEAD_LETTER_ENTRY,
+    define: { DEAD_LETTER_CONFIG: config },
   });
-}
-
-function bundle(entry: string, define: Record<string, string>): string {
-  const result = buildSync({
-    entryPoints: [entry],
-    bundle: true,
-    write: false,
-    format: "cjs",
-    platform: "node",
-    target: "node26",
-    define,
-    // Not minified, so the source locations a failure logs point at a line worth reading.
-  });
-
-  const output = result.outputFiles[0]?.text;
-  if (output === undefined) throw new Error("esbuild produced no output");
-  return output;
 }
 
 const BUCKET = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;

@@ -1,5 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
 
+import type { Credentials } from "@repo/lambda-function";
 import {
   afterEach,
   assert,
@@ -12,8 +13,6 @@ import {
 
 import {
   createRequestSigner,
-  type Credentials,
-  credentialsFromEnvironment,
   type RequestToSign,
   SIGNING_REGION,
   UnsignableQuery,
@@ -215,32 +214,5 @@ describe("createRequestSigner", () => {
     await expect(
       sign({ ...REQUEST, querystring: "x-amzn=1&xamz-date=2" }),
     ).resolves.toHaveProperty("authorization");
-  });
-
-  it("reads the role's credentials from the environment for each request", () => {
-    vi.stubEnv("AWS_ACCESS_KEY_ID", "AKIDEXAMPLE");
-    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "secret");
-    vi.stubEnv("AWS_SESSION_TOKEN", "token");
-
-    expect(credentialsFromEnvironment()).toEqual({
-      accessKeyId: "AKIDEXAMPLE",
-      secretAccessKey: "secret",
-      sessionToken: "token",
-    });
-  });
-
-  it("refuses to sign without credentials", () => {
-    vi.stubEnv("AWS_ACCESS_KEY_ID", "");
-    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "");
-
-    expect(() => credentialsFromEnvironment()).toThrow(/credentials/);
-  });
-
-  it("refuses to sign without a session token, which a role's credentials always carry", () => {
-    vi.stubEnv("AWS_ACCESS_KEY_ID", "AKIDEXAMPLE");
-    vi.stubEnv("AWS_SECRET_ACCESS_KEY", "secret");
-    vi.stubEnv("AWS_SESSION_TOKEN", "");
-
-    expect(() => credentialsFromEnvironment()).toThrow(/credentials/);
   });
 });

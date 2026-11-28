@@ -1,6 +1,7 @@
 // Key rotation's Lambda handler. The schedule invokes it with its own event, which asks for a run;
 // a person invokes it with `{ "revoke": "<kid>" }` to remove a key at once, before the run.
 
+import { logTelemetry } from "@repo/cloudfront-js-utils/log-telemetry";
 import { isKeyId } from "@repo/frontdoor-shared";
 import { describeUnexpectedError } from "@repo/utils/describe-unexpected-error";
 
@@ -20,20 +21,6 @@ function keyToRevoke(event: unknown): string | undefined {
   return undefined;
 }
 
-function log(
-  level: "INFO" | "ERROR",
-  event: string,
-  details: Record<string, unknown>,
-): void {
-  console.log(
-    JSON.stringify({
-      level,
-      message: "telemetry",
-      telemetry: { event, details },
-    }),
-  );
-}
-
 export function createHandler(
   ports: RotationPorts,
   policy: KeyPolicy,
@@ -47,20 +34,20 @@ export function createHandler(
         // Written and logged before the run, which needs KMS: whatever the run then fails at,
         // the key has gone. The run reads the tables again, as the revocation left them.
         const { event: name, ...details } = await revoke(ports, at, keyId);
-        log("INFO", name, details);
+        logTelemetry("INFO", name, details);
       }
       const report = await rotate(ports, policy, at);
       for (const { event: name, ...details } of report.events)
-        log("INFO", name, details);
+        logTelemetry("INFO", name, details);
     } catch (error) {
       if (error instanceof KeyCheckFailed) {
         const { keyId, reason, stored } = error;
-        log("ERROR", "key_check_failed", { keyId, reason, stored });
+        logTelemetry("ERROR", "key_check_failed", { keyId, reason, stored });
         throw error;
       }
       // The name is AWS's error code, such as AccessDeniedException, or Error. A message from
       // this package names only key IDs, tables and kinds.
-      log("ERROR", "key_rotation_failed", {
+      logTelemetry("ERROR", "key_rotation_failed", {
         name: error instanceof Error ? error.name : typeof error,
         message: error instanceof Error ? error.message : undefined,
         frames: describeUnexpectedError(error).frames,

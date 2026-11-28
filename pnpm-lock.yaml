@@ -364,9 +364,15 @@ importers:
       '@aws-sdk/client-kms':
         specifier: 3.1173.0
         version: 3.1173.0
+      '@repo/cloudfront-js-utils':
+        specifier: workspace:*
+        version: link:../../packages/cloudfront-js-utils
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../shared
+      '@repo/lambda-function':
+        specifier: workspace:*
+        version: link:../../packages/lambda-function
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils
@@ -407,6 +413,9 @@ importers:
       '@repo/frontdoor-shared':
         specifier: workspace:*
         version: link:../shared
+      '@repo/lambda-function':
+        specifier: workspace:*
+        version: link:../../packages/lambda-function
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils
@@ -967,6 +976,37 @@ importers:
         specifier: 5.1.1
         version: 5.1.1(@types/node@26.6.6)(@vitest/coverage-v8@5.1.1)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/lambda-function:
+    dependencies:
+      '@repo/cloudfront-js-utils':
+        specifier: workspace:*
+        version: link:../cloudfront-js-utils
+      '@repo/utils':
+        specifier: workspace:*
+        version: link:../utils
+      aws-jwt-verify:
+        specifier: 5.2.1
+        version: 5.2.1
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@repo/vitest-config':
+        specifier: workspace:*
+        version: link:../vitest-config
+      eslint:
+        specifier: 10.15.0
+        version: 10.15.0(jiti@2.7.0)(supports-color@10.2.2)
+      vitest:
+        specifier: 5.1.1
+        version: 5.1.1(@types/node@26.6.6)(@vitest/coverage-v8@5.1.1)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/release:
     dependencies:
       '@clack/core':
@@ -1051,6 +1091,9 @@ importers:
       '@repo/cloudfront-js-utils':
         specifier: workspace:*
         version: link:../../packages/cloudfront-js-utils
+      '@repo/lambda-function':
+        specifier: workspace:*
+        version: link:../../packages/lambda-function
       '@repo/shared-release':
         specifier: workspace:*
         version: link:../release
@@ -1149,6 +1192,9 @@ importers:
       '@repo/cloudfront-js-utils':
         specifier: workspace:*
         version: link:../../packages/cloudfront-js-utils
+      '@repo/lambda-function':
+        specifier: workspace:*
+        version: link:../../packages/lambda-function
       '@repo/utils':
         specifier: workspace:*
         version: link:../../packages/utils

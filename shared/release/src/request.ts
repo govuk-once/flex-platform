@@ -8,6 +8,7 @@
 // that isn't there, or one the worker would run anyway.
 
 import { isPlatformName } from "@repo/cloudfront-js-utils/is-platform-name";
+import { isSha256Hex } from "@repo/cloudfront-js-utils/is-sha256-hex";
 
 import { isBundleVersion } from "./bundle-version.ts";
 import { isReleaseId } from "./release-id.ts";
@@ -33,8 +34,6 @@ export interface ReleaseMessage {
   readonly domain: string;
   readonly id: string;
 }
-
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 // S3 writes a version ID of up to 1,024 bytes. AWS's own examples hold "+" and "/" as well as
 // URL-safe characters, so base64's are allowed too.
@@ -106,7 +105,7 @@ export function parseReleaseRequest(
     !matches(environment, isPlatformName) ||
     !matches(domain, isPlatformName) ||
     !matches(version, isBundleVersion) ||
-    !matches(sha256, (value) => SHA256_HEX.test(value)) ||
+    !matches(sha256, isSha256Hex) ||
     !matches(versionId, (value) => VERSION_ID.test(value)) ||
     !optional(runId, (value) => RUN_ID.test(value)) ||
     !optional(commit, (value) => COMMIT.test(value))
